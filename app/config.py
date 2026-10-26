@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     whatsapp_phone_number_id: str | None = None
     whatsapp_verify_token: SecretStr | None = None
     whatsapp_app_secret: SecretStr | None = None
+    whatsapp_api_version: str = "v26.0"
 
     # Database
     database_url: SecretStr | None = None
