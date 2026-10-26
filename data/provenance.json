@@ -151,6 +151,14 @@
     "sha256": "efbb4bd4b57211fd0fcecebc95fc47fca7f971f0ccfc1e34fc9b6fff7b14ce9d",
     "source_url": null
   },
+  "ndhs-2024": {
+    "acquisition": "download",
+    "bytes": 23270135,
+    "fetched_at": "2026-10-26T20:05:07+00:00",
+    "final_url": "https://dhsprogram.com/pubs/pdf/FR395/FR395.pdf",
+    "sha256": "a64e7f6d5dbdff17cb371e2e320de985a142137d6d86b7bcb85b5e1cb019a16e",
+    "source_url": "https://dhsprogram.com/pubs/pdf/FR395/FR395.pdf"
+  },
   "smart-agenda": {
     "acquisition": "local",
     "bytes": 18531835,
