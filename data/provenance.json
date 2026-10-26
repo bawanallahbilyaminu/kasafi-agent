@@ -1,0 +1,170 @@
+{
+  "appropriation-law-2026": {
+    "acquisition": "download",
+    "bytes": 7599504,
+    "fetched_at": "2026-10-26T19:11:45+00:00",
+    "final_url": "https://sokotostate.gov.ng/wp-content/uploads/2026/01/Sokoto-State-2026-Appropriation-Law.pdf",
+    "sha256": "d2f0a9671c7485f42393c1496de55b305c97b75a9432b80d8c69a66f2e23b46f",
+    "source_url": "https://sokotostate.gov.ng/wp-content/uploads/2026/01/Sokoto-State-2026-Appropriation-Law.pdf"
+  },
+  "audited-fs-2024": {
+    "acquisition": "download",
+    "bytes": 16708415,
+    "fetched_at": "2026-10-26T19:12:39+00:00",
+    "final_url": "https://sokotostate.gov.ng/wp-content/uploads/2025/07/2024-Audited-Financial-Statement-Accountant-Generals-Report-Sokoto-State.pdf",
+    "sha256": "d8f7bc0cf960624f3d0d7bf7ad429c4312bb1e9f8342739c54455d0453ae83d6",
+    "source_url": "https://sokotostate.gov.ng/wp-content/uploads/2025/07/2024-Audited-Financial-Statement-Accountant-Generals-Report-Sokoto-State.pdf"
+  },
+  "berap-2025": {
+    "acquisition": "download",
+    "bytes": 204087,
+    "fetched_at": "2026-10-26T19:13:03+00:00",
+    "final_url": "https://sokotostate.gov.ng/wp-content/uploads/2025/01/Approved-copy-of-Sokoto-State-BERAP-2025.pdf",
+    "sha256": "e84fc4a7072c9d5b464d27cc376ccf50f74a2e939d7131d385196966fe2cb82a",
+    "source_url": "https://sokotostate.gov.ng/wp-content/uploads/2025/01/Approved-copy-of-Sokoto-State-BERAP-2025.pdf"
+  },
+  "bir-2025-q4": {
+    "acquisition": "download",
+    "bytes": 1297009,
+    "fetched_at": "2026-10-26T19:11:56+00:00",
+    "final_url": "https://sokotostate.gov.ng/wp-content/uploads/2026/01/Sokoto-State-2025-Q4-BIRCN-CR-Updated-final-Published.pdf",
+    "sha256": "95e12dfc33b13ab67656796b2b3b32fb4bda88c25a01e41bb48d4fad4dd0d59d",
+    "source_url": "https://sokotostate.gov.ng/wp-content/uploads/2026/01/Sokoto-State-2025-Q4-BIRCN-CR-Updated-final-Published.pdf"
+  },
+  "bir-2026-q2": {
+    "acquisition": "download",
+    "bytes": 1318889,
+    "fetched_at": "2026-10-26T19:12:01+00:00",
+    "final_url": "https://sokotostate.gov.ng/wp-content/uploads/2026/07/Sokoto-State-2026-Q2-BIR-WORD-REPORT-CN-cr.pdf",
+    "sha256": "e323ee6470b685de6ac23564b6e1dec910fb96d5b53243db1cadd161f62ada8f",
+    "source_url": "https://sokotostate.gov.ng/wp-content/uploads/2026/07/Sokoto-State-2026-Q2-BIR-WORD-REPORT-CN-cr.pdf"
+  },
+  "bpr-2024-q4": {
+    "acquisition": "download",
+    "bytes": 1560602,
+    "fetched_at": "2026-10-26T19:11:51+00:00",
+    "final_url": "https://sokotostate.gov.ng/wp-content/uploads/2025/01/BPR3-C-BPR-Publication-Q4-2024-cR.pdf",
+    "sha256": "eee5fa92fb0e8282d93a316414246795a5b5b791c6fb85fc252551d757177f0e",
+    "source_url": "https://sokotostate.gov.ng/wp-content/uploads/2025/01/BPR3-C-BPR-Publication-Q4-2024-cR.pdf"
+  },
+  "budget-2024-approved": {
+    "acquisition": "download",
+    "bytes": 8351424,
+    "fetched_at": "2026-10-26T19:11:02+00:00",
+    "final_url": "https://sokotostate.gov.ng/wp-content/uploads/2025/01/sokoto-state-government-2024-approved-budget.pdf",
+    "sha256": "6a10610c9170c106459b038bb9708740f4609ab567a2395bbaf1081aa8f4976f",
+    "source_url": "https://sokotostate.gov.ng/wp-content/uploads/2025/01/sokoto-state-government-2024-approved-budget.pdf"
+  },
+  "budget-2025-amended": {
+    "acquisition": "download",
+    "bytes": 9021988,
+    "fetched_at": "2026-10-26T19:11:20+00:00",
+    "final_url": "https://sokotostate.gov.ng/wp-content/uploads/2025/06/Sokoto-State-Government-2025-AMENDED-BUDGET.pdf",
+    "sha256": "42c68ef4cb94e8580fbd40c13dbae45e6e9a5e71d593870b8aa6d314f025ac9d",
+    "source_url": "https://sokotostate.gov.ng/wp-content/uploads/2025/06/Sokoto-State-Government-2025-AMENDED-BUDGET.pdf"
+  },
+  "budget-2025-approved": {
+    "acquisition": "download",
+    "bytes": 15668256,
+    "fetched_at": "2026-10-26T19:11:12+00:00",
+    "final_url": "https://sokotostate.gov.ng/wp-content/uploads/2025/01/Approved-budget-2025.pdf",
+    "sha256": "43462f02c16184274f602f7bcdab3d1a2d6570fd803530bedd92ffe1d74a9524",
+    "source_url": "https://sokotostate.gov.ng/wp-content/uploads/2025/01/Approved-budget-2025.pdf"
+  },
+  "budget-2026-approved": {
+    "acquisition": "download",
+    "bytes": 13512905,
+    "fetched_at": "2026-10-26T19:11:32+00:00",
+    "final_url": "https://sokotostate.gov.ng/wp-content/uploads/2026/01/SOKOTO-State-FY-2026-Budget.pdf",
+    "sha256": "38742c3e003022264f6982b8b717c1c95803894813f4bea4d8993017a64308a7",
+    "source_url": "https://sokotostate.gov.ng/wp-content/uploads/2026/01/SOKOTO-State-FY-2026-Budget.pdf"
+  },
+  "citizens-accountability-2023": {
+    "acquisition": "download",
+    "bytes": 775555,
+    "fetched_at": "2026-10-26T19:12:44+00:00",
+    "final_url": "https://sokotostate.gov.ng/wp-content/uploads/2025/03/Citizens-Accountability-Report-2023.pdf",
+    "sha256": "225f80b26ce053f36c85e14364898e7a5dc828a439c99243a67556e0317d5a0c",
+    "source_url": "https://sokotostate.gov.ng/wp-content/uploads/2025/03/Citizens-Accountability-Report-2023.pdf"
+  },
+  "citizens-budget-consultation-2026": {
+    "acquisition": "download",
+    "bytes": 11579154,
+    "fetched_at": "2026-10-26T19:12:53+00:00",
+    "final_url": "https://sokotostate.gov.ng/wp-content/uploads/2026/01/2026-CITIZENS-BUDGET-CONSULTATION-REPORT.pdf",
+    "sha256": "cb5e7c273469721427bcc914264f595a06c5ef0d4de6c3d0d81e4df385393213",
+    "source_url": "https://sokotostate.gov.ng/wp-content/uploads/2026/01/2026-CITIZENS-BUDGET-CONSULTATION-REPORT.pdf"
+  },
+  "dsa-2023": {
+    "acquisition": "download",
+    "bytes": 856112,
+    "fetched_at": "2026-10-26T19:12:59+00:00",
+    "final_url": "https://sokotostate.gov.ng/wp-content/uploads/2025/01/Sokoto-State-2023-DSA-DMS-Final-Report-1.pdf",
+    "sha256": "02ed39ca0248f4c485e71a878a1c104dccd45dc9ecc47d2303e061c0b868da45",
+    "source_url": "https://sokotostate.gov.ng/wp-content/uploads/2025/01/Sokoto-State-2023-DSA-DMS-Final-Report-1.pdf"
+  },
+  "emonc-sokoto": {
+    "acquisition": "local",
+    "bytes": 6811793,
+    "file": "Emergency Obstetric and Newborn Care (EmONC) Assessment and Improvement Plan of Action, Sokoto State.pdf",
+    "recorded_at": "2026-10-26T19:13:06+00:00",
+    "sha256": "6ad5341e2c55973bd92c36e1a55fd13aebd4c569a1cfdd5643800d29c8de5f73",
+    "source_url": null
+  },
+  "financial-statements-2025": {
+    "acquisition": "download",
+    "bytes": 14419786,
+    "fetched_at": "2026-10-26T19:12:23+00:00",
+    "final_url": "https://sokotostate.gov.ng/wp-content/uploads/2026/06/Sokoto-Financial-Statements-2025.pdf",
+    "sha256": "e9f703ddeaa5cf5987214b6321790e60ce8544806d9048258e55f308604bc59e",
+    "source_url": "https://sokotostate.gov.ng/wp-content/uploads/2026/06/Sokoto-Financial-Statements-2025.pdf"
+  },
+  "health-aop-2025": {
+    "acquisition": "local",
+    "bytes": 3771652,
+    "file": "Sokoto State 2025 Health Sector-wide Annual Operational Plan.pdf",
+    "recorded_at": "2026-10-26T19:13:06+00:00",
+    "sha256": "da988fee2a85a2f07488f90f73aebf857e271204e17966d84c9f875b178bda3c",
+    "source_url": "https://mof.sk.gov.ng/wp-content/uploads/Health-sector-2025-AOP.pdf"
+  },
+  "mics-2021": {
+    "acquisition": "local",
+    "bytes": 19715657,
+    "file": "Nigeria 2021 Multiple Indicator Cluster Survey (MICS) and National Immunization Coverage Survey (NICS).pdf",
+    "recorded_at": "2026-10-26T19:13:06+00:00",
+    "sha256": "a09c74cb7f7c7439297b56626a206824aacc4add4db8686b1c3291399a42cf23",
+    "source_url": null
+  },
+  "mpi-2025-sokoto": {
+    "acquisition": "local",
+    "bytes": 11315597,
+    "file": "Sokoto State Multi-dimensional Poverty Index (MPI) Report 2025.pdf",
+    "recorded_at": "2026-10-26T19:13:06+00:00",
+    "sha256": "d162c7d2d763d9a166ce5e75dcf495e9f5908064405ac8ed5263c4fe68e285e3",
+    "source_url": "https://mof.sk.gov.ng/wp-content/uploads/MPI-2025-SOKOTO-STATE-Report.pdf"
+  },
+  "mtef-2025-2027": {
+    "acquisition": "local",
+    "bytes": 1835317,
+    "file": "Sokoto State MTEF Fiscal Strategy Paper 2025-2027.pdf",
+    "recorded_at": "2026-10-26T19:13:06+00:00",
+    "sha256": "efbb4bd4b57211fd0fcecebc95fc47fca7f971f0ccfc1e34fc9b6fff7b14ce9d",
+    "source_url": null
+  },
+  "smart-agenda": {
+    "acquisition": "local",
+    "bytes": 18531835,
+    "file": "Sokoto State 9-Point SMART Agenda.pdf",
+    "recorded_at": "2026-10-26T19:13:06+00:00",
+    "sha256": "dc137a7ef2b8edef48991fc28cfd7bd89c21adfbb298d08bc651f3d91cbb6d7d",
+    "source_url": null
+  },
+  "wb-sftas-lessons-2025": {
+    "acquisition": "download",
+    "bytes": 1997255,
+    "fetched_at": "2026-10-26T19:13:06+00:00",
+    "final_url": "https://documents1.worldbank.org/curated/en/099909511252531310/pdf/IDU-7fc295fe-e254-4f3e-8d28-883ab96416cb.pdf",
+    "sha256": "cd4363e279459b77692a8769a2578f3dc2f50730c1e17e1ebb96b495aad6ea96",
+    "source_url": "https://documents1.worldbank.org/curated/en/099909511252531310/pdf/IDU-7fc295fe-e254-4f3e-8d28-883ab96416cb.pdf"
+  }
+}
