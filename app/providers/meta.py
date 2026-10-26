@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import random
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -99,6 +100,20 @@ class MetaClient:
             usage=data.get("usage") or {},
             raw=data,
         )
+
+    async def transcribe(self, wav: bytes, *, model: str = "muse-voice-transcribe-1.0") -> dict[str, Any]:
+        """Muse Voice Transcribe (POST /asr/transcribe, multipart `request` JSON + `audio` WAV).
+
+        Returns the raw JSON body; its fields aren't pinned down in the docs yet.
+        """
+        request = json.dumps({"model": model, "audioEncoding": "WAV", "mode": "PUSH_TO_TALK"})
+        files = {
+            "request": (None, request, "application/json"),
+            "audio": ("audio.wav", wav, "audio/wav"),
+        }
+        resp = await self._request("POST", "/asr/transcribe", files=files,
+                                   headers={"Accept": "application/json"})
+        return resp.json()
 
     async def list_models(self) -> list[str]:
         resp = await self._request("GET", "/models")
