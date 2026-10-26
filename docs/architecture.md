@@ -64,7 +64,12 @@ WhatsApp webhook (FastAPI on VPS)
 ## Open decisions (confirm with Bilyaminu before scaffolding)
 
 - **Backend language:** proposed Python + FastAPI (best fit for the AI/PDF tooling). Bilyaminu also knows the MERN stack.
-- **Storage:** proposed PostgreSQL + pgvector (one database for documents, chunks, tables, provenance and the review queue), or SQLite to start.
+- ~~**Storage**~~ **Decided (Oct 26):** PostgreSQL + pgvector, one database for documents, chunks, tables, provenance and the review queue.
+  - **Dev:** local Docker Postgres 17 + pgvector.
+  - **Deploy:** Azure Database for PostgreSQL Flexible Server (Burstable B1ms, free tier), pgvector enabled via `azure.extensions=VECTOR`, SSL required, firewall limited to the VPS IP.
+  - Same schema and Alembic migrations for both; switch with `DATABASE_URL` in `.env`.
+  - The app (VPS) and DB (Azure) are on different networks, so **keep round-trips per answer minimal**: batch queries, fetch what a step needs in one query, avoid N+1 patterns.
+  - Click-by-click Azure setup steps to be written at deployment time.
 - **Embeddings model:** check whether Meta Model API offers embeddings; otherwise pick an open model.
 - **Text-to-speech for Hausa replies:** depends on what Meta offers.
 - **Review queue UI:** a minimal admin web page vs. a Notion database.
