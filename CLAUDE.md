@@ -28,6 +28,7 @@ Some details are not confirmed yet. Look them up (dev.meta.ai docs, provider doc
 - Meta Model API base URL, auth header, model IDs, and the tool/function-calling format.
 - Whether **Muse Voice Transcribe supports Hausa** (test this early with real voice notes).
 - Whether Meta offers **text-to-speech** (check the "Audio" section of the Meta Model API dashboard). If it doesn't, voice replies need another provider; flag this to Bilyaminu.
+- Confirmed from dev.meta.ai docs (Oct 26): Meta Model API base URL `https://api.meta.ai/v1`, header `Authorization: Bearer <key>`, OpenAI-compatible Chat Completions/Responses + Anthropic-compatible Messages. Model IDs: `muse-spark-1.3`, `muse-voice-transcribe-1.0` (`POST /v1/asr/transcribe`, WAV only, **Hausa not listed**), `sam-3.1`. No embeddings, no TTS (see `docs/architecture.md` decisions).
 - Confirmed: on Baseten, the hackathon model ID is **`meta-models/muse-spark-open-1026`** (the docs say `muse-spark-open`, which is wrong for the hackathon).
 
 ## Git workflow (Claude Code owns this)
@@ -56,7 +57,7 @@ Some details are not confirmed yet. Look them up (dev.meta.ai docs, provider doc
 
 ## Environment variables (see `.env.example`)
 
-`META_API_KEY`, `BASETEN_API_KEY`, `SERPER_API_KEY`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`, `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`, `FIREWORKS_API_KEY` (optional), `DATABASE_URL`.
+`META_API_KEY`, `BASETEN_API_KEY`, `SERPER_API_KEY`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`, `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`, `FIREWORKS_API_KEY` (optional), `DATABASE_URL`, `ADMIN_USER`, `ADMIN_PASSWORD`.
 
 ## Status (as of Oct 26, 2026)
 

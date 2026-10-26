@@ -61,19 +61,25 @@ WhatsApp webhook (FastAPI on VPS)
 3. Across partners (who works on X, where): _TBD_
 4. The self-growing moment: a question about a document that isn't indexed yet, which Kasafi then finds live: _TBD_
 
-## Open decisions (confirm with Bilyaminu before scaffolding)
+## Decisions (confirmed with Bilyaminu, Oct 26)
 
-- **Backend language:** proposed Python + FastAPI (best fit for the AI/PDF tooling). Bilyaminu also knows the MERN stack.
+- **Backend:** Python + FastAPI.
 - ~~**Storage**~~ **Decided (Oct 26):** PostgreSQL + pgvector, one database for documents, chunks, tables, provenance and the review queue.
   - **Dev:** local Docker Postgres 17 + pgvector.
   - **Deploy:** Azure Database for PostgreSQL Flexible Server (Burstable B1ms, free tier), pgvector enabled via `azure.extensions=VECTOR`, SSL required, firewall limited to the VPS IP.
   - Same schema and Alembic migrations for both; switch with `DATABASE_URL` in `.env`.
   - The app (VPS) and DB (Azure) are on different networks, so **keep round-trips per answer minimal**: batch queries, fetch what a step needs in one query, avoid N+1 patterns.
   - Click-by-click Azure setup steps to be written at deployment time.
-- **Embeddings model:** check whether Meta Model API offers embeddings; otherwise pick an open model.
-- **Text-to-speech for Hausa replies:** depends on what Meta offers.
-- **Review queue UI:** a minimal admin web page vs. a Notion database.
-- **Seed documents:** about 20 core public Sokoto documents. Bilyaminu provides the list or files (stored outside git or in a gitignored `data/`; commit only a manifest of URLs).
+- **Embeddings:** the Meta Model API has no embeddings endpoint, so we use **BGE-M3** running locally on CPU (in Docker on the VPS) and combine it with Postgres full-text search (hybrid retrieval).
+  - The documents are in English, so the **agent translates the Hausa question into English search queries** before retrieval rather than embedding the Hausa directly. Answers are still written in the user's language.
+- **Speech-to-text:** `muse-voice-transcribe-1.0` does **not** list Hausa (25 languages) and accepts WAV only (mono 16-bit PCM, 16/24 kHz, at most 10 min, at most 32 MB), so WhatsApp OGG/Opus voice notes need ffmpeg conversion. `muse-spark-1.3` accepts audio input directly. **Test both on real Hausa voice notes (Oct 27)** and pick the better one.
+- **Text-to-speech:** the Meta Model API has none, so we use Meta's open-weight **MMS-TTS Hausa** (`facebook/mms-tts-hau`, VITS, 36M params, CPU). Its license is **CC-BY-NC 4.0**: fine for the hackathon, but commercial use later needs another provider.
+  - Voice replies are **short**: a 1–2 sentence spoken summary. The full answer, citations and evidence image are sent as text.
+  - A **Hausa number normaliser** runs before TTS, e.g. "₦2.4bn" becomes "Naira biliyan biyu da miliyan ɗari huɗu" and "2025" becomes "dubu biyu da ashirin da biyar". It gets its own unit tests.
+- **Admin / review queue:** a minimal FastAPI + HTML admin page behind HTTP basic auth (`ADMIN_USER` / `ADMIN_PASSWORD` from `.env`, with a strong password). It moves to Clerk later, when the React app is built.
+  - **Review queue:** logged gaps and `auto-indexed` documents waiting for `human-verified` status.
+  - **Agent trace view** (used in the demo video): for each question it shows the plan, the documents found and fetched, the evidence list and the verification result. The agent therefore saves one trace record per question, written in a single insert at the end so the database round-trips stay low.
+- **Seed documents:** about 20 core public Sokoto documents, a mix of URLs and local PDFs that Bilyaminu provides. The files go in the gitignored `data/`. Only `data/manifest.json` is committed, with the source URL, SHA-256 hash, title, year and publisher of each document.
 
 ## Proposed repo layout
 
