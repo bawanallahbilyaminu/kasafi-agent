@@ -26,6 +26,9 @@ class Settings(BaseSettings):
 
     # Baseten (Muse Spark Open)
     baseten_api_key: SecretStr | None = None
+    baseten_base_url: str = "https://inference.baseten.co/v1"
+    # The hackathon key only works with this exact ID (not the docs' "meta-models/muse-spark-open").
+    baseten_model: str = "meta-models/muse-spark-open-1026"
 
     # Web search
     serper_api_key: SecretStr | None = None

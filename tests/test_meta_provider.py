@@ -7,7 +7,7 @@ import pytest
 from pydantic import SecretStr
 
 from app.config import Settings
-from app.providers import meta
+from app.providers import chat
 from app.providers.meta import MetaAPIError, MetaClient, audio_part, text_part
 
 FAKE_KEY = "test-key-not-real"
@@ -103,4 +103,4 @@ def test_missing_key_fails_fast() -> None:
 
 def test_retry_delay_uses_retry_after() -> None:
     resp = httpx.Response(503, headers={"retry-after": "7"})
-    assert meta._retry_delay(resp, 0) == 7.0
+    assert chat._retry_delay(resp, 0) == 7.0

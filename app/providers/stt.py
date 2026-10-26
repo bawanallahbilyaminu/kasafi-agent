@@ -21,7 +21,7 @@ from typing import Any
 
 from app.config import Settings, get_settings
 from app.providers.audio import to_wav16k
-from app.providers.meta import MetaClient, audio_part, text_part
+from app.providers.meta import MetaClient, text_part
 
 log = logging.getLogger(__name__)
 
@@ -106,7 +106,7 @@ async def _hyp_asr(client: MetaClient, wav: bytes, model: str) -> str:
 
 async def _hyp_spark(client: MetaClient, wav: bytes, model: str) -> str:
     r = await client.chat(
-        [{"role": "user", "content": [text_part(AUDIO_PROMPT), audio_part(wav, "wav")]}],
+        [{"role": "user", "content": [text_part(AUDIO_PROMPT), client.audio_part(wav)]}],
         model=model, reasoning_effort="low", max_tokens=4000,
     )
     try:
