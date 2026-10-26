@@ -1,0 +1,22 @@
+# Local development database: Postgres 17 + pgvector.
+# POSTGRES_PASSWORD comes from .env (never committed). Bound to localhost only.
+# Example DATABASE_URL: postgresql+psycopg://kasafi:<password>@localhost:5432/kasafi
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: kasafi
+      POSTGRES_DB: kasafi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kasafi -d kasafi"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

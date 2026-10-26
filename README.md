@@ -41,7 +41,16 @@ An earlier, separate Kasafi prototype was built for a different competition. No 
 
 ## Setup
 
-_Coming soon._ Copy `.env.example` to `.env` and fill in the values. Never commit `.env`.
+Requires Python 3.12, [uv](https://docs.astral.sh/uv/), Docker and FFmpeg.
+
+```bash
+cp .env.example .env              # fill in values; never commit .env
+uv sync                           # install dependencies into .venv
+docker compose up -d db           # local Postgres 17 + pgvector
+uv run uvicorn app.main:app --reload
+uv run pytest
+python scripts/fetch_seed_docs.py # download seed documents into data/
+```
 
 ## License
 
