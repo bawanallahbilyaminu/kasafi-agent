@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     meta_base_url: str = "https://api.meta.ai/v1"
     meta_model: str = "muse-spark-1.3"
 
+    # Speech-to-text pipeline (see evals/stt-hausa-2026-10-26.md)
+    stt_asr_model: str = "muse-voice-transcribe-1.0"
+    stt_audio_model: str = "muse-spark-1.2"
+    stt_reconcile_model: str = "muse-spark-1.3"
+
     # Baseten (Muse Spark Open)
     baseten_api_key: SecretStr | None = None
 
