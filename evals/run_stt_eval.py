@@ -2,8 +2,8 @@
 
 Runs the combined pipeline (app/providers/stt.py) on every voice note in
 data/test-audio/, then has Muse Spark judge each candidate against the reference.
-The single-model baselines are judged the same way, from the last
-scripts/test_audio.py run (data/test-audio/results.json).
+The single-model baselines (every model in data/test-audio/results.json, from
+scripts/test_audio.py, including Muse Spark Open on Baseten) are judged the same way.
 
 A "silent error" means the pipeline's meaning was not fully right AND it did not
 ask for a read-back. That is the number that has to go to zero.
@@ -58,14 +58,17 @@ async def main() -> None:
     questions = json.loads((ROOT / "evals/questions.json").read_text(encoding="utf-8"))["questions"]
     baselines_path = AUDIO_DIR / "results.json"
     baselines = json.loads(baselines_path.read_text(encoding="utf-8")) if baselines_path.exists() else {}
-    systems = ["muse-spark-1.3", "muse-spark-1.2", "muse-voice-transcribe-1.0", "combined"]
+    known = ["muse-spark-1.3", "muse-spark-1.2", "muse-voice-transcribe-1.0", "meta-models/muse-spark-open-1026"]
+    present = {m for entry in baselines.values() for m in entry if m != "audio_seconds"}
+    systems = [m for m in known if m in present] + sorted(present - set(known)) + ["combined"]
     out, prev = [], {}
+    print("columns:", " | ".join(systems))
     async with MetaClient() as client:
         for q in questions:
             prev_turn = prev.get(q.get("follows"))
             sr = await transcribe_voice_note((AUDIO_DIR / q["audio"]).read_bytes(), client, previous_turn=prev_turn)
             prev[q["id"]] = sr.transcript
-            cands = {m: baseline_text(baselines.get(q["audio"], {}), m) for m in systems[:3]}
+            cands = {m: baseline_text(baselines.get(q["audio"], {}), m) for m in systems[:-1]}
             cands["combined"] = f"{sr.transcript} || English: {sr.english}"
             verdicts = await asyncio.gather(*(judge(client, q, cands[m]) for m in systems))
             row = {"id": q["id"], "category": q["category"], "combined": sr.__dict__,
@@ -81,7 +84,7 @@ async def main() -> None:
     print("\nscore (full=1, partial=0.5):")
     for m in systems:
         s = sum({"full": 1, "partial": 0.5}.get(r["verdicts"][m]["meaning"], 0) for r in out)
-        print(f"  {m:<28} {s:4.1f} / {len(out)}")
+        print(f"  {m:<34} {s:4.1f} / {len(out)}")
     silent = [r["id"] for r in out
               if r["verdicts"]["combined"]["meaning"] != "full" and not r["combined"]["needs_confirmation"]]
     readbacks = sum(r["combined"]["needs_confirmation"] for r in out)
