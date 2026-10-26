@@ -73,3 +73,12 @@ def test_echo_text_by_type() -> None:
     assert "Sannu" in webhook.echo_reply({"type": "text", "text": {"body": "Sannu"}})
     assert webhook.echo_reply({"type": "audio"}) == webhook.ECHO_VOICE
     assert webhook.echo_reply({"type": "sticker"}) == webhook.ECHO_OTHER
+
+
+def test_empty_secrets_count_as_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
+    # An empty key would let anyone forge a valid HMAC, so empty must mean "reject".
+    s = Settings(_env_file=None, whatsapp_app_secret=SecretStr(""), whatsapp_verify_token=SecretStr(""))
+    monkeypatch.setattr(webhook, "get_settings", lambda: s)
+    c = TestClient(app)
+    assert c.get("/webhook", params={"hub.mode": "subscribe", "hub.verify_token": "", "hub.challenge": "1"}).status_code == 503
+    assert _post(c, _payload(), secret="").status_code == 503

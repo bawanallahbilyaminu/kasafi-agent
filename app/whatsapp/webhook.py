@@ -19,6 +19,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
+from pydantic import SecretStr
 
 from app.config import get_settings
 from app.whatsapp.client import WhatsAppClient, mask_phone
@@ -49,6 +50,11 @@ class _SeenIds:
 
 
 seen_ids = _SeenIds()
+
+
+def _secret(value: SecretStr | None) -> str | None:
+    """Treat an empty value (e.g. `WHATSAPP_APP_SECRET=` in .env) as not configured."""
+    return value.get_secret_value() if value is not None and value.get_secret_value() else None
 
 
 def valid_signature(body: bytes, header: str | None, secret: str) -> bool:
@@ -94,11 +100,11 @@ def verify(
     token: str = Query("", alias="hub.verify_token"),
     challenge: str = Query("", alias="hub.challenge"),
 ) -> str:
-    expected = get_settings().whatsapp_verify_token
+    expected = _secret(get_settings().whatsapp_verify_token)
     if expected is None:
         log.error("WHATSAPP_VERIFY_TOKEN is not set")
         raise HTTPException(503, "webhook not configured")
-    if mode == "subscribe" and hmac.compare_digest(token, expected.get_secret_value()):
+    if mode == "subscribe" and hmac.compare_digest(token, expected):
         log.info("webhook verified")
         return challenge
     raise HTTPException(403, "verification failed")
@@ -106,12 +112,12 @@ def verify(
 
 @router.post("/webhook")
 async def receive(request: Request, background: BackgroundTasks) -> dict[str, str]:
-    secret = get_settings().whatsapp_app_secret
+    secret = _secret(get_settings().whatsapp_app_secret)
     if secret is None:
         log.error("WHATSAPP_APP_SECRET is not set; rejecting webhook")
         raise HTTPException(503, "webhook not configured")
     body = await request.body()
-    if not valid_signature(body, request.headers.get("x-hub-signature-256"), secret.get_secret_value()):
+    if not valid_signature(body, request.headers.get("x-hub-signature-256"), secret):
         log.warning("webhook with bad or missing signature rejected")
         raise HTTPException(401, "bad signature")
 
