@@ -6,6 +6,7 @@
 # Data (only the manifest is committed)
 data/*
 !data/manifest.json
+!data/provenance.json
 
 # Python
 __pycache__/
