@@ -72,7 +72,10 @@ WhatsApp webhook (FastAPI on VPS)
   - Click-by-click Azure setup steps to be written at deployment time.
 - **Embeddings:** the Meta Model API has no embeddings endpoint, so we use **BGE-M3** running locally on CPU (in Docker on the VPS) and combine it with Postgres full-text search (hybrid retrieval).
   - The documents are in English, so the **agent translates the Hausa question into English search queries** before retrieval rather than embedding the Hausa directly. Answers are still written in the user's language.
-- **Speech-to-text:** `muse-voice-transcribe-1.0` does **not** list Hausa (25 languages) and accepts WAV only (mono 16-bit PCM, 16/24 kHz, at most 10 min, at most 32 MB), so WhatsApp OGG/Opus voice notes need ffmpeg conversion. `muse-spark-1.3` accepts audio input directly. **Test both on real Hausa voice notes (Oct 27)** and pick the better one.
+- **Speech-to-text:** `muse-voice-transcribe-1.0` does **not** list Hausa (25 languages) and accepts WAV only (mono 16-bit PCM, 16/24 kHz, at most 10 min, at most 32 MB), so WhatsApp OGG/Opus voice notes need ffmpeg conversion. `muse-spark-1.3` accepts audio input directly.
+  - **Decided (Oct 27), after testing 16 of our own voice notes** (`evals/stt-hausa-2026-10-26.md`): no single model is reliable on Hausa, so we use a **combined pipeline**. Voice Transcribe and `muse-spark-1.2` audio run in parallel, then one Spark text call reconciles the two into a Hausa transcript, an English version and a confidence level.
+  - When confidence is low, or the two disagree on a year, number or place, Kasafi **reads back** its understanding ("Kana nufin …?") before doing any retrieval.
+  - Unclear audio never gets an answer: the guardrails can't rely on the transcript alone.
 - **Text-to-speech:** the Meta Model API has none, so we use Meta's open-weight **MMS-TTS Hausa** (`facebook/mms-tts-hau`, VITS, 36M params, CPU). Its license is **CC-BY-NC 4.0**: fine for the hackathon, but commercial use later needs another provider.
   - Voice replies are **short**: a 1–2 sentence spoken summary. The full answer, citations and evidence image are sent as text.
   - A **Hausa number normaliser** runs before TTS, e.g. "₦2.4bn" becomes "Naira biliyan biyu da miliyan ɗari huɗu" and "2025" becomes "dubu biyu da ashirin da biyar". It gets its own unit tests.
