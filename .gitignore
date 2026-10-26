@@ -1,0 +1,29 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Data (only the manifest is committed)
+data/*
+!data/manifest.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Node
+node_modules/
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
+
+# Claude Code personal settings (project settings.json is committed)
+.claude/settings.local.json
+
+# Logs
+*.log

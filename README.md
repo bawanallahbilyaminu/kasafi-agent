@@ -1,0 +1,48 @@
+# Kasafi
+
+**Kasafi** is a Hausa, voice-first WhatsApp agent for public budget and policy documents in Sokoto State, Nigeria.
+
+Citizens, civil servants and development partners send a voice note or text in Hausa (or English) and ask about state budgets, budget performance reports, policies, development plans and development partner reports. Kasafi plans which documents it needs, finds and indexes any that are missing from trusted sites, pulls out the evidence, verifies every claim and replies with:
+
+- a short, plain answer in the user's language
+- citations (document and page) for every claim
+- a cropped image of the source table or row
+
+Kasafi gives neutral, cited facts only. It does not give opinions on politics, does not cover conflict or security topics, and does not give medical or nutrition advice.
+
+> Entry by Halal Numeriq Limited (Startups track) in the **Meta Global AI Developer Hackathon** (Oct 26 – Nov 4, 2026). Problem statement: *Build for Your World*.
+
+## Meta models used
+
+- **Muse Spark** (Meta Model API): planning, tool use, answering, verification
+- **Muse Spark Open** (open weights, served via Baseten)
+- **Muse Voice Transcribe**: Hausa voice notes to text
+- **SAM 3.1**: crops of the source tables used as evidence
+
+## Status
+
+Work in progress. See [`docs/architecture.md`](docs/architecture.md) for the design and build plan.
+
+## Built during the hackathon
+
+Everything in this repository was written during the hackathon (Oct 26 – Nov 4, 2026). The git history is the record of that work.
+
+- _Filled in as features land._
+
+## Pre-existing assets
+
+Assets created before the hackathon and reused here. No code is reused.
+
+- _Public Sokoto State budget, policy and partner documents (listed in `data/manifest.json` with their source URLs)._
+- _Hausa glossary of budget terms (TBD)._
+- _Test questions (TBD)._
+
+An earlier, separate Kasafi prototype was built for a different competition. No code from it is used in this repository.
+
+## Setup
+
+_Coming soon._ Copy `.env.example` to `.env` and fill in the values. Never commit `.env`.
+
+## License
+
+[MIT](LICENSE)
