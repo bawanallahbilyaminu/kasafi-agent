@@ -22,6 +22,7 @@ from fastapi.responses import PlainTextResponse
 from pydantic import SecretStr
 
 from app.config import get_settings
+from app.data_rights import DELETED_REPLY, delete_user_data, is_delete_command
 from app.whatsapp.client import WhatsAppClient, mask_phone
 
 log = logging.getLogger(__name__)
@@ -75,6 +76,9 @@ def extract_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 def echo_reply(msg: dict[str, Any]) -> str:
     kind = msg.get("type")
+    if kind == "text" and is_delete_command(msg.get("text", {}).get("body", "")):
+        delete_user_data(msg["from"])
+        return DELETED_REPLY
     if kind == "text":
         return ECHO_TEXT.format(text=msg.get("text", {}).get("body", "")[:500])
     if kind == "audio":
