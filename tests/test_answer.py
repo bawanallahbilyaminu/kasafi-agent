@@ -72,7 +72,8 @@ def test_grounded_answer_with_assumption_and_citation(monkeypatch) -> None:
     a, fake = run(monkeypatch, [PLAN, {"answer": "An ware 128,495,868,362.13 ga ilimi [1].", "found": "full", "cited": [1]}])
     assert a.found and a.verified and not a.partial
     assert a.text.startswith("_Na yi amfani da kasafin 2026 mafi sabo._")
-    assert "128,495,868,362.13" in a.text and "[1] Sokoto State FY 2026 Budget, shafi 40" in a.text
+    assert "₦128.50 biliyan" in a.text and "128,495,868,362.13" in a.exact      # readable for users, exact for checks
+    assert "[1] Sokoto State FY 2026 Budget, shafi 40" in a.text
     evidence_msg = fake.calls[1][1]["content"]
     assert "EVIDENCE:" in evidence_msg and "Reply in Hausa" in evidence_msg
 
@@ -89,7 +90,7 @@ def test_retry_that_fixes_the_figure_is_accepted(monkeypatch) -> None:
     bad = {"answer": "An ware 130,000,000,000.00 [1].", "found": "full", "cited": [1]}
     good = {"answer": "An ware 128,495,868,362.13 [1].", "found": "full", "cited": [1]}
     a, _ = run(monkeypatch, [PLAN, bad, good])
-    assert a.verified and "128,495,868,362.13" in a.text
+    assert a.verified and "128,495,868,362.13" in a.exact and "₦128.50 biliyan" in a.text
 
 
 def test_partial_answer_is_sent(monkeypatch) -> None:
@@ -114,3 +115,53 @@ def test_planner_drops_unknown_doc_ids_and_caps_lists(monkeypatch) -> None:
     plan = {**PLAN, "doc_ids": ["nope", "budget-2026-approved", "x", "y"], "search_queries": ["a", "b", "c", "d"]}
     a, _ = run(monkeypatch, [plan, {"answer": "An ware 128,495,868,362.13 [1].", "found": "full", "cited": [1]}])
     assert a.plan.doc_ids == ["budget-2026-approved"] and len(a.plan.search_queries) == 3
+
+
+# --- WhatsApp format: summary, bullets, readable amounts -------------------------------------
+
+from app.agent.answer import readable_amounts, render_answer  # noqa: E402
+
+
+@pytest.mark.parametrize("raw, ha, en", [
+    ("118,827,792,994.59", "₦118.83 biliyan", "₦118.83 billion"),
+    ("N52,179,252,082.91", "₦52.18 biliyan", "₦52.18 billion"),
+    ("2,500,000,000,000.00", "₦2.50 tiriliyan", "₦2.50 trillion"),
+    ("1,200,000.00", "₦1.20 miliyan", "₦1.20 million"),
+    ("₦640,000.00", "₦640,000.00", "₦640,000.00"),
+    ("N104,450 million", "₦104,450 million", "₦104,450 million"),   # already in units
+])
+def test_readable_amounts(raw: str, ha: str, en: str) -> None:
+    assert readable_amounts(raw, "ha") == ha and readable_amounts(raw, "en") == en
+
+
+@pytest.mark.parametrize("text", ["a 2025", "87.76 da 200%", "code 052100000000", "page 40", "0.489"])
+def test_non_money_numbers_are_untouched(text: str) -> None:
+    assert readable_amounts(text, "ha") == text
+
+
+def test_render_summary_then_bullets() -> None:
+    d = {"summary": "An ware wa Ma'aikatar Lafiya kuɗi a 2025 [1][2].",
+         "items": ["2025 (approved): 52,179,252,082.91 [1]", "Spent (Q1–Q4 2025): 17,506,884,680.90 [2]"]}
+    assert render_answer(d, "ha") == ("An ware wa Ma'aikatar Lafiya kuɗi a 2025 [1][2].\n\n"
+                                      "• 2025 (approved): ₦52.18 biliyan [1]\n"
+                                      "• Spent (Q1–Q4 2025): ₦17.51 biliyan [2]")
+    assert render_answer({"summary": "Kawai layi ɗaya [1].", "items": []}, "ha") == "Kawai layi ɗaya [1]."
+    assert render_answer({"answer": "Tsohon tsari [1]."}, "ha") == "Tsohon tsari [1]."   # older reply shape
+
+
+def test_figure_check_covers_summary_and_items(monkeypatch) -> None:
+    bad = {"summary": "Total [1].", "items": ["2025: 999,999,999.00 [1]"], "found": "full", "cited": [1]}
+    a, fake = run(monkeypatch, [PLAN, bad, bad])
+    assert not a.verified and len(fake.calls) == 3
+
+
+def test_word_ending_in_n_is_not_a_naira_sign() -> None:
+    assert readable_amounts("kasafin 52,179,252,082.91", "ha") == "kasafin ₦52.18 biliyan"
+    assert readable_amounts("N52,179,252,082.91", "ha") == "₦52.18 biliyan"
+    assert readable_amounts("NGN 1,200,000.00", "en") == "₦1.20 million"
+
+
+def test_over_hooked_hausa_is_fixed_but_correct_hooks_stay() -> None:
+    d = {"summary": "Ƙasafin 2025 ya ware, kuma an ƙashe kuɗi a ƙaramar hukuma [1].", "items": []}
+    assert render_answer(d, "ha") == "Kasafin 2025 ya ware, kuma an kashe kuɗi a ƙaramar hukuma [1]."
+    assert render_answer({"summary": "ƙasafi", "items": []}, "en") == "ƙasafi"     # only for Hausa replies
