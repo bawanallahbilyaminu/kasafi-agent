@@ -7,7 +7,7 @@ code that needs a secret checks for it where it is used.
 
 from functools import lru_cache
 
-from pydantic import SecretStr
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     whatsapp_verify_token: SecretStr | None = None
     whatsapp_app_secret: SecretStr | None = None
     whatsapp_api_version: str = "v26.0"
+    whatsapp_business_account_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("WHATSAPP_BUSINESS_ACCOUNT_ID", "WHATSAPP_WABA_ID", "WABA_ID"),
+    )
 
     # Database
     database_url: SecretStr | None = None
