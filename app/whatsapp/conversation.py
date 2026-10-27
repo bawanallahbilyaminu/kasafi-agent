@@ -7,6 +7,9 @@ Order matters:
 4. Consent: on first contact nothing goes to any model. The user gets the bilingual notice
    with [OK / Na yarda] [Hausa] [English] buttons, and stays there until they agree.
 5. After consent: per-number daily limits and the global spend cap, then the actual work.
+   After a voice read-back, the next reply is about that pending question: Eh/Yes confirms,
+   A'a/No cancels, and anything else is merged by the model as a correction, or treated as a new
+   question when it clearly is one (app/whatsapp/corrections.py).
 """
 
 from __future__ import annotations
@@ -17,14 +20,18 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+import httpx
+
 from app.config import Settings
 from app.data_rights import DELETED_REPLY, delete_user_data, is_delete_command
 from app.guardrails.emergency import EMERGENCY_REPLY, is_medical_emergency
 from app.language import detect_language
+from app.providers.chat import ProviderError
 from app.users import UserStore, user_key
 from app.whatsapp.client import mask_phone
 from app.whatsapp.messages import LANG_BUTTONS, NOT_IN_PILOT, NOTICE_BUTTONS, first_contact_notice, t
-from app.whatsapp.voice import is_pilot, reply_for_voice
+from app.whatsapp.corrections import Resolution, quick_resolve, resolve
+from app.whatsapp.voice import VoiceOutcome, is_pilot, reply_for_voice
 
 log = logging.getLogger(__name__)
 
@@ -54,7 +61,8 @@ def _notice(lang: str | None, source: str | None) -> list[Out]:
     return [Out(ha), Out(en, NOTICE_BUTTONS)]
 
 
-VoiceFn = Callable[..., Awaitable[str]]
+VoiceFn = Callable[..., Awaitable[VoiceOutcome]]
+ResolveFn = Callable[..., Awaitable[Resolution]]
 NotifyFn = Callable[[Out], Awaitable[None]]
 
 
@@ -63,7 +71,8 @@ async def _no_notify(out: Out) -> None:
 
 
 async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Settings,
-                 voice_fn: VoiceFn = reply_for_voice, notify: NotifyFn = _no_notify) -> list[Out]:
+                 voice_fn: VoiceFn = reply_for_voice, notify: NotifyFn = _no_notify,
+                 resolve_fn: ResolveFn = resolve) -> list[Out]:
     """Returns the replies to send. `notify` sends a message right away (the "listening" ack)."""
     sender, kind = msg.get("from", ""), msg.get("type")
     text = (msg.get("text") or {}).get("body", "") if kind == "text" else ""
@@ -111,23 +120,74 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     lang = user.lang or "ha"
     exempt = "".join(ch for ch in sender if ch.isdigit()) in settings.exempt_numbers
     voice_used, questions_used = store.usage(key)
+    pending = store.get_pending(key, settings.kasafi_pending_ttl_minutes)
+
+    def over_cap(cost: float) -> bool:
+        return not exempt and store.spent_today() + cost > settings.kasafi_daily_spend_cap_usd
+
+    # 5a. Eh / A'a to a pending read-back: no model, no limit used
+    if pending and text and (quick := quick_resolve(text)):
+        store.clear_pending(key)
+        if quick.kind == "confirm":
+            return [Out(t("confirmed", lang, question=pending[0]))]
+        return [Out(t("cancelled", lang))]
+
     if kind == "audio":
         if not exempt and voice_used >= settings.kasafi_voice_per_day:
             return [Out(t("voice_limit", lang, n=settings.kasafi_voice_per_day))]
-        if not exempt and store.spent_today() + settings.kasafi_cost_per_voice_usd > settings.kasafi_daily_spend_cap_usd:
+        if over_cap(settings.kasafi_cost_per_voice_usd):
             log.warning("daily spend cap reached")
             return [Out(t("busy", lang))]
         store.count(key, "voice")
         store.add_spend(settings.kasafi_cost_per_voice_usd)
         await notify(Out(t("listening", lang)))   # transcription takes ~10 s; say we're on it
-        return [Out(await voice_fn(msg, wa, lang=lang, settings=settings))]
+        outcome = await voice_fn(msg, wa, lang=lang, settings=settings)
+        if pending and outcome.result:            # a spoken Eh / A'a / correction
+            res = await _resolve_safely(pending[0], outcome.result.transcript, resolve_fn, settings)
+            if res.kind != "new":
+                store.clear_pending(key)
+                return [_resolution_reply(res, pending[0], lang)]
+        store.clear_pending(key)                  # a new question replaces any pending one
+        r = outcome.result
+        if r and r.needs_confirmation and not is_medical_emergency(r.transcript, r.english):
+            store.set_pending(key, r.transcript, r.english)
+        return [Out(outcome.text)]
+
     if kind == "text":
         if not exempt and questions_used >= settings.kasafi_questions_per_day:
             return [Out(t("question_limit", lang, n=settings.kasafi_questions_per_day))]
         store.count(key, "questions")
+        if pending:                               # a typed correction, or a new question
+            if over_cap(settings.kasafi_cost_per_question_usd):
+                return [Out(t("busy", lang))]
+            store.add_spend(settings.kasafi_cost_per_question_usd)
+            res = await _resolve_safely(pending[0], text, resolve_fn, settings)
+            store.clear_pending(key)
+            if res.kind != "new":
+                return [_resolution_reply(res, pending[0], lang)]
         # Text answers don't call a model yet. When the agent lands, check the spend cap and
         # add_spend(kasafi_cost_per_question_usd) here, as for voice.
         return [Out(t("echo", lang, text=text[:500]))]
     if button == "consent_ok":
         return [Out(t("consent_thanks", lang))]
     return [Out(t("other", lang))]
+
+
+async def _resolve_safely(pending: str, reply: str, resolve_fn: ResolveFn, settings: Settings) -> Resolution:
+    try:
+        return await resolve_fn(pending, reply, settings=settings)
+    except (ProviderError, httpx.HTTPError, ValueError) as e:  # model down or bad JSON
+        log.warning("correction merge failed: %s", type(e).__name__)
+        return Resolution("failed")
+
+
+def _resolution_reply(res: Resolution, pending: str, lang: str) -> Out:
+    if res.kind == "confirm":
+        return Out(t("confirmed", lang, question=pending))
+    if res.kind == "cancel":
+        return Out(t("cancelled", lang))
+    if res.kind == "failed":
+        return Out(t("correction_failed", lang))
+    if is_medical_emergency(res.question, res.english):
+        return Out(EMERGENCY_REPLY)
+    return Out(t("corrected", lang, question=res.question[:1000]))

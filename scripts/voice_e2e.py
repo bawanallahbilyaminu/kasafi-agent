@@ -43,7 +43,7 @@ async def main(files: list[Path]) -> None:
     for f in files:
         wa = LocalFileWA(f)
         t0 = time.perf_counter()
-        reply = await reply_for_voice(msg, wa, settings=settings)
+        reply = (await reply_for_voice(msg, wa, settings=settings)).text
         print(f"\n=== {f.name}  ({time.perf_counter() - t0:.1f}s, media deleted: {wa.deleted})\n{reply}")
 
 

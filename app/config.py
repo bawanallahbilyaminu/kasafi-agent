@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     kasafi_daily_spend_cap_usd: float = 5.0
     kasafi_cost_per_voice_usd: float = 0.02
     kasafi_cost_per_question_usd: float = 0.01
+    # How long a read-back question waits for Eh / A'a / a correction
+    kasafi_pending_ttl_minutes: int = 15
 
     # Our own test numbers: no per-number daily limits and no global spend cap. They still need
     # consent, and their usage still counts toward the daily spend total.

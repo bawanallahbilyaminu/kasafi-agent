@@ -2,7 +2,8 @@
 
 Privacy: the phone number is never stored. Users are keyed by HMAC-SHA256(number) with a
 server secret (KASAFI_HASH_KEY). A plain SHA-256 of a phone number can be reversed by trying
-every number. Usage rows are pruned after 30 days, matching the log retention. Everything
+every number. Usage rows are pruned after 30 days, matching the log retention. A read-back
+question waiting for confirmation is kept for at most KASAFI_PENDING_TTL_MINUTES. Everything
 for a user is removed by GOGE BAYANAI NA / DELETE MY DATA (app/data_rights.py).
 
 SQLite on a Docker volume for the pilot (KASAFI_STATE_DB). It moves to Postgres with the rest
@@ -33,7 +34,10 @@ CREATE TABLE IF NOT EXISTS users (
     lang        TEXT,              -- 'ha' | 'en' | NULL (not known yet)
     lang_source TEXT,              -- 'detected' | 'chosen'
     consent_at  TEXT,              -- ISO time the user tapped OK / Na yarda; NULL = not consented
-    created_at  TEXT NOT NULL
+    created_at  TEXT NOT NULL,
+    pending_question TEXT,         -- read-back awaiting Eh / A'a / a correction (short-lived)
+    pending_english  TEXT,
+    pending_at       TEXT
 );
 CREATE TABLE IF NOT EXISTS usage (
     user_key  TEXT NOT NULL,
@@ -81,7 +85,15 @@ class UserStore:
         self._db = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
         self._db.execute("PRAGMA journal_mode=WAL" if path != ":memory:" else "PRAGMA journal_mode=MEMORY")
         self._db.executescript(SCHEMA)
+        self._migrate()
         self._lock = threading.Lock()
+
+    def _migrate(self) -> None:
+        """Add columns introduced after the first deploy (the server DB already exists)."""
+        have = {row[1] for row in self._db.execute("PRAGMA table_info(users)")}
+        for col in ("pending_question", "pending_english", "pending_at"):
+            if col not in have:
+                self._db.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
 
     def _exec(self, sql: str, args: tuple = ()) -> sqlite3.Cursor:
         with self._lock:
@@ -104,6 +116,25 @@ class UserStore:
     def give_consent(self, key: str) -> None:
         self._exec("UPDATE users SET consent_at=? WHERE user_key=? AND consent_at IS NULL",
                    (datetime.now(timezone.utc).isoformat(), key))
+
+    # pending read-back
+    def set_pending(self, key: str, question: str, english: str) -> None:
+        self._exec("UPDATE users SET pending_question=?, pending_english=?, pending_at=? WHERE user_key=?",
+                   (question, english, datetime.now(timezone.utc).isoformat(), key))
+
+    def get_pending(self, key: str, ttl_minutes: int) -> tuple[str, str] | None:
+        row = self._exec("SELECT pending_question, pending_english, pending_at FROM users WHERE user_key=?",
+                         (key,)).fetchone()
+        if not row or not row[0]:
+            return None
+        if datetime.now(timezone.utc) - datetime.fromisoformat(row[2]) > timedelta(minutes=ttl_minutes):
+            self.clear_pending(key)
+            return None
+        return row[0], row[1] or ""
+
+    def clear_pending(self, key: str) -> None:
+        self._exec("UPDATE users SET pending_question=NULL, pending_english=NULL, pending_at=NULL WHERE user_key=?",
+                   (key,))
 
     def delete(self, key: str) -> None:
         with self._lock:

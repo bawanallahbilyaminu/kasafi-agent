@@ -130,6 +130,10 @@ TEXTS = {
         "ha": "Na gyara:\n\n«{question}»\n\n(Kasafi yana gwaji: amsoshi za su zo nan ba da jimawa ba.)",
         "en": "Corrected:\n\n«{question}»\n\n(Kasafi is in testing: answers are coming soon.)",
     },
+    "correction_failed": {
+        "ha": "Yi haƙuri, ban iya yin wannan gyaran ba.\n\nDon Allah ka sake aiko da cikakkiyar tambayar.",
+        "en": "Sorry, I couldn't apply that correction.\n\nPlease send the full question again.",
+    },
     "cancelled": {
         "ha": "To, an soke wannan tambayar.\n\nKa aiko da sabuwar tambaya a duk lokacin da kake so.",
         "en": "OK, that question is cancelled.\n\nSend a new question whenever you like.",

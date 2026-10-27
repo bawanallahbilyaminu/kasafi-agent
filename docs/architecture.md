@@ -76,6 +76,11 @@ WhatsApp webhook (FastAPI on VPS)
   - **Decided (Oct 27), after testing 16 of our own voice notes** (`evals/stt-hausa-2026-10-26.md`): no single model is reliable on Hausa, so we use a **combined pipeline**. Voice Transcribe and `muse-spark-1.2` audio run in parallel, then one Spark text call reconciles the two into a Hausa transcript, an English version and a confidence level.
   - When confidence is low, or the two disagree on a year, number or place, Kasafi **reads back** its understanding ("Kana nufin …?") before doing any retrieval.
   - Unclear audio never gets an answer: the guardrails can't rely on the transcript alone.
+  - **Read-back and correction:**
+    - The read-back quotes what was said, in the language it was spoken; the English translation is only for search.
+    - The pending question is kept for at most 15 minutes, and deleted with the user's data.
+    - Eh/Yes confirms and A'a/No cancels. A short correction ("2025") is merged into the pending question by Muse Spark; a clearly different question is treated as new.
+    - A "🎧 Ina sauraro…" ack goes out as soon as a voice note passes the consent and limit checks.
   - Muse Spark Open on Baseten (`audio_url`) was tested too: 7/17, and it often ignores the audio at random, so it stays out of the speech path. It is used for text tasks instead.
 - **Text-to-speech:** the Meta Model API has none, so we use Meta's open-weight **MMS-TTS Hausa** (`facebook/mms-tts-hau`, VITS, 36M params, CPU). Its license is **CC-BY-NC 4.0**: fine for the hackathon, but commercial use later needs another provider.
   - Voice replies are **short**: a 1–2 sentence spoken summary. The full answer, citations and evidence image are sent as text.

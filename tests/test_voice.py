@@ -50,7 +50,7 @@ def _run(monkeypatch, *, result=None, exc=None, wa=None, settings=None, sender=P
     monkeypatch.setattr(voice, "transcribe_voice_note", fake_transcribe)
     wa = wa or FakeWA()
     out = asyncio.run(voice.reply_for_voice(_msg(sender), wa, lang=lang, settings=settings or _settings(),
-                                            meta_client_factory=FakeMeta))
+                                            meta_client_factory=FakeMeta)).text
     return out, wa
 
 

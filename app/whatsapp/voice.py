@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -29,6 +30,12 @@ from app.whatsapp.client import MediaError, WhatsAppClient, mask_phone
 from app.whatsapp.messages import t
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class VoiceOutcome:
+    text: str                           # the reply to send
+    result: SpeechResult | None = None  # None when nothing usable was heard
 
 
 def is_pilot(number: str, settings: Settings) -> bool:
@@ -55,19 +62,19 @@ async def reply_for_voice(
     lang: str = "ha",
     settings: Settings | None = None,
     meta_client_factory: type[MetaClient] = MetaClient,
-) -> str:
+) -> VoiceOutcome:
     settings = settings or get_settings()
     sender = msg.get("from", "")
     media_id = (msg.get("audio") or {}).get("id")
     if not media_id:
-        return t("not_heard", lang)
+        return VoiceOutcome(t("not_heard", lang))
 
     t0 = time.perf_counter()
     try:
         audio = await wa.download_media(media_id)
     except MediaError as e:
         log.warning("voice note download failed for %s: %s", mask_phone(sender), e)
-        return t("not_heard", lang)
+        return VoiceOutcome(t("not_heard", lang))
 
     try:
         async with meta_client_factory(settings) as client:
@@ -75,10 +82,10 @@ async def reply_for_voice(
                                                  max_seconds=settings.voice_max_seconds)
     except VoiceNoteTooLong as e:
         log.info("voice note from %s too long: %s", mask_phone(sender), e)
-        return t("too_long", lang, minutes=settings.voice_max_seconds // 60)
+        return VoiceOutcome(t("too_long", lang, minutes=settings.voice_max_seconds // 60))
     except (TranscriptionFailed, ProviderError, httpx.HTTPError) as e:
         log.warning("transcription failed for %s: %s", mask_phone(sender), type(e).__name__)
-        return t("not_heard", lang)
+        return VoiceOutcome(t("not_heard", lang))
     finally:
         del audio  # drop the only in-memory copy
         try:
@@ -89,7 +96,7 @@ async def reply_for_voice(
     log.info("voice note from %s: confidence=%s read_back=%s hypotheses=%s took=%.1fs",
              mask_phone(sender), result.confidence, result.needs_confirmation,
              sorted(result.hypotheses), time.perf_counter() - t0)
-    return compose_reply(result, lang)
+    return VoiceOutcome(compose_reply(result, lang), result if result.transcript.strip() else None)
 
 
 def voice_replies_enabled(lang: str | None) -> bool:
