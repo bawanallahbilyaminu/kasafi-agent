@@ -20,6 +20,7 @@ class Hit:
     page: int
     text: str
     rank: float
+    idx: int = 0          # chunk position on its page, for fetching neighbours
 
 
 SQL = """
@@ -43,7 +44,7 @@ any_term AS (
 best AS (
     SELECT id, max(rank) AS rank FROM (SELECT * FROM all_terms UNION ALL SELECT * FROM any_term) u GROUP BY id
 )
-SELECT c.doc_id, d.title, d.year, c.page, c.text, b.rank
+SELECT c.doc_id, d.title, d.year, c.page, c.text, b.rank, c.idx
 FROM best b JOIN chunks c ON c.id = b.id JOIN documents d ON d.id = c.doc_id
 ORDER BY b.rank DESC LIMIT %(k)s
 """

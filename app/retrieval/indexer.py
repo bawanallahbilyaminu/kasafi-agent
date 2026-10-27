@@ -2,7 +2,12 @@
 
 Document text is untrusted data (CLAUDE.md rule 6): it is stored and searched, never executed
 or followed. Pages with no text layer are stored with source='none' and need OCR later.
-Re-indexing is idempotent: a document whose SHA-256 hasn't changed is skipped.
+Re-indexing is idempotent: a document whose SHA-256 hasn't changed is skipped, and OCR text
+already stored for scanned pages is kept.
+
+Budget tables run across many pages, and the same sector rows appear in several tables (total,
+personnel, overhead, capital). So each chunk starts with the title of the table it sits in,
+carried over from earlier pages, e.g. "[Table: ... Total Expenditure by Programme]".
 """
 
 from __future__ import annotations
@@ -70,6 +75,106 @@ def extract_pages(path: Path) -> list[str]:
         pdf.close()
 
 
+# A title names a kind of statement ("budget" alone isn't enough: "Procurement of software for tracking of
+# Budget" is a line item) and has a title shape ("... by Programme", "Summary of ...", "Total ...").
+_TITLE_WORDS = re.compile(r"(?i)\b(expenditure|revenue|receipts|appropriation|financing|summary|statement)\b")
+_TITLE_SHAPE = re.compile(r"(?i)(\bby\b|^summary\b|^total\b|\bsummary of\b|\bstatement of\b)")
+_HAS_AMOUNT = re.compile(r"\d{1,3}(,\d{3})+|\d+\.\d{2}\b")
+
+
+def is_table_title(line: str) -> bool:
+    """A heading such as 'Sokoto State Government 2026 Approved Budget - Total Expenditure by Programme'.
+
+    Headings are mostly capitalised words; a prose sentence ("Consolidated Revenue Fund (CRF) to be
+    maintained by the Government ...") isn't.
+    """
+    s = line.strip()
+    if not (15 <= len(s) <= 160 and not s.endswith(".") and not _HAS_AMOUNT.search(s)
+            and _TITLE_WORDS.search(s) and _TITLE_SHAPE.search(s) and s[:1].isupper()):
+        return False
+    long_words = [w for w in re.findall(r"[A-Za-z]+", s) if len(w) > 3]
+    return bool(long_words) and sum(w[0].isupper() for w in long_words) / len(long_words) >= 0.7
+
+
+# --- column labelling --------------------------------------------------------------------------
+# Budget tables reach us as rows of bare numbers ("05 Education 8,139,687,377.37 80,287,... -"), and the
+# column header ("Code Sector ... 2024 Full Year Actuals 2025 Revised Budget ... 2026 Approved Budget ...")
+# is on an earlier line or page. A model counting positions picked the wrong column (eval 11), so rows
+# are labelled in code: "05 Education | 2026 Approved Budget: 128,495,868,362.13 | ...". A row is only
+# labelled when its value count matches the column count exactly; anything else stays as it was.
+_VALUE = re.compile(r"^(?:-|\(?-?[\d,]+(?:\.\d+)?\)?%?)$")
+_COLUMN_SPLIT = re.compile(r"(?<!against)(?<!to)\s(?=20\d\d\b)|\s(?=%)|\s(?=Balance\b)")
+
+
+def parse_columns(header: str) -> list[str]:
+    """'Code Sector 2024 Full Year Actuals 2025 Revised Budget ...' -> ['2024 Full Year Actuals', ...]."""
+    h = re.sub(r"\s+", " ", header).strip()
+    m = re.search(r"\b20\d\d\b", h)
+    if not h.startswith("Code ") or not m:
+        return []
+    cols = [c.strip() for c in _COLUMN_SPLIT.split(h[m.start():]) if c.strip()]
+    return cols if len(cols) >= 2 else []
+
+
+def label_row(line: str, columns: list[str]) -> str:
+    tokens = line.split()
+    values: list[str] = []
+    while tokens and _VALUE.match(tokens[-1]):
+        values.insert(0, tokens.pop())
+    if not columns or not tokens or len(values) != len(columns) or not any(v != "-" for v in values):
+        return line
+    return " ".join(tokens) + " | " + " | ".join(f"{c}: {v}" for c, v in zip(columns, values))
+
+
+def label_tables(text: str, columns: list[str]) -> tuple[str, list[str]]:
+    """Label table rows on one page; returns the new text and the columns in force at the end of the page."""
+    lines, out, i = text.splitlines(), [], 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("Code ") and not _HAS_AMOUNT.search(line):
+            header, j = [line], i + 1
+            # A data row starts with a 2-digit sector code ("04 Health") or a 5+-digit code ("010101");
+            # header lines may start with a 4-digit year ("2026 Approved"), which must not end the header.
+            while j < len(lines) and j - i <= 8 and not _HAS_AMOUNT.search(lines[j]) and not re.match(r"^(\d{2}|\d{5,})\s", lines[j]):
+                header.append(lines[j])
+                j += 1
+            if cols := parse_columns(" ".join(header)):
+                columns = cols
+            out.extend(lines[i:j])
+            i = j
+            continue
+        # Columns carry over a new title: budgets often print a table's header only once, and the
+        # tables in one section share a layout. The exact value-count check guards the rest.
+        out.append(label_row(line, columns))
+        i += 1
+    return chr(10).join(out), columns
+
+
+def contextual_chunks(pages: list[str]) -> list[list[str]]:
+    """Label table columns, chunk every page, and prefix each chunk with the table title in force at its start."""
+    out, title, columns = [], "", []
+    for text in pages:
+        page_chunks = []
+        text, columns = label_tables(text, columns)
+        # Sector-total and "Total ..." rows also get their own one-row chunk (with the table title): in a
+        # big table they're outranked by the many sub-programme rows that repeat the sector's name.
+        key_rows, row_title = [], title
+        for line in text.splitlines():
+            if is_table_title(line):
+                row_title = line.strip()
+            elif " | " in line and (re.match(r"^\d{2}\s", line) or line.lower().startswith("total")):
+                key_rows.append((f"[Table: {row_title}]" + chr(10) if row_title else "") + line)
+        for chunk in chunk_page(text) if len(text) >= MIN_PAGE_CHARS else []:
+            lines = chunk.splitlines()
+            prefix = f"[Table: {title}]" + chr(10) if title and not is_table_title(lines[0]) else ""
+            page_chunks.append(prefix + chunk)
+            for line in lines:
+                if is_table_title(line):
+                    title = line.strip()
+        out.append(page_chunks + key_rows)
+    return out
+
+
 def chunk_page(text: str, size: int = CHUNK_CHARS, overlap: int = CHUNK_OVERLAP) -> list[str]:
     """Split on line boundaries into ~size-char pieces with ~overlap chars repeated between pieces."""
     if len(text) <= size:
@@ -98,7 +203,17 @@ def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bo
         if row and row[0] == sha:
             return IndexResult(doc["id"], "unchanged")
     pages = extract_pages(path)
-    empty = sum(len(p) < MIN_PAGE_CHARS for p in pages)
+    # Keep OCR text from earlier runs for pages that still have no text layer.
+    ocr = dict(conn.execute("SELECT page, text FROM pages WHERE doc_id = %s AND source = 'ocr'", (doc["id"],)).fetchall())
+    sources = []
+    for i, text in enumerate(pages):
+        if len(text) < MIN_PAGE_CHARS and (i + 1) in ocr:
+            pages[i] = ocr[i + 1]
+            sources.append("ocr")
+        else:
+            sources.append("text" if len(text) >= MIN_PAGE_CHARS else "none")
+    empty = sources.count("none")
+    chunked = contextual_chunks(pages)
     with conn.transaction():
         conn.execute("DELETE FROM documents WHERE id = %s", (doc["id"],))   # cascades to pages/chunks
         conn.execute(
@@ -110,13 +225,11 @@ def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bo
         n_chunks = 0
         with conn.cursor() as cur:
             with cur.copy("COPY pages (doc_id, page, text, source) FROM STDIN") as cp:
-                for i, text in enumerate(pages, start=1):
-                    cp.write_row((doc["id"], i, text, "text" if len(text) >= MIN_PAGE_CHARS else "none"))
+                for i, (text, source) in enumerate(zip(pages, sources), start=1):
+                    cp.write_row((doc["id"], i, text, source))
             with cur.copy("COPY chunks (doc_id, page, idx, text) FROM STDIN") as cp:
-                for i, text in enumerate(pages, start=1):
-                    if len(text) < MIN_PAGE_CHARS:
-                        continue
-                    for j, chunk in enumerate(chunk_page(text)):
+                for i, page_chunks in enumerate(chunked, start=1):
+                    for j, chunk in enumerate(page_chunks):
                         cp.write_row((doc["id"], i, j, chunk))
                         n_chunks += 1
     return IndexResult(doc["id"], "indexed", len(pages), empty, n_chunks)

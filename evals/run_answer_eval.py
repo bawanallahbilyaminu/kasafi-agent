@@ -1,0 +1,82 @@
+"""Grounded-answer eval: run the real answer pipeline on evals/answers.json cases and check facts.
+
+Checks for each case:
+- found and verified (every number in the answer appears in its cited evidence)
+- every expected figure appears in the answer exactly as written in the document
+- at least one citation from an expected document (and page, if given)
+- expected terms present (any of the alternatives), and an assumption stated when required
+Usage:  uv run python evals/run_answer_eval.py [--ids 01 11] [--runs 2]
+"""
+
+import argparse
+import asyncio
+import json
+import statistics
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+import psycopg  # noqa: E402
+
+from app.agent.answer import answer_question  # noqa: E402
+from app.config import get_settings  # noqa: E402
+
+
+
+def check(case: dict, a) -> list[str]:
+    fails = []
+    if not a.found:
+        return ["not found"]
+    if not a.verified:
+        fails.append("unverified figures")
+    for n in case.get("numbers", []):
+        if n not in a.text:
+            fails.append(f"missing figure {n}")
+    if case.get("numbers_any") and not any(all(n in a.text for n in group) for group in case["numbers_any"]):
+        fails.append(f"none of the accepted figures {case['numbers_any']}")
+    cites = [(e.doc_id, e.page) for e in a.cited]
+    if not any(d in case["docs"] and (not case.get("pages") or p in case["pages"]) for d, p in cites):
+        fails.append(f"no citation from {case['docs']} {case.get('pages', '')} (got {cites})")
+    lowered = a.text.lower()
+    for alts in case.get("terms_any", []):
+        if not any(t.lower() in lowered for t in alts):
+            fails.append(f"missing term {alts[0]}")
+    if case.get("must_state_assumption"):
+        note = a.plan.assumption_for(case["lang"]) if a.plan else ""
+        if not note or note not in a.text:
+            fails.append("assumption not stated")
+    return fails
+
+
+async def main(ids: list[str] | None, runs: int) -> int:
+    s = get_settings()
+    cases = json.loads((ROOT / "evals/answers.json").read_text(encoding="utf-8"))["cases"]
+    questions = {q["id"]: q for q in json.loads((ROOT / "evals/questions.json").read_text(encoding="utf-8"))["questions"]}
+    cases = [c for c in cases if not ids or c["id"] in ids]
+    passed, times = 0, []
+    with psycopg.connect(s.db_url()) as conn:
+        for run in range(runs):
+            for c in cases:
+                t0 = time.perf_counter()
+                a = await answer_question(questions[c["id"]]["text_ha"], c["lang"], conn, settings=s)
+                times.append(time.perf_counter() - t0)
+                fails = check(c, a)
+                passed += not fails
+                print(f"[run {run + 1}] {c['id']:>3} {'PASS' if not fails else 'FAIL'} {times[-1]:5.1f}s  "
+                      f"{'; '.join(fails)}")
+                if fails:
+                    print("      " + a.text.replace("\n", "\n      "))
+    total = len(cases) * runs
+    print(f"\n{passed}/{total} passed  |  median {statistics.median(times):.1f}s, max {max(times):.1f}s")
+    return 0 if passed == total else 1
+
+
+if __name__ == "__main__":
+    p = argparse.ArgumentParser()
+    p.add_argument("--ids", nargs="+")
+    p.add_argument("--runs", type=int, default=1)
+    a = p.parse_args()
+    raise SystemExit(asyncio.run(main(a.ids, a.runs)))
