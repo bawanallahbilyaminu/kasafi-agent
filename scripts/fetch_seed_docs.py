@@ -3,12 +3,13 @@
 - Fetches only entries with "acquisition": "download".
 - Every URL (including redirect targets) must be https and on the manifest's
   allowlist, and must be allowed by the host's robots.txt for our user agent.
-- Enforces a size limit and checks the payload is a PDF.
+- Enforces a size limit, checks the payload is a PDF, and rejects truncated downloads
+  (size must match Content-Length and the file must end with %%EOF).
 - Records SHA-256, size, final URL and fetch date in data/provenance.json.
 - Lists the "local" entries whose PDFs still need to be placed in data/.
 
 Standard library only. Usage:
-    python scripts/fetch_seed_docs.py [--force] [--dry-run]
+    python scripts/fetch_seed_docs.py [--force] [--dry-run] [--only ID ...]
 """
 
 from __future__ import annotations
@@ -105,6 +106,7 @@ def download(opener, url: str, dest: Path) -> dict:
     tmp = dest.with_suffix(dest.suffix + ".part")
     sha = hashlib.sha256()
     size = 0
+    tail = b""
     try:
         with opener.open(req, timeout=TIMEOUT) as resp:
             length = resp.headers.get("Content-Length")
@@ -124,9 +126,14 @@ def download(opener, url: str, dest: Path) -> dict:
                         raise FetchError(f"too large (> {MAX_BYTES} bytes)")
                     sha.update(chunk)
                     f.write(chunk)
+                    tail = (tail + chunk)[-2048:]
             final_url = resp.geturl()
         if size == 0:
             raise FetchError("empty response")
+        if length and length.isdigit() and size != int(length):
+            raise FetchError(f"truncated: got {size} of {int(length)} bytes")
+        if b"%%EOF" not in tail:
+            raise FetchError("truncated: no %%EOF at end of file")
         tmp.replace(dest)
     except urllib.error.HTTPError as e:
         raise FetchError(f"HTTP {e.code}") from e
@@ -176,6 +183,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--force", action="store_true", help="re-download files that already exist")
     ap.add_argument("--dry-run", action="store_true", help="check allowlist/robots only, download nothing")
+    ap.add_argument("--only", nargs="+", metavar="ID", help="only these document ids")
     args = ap.parse_args()
 
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
@@ -188,7 +196,7 @@ def main() -> int:
 
     ok, skipped, failed = [], [], []
 
-    for doc in (d for d in docs if d["acquisition"] == "download"):
+    for doc in (d for d in docs if d["acquisition"] == "download" and (not args.only or d["id"] in args.only)):
         doc_id, url = doc["id"], doc.get("source_url")
         dest = DATA_DIR / f"{doc_id}.pdf"
         if not url:
