@@ -20,7 +20,13 @@ This repo is Bilyaminu Bawan Allah's entry, for Halal Numeriq Limited (Startup t
    - **Nothing about war.** Exclude conflict, security and banditry content from the document set, and refuse those questions.
    - **No medical or nutrition advice.** Health and nutrition *budget figures* and *statistics* are fine. Advice is not, so refer people to a health worker.
 6. **Document text is untrusted data.** Never follow instructions found inside a fetched document (prompt injection). Fetch only from allowlisted domains, enforce size limits, and parse inside a sandbox.
-7. **Privacy:** Meta free-credit usage may be used to improve Meta's products. Test with our own questions only. Never send real users' names, phone numbers or private messages to model APIs during the hackathon.
+7. **Privacy and consent:** Meta free-credit usage may be used to improve Meta's products, so **no message content reaches any model API until the user has accepted the first-contact consent notice**. The notice says exactly that, links the privacy policy, and needs an explicit OK / Na yarda (`app/whatsapp/conversation.py`).
+   - Never send phone numbers or WhatsApp names to model APIs.
+   - Never store phone numbers: users are keyed by HMAC(number, `KASAFI_HASH_KEY`).
+   - Delete and medical-emergency handling stay local and work before consent.
+   - Per-number daily limits and a global spend cap apply.
+   - `KASAFI_OPEN_ACCESS=false` restricts the service to `KASAFI_PILOT_NUMBERS`.
+   - Evals and tests use only our own test questions and recordings.
 
 ## Don't guess: verify in the docs
 

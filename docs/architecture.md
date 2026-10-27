@@ -80,6 +80,12 @@ WhatsApp webhook (FastAPI on VPS)
 - **Text-to-speech:** the Meta Model API has none, so we use Meta's open-weight **MMS-TTS Hausa** (`facebook/mms-tts-hau`, VITS, 36M params, CPU). Its license is **CC-BY-NC 4.0**: fine for the hackathon, but commercial use later needs another provider.
   - Voice replies are **short**: a 1–2 sentence spoken summary. The full answer, citations and evidence image are sent as text.
   - A **Hausa number normaliser** runs before TTS, e.g. "₦2.4bn" becomes "Naira biliyan biyu da miliyan ɗari huɗu" and "2025" becomes "dubu biyu da ashirin da biyar". It gets its own unit tests.
+- **Access and consent (decided Oct 27).** Kasafi is open to everyone (`KASAFI_OPEN_ACCESS`; the pilot allowlist is the fallback), but consent comes first:
+  - **First contact:** a bilingual notice with [OK / Na yarda] [Hausa] [English] buttons. Nothing reaches a model until the user agrees.
+  - **Reply language:** detected locally from the first message and switchable at any time.
+  - **Limits:** per-number daily limits (20 voice notes, 50 questions) and a global daily spend cap.
+  - **Storage:** state is kept in SQLite on a Docker volume and keyed by HMAC(number). It moves to Postgres later.
+  - **Spoken replies:** Hausa voice replies only go to users in Hausa mode.
 - **Data retention, confirmed with Bilyaminu (Oct 27).** The published privacy policy (halalnumeriq.com.ng/kasafi; source in `docs/site/`) promises the following, so the code must enforce it:
   - **Voice notes:** audio is held in memory only, plus a temporary file for ffmpeg that is deleted straight away. It is never stored, and it is discarded as soon as it has been transcribed.
   - **Conversations** (messages and replies): deleted after **90 days**.

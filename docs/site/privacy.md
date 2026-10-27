@@ -5,7 +5,7 @@ permalink: /privacy/
 
 # Kasafi Privacy Policy
 
-*Last updated: 27 October 2026*
+*Last updated: 27 October 2026 (consent notice, language preference, daily limits)*
 
 Kasafi is a WhatsApp assistant run by **Halal Numeriq Limited**, Sokoto, Nigeria ("we"). We are the data controller
 under the **Nigeria Data Protection Act 2023 (NDPA)**. Contact: [bilyaminu@halalnumeriq.com.ng](mailto:bilyaminu@halalnumeriq.com.ng).
@@ -15,14 +15,18 @@ under the **Nigeria Data Protection Act 2023 (NDPA)**. Contact: [bilyaminu@halal
 - Your **WhatsApp phone number** (and the profile name WhatsApp sends with it)
 - The **messages and voice notes** you send Kasafi, and Kasafi's replies
 - Basic technical records: times, message types and errors. These do not include your message text or your full number.
+- A few **settings linked to a coded ID**: whether and when you agreed to the first-contact notice, your reply language
+  (Hausa or English), and how many messages you sent each day (for the daily limits). The ID is made from your number
+  with a secret key, so we don't store the number itself.
 
 We don't ask for your name, ID, address or location. Please don't send private details about your health or anyone else's.
 
 ## Why
 
 To **answer your questions about public documents**, such as Sokoto State budgets, plans and reports. That means turning
-voice notes into text, searching the documents and replying to you. Our legal basis is your **consent**, which you give
-by messaging Kasafi; you can withdraw it at any time. We also review questions Kasafi could not answer, after separating
+voice notes into text, searching the documents and replying to you. Our legal basis is your **consent**. The first time
+you message Kasafi, you get a short notice, and **nothing you send goes to any AI service until you tap OK / Na yarda**.
+You can withdraw your consent at any time by sending GOGE BAYANAI NA. We also review questions Kasafi could not answer, after separating
 them from your phone number, to make it more accurate (**legitimate interest**).
 
 We do not sell your data, use it for advertising, or profile your political views.
@@ -44,7 +48,11 @@ protection terms and the NDPA's rules on transfers.
 - **Voice notes:** deleted as soon as they have been turned into text.
 - **Conversations** (your messages and our replies): **90 days**, then deleted.
 - **Technical logs:** 30 days.
+- **Daily usage counts:** 30 days. **Consent and language settings:** until you ask us to delete them.
 - Unanswered questions kept for improving Kasafi are stored **without** your phone number.
+
+To keep the free pilot fair and affordable, each number has a daily limit (currently 20 voice notes and 50 questions),
+and Kasafi has an overall daily limit. When a limit is reached, Kasafi tells you and starts again the next day.
 
 ## Your rights
 

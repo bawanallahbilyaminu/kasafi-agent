@@ -5,7 +5,7 @@ permalink: /data-deletion/
 
 # Delete your Kasafi data
 
-*Last updated: 27 October 2026*
+*Last updated: 27 October 2026 (consent and language settings)*
 
 ## On WhatsApp (quickest)
 
@@ -25,8 +25,9 @@ used. We may ask you to confirm the number is yours by sending a message from it
 
 ## What we delete
 
-Your messages, voice-note transcripts, Kasafi's replies and evidence images, and your phone number and WhatsApp name
-from our records. We do this within **7 days**, and usually straight away.
+Your messages, voice-note transcripts, Kasafi's replies and evidence images, your consent record, your language choice
+and your daily usage counts, plus your phone number and WhatsApp name from our records. We do this within **7 days**,
+and usually straight away. If you message Kasafi again afterwards, you'll get the first-contact notice again.
 
 ## What we may keep
 

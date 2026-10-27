@@ -21,7 +21,7 @@ ARG KASAFI_COMMIT=unknown
 ENV KASAFI_COMMIT=$KASAFI_COMMIT
 LABEL org.kasafi.app=kasafi-agent-api org.kasafi.commit=$KASAFI_COMMIT
 
-RUN useradd --system --uid 10001 kasafi
+RUN useradd --system --uid 10001 kasafi && mkdir -p /data && chown kasafi /data
 USER kasafi
 
 EXPOSE 8000
