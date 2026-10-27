@@ -134,6 +134,23 @@ TEXTS = {
         "ha": "Yi haƙuri, ban iya yin wannan gyaran ba.\n\nDon Allah ka sake aiko da cikakkiyar tambayar.",
         "en": "Sorry, I couldn't apply that correction.\n\nPlease send the full question again.",
     },
+    # Scope guardrails (app/guardrails/scope.py)
+    "guard_electoral": {
+        "ha": "Kasafi ba ya ba da ra'ayi kan 'yan takara, jam'iyyu ko zaɓe.\n\nIna amsa tambayoyi ne kawai game da takardun kasafi da manufofin gwamnati, tare da madogara.",
+        "en": "Kasafi doesn't give opinions on candidates, parties or elections.\n\nI only answer questions about public budget and policy documents, with sources.",
+    },
+    "guard_verdict": {
+        "ha": "Kasafi ba ya yanke hukunci kan ayyukan gwamnati ko na 'yan siyasa.\n\nAmma zan iya nuna maka bayanai daga takardu gefe da gefe, misali: «Nawa aka ware wa ilimi a 2025, kuma nawa aka kashe?»",
+        "en": "Kasafi doesn't judge the performance of the government or politicians.\n\nBut I can show you the facts from the documents side by side, for example: «How much was allocated to education in 2025, and how much was spent?»",
+    },
+    "guard_security": {
+        "ha": "Yi haƙuri, tambayoyi game da tsaro, rikici ko hare-hare ba sa cikin abin da Kasafi ke amsawa.\n\nIna amsa tambayoyi game da kasafi da manufofin gwamnati.",
+        "en": "Sorry, questions about security, conflict or attacks are outside what Kasafi covers.\n\nI answer questions about public budgets and policies.",
+    },
+    "guard_medical_advice": {
+        "ha": "Kasafi ba ya ba da shawarar magani ko ta abinci mai gina jiki.\n\nDon Allah ka tuntuɓi ma'aikacin lafiya. Zan iya taimaka maka da alƙaluman kasafin lafiya, misali: «Nawa aka ware wa lafiya a 2026?»",
+        "en": "Kasafi doesn't give medical or nutrition advice.\n\nPlease speak to a health worker. I can help with health budget figures, for example: «How much was allocated to health in 2026?»",
+    },
     "cancelled": {
         "ha": "To, an soke wannan tambayar.\n\nKa aiko da sabuwar tambaya a duk lokacin da kake so.",
         "en": "OK, that question is cancelled.\n\nSend a new question whenever you like.",

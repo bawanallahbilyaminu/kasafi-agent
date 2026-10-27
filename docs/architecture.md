@@ -92,6 +92,12 @@ WhatsApp webhook (FastAPI on VPS)
   - **Limits:** per-number daily limits (20 voice notes, 50 questions) and a global daily spend cap.
   - **Storage:** state is kept in SQLite on a Docker volume and keyed by HMAC(number). It moves to Postgres later.
   - **Spoken replies:** Hausa voice replies only go to users in Hausa mode.
+- **Scope guardrails (built Oct 27, `app/guardrails/scope.py`).** They run after the emergency referral, on typed text, voice notes (the merged transcript plus both raw hypotheses) and corrected questions.
+  - **Keyword tier (no model):** catches clear cases, i.e. eval 13 (electoral), 14 (verdict), 16 (security) and medical advice.
+  - **Muse Spark tier:** runs only when a borderline word appears (gwamna, zaɓe, tsaro, magani, …).
+  - **Replies:** a polite refusal in the user's language. A verdict question is redirected to "facts side by side".
+  - **Security budgets:** in scope when `KASAFI_ALLOW_SECURITY_BUDGET=true`. Bilyaminu chose true (Oct 27); the code default is the strict reading of rule 5.
+  - **Election budgets:** budget lines for the state electoral commission are in scope.
 - **Data retention, confirmed with Bilyaminu (Oct 27).** The published privacy policy (halalnumeriq.com.ng/kasafi; source in `docs/site/`) promises the following, so the code must enforce it:
   - **Voice notes:** audio is held in memory only, plus a temporary file for ffmpeg that is deleted straight away. It is never stored, and it is discarded as soon as it has been transcribed.
   - **Conversations** (messages and replies): deleted after **90 days**.

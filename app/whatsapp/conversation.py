@@ -25,6 +25,7 @@ import httpx
 
 from app.config import Settings
 from app.data_rights import DELETED_REPLY, delete_user_data, is_delete_command
+from app.guardrails import scope
 from app.guardrails.emergency import EMERGENCY_REPLY, is_medical_emergency
 from app.language import detect_language
 from app.providers.chat import ProviderError
@@ -65,6 +66,7 @@ def _notice(lang: str | None, source: str | None) -> list[Out]:
 
 VoiceFn = Callable[..., Awaitable[VoiceOutcome]]
 ResolveFn = Callable[..., Awaitable[Resolution]]
+GuardFn = Callable[..., Awaitable[scope.Verdict]]
 NotifyFn = Callable[[Out], Awaitable[None]]
 
 
@@ -74,7 +76,7 @@ async def _no_notify(out: Out) -> None:
 
 async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Settings,
                  voice_fn: VoiceFn = reply_for_voice, notify: NotifyFn = _no_notify,
-                 resolve_fn: ResolveFn = resolve) -> list[Out]:
+                 resolve_fn: ResolveFn = resolve, guard_fn: GuardFn = scope.check) -> list[Out]:
     """Returns the replies to send. `notify` sends a message right away (the "listening" ack)."""
     sender, kind = msg.get("from", ""), msg.get("type")
     text = (msg.get("text") or {}).get("body", "") if kind == "text" else ""
@@ -149,9 +151,13 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             res = await _resolve_safely(pending[0], outcome.result.transcript, resolve_fn, settings)
             if res.kind != "new":
                 store.clear_pending(key)
+                if refusal := await _guard_correction(res, lang, guard_fn, settings):
+                    return [refusal]
                 return [_resolution_reply(res, pending[0], lang)]
         store.clear_pending(key)                  # a new question replaces any pending one
         r = outcome.result
+        if r and outcome.text != EMERGENCY_REPLY and (refusal := await _guarded(heard_texts(r), lang, guard_fn, settings)):
+            return [refusal]
         if r and r.needs_confirmation and not is_medical_emergency(*heard_texts(r)):
             store.set_pending(key, r.transcript, r.english)
         return [Out(outcome.text)]
@@ -167,13 +173,32 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             res = await _resolve_safely(pending[0], text, resolve_fn, settings)
             store.clear_pending(key)
             if res.kind != "new":
+                if refusal := await _guard_correction(res, lang, guard_fn, settings):
+                    return [refusal]
                 return [_resolution_reply(res, pending[0], lang)]
+        if refusal := await _guarded([text], lang, guard_fn, settings):
+            return [refusal]
         # Text answers don't call a model yet. When the agent lands, check the spend cap and
         # add_spend(kasafi_cost_per_question_usd) here, as for voice.
         return [Out(t("echo", lang, text=text[:500]))]
     if button == "consent_ok":
         return [Out(t("consent_thanks", lang))]
     return [Out(t("other", lang))]
+
+
+async def _guarded(texts: list[str], lang: str, guard_fn: GuardFn, settings: Settings) -> Out | None:
+    """A polite refusal if the message is out of scope (political, security, medical advice), else None."""
+    verdict = await guard_fn(texts, settings=settings)
+    if not verdict.blocked:
+        return None
+    log.info("out of scope: %s (by %s)", verdict.category, verdict.tier)
+    return Out(t(f"guard_{verdict.category}", lang))
+
+
+async def _guard_correction(res: Resolution, lang: str, guard_fn: GuardFn, settings: Settings) -> Out | None:
+    if res.kind != "correction" or is_medical_emergency(res.question, res.english):
+        return None   # confirm/cancel/failed need no check; emergencies get the referral
+    return await _guarded([res.question, res.english], lang, guard_fn, settings)
 
 
 async def _resolve_safely(pending: str, reply: str, resolve_fn: ResolveFn, settings: Settings) -> Resolution:

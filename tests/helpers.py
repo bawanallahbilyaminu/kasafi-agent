@@ -5,6 +5,7 @@ import asyncio
 from pydantic import SecretStr
 
 from app.config import Settings
+from app.guardrails.scope import Verdict, keyword_check
 from app.providers.stt import SpeechResult
 from app.users import UserStore
 from app.whatsapp.conversation import handle
@@ -24,7 +25,7 @@ def heard(transcript: str, *, confirm: bool = False, english: str = "") -> Speec
 
 def run_handle(msg: dict, *, store: UserStore | None = None, settings: Settings | None = None, voice_calls=None,
                notified: list | None = None, spoken: SpeechResult | None = None, corrections: dict | None = None,
-               resolve_calls: list | None = None):
+               resolve_calls: list | None = None, model_verdicts: dict | None = None, guard_calls: list | None = None):
     """Run the conversation flow with fakes.
 
     spoken:      what the fake voice pipeline "heard" (None means a plain VOICE[lang] reply)
@@ -49,10 +50,21 @@ def run_handle(msg: dict, *, store: UserStore | None = None, settings: Settings 
             raise res
         return res
 
+    async def fake_guard(texts, *, settings):
+        """Real keyword tier; model tier replaced by model_verdicts {text: category}."""
+        if guard_calls is not None:
+            guard_calls.append(list(texts))
+        if cat := keyword_check(texts):
+            return Verdict(cat, "keyword")
+        for text in texts:
+            if text in (model_verdicts or {}):
+                return Verdict(model_verdicts[text], "model")
+        return Verdict("ok", "none")
+
     async def notify(out):
         if notified is not None:
             notified.append(out)
 
     outs = asyncio.run(handle(msg, None, store=store, settings=settings or make_settings(), voice_fn=fake_voice,
-                              notify=notify, resolve_fn=fake_resolve))
+                              notify=notify, resolve_fn=fake_resolve, guard_fn=fake_guard))
     return outs, store

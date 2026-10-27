@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     kasafi_daily_spend_cap_usd: float = 5.0
     kasafi_cost_per_voice_usd: float = 0.02
     kasafi_cost_per_question_usd: float = 0.01
+    # CLAUDE.md rule 5 excludes security content. False (strict) also refuses security-budget questions;
+    # set true to treat security-agency budget lines as ordinary budget facts.
+    kasafi_allow_security_budget: bool = False
     # How long a read-back question waits for Eh / A'a / a correction
     kasafi_pending_ttl_minutes: int = 15
 
