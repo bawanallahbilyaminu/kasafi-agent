@@ -1,22 +1,137 @@
 {
   "_about": "Expected facts for grounded answers. Each figure was checked by hand against the cited source page (Claude, Oct 27 2026); Bilyaminu to confirm. `numbers`: every one must appear in the answer, as written in the document. `docs`: at least one citation must come from one of these documents (and `pages`, if given).",
   "cases": [
-    {"id": "01", "lang": "ha", "docs": ["budget-2026-approved"], "pages": [40],
-     "numbers": ["118,827,792,994.59"],
-     "source": "2026 budget p40, Total Expenditure by Programme, row '04 Health', column '2026 Approved Budget'. The Ministry of Health line (p18, Administrative Classification) is 124,405,118,574.90."},
-    {"id": "02", "lang": "ha", "docs": ["smart-agenda"], "pages": [3, 4, 36],
-     "numbers": [],
-     "terms_any": [["Tsaro", "Security"], ["Addini", "Religious"], ["Ilimi", "Education"], ["Lafiya", "Health"], ["Noma", "Agriculture"], ["Ruwa", "Water"], ["Matasa", "Youth"], ["Ƙananan Hukumomi", "Kananan Hukumomi", "Local Government"]],
-     "source": "SMART Agenda p3 (OCR): Security, Religious Affairs, Education, Healthcare, Economic Development, Agriculture, Water Supply, Youth Empowerment, Local Government Autonomy."},
-    {"id": "06", "lang": "ha", "docs": ["mtef-2025-2027", "dsa-2023"],
-     "numbers_any": [["104,450"], ["122,018,931,035"]],
-     "source": "Either is right. The 2023 DSA's own figure (p16, 3.2.1 Debt Stock): N104,450 million in 2022, up from N84,239 million in 2021. The MTEF 2025-2027 (p39) gives end-2023 debt of 122,018,931,035. My first expected value had only the MTEF one, but the question asks 'according to the 2023 DSA'."},
-    {"id": "07a", "lang": "ha", "docs": ["mpi-2025-sokoto"],
-     "numbers": [],
-     "terms_any": [["Tangaza"], ["Binji"]],
-     "source": "MPI 2025 p65, Table 5.1 (MPI with income): Tangaza 0.489, Binji 0.487, Goronyo 0.454."},
-    {"id": "11", "lang": "ha", "docs": ["budget-2026-approved"], "pages": [40],
-     "numbers": ["128,495,868,362.13"], "must_state_assumption": true,
-     "source": "No year given, so the latest budget (2026): p40, Total Expenditure by Programme, row '05 Education', column '2026 Approved Budget'."}
+    {
+      "id": "01",
+      "lang": "ha",
+      "docs": [
+        "budget-2026-approved"
+      ],
+      "pages": [
+        40
+      ],
+      "numbers": [
+        "118,827,792,994.59"
+      ],
+      "source": "2026 budget p40, Total Expenditure by Programme, row '04 Health', column '2026 Approved Budget'. The Ministry of Health line (p18, Administrative Classification) is 124,405,118,574.90."
+    },
+    {
+      "id": "02",
+      "lang": "ha",
+      "docs": [
+        "smart-agenda"
+      ],
+      "pages": [
+        3,
+        4,
+        36
+      ],
+      "numbers": [],
+      "terms_any": [
+        [
+          "Tsaro",
+          "Security"
+        ],
+        [
+          "Addini",
+          "Religious"
+        ],
+        [
+          "Ilimi",
+          "Education"
+        ],
+        [
+          "Lafiya",
+          "Health"
+        ],
+        [
+          "Noma",
+          "Agriculture"
+        ],
+        [
+          "Ruwa",
+          "Water"
+        ],
+        [
+          "Matasa",
+          "Youth"
+        ],
+        [
+          "Ƙananan Hukumomi",
+          "Kananan Hukumomi",
+          "Local Government"
+        ]
+      ],
+      "source": "SMART Agenda p3 (OCR): Security, Religious Affairs, Education, Healthcare, Economic Development, Agriculture, Water Supply, Youth Empowerment, Local Government Autonomy."
+    },
+    {
+      "id": "06",
+      "lang": "ha",
+      "docs": [
+        "mtef-2025-2027",
+        "dsa-2023"
+      ],
+      "numbers_any": [
+        [
+          "104,450"
+        ],
+        [
+          "122,018,931,035"
+        ]
+      ],
+      "source": "Either is right. The 2023 DSA's own figure (p16, 3.2.1 Debt Stock): N104,450 million in 2022, up from N84,239 million in 2021. The MTEF 2025-2027 (p39) gives end-2023 debt of 122,018,931,035. My first expected value had only the MTEF one, but the question asks 'according to the 2023 DSA'."
+    },
+    {
+      "id": "07a",
+      "lang": "ha",
+      "docs": [
+        "mpi-2025-sokoto"
+      ],
+      "numbers": [],
+      "terms_any": [
+        [
+          "Tangaza"
+        ],
+        [
+          "Binji"
+        ]
+      ],
+      "source": "MPI 2025 p65, Table 5.1 (MPI with income): Tangaza 0.489, Binji 0.487, Goronyo 0.454."
+    },
+    {
+      "id": "11",
+      "lang": "ha",
+      "docs": [
+        "budget-2026-approved"
+      ],
+      "pages": [
+        40
+      ],
+      "numbers": [
+        "128,495,868,362.13"
+      ],
+      "must_state_assumption": true,
+      "source": "No year given, so the latest budget (2026): p40, Total Expenditure by Programme, row '05 Education', column '2026 Approved Budget'."
+    },
+    {
+      "id": "17",
+      "lang": "ha",
+      "docs": [
+        "budget-2025-approved",
+        "bir-2025-q4"
+      ],
+      "numbers": [
+        "17,506,884,680.90"
+      ],
+      "numbers_any": [
+        [
+          "52,179,252,082.91"
+        ],
+        [
+          "41,869,252,082.91"
+        ]
+      ],
+      "source": "Allocated: 2025 budget p12 (Total Expenditure by Administrative Classification, 052100000000 Ministry of Health, 2025 Approved Budget) 52,179,252,082.91; final budget 41,869,252,082.91 (BIR Q4 2025 p19). Spent: BIR Q4 2025 p19, 2025 Performance Year to Date (Q1-Q4) 17,506,884,680.90 (41.8% of final)."
+    }
   ]
 }

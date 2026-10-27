@@ -104,13 +104,18 @@ def is_table_title(line: str) -> bool:
 # labelled when its value count matches the column count exactly; anything else stays as it was.
 _VALUE = re.compile(r"^(?:-|\(?-?[\d,]+(?:\.\d+)?\)?%?)$")
 _COLUMN_SPLIT = re.compile(r"(?<!against)(?<!to)\s(?=20\d\d\b)|\s(?=%)|\s(?=Balance\b)")
+# Detail tables start their header with "Code ..."; summary tables with "Item ..." (2024/2025 budgets).
+_HEADER_START = re.compile(r"^(Code|Item)\b")
+# A data row starts with a 2-digit sector code ("04 Health") or a 5+-digit code ("010101"); header
+# lines may start with a 4-digit year ("2026 Approved"), which must not end the header.
+_ROW_CODE = re.compile(r"^(\d{2}|\d{5,})\s")
 
 
 def parse_columns(header: str) -> list[str]:
     """'Code Sector 2024 Full Year Actuals 2025 Revised Budget ...' -> ['2024 Full Year Actuals', ...]."""
     h = re.sub(r"\s+", " ", header).strip()
     m = re.search(r"\b20\d\d\b", h)
-    if not h.startswith("Code ") or not m:
+    if not _HEADER_START.match(h) or not m:
         return []
     cols = [c.strip() for c in _COLUMN_SPLIT.split(h[m.start():]) if c.strip()]
     return cols if len(cols) >= 2 else []
@@ -126,18 +131,45 @@ def label_row(line: str, columns: list[str]) -> str:
     return " ".join(tokens) + " | " + " | ".join(f"{c}: {v}" for c, v in zip(columns, values))
 
 
-def label_tables(text: str, columns: list[str]) -> tuple[str, list[str]]:
-    """Label table rows on one page; returns the new text and the columns in force at the end of the page."""
+# A header continuation line must look like header text. Without this, the next row's name ("Bureau for
+# Public Procurement", no amount, no code) was swallowed into the last column's label.
+_HEADER_WORDS = re.compile(
+    r"(?i)\b(20\d\d|budget|actuals?|estimates?|performance|revised|approved|original|final|draft|adjustments?|"
+    r"out-year|tagging|balance|against|january|september|q[1-4]|year|date|bi-lateral|post|mda|proposal|"
+    r"executive|full|supplementary|virement)\b|%|\(")
+MAX_HEADER_LINES = 14   # the 2024 budget wraps its header almost one word per line
+
+
+def _is_header_line(line: str) -> bool:
+    return not _HAS_AMOUNT.search(line) and not _ROW_CODE.match(line) and bool(_HEADER_WORDS.search(line))
+
+
+def label_tables(text: str, columns: list[str], open_header: list[str] | None = None
+                 ) -> tuple[str, list[str], list[str]]:
+    """Label table rows on one page.
+
+    Returns the new text, the columns in force at the end of the page, and any header still open
+    at the end of the page: a header split by a page break continues on the next page.
+    """
     lines, out, i = text.splitlines(), [], 0
+    if open_header:                          # finish a header that started on the previous page
+        j = 0
+        while j < len(lines) and j <= MAX_HEADER_LINES and _is_header_line(lines[j]):
+            j += 1
+        if cols := parse_columns(" ".join(open_header + lines[:j])):
+            columns = cols
+        out.extend(lines[:j])
+        i = j
     while i < len(lines):
         line = lines[i]
-        if line.startswith("Code ") and not _HAS_AMOUNT.search(line):
+        if _HEADER_START.match(line) and not _HAS_AMOUNT.search(line):
             header, j = [line], i + 1
-            # A data row starts with a 2-digit sector code ("04 Health") or a 5+-digit code ("010101");
-            # header lines may start with a 4-digit year ("2026 Approved"), which must not end the header.
-            while j < len(lines) and j - i <= 8 and not _HAS_AMOUNT.search(lines[j]) and not re.match(r"^(\d{2}|\d{5,})\s", lines[j]):
+            while j < len(lines) and j - i <= MAX_HEADER_LINES and _is_header_line(lines[j]):
                 header.append(lines[j])
                 j += 1
+            if j == len(lines):              # the page ended inside the header
+                out.extend(lines[i:j])
+                return chr(10).join(out), columns, header
             if cols := parse_columns(" ".join(header)):
                 columns = cols
             out.extend(lines[i:j])
@@ -147,15 +179,15 @@ def label_tables(text: str, columns: list[str]) -> tuple[str, list[str]]:
         # tables in one section share a layout. The exact value-count check guards the rest.
         out.append(label_row(line, columns))
         i += 1
-    return chr(10).join(out), columns
+    return chr(10).join(out), columns, []
 
 
 def contextual_chunks(pages: list[str]) -> list[list[str]]:
     """Label table columns, chunk every page, and prefix each chunk with the table title in force at its start."""
-    out, title, columns = [], "", []
+    out, title, columns, open_header = [], "", [], []
     for text in pages:
         page_chunks = []
-        text, columns = label_tables(text, columns)
+        text, columns, open_header = label_tables(text, columns, open_header)
         # Sector-total and "Total ..." rows also get their own one-row chunk (with the table title): in a
         # big table they're outranked by the many sub-programme rows that repeat the sector's name.
         key_rows, row_title = [], title

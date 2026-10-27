@@ -71,3 +71,52 @@ def test_index_and_search_a_real_document(db) -> None:
     assert index_document(db, doc, SEED).status == "unchanged"          # idempotent
     hits = search(db, "reform objectives", k=3, doc_ids=["test-berap"])
     assert hits and all(h.doc_id == "test-berap" and 1 <= h.page <= 4 for h in hits)
+
+
+# --- column labelling ---------------------------------------------------------------------------
+
+from app.retrieval.indexer import label_row, label_tables, parse_columns  # noqa: E402
+
+H2026 = ("Code Sector, Objective and Programme 2024 Full Year Actuals 2025 Revised Budget 2025 Performance "
+         "January to September 2026 Approved Budget 2027 Out-Year Estimate 2028 Out-Year Estimate 2026 Nutrition Tagging")
+ROW = "05 Education 8,139,687,377.37 80,287,078,732.62 39,577,019,325.11 128,495,868,362.13 123,242,901,775.81 120,393,444,275.81 -"
+
+
+def test_parse_columns_keeps_against_year_inside_a_column() -> None:
+    cols = parse_columns("Code Adminstrative Unit 2025 Original Budget 2025 Final Budget 2025 Q4 Performance "
+                         "2025 Performance Year to Date (Q1-Q4) % Performance Year to Date against 2025 Final Budget "
+                         "Balance (against Final Budget)")
+    assert cols[4] == "% Performance Year to Date against 2025 Final Budget" and len(cols) == 6
+
+
+def test_row_is_labelled_only_when_counts_match() -> None:
+    cols = parse_columns(H2026)
+    assert "2026 Approved Budget: 128,495,868,362.13" in label_row(ROW, cols)
+    assert label_row(ROW + " 99.00", cols) == ROW + " 99.00"                 # 8 values for 7 columns: untouched
+    assert label_row("Prose 12 13", cols) == "Prose 12 13"
+
+
+def test_item_header_and_header_split_across_pages() -> None:
+    page1 = "Summary\nItem 2023 Full Year\nActuals 2024 Revised Budget"
+    page2 = "2025 Approved\nBudget\nTotal Revenue 1.00 2.00 3.00"
+    _, cols, open_h = label_tables(page1, [])
+    assert open_h                                                            # header still open at the page end
+    text, cols, _ = label_tables(page2, cols, open_h)
+    assert cols == ["2023 Full Year Actuals", "2024 Revised Budget", "2025 Approved Budget"]
+    assert "Total Revenue | 2023 Full Year Actuals: 1.00" in text
+
+
+def test_row_name_below_header_is_not_swallowed_into_a_column() -> None:
+    page = ("Code Unit 2025 Revised Budget 2025 Q1 Performance Balance (against Revised Budget)\n"
+            "Bureau for Public Procurement\n011101000100 FEES 60,000,000.00 5,762,000.00 54,238,000.00")
+    text, cols, _ = label_tables(page, [])
+    assert cols[-1] == "Balance (against Revised Budget)"
+    assert "Balance (against Revised Budget): 54,238,000.00" in text
+
+
+def test_2024_style_header_wrapped_one_word_per_line() -> None:
+    page = ("Code Economic 2022 Full Year\nActuals\n2023 Revised\nBudget\n2023 Performance\nJanuary to\nSeptember\n"
+            "2024 Executive\nBudget Proposal\n2024 Approved\nBudget\n2025 Out-Year\nEstimate\n"
+            "21 PERSONNEL 1.00 2.00 3.00 4.00 5.00 6.00")
+    text, cols, _ = label_tables(page, [])
+    assert "2024 Executive Budget Proposal" in cols and "2024 Approved Budget: 5.00" in text
