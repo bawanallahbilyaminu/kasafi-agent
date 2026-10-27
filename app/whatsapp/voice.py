@@ -20,6 +20,7 @@ from typing import Any
 import httpx
 
 from app.config import Settings, get_settings
+from app.guardrails.emergency import EMERGENCY_REPLY, is_medical_emergency
 from app.providers.chat import ProviderError
 from app.providers.meta import MetaClient
 from app.providers.stt import SpeechResult, TranscriptionFailed, VoiceNoteTooLong, transcribe_voice_note
@@ -45,6 +46,9 @@ def compose_reply(result: SpeechResult) -> str:
     transcript = result.transcript.strip()
     if not transcript:
         return NOT_HEARD
+    # Safety first: an emergency gets a referral now, never a read-back or "answer coming soon".
+    if is_medical_emergency(transcript, result.english):
+        return EMERGENCY_REPLY
     template = READ_BACK if result.needs_confirmation else HEARD
     return template.format(transcript=transcript[:1000])
 

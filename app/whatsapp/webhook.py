@@ -23,6 +23,7 @@ from pydantic import SecretStr
 
 from app.config import get_settings
 from app.data_rights import DELETED_REPLY, delete_user_data, is_delete_command
+from app.guardrails.emergency import EMERGENCY_REPLY, is_medical_emergency
 from app.whatsapp.client import WhatsAppClient, mask_phone
 from app.whatsapp.voice import reply_for_voice
 
@@ -79,6 +80,8 @@ def echo_reply(msg: dict[str, Any]) -> str:
     if kind == "text" and is_delete_command(msg.get("text", {}).get("body", "")):
         delete_user_data(msg["from"])
         return DELETED_REPLY
+    if kind == "text" and is_medical_emergency(msg.get("text", {}).get("body", "")):
+        return EMERGENCY_REPLY
     if kind == "text":
         return ECHO_TEXT.format(text=msg.get("text", {}).get("body", "")[:500])
     return ECHO_OTHER
