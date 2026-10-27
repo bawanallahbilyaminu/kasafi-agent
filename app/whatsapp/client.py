@@ -10,9 +10,11 @@ Graph API at https://graph.facebook.com/<version> with `Authorization: Bearer <W
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import logging
+import time
 from urllib.parse import urlparse
 
 import httpx
@@ -49,6 +51,7 @@ class WhatsAppClient:
         if settings.whatsapp_token is None or not settings.whatsapp_phone_number_id:
             raise RuntimeError("WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID must be set (see .env.example)")
         self.phone_number_id = settings.whatsapp_phone_number_id
+        self._pending_deletes: set[asyncio.Task] = set()
         self._http = httpx.AsyncClient(
             base_url=f"{GRAPH_URL}/{settings.whatsapp_api_version}",
             headers={"Authorization": f"Bearer {settings.whatsapp_token.get_secret_value()}"},
@@ -57,7 +60,27 @@ class WhatsAppClient:
         )
 
     async def aclose(self) -> None:
+        await self.drain()   # finish background media deletes before the HTTP client goes away
         await self._http.aclose()
+
+    def delete_media_later(self, media_id: str) -> None:
+        """Delete Meta's copy in the background so the user's reply isn't held up (it took ~4 s on the VPS)."""
+        task = asyncio.create_task(self._timed_delete(media_id))
+        self._pending_deletes.add(task)
+        task.add_done_callback(self._pending_deletes.discard)
+
+    async def drain(self) -> None:
+        if self._pending_deletes:
+            await asyncio.gather(*self._pending_deletes, return_exceptions=True)
+
+    async def _timed_delete(self, media_id: str) -> None:
+        t0 = time.perf_counter()
+        try:
+            ok = await self.delete_media(media_id)
+        except httpx.HTTPError as e:
+            log.info("media delete failed: %s after %.1fs", type(e).__name__, time.perf_counter() - t0)
+            return
+        log.info("media delete %s in %.1fs", "done" if ok else "not accepted", time.perf_counter() - t0)
 
     async def send_text(self, to: str, body: str) -> dict:
         resp = await self._http.post(f"/{self.phone_number_id}/messages", json={

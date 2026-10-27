@@ -88,11 +88,8 @@ async def reply_for_voice(
         log.warning("transcription failed for %s: %s", mask_phone(sender), type(e).__name__)
         return VoiceOutcome(t("not_heard", lang))
     finally:
-        del audio  # drop the only in-memory copy
-        try:
-            await wa.delete_media(media_id)
-        except httpx.HTTPError as e:  # best effort; the reply still goes out
-            log.info("media delete failed: %s", type(e).__name__)
+        del audio                       # drop the only in-memory copy now
+        wa.delete_media_later(media_id)  # Meta's copy: deleted in the background, finished before the client closes
 
     # Timings only, never the transcript. asr and spark_audio run in parallel, then reconcile.
     tm = result.timings

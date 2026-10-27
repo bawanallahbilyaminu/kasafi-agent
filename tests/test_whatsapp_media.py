@@ -91,3 +91,37 @@ def test_send_buttons_payload_and_limits() -> None:
         _run(lambda c: c.send_buttons("x", "b", [("a", "x" * 21)]), handler)
     with pytest.raises(ValueError):
         _run(lambda c: c.send_buttons("x", "b" * 1025, [("a", "ok")]), handler)
+
+
+def test_background_delete_does_not_block_and_finishes_before_close(caplog) -> None:
+    """The reply can go out while Meta's copy is being deleted; aclose() waits for the delete."""
+    import logging
+    order: list = []
+
+    async def go():
+        release = asyncio.Event()
+
+        async def handler_async(req):
+            if req.method == "DELETE":
+                order.append("delete started")
+                await release.wait()
+                order.append("delete finished")
+                return httpx.Response(200, json={"success": True})
+            order.append("reply sent")
+            return httpx.Response(200, json={"messages": [{"id": "wamid.x"}]})
+
+        class AsyncTransport(httpx.AsyncBaseTransport):
+            async def handle_async_request(self, request):
+                return await handler_async(request)
+
+        c = WhatsAppClient(_settings(), transport=AsyncTransport())
+        c.delete_media_later("m1")
+        await asyncio.sleep(0)                      # let the delete start
+        await c.send_text("2340000000001", "reply")  # not blocked by the slow delete
+        release.set()
+        await c.aclose()                            # waits for the delete to finish
+
+    with caplog.at_level(logging.INFO):
+        asyncio.run(go())
+    assert order == ["delete started", "reply sent", "delete finished"]
+    assert "media delete done in" in caplog.text

@@ -35,6 +35,9 @@ class LocalFileWA:
         self.deleted = True
         return True
 
+    def delete_media_later(self, media_id: str) -> None:
+        self.deleted = True
+
 
 async def main(files: list[Path]) -> None:
     files = files or sorted(p for p in AUDIO_DIR.iterdir() if p.suffix.lower() in {".ogg", ".opus", ".m4a", ".mp3"})

@@ -30,6 +30,9 @@ class FakeWA:
         self.deleted.append(media_id)
         return True
 
+    def delete_media_later(self, media_id: str) -> None:
+        self.deleted.append(media_id)
+
 
 class FakeMeta:
     def __init__(self, settings=None) -> None: ...
