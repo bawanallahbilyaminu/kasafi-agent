@@ -14,7 +14,8 @@ def make_settings(**kw) -> Settings:
     return Settings(_env_file=None, **{**base, **kw})
 
 
-def run_handle(msg: dict, *, store: UserStore | None = None, settings: Settings | None = None, voice_calls=None):
+def run_handle(msg: dict, *, store: UserStore | None = None, settings: Settings | None = None, voice_calls=None,
+               notified: list | None = None):
     store = store or UserStore(":memory:")
 
     async def fake_voice(m, wa, *, lang, settings):
@@ -22,5 +23,10 @@ def run_handle(msg: dict, *, store: UserStore | None = None, settings: Settings 
             voice_calls.append(lang)
         return f"VOICE[{lang}]"
 
-    outs = asyncio.run(handle(msg, None, store=store, settings=settings or make_settings(), voice_fn=fake_voice))
+    async def notify(out):
+        if notified is not None:
+            notified.append(out)
+
+    outs = asyncio.run(handle(msg, None, store=store, settings=settings or make_settings(), voice_fn=fake_voice,
+                              notify=notify))
     return outs, store

@@ -76,12 +76,15 @@ async def _reply(messages: list[dict[str, Any]]) -> None:
     settings, store = get_settings(), get_store()
     try:
         for msg in messages:
+            async def send(out, to=msg["from"]) -> None:
+                if out.buttons:
+                    await client.send_buttons(to, out.text, out.buttons)
+                else:
+                    await client.send_text(to, out.text)
+
             try:
-                for out in await handle(msg, client, store=store, settings=settings):
-                    if out.buttons:
-                        await client.send_buttons(msg["from"], out.text, out.buttons)
-                    else:
-                        await client.send_text(msg["from"], out.text)
+                for out in await handle(msg, client, store=store, settings=settings, notify=send):
+                    await send(out)
                 log.info("reply sent to %s", mask_phone(msg["from"]))
             except Exception:  # one failed reply must not stop the rest
                 log.exception("reply to %s failed", mask_phone(msg.get("from", "")))

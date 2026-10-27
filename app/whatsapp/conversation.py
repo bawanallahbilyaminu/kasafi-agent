@@ -55,10 +55,16 @@ def _notice(lang: str | None, source: str | None) -> list[Out]:
 
 
 VoiceFn = Callable[..., Awaitable[str]]
+NotifyFn = Callable[[Out], Awaitable[None]]
+
+
+async def _no_notify(out: Out) -> None:
+    return None
 
 
 async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Settings,
-                 voice_fn: VoiceFn = reply_for_voice) -> list[Out]:
+                 voice_fn: VoiceFn = reply_for_voice, notify: NotifyFn = _no_notify) -> list[Out]:
+    """Returns the replies to send. `notify` sends a message right away (the "listening" ack)."""
     sender, kind = msg.get("from", ""), msg.get("type")
     text = (msg.get("text") or {}).get("body", "") if kind == "text" else ""
     button = _button_id(msg)
@@ -113,6 +119,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             return [Out(t("busy", lang))]
         store.count(key, "voice")
         store.add_spend(settings.kasafi_cost_per_voice_usd)
+        await notify(Out(t("listening", lang)))   # transcription takes ~10 s; say we're on it
         return [Out(await voice_fn(msg, wa, lang=lang, settings=settings))]
     if kind == "text":
         if not exempt and questions_used >= settings.kasafi_questions_per_day:

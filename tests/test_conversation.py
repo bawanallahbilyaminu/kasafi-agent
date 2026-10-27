@@ -194,3 +194,18 @@ def test_exempt_number_still_needs_consent() -> None:
     calls: list = []
     outs, _ = run_handle(voice(), settings=s, voice_calls=calls)
     assert calls == [] and outs[-1].buttons == NOTICE_BUTTONS
+
+
+def test_listening_ack_is_sent_before_voice_processing() -> None:
+    store = consented(UserStore(":memory:"))
+    notified: list = []
+    outs, _ = run_handle(voice(), store=store, notified=notified)
+    assert [o.text for o in notified] == [t("listening", "ha")] and outs[0].text == "VOICE[ha]"
+
+
+def test_no_listening_ack_when_limited_or_before_consent() -> None:
+    notified: list = []
+    run_handle(voice(), notified=notified)                                     # before consent
+    s = make_settings(kasafi_voice_per_day=0)
+    run_handle(voice(), store=consented(UserStore(":memory:")), settings=s, notified=notified)   # over the limit
+    assert notified == []
