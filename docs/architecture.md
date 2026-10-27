@@ -80,6 +80,12 @@ WhatsApp webhook (FastAPI on VPS)
 - **Text-to-speech:** the Meta Model API has none, so we use Meta's open-weight **MMS-TTS Hausa** (`facebook/mms-tts-hau`, VITS, 36M params, CPU). Its license is **CC-BY-NC 4.0**: fine for the hackathon, but commercial use later needs another provider.
   - Voice replies are **short**: a 1–2 sentence spoken summary. The full answer, citations and evidence image are sent as text.
   - A **Hausa number normaliser** runs before TTS, e.g. "₦2.4bn" becomes "Naira biliyan biyu da miliyan ɗari huɗu" and "2025" becomes "dubu biyu da ashirin da biyar". It gets its own unit tests.
+- **Data retention, confirmed with Bilyaminu (Oct 27).** The published privacy policy (halalnumeriq.com.ng/kasafi; source in `docs/site/`) promises the following, so the code must enforce it:
+  - **Voice notes:** audio is held in memory only, plus a temporary file for ffmpeg that is deleted straight away. It is never stored, and it is discarded as soon as it has been transcribed.
+  - **Conversations** (messages and replies): deleted after **90 days**.
+  - **Logs:** kept **30 days**. They never contain message text or full phone numbers.
+  - **Deletion requests** (GOGE BAYANAI NA / DELETE MY DATA, or email): completed within **7 days**.
+  - **AI providers** receive question content only, never the phone number or WhatsApp name.
 - **Admin / review queue:** a minimal FastAPI + HTML admin page behind HTTP basic auth (`ADMIN_USER` / `ADMIN_PASSWORD` from `.env`, with a strong password). It moves to Clerk later, when the React app is built.
   - **Review queue:** logged gaps and `auto-indexed` documents waiting for `human-verified` status.
   - **Agent trace view** (used in the demo video): for each question it shows the plan, the documents found and fetched, the evidence list and the verification result. The agent therefore saves one trace record per question, written in a single insert at the end so the database round-trips stay low.
