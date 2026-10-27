@@ -17,7 +17,9 @@
       "Bash(ssh vps docker logs:*)",
       "Bash(ssh vps docker ps:*)",
       "Bash(ssh vps docker compose -f /opt/kasafi-agent/deploy/docker-compose.yml ps:*)",
-      "Bash(ssh vps curl -s http://127.0.0.1:8010/health:*)"
+      "Bash(ssh vps curl -s http://127.0.0.1:8010/health:*)",
+      "Bash(deploy/deploy.sh)",
+      "Bash(deploy/deploy.sh --rollback)"
     ],
     "deny": [
       "Read(./.env)",
