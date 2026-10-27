@@ -286,3 +286,15 @@ def _found(d: dict) -> str:
     if v is True or v == "full":
         return "full"
     return "partial" if v == "partial" else "none"
+
+
+async def answer_from_documents(question: str, lang: str, *, settings: Settings) -> str:
+    """Entry point for the WhatsApp flow: one DB connection per question (the DB is on the same host)."""
+    with psycopg.connect(settings.db_url(), connect_timeout=5) as conn:
+        a = await answer_question(question, lang, conn, settings=settings)
+    tm = a.timings
+    # No question text in logs: only what was searched where, and how it went.
+    log.info("answer: found=%s partial=%s verified=%s docs=%s cited=%s plan=%.1fs search=%.2fs answer=%.1fs",
+             a.found, a.partial, a.verified, a.plan.doc_ids if a.plan else [],
+             [f"{e.doc_id}:{e.page}" for e in a.cited], tm.get("plan", 0), tm.get("search", 0), tm.get("answer", 0))
+    return a.text

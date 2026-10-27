@@ -11,6 +11,10 @@
 
 ## Agent flow
 
+> **Status (Oct 27):** single-document answers are live (`app/agent/answer.py`: plan → find → answer → number
+> check), on typed questions, clearly heard voice notes and confirmed or corrected read-backs. Multi-document
+> evidence lists, the calculator, the verify pass, live fetching and SAM 3.1 crops are next.
+
 ```
 WhatsApp webhook (FastAPI on VPS)
  ├─ voice note → Muse Voice Transcribe → text   (verify Hausa support)

@@ -34,6 +34,7 @@ from app.users import UserStore, user_key
 from app.whatsapp.client import mask_phone
 from app.whatsapp.messages import LANG_BUTTONS, NOT_IN_PILOT, NOTICE_BUTTONS, first_contact_notice, t
 from app.whatsapp.corrections import Resolution, quick_resolve, resolve
+from app.agent.answer import answer_from_documents
 from app.whatsapp.voice import VoiceOutcome, is_pilot, reply_for_voice
 
 log = logging.getLogger(__name__)
@@ -67,6 +68,8 @@ def _notice(lang: str | None, source: str | None) -> list[Out]:
 VoiceFn = Callable[..., Awaitable[VoiceOutcome]]
 ResolveFn = Callable[..., Awaitable[Resolution]]
 GuardFn = Callable[..., Awaitable[scope.Verdict]]
+AnswerFn = Callable[..., Awaitable[str]]
+_DEFAULT = object()   # answer_fn default: answer from the documents when a database is configured
 NotifyFn = Callable[[Out], Awaitable[None]]
 
 
@@ -76,7 +79,8 @@ async def _no_notify(out: Out) -> None:
 
 async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Settings,
                  voice_fn: VoiceFn = reply_for_voice, notify: NotifyFn = _no_notify,
-                 resolve_fn: ResolveFn = resolve, guard_fn: GuardFn = scope.check) -> list[Out]:
+                 resolve_fn: ResolveFn = resolve, guard_fn: GuardFn = scope.check,
+                 answer_fn: AnswerFn | None | object = _DEFAULT) -> list[Out]:
     """Returns the replies to send. `notify` sends a message right away (the "listening" ack)."""
     sender, kind = msg.get("from", ""), msg.get("type")
     text = (msg.get("text") or {}).get("body", "") if kind == "text" else ""
@@ -129,13 +133,51 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     def over_cap(cost: float) -> bool:
         return not exempt and store.spent_today() + cost > settings.kasafi_daily_spend_cap_usd
 
-    # 5a. Eh / A'a to a pending read-back: no model, no limit used
+    answer = (answer_from_documents if settings.has_database else None) if answer_fn is _DEFAULT else answer_fn
+
+    async def respond(question: str, prefix: str, fallback: Out) -> list[Out]:
+        """Answer an in-scope, confirmed question from the documents, after `prefix` (what we heard).
+
+        With no document store (dev, tests), the old acknowledgement `fallback` is sent instead.
+        """
+        if answer is None:
+            return [fallback]
+        if over_cap(settings.kasafi_cost_per_question_usd):
+            log.warning("daily spend cap reached")
+            return [Out(t("busy", lang))]
+        store.add_spend(settings.kasafi_cost_per_question_usd)
+        await notify(Out(t("searching", lang)))   # planning + search + answer takes ~8 s
+        try:
+            body = await answer(question, lang, settings=settings)
+        except Exception as e:  # DB or model down: tell the user rather than go silent
+            log.exception("answer failed: %s", type(e).__name__)
+            body = t("answer_failed", lang)
+        return [Out(f"{prefix}\n\n{body}" if prefix else body)]
+
+    async def resolution_reply(res: Resolution, pending_q: str) -> list[Out]:
+        if res.kind == "confirm":
+            return await respond(pending_q, t("confirmed_prefix", lang, question=pending_q),
+                                 Out(t("confirmed", lang, question=pending_q)))
+        if res.kind == "cancel":
+            return [Out(t("cancelled", lang))]
+        if res.kind == "failed":
+            return [Out(t("correction_failed", lang))]
+        if is_medical_emergency(res.question, res.english):
+            return [Out(EMERGENCY_REPLY)]
+        if refusal := await _guard_correction(res, lang, guard_fn, settings):
+            return [refusal]
+        q = res.question[:1000]
+        return await respond(q, t("corrected_prefix", lang, question=q), Out(t("corrected", lang, question=q)))
+
+    # 5a. Eh / A'a to a pending read-back: no model needed to decide
     if pending and text and (quick := quick_resolve(text)):
         log.info("read-back reply from %s: %s (typed, no model)", mask_phone(sender), quick.kind)
+        if quick.kind == "confirm" and answer is not None:
+            if not exempt and questions_used >= settings.kasafi_questions_per_day:
+                return [Out(t("question_limit", lang, n=settings.kasafi_questions_per_day))]
+            store.count(key, "questions")      # confirming now produces an answer
         store.clear_pending(key)
-        if quick.kind == "confirm":
-            return [Out(t("confirmed", lang, question=pending[0]))]
-        return [Out(t("cancelled", lang))]
+        return await resolution_reply(quick, pending[0])
 
     if kind == "audio":
         if not exempt and voice_used >= settings.kasafi_voice_per_day:
@@ -151,16 +193,18 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             res = await _resolve_safely(pending[0], outcome.result.transcript, resolve_fn, settings)
             if res.kind != "new":
                 store.clear_pending(key)
-                if refusal := await _guard_correction(res, lang, guard_fn, settings):
-                    return [refusal]
-                return [_resolution_reply(res, pending[0], lang)]
+                return await resolution_reply(res, pending[0])
         store.clear_pending(key)                  # a new question replaces any pending one
         r = outcome.result
         if r and outcome.text != EMERGENCY_REPLY and (refusal := await _guarded(heard_texts(r), lang, guard_fn, settings)):
             return [refusal]
         if r and r.needs_confirmation and not is_medical_emergency(*heard_texts(r)):
             store.set_pending(key, r.transcript, r.english)
-        return [Out(outcome.text)]
+            return [Out(outcome.text)]            # read-back: answer after Eh or a correction
+        if r and outcome.text != EMERGENCY_REPLY:  # heard clearly: answer now
+            return await respond(r.transcript, t("heard_prefix", lang, transcript=r.transcript[:1000]),
+                                 Out(outcome.text))
+        return [Out(outcome.text)]                # emergency referral, not heard, too long
 
     if kind == "text":
         if not exempt and questions_used >= settings.kasafi_questions_per_day:
@@ -173,14 +217,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             res = await _resolve_safely(pending[0], text, resolve_fn, settings)
             store.clear_pending(key)
             if res.kind != "new":
-                if refusal := await _guard_correction(res, lang, guard_fn, settings):
-                    return [refusal]
-                return [_resolution_reply(res, pending[0], lang)]
+                return await resolution_reply(res, pending[0])
         if refusal := await _guarded([text], lang, guard_fn, settings):
             return [refusal]
-        # Text answers don't call a model yet. When the agent lands, check the spend cap and
-        # add_spend(kasafi_cost_per_question_usd) here, as for voice.
-        return [Out(t("echo", lang, text=text[:500]))]
+        return await respond(text[:1000], "", Out(t("echo", lang, text=text[:500])))
     if button == "consent_ok":
         return [Out(t("consent_thanks", lang))]
     return [Out(t("other", lang))]
@@ -212,13 +252,3 @@ async def _resolve_safely(pending: str, reply: str, resolve_fn: ResolveFn, setti
     return res
 
 
-def _resolution_reply(res: Resolution, pending: str, lang: str) -> Out:
-    if res.kind == "confirm":
-        return Out(t("confirmed", lang, question=pending))
-    if res.kind == "cancel":
-        return Out(t("cancelled", lang))
-    if res.kind == "failed":
-        return Out(t("correction_failed", lang))
-    if is_medical_emergency(res.question, res.english):
-        return Out(EMERGENCY_REPLY)
-    return Out(t("corrected", lang, question=res.question[:1000]))

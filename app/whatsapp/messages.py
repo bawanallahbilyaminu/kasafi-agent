@@ -121,6 +121,27 @@ TEXTS = {
         "ha": "Saƙon murya ya yi tsawo.\n\nDon Allah ka tura gajere (ƙasa da minti {minutes}), ko ka rubuta tambayarka.",
         "en": "That voice note is too long.\n\nPlease send a shorter one (under {minutes} minutes), or type your question.",
     },
+    # Answers from the documents (app/agent/answer.py). The answer follows the prefix after a blank line.
+    "searching": {
+        "ha": "🔎 Ina duba takardu…",
+        "en": "🔎 Checking the documents…",
+    },
+    "heard_prefix": {
+        "ha": "Na ji tambayarka:\n\n«{transcript}»",
+        "en": "I heard your question:\n\n«{transcript}»",
+    },
+    "confirmed_prefix": {
+        "ha": "Na gode. Tambayarka:\n\n«{question}»",
+        "en": "Thank you. Your question:\n\n«{question}»",
+    },
+    "corrected_prefix": {
+        "ha": "Na gyara:\n\n«{question}»",
+        "en": "Corrected:\n\n«{question}»",
+    },
+    "answer_failed": {
+        "ha": "Yi haƙuri, an sami matsala wajen neman amsar.\n\nDon Allah ka sake gwadawa nan da ɗan lokaci.",
+        "en": "Sorry, something went wrong while looking up the answer.\n\nPlease try again in a little while.",
+    },
     # Read-back confirmation and corrections
     "confirmed": {
         "ha": "Na gode. Tambayarka:\n\n«{question}»\n\n(Kasafi yana gwaji: amsoshi za su zo nan ba da jimawa ba.)",
