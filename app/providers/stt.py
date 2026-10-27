@@ -84,6 +84,10 @@ class TranscriptionFailed(RuntimeError):
     pass
 
 
+class VoiceNoteTooLong(TranscriptionFailed):
+    pass
+
+
 def parse_json_reply(content: str) -> dict[str, Any]:
     s = content.strip()
     if s.startswith("```"):
@@ -122,6 +126,7 @@ async def transcribe_voice_note(
     *,
     previous_turn: str | None = None,
     settings: Settings | None = None,
+    max_seconds: float | None = None,
 ) -> SpeechResult:
     """Transcribe a voice note (any ffmpeg-readable format).
 
@@ -130,6 +135,9 @@ async def transcribe_voice_note(
     """
     settings = settings or get_settings()
     wav = to_wav16k(audio)
+    seconds = (len(wav) - 44) / 32000  # 16 kHz mono s16
+    if max_seconds is not None and seconds > max_seconds:
+        raise VoiceNoteTooLong(f"{seconds:.0f}s voice note exceeds {max_seconds:.0f}s")
 
     a, b = await asyncio.gather(
         _timed(_hyp_asr(client, wav, settings.stt_asr_model)),

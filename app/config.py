@@ -19,6 +19,15 @@ class Settings(BaseSettings):
     meta_base_url: str = "https://api.meta.ai/v1"
     meta_model: str = "muse-spark-1.3"
 
+    # Pilot gate: comma-separated WhatsApp numbers (digits, country code) whose voice notes may go to
+    # model APIs. CLAUDE.md rule 7: no real users' messages to model APIs during the hackathon.
+    kasafi_pilot_numbers: str = ""
+    voice_max_seconds: int = 180
+
+    @property
+    def pilot_numbers(self) -> set[str]:
+        return {"".join(ch for ch in n if ch.isdigit()) for n in self.kasafi_pilot_numbers.split(",") if n.strip()}
+
     # Speech-to-text pipeline (see evals/stt-hausa-2026-10-26.md)
     stt_asr_model: str = "muse-voice-transcribe-1.0"
     stt_audio_model: str = "muse-spark-1.2"

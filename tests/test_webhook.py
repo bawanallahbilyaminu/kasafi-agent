@@ -71,7 +71,6 @@ def test_status_updates_are_acknowledged_without_reply(client) -> None:
 
 def test_echo_text_by_type() -> None:
     assert "Sannu" in webhook.echo_reply({"type": "text", "text": {"body": "Sannu"}})
-    assert webhook.echo_reply({"type": "audio"}) == webhook.ECHO_VOICE
     assert webhook.echo_reply({"type": "sticker"}) == webhook.ECHO_OTHER
 
 

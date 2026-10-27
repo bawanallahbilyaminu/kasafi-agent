@@ -24,12 +24,12 @@ from pydantic import SecretStr
 from app.config import get_settings
 from app.data_rights import DELETED_REPLY, delete_user_data, is_delete_command
 from app.whatsapp.client import WhatsAppClient, mask_phone
+from app.whatsapp.voice import reply_for_voice
 
 log = logging.getLogger(__name__)
 router = APIRouter()
 
 ECHO_TEXT = "Kasafi (gwaji): na karɓi saƙonka: «{text}»"
-ECHO_VOICE = "Kasafi (gwaji): na karɓi saƙon murya. Nan ba da jimawa ba zan iya saurara."
 ECHO_OTHER = "Kasafi (gwaji): don Allah ka aiko da rubutu ko saƙon murya."
 
 
@@ -81,8 +81,6 @@ def echo_reply(msg: dict[str, Any]) -> str:
         return DELETED_REPLY
     if kind == "text":
         return ECHO_TEXT.format(text=msg.get("text", {}).get("body", "")[:500])
-    if kind == "audio":
-        return ECHO_VOICE
     return ECHO_OTHER
 
 
@@ -91,10 +89,11 @@ async def _reply(messages: list[dict[str, Any]]) -> None:
     try:
         for msg in messages:
             try:
-                await client.send_text(msg["from"], echo_reply(msg))
+                body = await reply_for_voice(msg, client) if msg.get("type") == "audio" else echo_reply(msg)
+                await client.send_text(msg["from"], body)
                 log.info("reply sent to %s", mask_phone(msg["from"]))
             except Exception:  # one failed reply must not stop the rest
-                log.exception("echo reply to %s failed", mask_phone(msg.get("from", "")))
+                log.exception("reply to %s failed", mask_phone(msg.get("from", "")))
     finally:
         await client.aclose()
 
