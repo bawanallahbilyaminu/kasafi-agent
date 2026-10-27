@@ -24,6 +24,19 @@ class Settings(BaseSettings):
     kasafi_pilot_numbers: str = ""
     voice_max_seconds: int = 180
 
+    # Open access with consent (CLAUDE.md rule 7). When false, only KASAFI_PILOT_NUMBERS are served.
+    kasafi_open_access: bool = True
+    # Keys the HMAC that turns phone numbers into user IDs. Falls back to WHATSAPP_APP_SECRET.
+    kasafi_hash_key: SecretStr | None = None
+    kasafi_state_db: str = "data/state.db"
+    # Per-number daily limits and a global daily spend cap. The per-call costs are rough estimates;
+    # calibrate them against the Meta billing dashboard.
+    kasafi_voice_per_day: int = 20
+    kasafi_questions_per_day: int = 50
+    kasafi_daily_spend_cap_usd: float = 5.0
+    kasafi_cost_per_voice_usd: float = 0.02
+    kasafi_cost_per_question_usd: float = 0.01
+
     @property
     def pilot_numbers(self) -> set[str]:
         return {"".join(ch for ch in n if ch.isdigit()) for n in self.kasafi_pilot_numbers.split(",") if n.strip()}
