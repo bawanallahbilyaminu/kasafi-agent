@@ -11,6 +11,8 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+      args:
+        KASAFI_COMMIT: ${KASAFI_COMMIT:-unknown}
     image: kasafi-agent-api:latest
     container_name: kasafi-agent-api
     env_file: .env

@@ -72,13 +72,74 @@ curl -s https://kasafi-api.halalnumeriq.com.ng/health
 Then App Dashboard → WhatsApp → Configuration → Webhook → Edit: set the Callback URL to
 `https://kasafi-api.halalnumeriq.com.ng/webhook`, keep the same verify token, and click **Verify and save**.
 
-## Update
+## One-command deploy (from your laptop)
 
-```sh
-cd /opt/kasafi-agent && git pull && cd deploy && docker compose up -d --build
+### SSH alias (one-time)
+
+Add this to `C:\Users\<you>\.ssh\config` (that's `~/.ssh/config`; Git Bash and Windows OpenSSH share it). The IP lives
+only there, never in this repo:
+
+```
+Host vps
+    HostName <server IP>
+    User root
+    IdentityFile ~/.ssh/id_ed25519
+    IdentitiesOnly yes
+    ServerAliveInterval 30
 ```
 
-## Rollback / remove
+Test it with `ssh vps true`. To avoid typing the key passphrase on every deploy, run the Windows ssh-agent once
+(PowerShell as admin: `Set-Service ssh-agent -StartupType Automatic; Start-Service ssh-agent`, then `ssh-add`).
+`deploy.sh` uses Windows OpenSSH when it's available, so it picks up the agent. For a different alias, set
+`KASAFI_SSH_HOST=myalias`.
+
+### Commands
+
+| Git Bash | PowerShell | What it does |
+|---|---|---|
+| `deploy/deploy.sh` | `.\deploy\deploy.ps1` | Deploy the pushed `main` |
+| `deploy/deploy.sh --rollback` | `.\deploy\deploy.ps1 --rollback` | Go back one release |
+| `deploy/deploy.sh --sync-env` | `.\deploy\deploy.ps1 --sync-env` | Update the server's `deploy/.env` from your local `.env` |
+
+### What a deploy does
+
+1. **On your laptop:** it refuses if you're not on `main`, the working tree has uncommitted changes, or local `main`
+   differs from `origin/main` (not pushed or not pulled). Then it runs `uv run pytest`.
+2. **On the server** (`deploy/remote.sh`, sent over ssh and run as root, with a lock so two deploys can't overlap):
+   - records the current commit
+   - runs `git pull --ff-only` on `main` and checks that the result equals the commit your laptop expects
+   - builds the `kasafi-agent-api` image stamped with that commit (`/version` reports it)
+   - runs `alembic upgrade head` **only** if `alembic.ini` exists and `DATABASE_URL` is set in `deploy/.env`.
+     When migrations are added, the Dockerfile must also copy `alembic.ini` and `migrations/`.
+   - runs `docker compose up -d` for the **kasafi-agent project only**
+   - waits up to 90 s for `127.0.0.1:8010/health` to answer **and** `/version` to report the new commit
+3. **If that fails:** it checks out the previous commit, rebuilds, waits for health, and exits with code 2 and a red
+   "rolled back" message naming the failing commit. If the rollback also fails, it exits with code 1 and says so.
+4. **If it succeeds:** it adds the commit to `/var/lib/kasafi-agent/releases`, appends a line to
+   `/var/log/kasafi-agent/deploy.log`, and keeps only the newest 3 `kasafi-agent-api:<commit>` images. It removes
+   only dangling images labelled `org.kasafi.app=kasafi-agent-api`, never anything else. Back on your laptop it
+   checks `https://kasafi-api.halalnumeriq.com.ng/health` and `/version` and prints the live commit.
+
+It never touches `deploy/.env` during a normal deploy, never uses `--remove-orphans`, and never prunes other
+containers or images. The server runs mailcow and other apps.
+
+### `--rollback`
+
+Rolls back to the previous release in `/var/lib/kasafi-agent/releases` and checks its health. Each run goes back one
+more release. The next normal deploy returns to the latest `main`.
+
+### `--sync-env`
+
+Uploads **only** the allowed keys from your local `.env` (see `ALLOWED_KEYS` in `deploy.sh`: Meta, Baseten, Serper
+and WhatsApp), with `\r` stripped, using `umask 077`. Values are never printed. `KASAFI_PORT` is kept from the
+server's file, the old file is saved as `deploy/.env.bak`, and the container is restarted. If it's unhealthy with
+the new values, the old `.env` is restored automatically. `DATABASE_URL` is deliberately left out until the
+production database exists, because the local one points at dev Postgres.
+
+The first time, run a normal deploy **before** `--sync-env`. The health check needs a container built by
+`deploy.sh` so that `/version` matches.
+
+## Remove completely
 
 ```sh
 cd /opt/kasafi-agent/deploy && docker compose down    # stops only the kasafi-agent project

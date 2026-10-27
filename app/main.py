@@ -1,6 +1,7 @@
 """Kasafi FastAPI app: WhatsApp webhook, legal pages and health check."""
 
 import logging
+import os
 
 from fastapi import FastAPI
 
@@ -31,3 +32,9 @@ app.include_router(legal_router)
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/version")
+def version() -> dict[str, str]:
+    # Set at image build time by deploy/remote.sh, so deploys can confirm the new container is serving.
+    return {"commit": os.environ.get("KASAFI_COMMIT", "unknown")}

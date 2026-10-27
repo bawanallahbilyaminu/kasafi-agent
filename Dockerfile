@@ -16,6 +16,11 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY app ./app
 
+# Late in the file so a new commit doesn't invalidate the dependency layers.
+ARG KASAFI_COMMIT=unknown
+ENV KASAFI_COMMIT=$KASAFI_COMMIT
+LABEL org.kasafi.app=kasafi-agent-api org.kasafi.commit=$KASAFI_COMMIT
+
 RUN useradd --system --uid 10001 kasafi
 USER kasafi
 
