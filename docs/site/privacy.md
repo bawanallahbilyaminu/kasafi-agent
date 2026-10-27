@@ -1,0 +1,70 @@
+---
+title: Kasafi Privacy Policy
+permalink: /privacy/
+---
+
+# Kasafi Privacy Policy
+
+*Last updated: 27 October 2026*
+
+Kasafi is a WhatsApp assistant run by **Halal Numeriq Limited**, Sokoto, Nigeria ("we"). We are the data controller
+under the **Nigeria Data Protection Act 2023 (NDPA)**. Contact: [bilyaminu@halalnumeriq.com.ng](mailto:bilyaminu@halalnumeriq.com.ng).
+
+## What we collect
+
+- Your **WhatsApp phone number** (and the profile name WhatsApp sends with it)
+- The **messages and voice notes** you send Kasafi, and Kasafi's replies
+- Basic technical records: times, message types and errors. These do not include your message text or your full number.
+
+We don't ask for your name, ID, address or location. Please don't send private details about your health or anyone else's.
+
+## Why
+
+To **answer your questions about public documents**, such as Sokoto State budgets, plans and reports. That means turning
+voice notes into text, searching the documents and replying to you. Our legal basis is your **consent**, which you give
+by messaging Kasafi; you can withdraw it at any time. We also review questions Kasafi could not answer, after separating
+them from your phone number, to make it more accurate (**legitimate interest**).
+
+We do not sell your data, use it for advertising, or profile your political views.
+
+## Who processes it
+
+- **Meta, WhatsApp Cloud API**: delivers messages between you and Kasafi.
+- **Meta, Meta Model API**: AI models that transcribe voice notes and help write answers. **During the hackathon pilot,
+  content sent to the Meta Model API may be used by Meta to improve its products.**
+- **Baseten**: runs an open-weight Meta AI model that helps write answers.
+- **Our server (VPS) and our database (Microsoft Azure)**: host Kasafi and store conversations.
+
+The AI services (Meta Model API and Baseten) receive your question and extracts from documents. **They never receive
+your phone number or WhatsApp name.** Some of these providers process data outside Nigeria, under their own data
+protection terms and the NDPA's rules on transfers.
+
+## How long we keep it
+
+- **Voice notes:** deleted as soon as they have been turned into text.
+- **Conversations** (your messages and our replies): **90 days**, then deleted.
+- **Technical logs:** 30 days.
+- Unanswered questions kept for improving Kasafi are stored **without** your phone number.
+
+## Your rights
+
+Under the NDPA you can ask for a copy of your data, or ask us to correct it, delete it, limit how we use it, or give it
+to you in a portable format. You can also object to how we use it and withdraw your consent. Email
+[bilyaminu@halalnumeriq.com.ng](mailto:bilyaminu@halalnumeriq.com.ng) and we will reply within 30 days.
+
+**To delete your data**, send **GOGE BAYANAI NA** or **DELETE MY DATA** to Kasafi on WhatsApp. See
+[how to delete your data](../data-deletion/).
+
+If you are unhappy with how we handle your data, you can complain to the **Nigeria Data Protection Commission (NDPC)**
+at [ndpc.gov.ng](https://ndpc.gov.ng).
+
+## Security
+
+We use encrypted connections, check that incoming messages really come from WhatsApp, and limit access to authorised
+staff. If a breach puts your rights at risk, we will report it to the NDPC as the NDPA requires and tell the people
+affected.
+
+## Changes
+
+If this policy changes, we will update this page and the date at the top. Kasafi is meant for adults; anyone under 18
+should use it with a parent or guardian.

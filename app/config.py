@@ -43,8 +43,8 @@ class Settings(BaseSettings):
     # Database
     database_url: SecretStr | None = None
 
-    # Shown on /privacy and /data-deletion (optional; the WhatsApp command always works)
-    privacy_contact_email: str | None = None
+    # Published privacy / data-deletion / terms pages (docs/site, GitHub Pages)
+    legal_site_url: str = "https://bawanallahbilyaminu.github.io/kasafi-agent"
 
     # Admin page basic auth
     admin_user: str | None = None

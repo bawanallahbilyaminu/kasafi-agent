@@ -1,7 +1,7 @@
 """Data-subject requests (NDPA 2023): deletion via WhatsApp command.
 
-The /data-deletion page promises that GOGE BAYANAI / DELETE MY DATA deletes
-everything linked to the sender's number. Keep this in sync with that page.
+docs/site/data-deletion.md promises that GOGE BAYANAI NA / DELETE MY DATA
+deletes everything linked to the sender's number. Keep this in sync with that page.
 """
 
 import logging
@@ -11,7 +11,7 @@ from app.whatsapp.client import mask_phone
 
 log = logging.getLogger(__name__)
 
-DELETE_COMMANDS = {"goge bayanai", "goge bayanaina", "delete my data"}
+DELETE_COMMANDS = {"goge bayanai na", "goge bayanaina", "goge bayanai", "delete my data"}
 DELETED_REPLY = (
     "An goge duk bayananka daga Kasafi: saƙonninka, rubutun saƙon murya da amsoshinmu.\n"
     "Your Kasafi data has been deleted."
