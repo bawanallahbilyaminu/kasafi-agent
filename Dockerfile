@@ -15,6 +15,9 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY app ./app
+# Migrations run on deploy (deploy/remote.sh) once DATABASE_URL is set on the server.
+COPY alembic.ini ./
+COPY migrations ./migrations
 
 # Late in the file so a new commit doesn't invalidate the dependency layers.
 ARG KASAFI_COMMIT=unknown

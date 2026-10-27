@@ -6,6 +6,7 @@ code that needs a secret checks for it where it is used.
 """
 
 from functools import lru_cache
+from urllib.parse import quote
 
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -79,8 +80,23 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("WHATSAPP_BUSINESS_ACCOUNT_ID", "WHATSAPP_WABA_ID", "WABA_ID"),
     )
 
-    # Database
+    # Database. Production sets DATABASE_URL. In dev, when it's empty, the docker-compose
+    # Postgres on localhost is used with POSTGRES_PASSWORD.
     database_url: SecretStr | None = None
+    postgres_password: SecretStr | None = None
+
+    def db_url(self, driver: str = "") -> str:
+        """Connection URL. driver="" for psycopg (postgresql://), "psycopg" for SQLAlchemy/Alembic."""
+        url = self.database_url.get_secret_value() if self.database_url else ""
+        if not url and self.postgres_password and self.postgres_password.get_secret_value():
+            pw = quote(self.postgres_password.get_secret_value(), safe="")
+            # 127.0.0.1, not localhost: on Windows localhost tries IPv6 first and the connect hangs.
+            url = f"postgresql://kasafi:{pw}@127.0.0.1:5432/kasafi"
+        if not url:
+            raise RuntimeError("DATABASE_URL (or POSTGRES_PASSWORD for the dev database) is not set")
+        scheme, rest = url.split("://", 1)
+        base = scheme.split("+", 1)[0]
+        return f"{base}+{driver}://{rest}" if driver else f"{base}://{rest}"
 
     # Published privacy / data-deletion / terms pages (the URLs registered in the Meta app)
     legal_site_url: str = "https://halalnumeriq.com.ng/kasafi"
