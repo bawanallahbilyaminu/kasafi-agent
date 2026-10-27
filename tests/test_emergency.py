@@ -6,7 +6,7 @@ import pytest
 from app.guardrails.emergency import EMERGENCY_REPLY, is_medical_emergency
 from app.providers.stt import SpeechResult
 from app.whatsapp.voice import compose_reply
-from app.whatsapp.webhook import echo_reply
+from tests.helpers import run_handle
 
 QUESTIONS = {q["id"]: q for q in json.loads(Path("evals/questions.json").read_text(encoding="utf-8"))["questions"]}
 
@@ -27,4 +27,5 @@ def test_emergency_beats_read_back_and_echo() -> None:
     r = SpeechResult(transcript="Mata tana da ciki kuma tana zubar da jini", english="", language="ha",
                      confidence="low", needs_confirmation=True)
     assert compose_reply(r) == EMERGENCY_REPLY
-    assert echo_reply({"type": "text", "text": {"body": "My wife is bleeding, what medicine?"}}) == EMERGENCY_REPLY
+    outs, _ = run_handle({"type": "text", "from": "2340000000001", "text": {"body": "My wife is bleeding, what medicine?"}})
+    assert [o.text for o in outs] == [EMERGENCY_REPLY]  # even before consent: local check, no model

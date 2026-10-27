@@ -74,6 +74,27 @@ class WhatsAppClient:
             resp.raise_for_status()
         return resp.json()
 
+    async def send_buttons(self, to: str, body: str, buttons: list[tuple[str, str]]) -> dict:
+        """Interactive reply-buttons message: at most 3 buttons, titles of 20 characters or fewer, body of 1024 or fewer."""
+        if not 1 <= len(buttons) <= 3 or any(len(title) > 20 for _, title in buttons) or len(body) > 1024:
+            raise ValueError("WhatsApp reply buttons: 1-3 buttons, titles <= 20 chars, body <= 1024 chars")
+        resp = await self._http.post(f"/{self.phone_number_id}/messages", json={
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "interactive",
+            "interactive": {
+                "type": "button",
+                "body": {"text": body},
+                "action": {"buttons": [{"type": "reply", "reply": {"id": i, "title": title}} for i, title in buttons]},
+            },
+        })
+        if not resp.is_success:
+            log.warning("WhatsApp buttons to %s failed: HTTP %s, Graph error code %s",
+                        mask_phone(to), resp.status_code, _graph_code(resp))
+            resp.raise_for_status()
+        return resp.json()
+
     async def download_media(self, media_id: str, *, max_bytes: int = MAX_MEDIA_BYTES) -> bytes:
         """Fetch a received media file into memory (never to disk)."""
         meta = await self._http.get(f"/{media_id}", params={"phone_number_id": self.phone_number_id})

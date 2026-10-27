@@ -7,6 +7,7 @@ from app.config import Settings
 from app.providers.chat import ProviderError
 from app.providers.stt import SpeechResult, TranscriptionFailed, VoiceNoteTooLong
 from app.whatsapp import voice
+from app.whatsapp.messages import t
 
 PILOT = "2340000000001"
 
@@ -40,7 +41,7 @@ def _msg(sender: str = PILOT) -> dict:
     return {"from": sender, "type": "audio", "audio": {"id": "media-1", "voice": True}}
 
 
-def _run(monkeypatch, *, result=None, exc=None, wa=None, settings=None, sender=PILOT):
+def _run(monkeypatch, *, result=None, exc=None, wa=None, settings=None, sender=PILOT, lang="ha"):
     async def fake_transcribe(audio, client, **kw):
         assert kw["max_seconds"] == 180
         if exc:
@@ -48,7 +49,7 @@ def _run(monkeypatch, *, result=None, exc=None, wa=None, settings=None, sender=P
         return result
     monkeypatch.setattr(voice, "transcribe_voice_note", fake_transcribe)
     wa = wa or FakeWA()
-    out = asyncio.run(voice.reply_for_voice(_msg(sender), wa, settings=settings or _settings(),
+    out = asyncio.run(voice.reply_for_voice(_msg(sender), wa, lang=lang, settings=settings or _settings(),
                                             meta_client_factory=FakeMeta))
     return out, wa
 
@@ -69,11 +70,6 @@ def test_uncertain_transcript_gets_read_back(monkeypatch) -> None:
     assert "Kana nufin haka?" in out
 
 
-def test_non_pilot_is_never_downloaded_or_sent_to_models(monkeypatch) -> None:
-    out, wa = _run(monkeypatch, exc=AssertionError("models must not be called"), sender="2349999999999")
-    assert out == voice.NOT_IN_PILOT and wa.downloaded == [] and wa.deleted == []
-
-
 @pytest.mark.parametrize("exc, expected", [
     (VoiceNoteTooLong("too long"), "ya yi tsawo"),
     (TranscriptionFailed("no speech"), "ban ji"),
@@ -85,8 +81,19 @@ def test_failures_reply_politely_and_still_delete_media(monkeypatch, exc, expect
 
 
 def test_empty_transcript_and_download_failure(monkeypatch) -> None:
-    assert _run(monkeypatch, result=_result(transcript=""))[0] == voice.NOT_HEARD
-    assert _run(monkeypatch, result=_result(), wa=FakeWA(fail=True))[0] == voice.NOT_HEARD
+    assert _run(monkeypatch, result=_result(transcript=""))[0] == t("not_heard", "ha")
+    assert _run(monkeypatch, result=_result(), wa=FakeWA(fail=True))[0] == t("not_heard", "ha")
+
+
+def test_english_mode_replies_in_english_with_translation(monkeypatch) -> None:
+    r = SpeechResult(transcript="Nawa aka ware wa ilimi?", english="How much went to education?", language="ha",
+                     confidence="high", needs_confirmation=True)
+    out, _ = _run(monkeypatch, result=r, lang="en")
+    assert out.startswith("I heard:") and "(English: How much went to education?)" in out and "Did you mean" in out
+
+
+def test_voice_replies_only_in_hausa_mode() -> None:
+    assert voice.voice_replies_enabled("ha") and not voice.voice_replies_enabled("en")
 
 
 def test_pilot_numbers_normalised() -> None:

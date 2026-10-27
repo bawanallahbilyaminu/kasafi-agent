@@ -69,11 +69,6 @@ def test_status_updates_are_acknowledged_without_reply(client) -> None:
     assert client.sent == []
 
 
-def test_echo_text_by_type() -> None:
-    assert "Sannu" in webhook.echo_reply({"type": "text", "text": {"body": "Sannu"}})
-    assert webhook.echo_reply({"type": "sticker"}) == webhook.ECHO_OTHER
-
-
 def test_empty_secrets_count_as_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
     # An empty key would let anyone forge a valid HMAC, so empty must mean "reject".
     s = Settings(_env_file=None, whatsapp_app_secret=SecretStr(""), whatsapp_verify_token=SecretStr(""))

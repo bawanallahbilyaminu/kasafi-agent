@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 
 from app.data_rights import DELETED_REPLY, is_delete_command
 from app.main import app
-from app.whatsapp.webhook import echo_reply
+from tests.helpers import run_handle
 
 SITE = "https://halalnumeriq.com.ng/kasafi"
 
@@ -17,7 +17,8 @@ def test_legal_routes_redirect_to_published_site(page: str) -> None:
 @pytest.mark.parametrize("text", ["GOGE BAYANAI NA", "goge bayanai na!", "Goge bayanaina", " Delete my data. "])
 def test_delete_command_variants(text: str) -> None:
     assert is_delete_command(text)
-    assert echo_reply({"type": "text", "from": "0000000000", "text": {"body": text}}) == DELETED_REPLY
+    outs, _ = run_handle({"type": "text", "from": "2340000000001", "text": {"body": text}})
+    assert [o.text for o in outs] == [DELETED_REPLY]
 
 
 def test_question_mentioning_delete_is_not_a_command() -> None:

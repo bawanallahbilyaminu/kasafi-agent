@@ -1,10 +1,11 @@
-"""WhatsApp webhook: verification handshake and incoming messages (echo for now).
+"""WhatsApp webhook: verification handshake and incoming messages.
 
 - GET: Meta sends hub.mode=subscribe, hub.verify_token, hub.challenge. Reply 200
   with the challenge if the token matches WHATSAPP_VERIFY_TOKEN.
 - POST: verify X-Hub-Signature-256 (HMAC-SHA256 of the raw body, keyed with
   WHATSAPP_APP_SECRET), acknowledge with 200 right away, and reply in the
   background. Meta retries for up to 7 days, so message IDs are de-duplicated.
+  What to reply is decided in app/whatsapp/conversation.py (consent, language, limits).
 
 Privacy: logs carry masked numbers and message types only, never message text.
 """
@@ -22,17 +23,12 @@ from fastapi.responses import PlainTextResponse
 from pydantic import SecretStr
 
 from app.config import get_settings
-from app.data_rights import DELETED_REPLY, delete_user_data, is_delete_command
-from app.guardrails.emergency import EMERGENCY_REPLY, is_medical_emergency
+from app.users import get_store
 from app.whatsapp.client import WhatsAppClient, mask_phone
-from app.whatsapp.voice import reply_for_voice
+from app.whatsapp.conversation import handle
 
 log = logging.getLogger(__name__)
 router = APIRouter()
-
-ECHO_TEXT = "Kasafi (gwaji): na karɓi saƙonka: «{text}»"
-ECHO_OTHER = "Kasafi (gwaji): don Allah ka aiko da rubutu ko saƙon murya."
-
 
 class _SeenIds:
     """Bounded set of recently processed message IDs."""
@@ -75,25 +71,17 @@ def extract_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
-def echo_reply(msg: dict[str, Any]) -> str:
-    kind = msg.get("type")
-    if kind == "text" and is_delete_command(msg.get("text", {}).get("body", "")):
-        delete_user_data(msg["from"])
-        return DELETED_REPLY
-    if kind == "text" and is_medical_emergency(msg.get("text", {}).get("body", "")):
-        return EMERGENCY_REPLY
-    if kind == "text":
-        return ECHO_TEXT.format(text=msg.get("text", {}).get("body", "")[:500])
-    return ECHO_OTHER
-
-
 async def _reply(messages: list[dict[str, Any]]) -> None:
     client = WhatsAppClient()
+    settings, store = get_settings(), get_store()
     try:
         for msg in messages:
             try:
-                body = await reply_for_voice(msg, client) if msg.get("type") == "audio" else echo_reply(msg)
-                await client.send_text(msg["from"], body)
+                for out in await handle(msg, client, store=store, settings=settings):
+                    if out.buttons:
+                        await client.send_buttons(msg["from"], out.text, out.buttons)
+                    else:
+                        await client.send_text(msg["from"], out.text)
                 log.info("reply sent to %s", mask_phone(msg["from"]))
             except Exception:  # one failed reply must not stop the rest
                 log.exception("reply to %s failed", mask_phone(msg.get("from", "")))

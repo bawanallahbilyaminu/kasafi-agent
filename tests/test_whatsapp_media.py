@@ -72,3 +72,22 @@ def test_sha_mismatch_and_size_limits() -> None:
 def test_delete_media_is_best_effort() -> None:
     assert _run(lambda c: c.delete_media("m1"), _handler([])) is True
     assert _run(lambda c: c.delete_media("m1"), _handler([], delete_status=400)) is False
+
+
+def test_send_buttons_payload_and_limits() -> None:
+    import json
+    sent: list = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(req.content))
+        return httpx.Response(200, json={"messages": [{"id": "wamid.x"}]})
+
+    _run(lambda c: c.send_buttons("2340000000001", "Body", [("consent_ok", "OK / Na yarda"), ("lang_ha", "Hausa")]),
+         handler)
+    inter = sent[0]["interactive"]
+    assert sent[0]["type"] == "interactive" and inter["type"] == "button"
+    assert inter["action"]["buttons"][0] == {"type": "reply", "reply": {"id": "consent_ok", "title": "OK / Na yarda"}}
+    with pytest.raises(ValueError):
+        _run(lambda c: c.send_buttons("x", "b", [("a", "x" * 21)]), handler)
+    with pytest.raises(ValueError):
+        _run(lambda c: c.send_buttons("x", "b" * 1025, [("a", "ok")]), handler)
