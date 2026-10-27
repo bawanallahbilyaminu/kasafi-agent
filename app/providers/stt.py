@@ -156,6 +156,20 @@ async def transcribe_voice_note(
     if not any(hyps.values()):
         raise TranscriptionFailed("no speech recognised")
 
+    return await reconcile(hyps, client, model=settings.stt_reconcile_model,
+                           previous_turn=previous_turn, timings=timings)
+
+
+async def reconcile(
+    hyps: dict[str, str],
+    client: MetaClient,
+    *,
+    model: str,
+    previous_turn: str | None = None,
+    timings: dict[str, float] | None = None,
+) -> SpeechResult:
+    """Merge the two hypotheses into one utterance (text-only Spark call)."""
+    timings = dict(timings or {})
     user = (
         f"Hypothesis A (phonetic): {hyps.get('asr') or '(failed)'}\n"
         f"Hypothesis B (multimodal): {hyps.get('spark_audio') or '(failed)'}"
@@ -166,7 +180,7 @@ async def transcribe_voice_note(
     t0 = time.perf_counter()
     r = await client.chat(
         [{"role": "system", "content": RECONCILE_SYSTEM}, {"role": "user", "content": user}],
-        model=settings.stt_reconcile_model, reasoning_effort="low", max_tokens=4000,
+        model=model, reasoning_effort="low", max_tokens=4000,
     )
     timings["reconcile"] = round(time.perf_counter() - t0, 2)
     try:
