@@ -92,6 +92,7 @@ async def _reply(messages: list[dict[str, Any]]) -> None:
         for msg in messages:
             try:
                 await client.send_text(msg["from"], echo_reply(msg))
+                log.info("reply sent to %s", mask_phone(msg["from"]))
             except Exception:  # one failed reply must not stop the rest
                 log.exception("echo reply to %s failed", mask_phone(msg.get("from", "")))
     finally:
