@@ -76,6 +76,7 @@ WhatsApp webhook (FastAPI on VPS)
   - **Decided (Oct 27), after testing 16 of our own voice notes** (`evals/stt-hausa-2026-10-26.md`): no single model is reliable on Hausa, so we use a **combined pipeline**. Voice Transcribe and `muse-spark-1.2` audio run in parallel, then one Spark text call reconciles the two into a Hausa transcript, an English version and a confidence level.
   - When confidence is low, or the two disagree on a year, number or place, Kasafi **reads back** its understanding ("Kana nufin …?") before doing any retrieval.
   - Unclear audio never gets an answer: the guardrails can't rely on the transcript alone.
+  - **Guardrails must also check the raw hypotheses** (`SpeechResult.hypotheses`). The merge dropped "'yan bindiga" with high confidence in 3 of 4 tries (`evals/stt-hausa-2026-10-26.md`).
   - **Read-back and correction:**
     - The read-back quotes what was said, in the language it was spoken; the English translation is only for search.
     - The pending question is kept for at most 15 minutes, and deleted with the user's data.
