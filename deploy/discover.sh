@@ -37,8 +37,8 @@ M=$(sudo docker inspect -f '{{index .Config.Labels "com.docker.compose.project.w
 echo "mailcow dir: ${M:-not found}"
 [ -n "$M" ] && sudo grep -E '^(HTTP_PORT|HTTPS_PORT|HTTP_BIND|HTTPS_BIND|SKIP_LETS_ENCRYPT|ADDITIONAL_SAN|MAILCOW_HOSTNAME)=' "$M/mailcow.conf"
 
-section "existing /opt/kasafi?"
-ls -ld /opt/kasafi 2>/dev/null || echo "not present"
+section "existing /opt/kasafi-agent?"
+ls -ld /opt/kasafi-agent 2>/dev/null || echo "not present"
 
 section "DNS for kasafi-api.halalnumeriq.com.ng"
 getent hosts kasafi-api.halalnumeriq.com.ng || echo "not resolving yet"

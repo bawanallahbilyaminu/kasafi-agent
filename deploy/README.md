@@ -1,8 +1,9 @@
 # Deploying Kasafi API to the VPS
 
 Goal: a fixed webhook URL, `https://kasafi-api.halalnumeriq.com.ng/webhook`, on a VPS that also runs mailcow and other
-Docker apps. **Do not touch other services.** Kasafi runs as its own compose project (`kasafi`), on its own network,
-and listens only on `127.0.0.1:${KASAFI_PORT}` (default 8010). Public HTTPS comes from the host's **existing** reverse
+Docker apps. **Do not touch other services.** Kasafi runs as its own compose project (`kasafi-agent`), on its own
+network and in `/opt/kasafi-agent`; these unique names avoid clashing with existing containers. It listens only on
+`127.0.0.1:${KASAFI_PORT}` (default 8010). Public HTTPS comes from the host's **existing** reverse
 proxy, which gets one new site entry. No server IPs, secrets or phone numbers go in this repo.
 
 ## 0. DNS
@@ -20,15 +21,28 @@ ssh <user>@<server> 'bash -s' < deploy/discover.sh
 
 This shows what owns ports 80/443 (CloudPanel's nginx), mailcow's port and certificate settings, and whether 8010 is free.
 
-## 2. Install (only touches /opt/kasafi)
+## 2. Install (only touches /opt/kasafi-agent)
+
+On the server:
 
 ```sh
-sudo git clone https://github.com/bawanallahbilyaminu/kasafi-agent.git /opt/kasafi
-cd /opt/kasafi/deploy
-sudo cp ../.env.example .env && sudo chmod 600 .env   # then fill in the values
-echo "KASAFI_PORT=8010" | sudo tee -a .env            # a port confirmed free in step 1
-sudo docker compose up -d --build
-curl -s http://127.0.0.1:8010/health                  # {"status":"ok"}
+git clone https://github.com/bawanallahbilyaminu/kasafi-agent.git /opt/kasafi-agent
+```
+
+From your machine, in the repo folder, copy **only** the keys the API needs. Nothing is printed, and the file is
+created with mode 600:
+
+```sh
+grep -E '^(META_API_KEY|BASETEN_API_KEY|WHATSAPP_[A-Z_]+)=' .env \
+  | ssh root@<server> 'umask 077; cat > /opt/kasafi-agent/deploy/.env && echo KASAFI_PORT=8010 >> /opt/kasafi-agent/deploy/.env'
+```
+
+On the server:
+
+```sh
+cd /opt/kasafi-agent/deploy && docker compose up -d --build
+docker compose ps                        # kasafi-agent-api ... (healthy)
+curl -s http://127.0.0.1:8010/health     # {"status":"ok"}
 ```
 
 ## 3. HTTPS: a CloudPanel Reverse Proxy site
@@ -61,12 +75,12 @@ Then App Dashboard → WhatsApp → Configuration → Webhook → Edit: set the 
 ## Update
 
 ```sh
-cd /opt/kasafi && sudo git pull && cd deploy && sudo docker compose up -d --build
+cd /opt/kasafi-agent && git pull && cd deploy && docker compose up -d --build
 ```
 
 ## Rollback / remove
 
 ```sh
-cd /opt/kasafi/deploy && sudo docker compose down    # stops only the kasafi project
+cd /opt/kasafi-agent/deploy && docker compose down    # stops only the kasafi-agent project
 # then delete the kasafi-api site in CloudPanel (Sites → ⋯ → Delete)
 ```
