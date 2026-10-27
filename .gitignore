@@ -28,3 +28,8 @@ node_modules/
 
 # Logs
 *.log
+
+# VPS-only secrets and database backups (created on the server)
+deploy/db.env
+deploy/backups/
+deploy/index.incoming.sql.gz

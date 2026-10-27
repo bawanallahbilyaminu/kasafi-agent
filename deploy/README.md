@@ -139,9 +139,29 @@ production database exists, because the local one points at dev Postgres.
 The first time, run a normal deploy **before** `--sync-env`. The health check needs a container built by
 `deploy.sh` so that `/version` matches.
 
+## Database (Postgres on the VPS)
+
+- The `db` service is Postgres 17 + pgvector, with **no published port**. Only `kasafi-agent-api` reaches it, as
+  `db:5432`, on the `kasafi-agent` network.
+- **Password:** created on the first deploy in `/opt/kasafi-agent/deploy/db.env` (mode 600). It's never synced,
+  printed or committed.
+- **Data** lives in the `kasafi-agent-pgdata` volume. **Migrations** run on every deploy, after the database is
+  healthy.
+- **Index:** `deploy/deploy.sh --sync-index` copies `documents`, `pages` and `chunks` from the dev database
+  (public documents only, about 6.5 MB compressed). It replaces the server's copy in one transaction, so a failed
+  load keeps the old index.
+- **Backups:** the `backup` service writes `deploy/backups/kasafi-YYYY-MM-DD.dump` every 24 h and keeps 7 days.
+  Restore with:
+  ```sh
+  cd /opt/kasafi-agent/deploy
+  docker compose exec -T db pg_restore -U kasafi -d kasafi --clean --if-exists < backups/kasafi-YYYY-MM-DD.dump
+  ```
+  These backups are on the same server. Copy them off-site for real protection.
+
 ## Remove completely
 
 ```sh
-cd /opt/kasafi-agent/deploy && docker compose down    # stops only the kasafi-agent project
+cd /opt/kasafi-agent/deploy && docker compose down    # stops only the kasafi-agent project (keeps volumes)
+# docker compose down -v would also delete the database and state volumes; don't, unless you mean it
 # then delete the kasafi-api site in CloudPanel (Sites → ⋯ → Delete)
 ```

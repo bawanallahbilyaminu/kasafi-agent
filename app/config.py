@@ -80,23 +80,32 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("WHATSAPP_BUSINESS_ACCOUNT_ID", "WHATSAPP_WABA_ID", "WABA_ID"),
     )
 
-    # Database. Production sets DATABASE_URL. In dev, when it's empty, the docker-compose
-    # Postgres on localhost is used with POSTGRES_PASSWORD.
+    # Database. DATABASE_URL wins if set. Otherwise it's built from POSTGRES_PASSWORD and
+    # POSTGRES_HOST: the docker-compose dev DB on 127.0.0.1, or the "db" container on the VPS.
     database_url: SecretStr | None = None
     postgres_password: SecretStr | None = None
+    # 127.0.0.1, not localhost: on Windows localhost tries IPv6 first and the connect hangs.
+    postgres_host: str = "127.0.0.1"
 
     def db_url(self, driver: str = "") -> str:
         """Connection URL. driver="" for psycopg (postgresql://), "psycopg" for SQLAlchemy/Alembic."""
         url = self.database_url.get_secret_value() if self.database_url else ""
         if not url and self.postgres_password and self.postgres_password.get_secret_value():
             pw = quote(self.postgres_password.get_secret_value(), safe="")
-            # 127.0.0.1, not localhost: on Windows localhost tries IPv6 first and the connect hangs.
-            url = f"postgresql://kasafi:{pw}@127.0.0.1:5432/kasafi"
+            url = f"postgresql://kasafi:{pw}@{self.postgres_host}:5432/kasafi"
         if not url:
             raise RuntimeError("DATABASE_URL (or POSTGRES_PASSWORD for the dev database) is not set")
         scheme, rest = url.split("://", 1)
         base = scheme.split("+", 1)[0]
         return f"{base}+{driver}://{rest}" if driver else f"{base}://{rest}"
+
+    @property
+    def has_database(self) -> bool:
+        try:
+            self.db_url()
+        except RuntimeError:
+            return False
+        return True
 
     # Published privacy / data-deletion / terms pages (the URLs registered in the Meta app)
     legal_site_url: str = "https://halalnumeriq.com.ng/kasafi"

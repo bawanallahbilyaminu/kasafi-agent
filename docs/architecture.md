@@ -66,7 +66,13 @@ WhatsApp webhook (FastAPI on VPS)
 - **Backend:** Python + FastAPI.
 - ~~**Storage**~~ **Decided (Oct 26):** PostgreSQL + pgvector, one database for documents, chunks, tables, provenance and the review queue.
   - **Dev:** local Docker Postgres 17 + pgvector.
-  - **Deploy:** Azure Database for PostgreSQL Flexible Server (Burstable B1ms, free tier), pgvector enabled via `azure.extensions=VECTOR`, SSL required, firewall limited to the VPS IP.
+  - **Deploy (changed Oct 27, Bilyaminu chose option A):** a **Postgres 17 + pgvector container on the VPS**, in the `kasafi-agent` compose project.
+    - It has no published port; only the API container reaches it, on the private network.
+    - Its password is generated on the server in `deploy/db.env`.
+    - Nightly `pg_dump` backups are kept for 7 days in `deploy/backups/`. An off-server copy is still to do.
+    - The index is copied from the dev DB with `deploy/deploy.sh --sync-index`.
+    - The Azure option below is kept for later. The same migrations work there.
+  - **Deploy (original plan, deferred):** Azure Database for PostgreSQL Flexible Server (Burstable B1ms, free tier), pgvector enabled via `azure.extensions=VECTOR`, SSL required, firewall limited to the VPS IP.
   - Same schema and Alembic migrations for both; switch with `DATABASE_URL` in `.env`.
   - The app (VPS) and DB (Azure) are on different networks, so **keep round-trips per answer minimal**: batch queries, fetch what a step needs in one query, avoid N+1 patterns.
   - Click-by-click Azure setup steps to be written at deployment time.

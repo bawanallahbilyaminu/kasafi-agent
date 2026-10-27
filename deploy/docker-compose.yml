@@ -1,10 +1,20 @@
-# Kasafi API on the VPS. A uniquely named compose project ("kasafi-agent"), network and
-# image, so it can't collide with or touch mailcow or any other app on the host.
+# Kasafi on the VPS. A uniquely named compose project ("kasafi-agent"), network, images and
+# volumes, so it can't collide with or touch mailcow or any other app on the host.
 #
-# The container listens only on 127.0.0.1:${KASAFI_PORT}. CloudPanel's nginx forwards
-# https://kasafi-api.halalnumeriq.com.ng to it (see deploy/README.md). Secrets come from
-# deploy/.env on the server (never committed).
+# - api:    listens only on 127.0.0.1:${KASAFI_PORT}. CloudPanel's nginx forwards
+#           https://kasafi-api.halalnumeriq.com.ng to it (see deploy/README.md).
+# - db:     Postgres 17 + pgvector, with NO published port: only reachable from the api on
+#           the kasafi-agent network.
+# - backup: pg_dump every 24 h into deploy/backups/, keeping 7 days.
+# Secrets: deploy/.env (synced from the laptop by deploy.sh --sync-env) and deploy/db.env
+# (POSTGRES_PASSWORD, generated on the server by deploy/remote.sh). Neither is committed.
 name: kasafi-agent
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 services:
   api:
@@ -15,13 +25,17 @@ services:
         KASAFI_COMMIT: ${KASAFI_COMMIT:-unknown}
     image: kasafi-agent-api:latest
     container_name: kasafi-agent-api
-    env_file: .env
+    env_file: [.env, db.env]
     environment:
       KASAFI_STATE_DB: /data/kasafi.db   # consent, language, limits (no phone numbers)
+      POSTGRES_HOST: db
     volumes:
       - kasafi-agent-data:/data
     ports:
       - "127.0.0.1:${KASAFI_PORT:-8010}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
     read_only: true
     tmpfs:
@@ -32,11 +46,63 @@ services:
       resources:
         limits:
           memory: 512m
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging
+    networks: [kasafi-agent]
+
+  db:
+    image: pgvector/pgvector:pg17
+    container_name: kasafi-agent-db
+    env_file: [db.env]
+    environment:
+      POSTGRES_USER: kasafi
+      POSTGRES_DB: kasafi
+    volumes:
+      - kasafi-agent-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kasafi -d kasafi"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+    logging: *logging
+    networks: [kasafi-agent]
+
+  backup:
+    image: pgvector/pgvector:pg17
+    container_name: kasafi-agent-db-backup
+    env_file: [db.env]
+    environment:
+      PGHOST: db
+      PGUSER: kasafi
+      PGDATABASE: kasafi
+    entrypoint:
+      - sh
+      - -c
+      - |
+        export PGPASSWORD="$$POSTGRES_PASSWORD"
+        while true; do
+          f=/backups/kasafi-$$(date +%F).dump
+          pg_dump -Fc -f "$$f.part" && mv "$$f.part" "$$f" && echo "backup ok: $$f"
+          find /backups -name 'kasafi-*.dump' -mtime +7 -delete
+          sleep 86400
+        done
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    logging: *logging
     networks: [kasafi-agent]
 
 networks:
@@ -46,3 +112,5 @@ networks:
 volumes:
   kasafi-agent-data:
     name: kasafi-agent-data
+  kasafi-agent-pgdata:
+    name: kasafi-agent-pgdata

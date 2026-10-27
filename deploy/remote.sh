@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Server side of deploy/deploy.sh. Don't run this by hand; deploy.sh sends it over ssh:
-#   ssh vps 'bash -s -- <deploy|rollback|sync-env> [expected-commit]' < deploy/remote.sh
+#   ssh vps 'bash -s -- <deploy|rollback|sync-env|sync-index> [expected-commit]' < deploy/remote.sh
 #
 # It only touches /opt/kasafi-agent, the "kasafi-agent" compose project, the
 # kasafi-agent-api images, and its own state and log files. It never prunes other
@@ -12,6 +12,7 @@ MODE=${1:?mode}
 EXPECTED=${2:-}
 APP=/opt/kasafi-agent
 ENV_FILE=$APP/deploy/.env
+DB_ENV=$APP/deploy/db.env           # POSTGRES_PASSWORD, generated here once, never synced or printed
 STATE=/var/lib/kasafi-agent
 RELEASES=$STATE/releases          # successfully deployed commits, newest last
 LOG=/var/log/kasafi-agent/deploy.log
@@ -28,6 +29,12 @@ flock -n 9 || { echo "remote: another kasafi-agent deploy is running"; exit 1; }
 cd "$APP"
 [ -f "$ENV_FILE" ] || { echo "remote: $ENV_FILE missing; run deploy.sh --sync-env first"; exit 1; }
 PORT=$(grep -E '^KASAFI_PORT=[0-9]+$' "$ENV_FILE" | tail -1 | cut -d= -f2 || true); PORT=${PORT:-8010}
+if [ ! -s "$DB_ENV" ]; then
+  (umask 077; echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" > "$DB_ENV")
+  echo "[remote] created $DB_ENV with a new database password"
+fi
+chmod 600 "$DB_ENV"
+mkdir -p "$APP/deploy/backups"
 
 dc() { docker compose --project-name kasafi-agent --project-directory "$APP/deploy" -f "$APP/deploy/docker-compose.yml" "$@"; }
 say() { printf '[remote] %s\n' "$*"; }
@@ -54,14 +61,14 @@ build_and_start() {  # $1 = commit; runs migrations between build and start
   say "building $(short "$commit")"
   KASAFI_COMMIT=$commit dc build --quiet api
   docker tag "$IMAGE:latest" "$IMAGE:$(short "$commit")"
-  if [ -f "$APP/alembic.ini" ] && grep -qE '^DATABASE_URL=.+' "$ENV_FILE"; then
+  say "starting database"
+  dc up -d --wait db
+  if [ -f "$APP/alembic.ini" ]; then
     say "running database migrations"
     dc run --rm --no-deps api alembic upgrade head
-  else
-    say "migrations skipped (no alembic.ini or no DATABASE_URL yet)"
   fi
-  say "starting container"
-  dc up -d --no-build api
+  say "starting containers"
+  dc up -d --no-build api backup
 }
 
 checkout() { git -c advice.detachedHead=false checkout -q --detach "$1"; }
@@ -150,6 +157,28 @@ sync-env)
   log "sync-env FAILED; restore also unhealthy"
   echo "RESULT=failed COMMIT=none"
   exit 1
+  ;;
+
+sync-index)
+  # deploy.sh first uploads a gzipped data-only pg_dump of documents/pages/chunks (public
+  # documents only, no user data) to index.incoming.sql.gz. It replaces the server's copy
+  # in one transaction, so a failure leaves the old index in place.
+  INCOMING=$APP/deploy/index.incoming.sql.gz
+  [ -s "$INCOMING" ] || { say "no $INCOMING uploaded"; exit 1; }
+  dc up -d --wait db
+  say "loading index ($(du -h "$INCOMING" | cut -f1) compressed)"
+  if { echo "TRUNCATE documents CASCADE;"; gunzip -c "$INCOMING"; }        | dc exec -T db psql -q -1 -v ON_ERROR_STOP=1 -U kasafi -d kasafi >/dev/null; then
+    rm -f "$INCOMING"
+    counts=$(dc exec -T db psql -At -U kasafi -d kasafi -c       "SELECT (SELECT count(*) FROM documents)||' documents, '||(SELECT count(*) FROM pages)||' pages, '||(SELECT count(*) FROM chunks)||' chunks'")
+    say "index loaded: $counts"
+    log "sync-index ok: $counts"
+    echo "RESULT=ok COMMIT=$(git rev-parse HEAD)"
+    exit 0
+  fi
+  rm -f "$INCOMING"
+  log "sync-index FAILED; previous index kept"
+  echo "RESULT=rolled_back COMMIT=$(git rev-parse HEAD)"
+  exit 2
   ;;
 
 *) echo "remote: unknown mode $MODE"; exit 1 ;;
