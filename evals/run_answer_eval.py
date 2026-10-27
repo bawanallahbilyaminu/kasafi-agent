@@ -51,18 +51,23 @@ def check(case: dict, a) -> list[str]:
     return fails
 
 
-async def main(ids: list[str] | None, runs: int) -> int:
+async def main(ids: list[str] | None, runs: int, plan_reasoning: str | None = None) -> int:
     s = get_settings()
+    if plan_reasoning:
+        s = s.model_copy(update={"kasafi_plan_reasoning": plan_reasoning})
+    print(f"planner reasoning: {s.kasafi_plan_reasoning}")
     cases = json.loads((ROOT / "evals/answers.json").read_text(encoding="utf-8"))["cases"]
     questions = {q["id"]: q for q in json.loads((ROOT / "evals/questions.json").read_text(encoding="utf-8"))["questions"]}
     cases = [c for c in cases if not ids or c["id"] in ids]
-    passed, times = 0, []
+    passed, times, plan_t, answer_t = 0, [], [], []
     with psycopg.connect(s.db_url()) as conn:
         for run in range(runs):
             for c in cases:
                 t0 = time.perf_counter()
                 a = await answer_question(questions[c["id"]]["text_ha"], c["lang"], conn, settings=s)
                 times.append(time.perf_counter() - t0)
+                plan_t.append(a.timings.get("plan", 0))
+                answer_t.append(a.timings.get("answer", 0))
                 fails = check(c, a)
                 passed += not fails
                 print(f"[run {run + 1}] {c['id']:>3} {'PASS' if not fails else 'FAIL'} {times[-1]:5.1f}s  "
@@ -70,7 +75,8 @@ async def main(ids: list[str] | None, runs: int) -> int:
                 if fails:
                     print("      " + a.text.replace("\n", "\n      "))
     total = len(cases) * runs
-    print(f"\n{passed}/{total} passed  |  median {statistics.median(times):.1f}s, max {max(times):.1f}s")
+    print(f"\n{passed}/{total} passed  |  total median {statistics.median(times):.1f}s, max {max(times):.1f}s  |  "
+          f"plan median {statistics.median(plan_t):.1f}s  |  answer median {statistics.median(answer_t):.1f}s")
     return 0 if passed == total else 1
 
 
@@ -78,5 +84,6 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--ids", nargs="+")
     p.add_argument("--runs", type=int, default=1)
+    p.add_argument("--plan-reasoning", choices=["minimal", "low", "medium"])
     a = p.parse_args()
-    raise SystemExit(asyncio.run(main(a.ids, a.runs)))
+    raise SystemExit(asyncio.run(main(a.ids, a.runs, a.plan_reasoning)))

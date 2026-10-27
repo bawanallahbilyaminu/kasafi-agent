@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     # CLAUDE.md rule 5 excludes security content. False (strict) also refuses security-budget questions;
     # set true to treat security-agency budget lines as ordinary budget facts.
     kasafi_allow_security_budget: bool = False
+    # Reasoning effort for the answer planner (speed vs accuracy; see evals/run_answer_eval.py)
+    kasafi_plan_reasoning: str = "minimal"   # same eval score as "low", median 7.9 s vs 9.9 s (Oct 27)
     # How long a read-back question waits for Eh / A'a / a correction
     kasafi_pending_ttl_minutes: int = 15
 

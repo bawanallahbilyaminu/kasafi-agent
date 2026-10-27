@@ -191,7 +191,7 @@ async def plan_question(question: str, catalog: list[dict], client: ChatClient, 
     r = await client.chat(
         [{"role": "system", "content": PLAN_SYSTEM},
          {"role": "user", "content": f"CATALOG:\n{json.dumps(catalog, ensure_ascii=False)}\n\nQUESTION: {question}"}],
-        model=settings.meta_model, reasoning_effort="low", max_tokens=3000,
+        model=settings.meta_model, reasoning_effort=settings.kasafi_plan_reasoning, max_tokens=3000,
     )
     d = parse_json_reply(r.content)
     known = {c["id"] for c in catalog}
