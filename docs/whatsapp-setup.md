@@ -46,3 +46,10 @@ backend's `/privacy`, `/terms` and `/data-deletion` redirect to them.
 - A new WABA has **no message templates**, not even `hello_world`. Free-form text only reaches a user within 24 hours
   of their last message to us. Anything else needs an approved template, otherwise the send is accepted (HTTP 200)
   and then silently fails with 131047, which is only reported in a status webhook.
+
+## Later: message templates (not needed yet)
+
+Kasafi only **replies** inside the 24-hour customer-service window, which opens when a user messages us. That needs no
+template. We will need an approved template if Kasafi ever starts a conversation or replies after 24 hours, for example
+"your answer is ready" after a long fetch, or a follow-up from the review queue. When that happens, draft a Hausa +
+English **utility** template and submit it for Meta's approval.
