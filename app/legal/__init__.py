@@ -1,8 +1,8 @@
 """Legal pages: /privacy, /data-deletion and /terms redirect to the published site.
 
-The single source of truth is docs/site/*.md, published to GitHub Pages by
-.github/workflows/pages.yml. If behaviour changes (retention, providers, the
-delete command), update those pages in the same commit.
+The live pages (registered in the Meta app) are on halalnumeriq.com.ng/kasafi.
+docs/site/*.md is the version-controlled copy of their text. If behaviour changes
+(retention, providers, the delete command), update both.
 """
 
 from fastapi import APIRouter
@@ -15,7 +15,7 @@ PAGES = ("privacy", "data-deletion", "terms")
 
 
 def _redirect(page: str) -> RedirectResponse:
-    return RedirectResponse(f"{get_settings().legal_site_url.rstrip('/')}/{page}/", status_code=307)
+    return RedirectResponse(f"{get_settings().legal_site_url.rstrip('/')}/{page}", status_code=307)
 
 
 for _page in PAGES:

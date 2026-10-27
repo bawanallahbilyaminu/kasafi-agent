@@ -5,13 +5,13 @@ from app.data_rights import DELETED_REPLY, is_delete_command
 from app.main import app
 from app.whatsapp.webhook import echo_reply
 
-SITE = "https://bawanallahbilyaminu.github.io/kasafi-agent"
+SITE = "https://halalnumeriq.com.ng/kasafi"
 
 
 @pytest.mark.parametrize("page", ["privacy", "data-deletion", "terms"])
 def test_legal_routes_redirect_to_published_site(page: str) -> None:
     r = TestClient(app).get(f"/{page}", follow_redirects=False)
-    assert r.status_code == 307 and r.headers["location"] == f"{SITE}/{page}/"
+    assert r.status_code == 307 and r.headers["location"] == f"{SITE}/{page}"
 
 
 @pytest.mark.parametrize("text", ["GOGE BAYANAI NA", "goge bayanai na!", "Goge bayanaina", " Delete my data. "])

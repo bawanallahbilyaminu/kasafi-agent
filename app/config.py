@@ -43,8 +43,8 @@ class Settings(BaseSettings):
     # Database
     database_url: SecretStr | None = None
 
-    # Published privacy / data-deletion / terms pages (docs/site, GitHub Pages)
-    legal_site_url: str = "https://bawanallahbilyaminu.github.io/kasafi-agent"
+    # Published privacy / data-deletion / terms pages (the URLs registered in the Meta app)
+    legal_site_url: str = "https://halalnumeriq.com.ng/kasafi"
 
     # Admin page basic auth
     admin_user: str | None = None
