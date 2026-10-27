@@ -188,3 +188,16 @@ def test_merge_with_model_parses_and_keeps_reply_as_data() -> None:
     assert fake.messages[1] == {"role": "user", "content": f"PENDING: {WRONG}\nREPLY: 2025"}
     bad = asyncio.run(merge_with_model(WRONG, "x", FakeChat({"kind": "weird"}), make_settings()))
     assert bad.kind == "new"
+
+
+def test_logs_show_reply_kind_and_timing_but_never_content(caplog) -> None:
+    import logging
+    store = setup_pending()
+    with caplog.at_level(logging.INFO):
+        run_handle(text("2025"), store=store, corrections={"2025": Resolution("correction", FIXED)})
+    store = setup_pending()
+    with caplog.at_level(logging.INFO):
+        run_handle(text("Eh"), store=store)
+    logs = caplog.text
+    assert "resolved: correction in" in logs and "read-back reply from **01: confirm (typed, no model)" in logs
+    assert "2025" not in logs and FIXED not in logs and WRONG not in logs and A not in logs

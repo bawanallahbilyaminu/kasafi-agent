@@ -134,7 +134,9 @@ async def transcribe_voice_note(
     references such as "waɗannan wuraren" (those places).
     """
     settings = settings or get_settings()
+    t_convert = time.perf_counter()
     wav = to_wav16k(audio)
+    convert_s = round(time.perf_counter() - t_convert, 2)
     seconds = (len(wav) - 44) / 32000  # 16 kHz mono s16
     if max_seconds is not None and seconds > max_seconds:
         raise VoiceNoteTooLong(f"{seconds:.0f}s voice note exceeds {max_seconds:.0f}s")
@@ -145,7 +147,7 @@ async def transcribe_voice_note(
         return_exceptions=True,
     )
     hyps: dict[str, str] = {}
-    timings: dict[str, float] = {}
+    timings: dict[str, float] = {"audio": round(seconds, 1), "convert": convert_s}
     for name, res in (("asr", a), ("spark_audio", b)):
         if isinstance(res, BaseException):
             log.warning("STT hypothesis %s failed: %s", name, res)

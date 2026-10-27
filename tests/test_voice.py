@@ -101,3 +101,17 @@ def test_pilot_numbers_normalised() -> None:
     s = _settings(" +234 000 000 0001 , 2348111111111")
     assert voice.is_pilot("2340000000001", s) and voice.is_pilot("2348111111111", s)
     assert not voice.is_pilot("2340000000002", s)
+
+
+def test_voice_log_has_stage_timings_and_no_transcript(monkeypatch, caplog) -> None:
+    import logging
+    r = SpeechResult(transcript="Nawa aka ware wa ilimi a 2026?", english="How much for education in 2026?",
+                     language="ha", confidence="high", needs_confirmation=False,
+                     hypotheses={"asr": "x", "spark_audio": "y"},
+                     timings={"audio": 9.6, "convert": 0.1, "asr": 4.2, "spark_audio": 6.3, "reconcile": 3.1})
+    with caplog.at_level(logging.INFO):
+        _run(monkeypatch, result=r)
+    line = next(rec.getMessage() for rec in caplog.records if "voice note from" in rec.getMessage())
+    for part in ["audio=10s", "download=", "convert=0.1s", "asr=4.2s", "spark_audio=6.3s", "reconcile=3.1s", "total="]:
+        assert part in line
+    assert "ilimi" not in caplog.text and "education" not in caplog.text and PILOT not in caplog.text

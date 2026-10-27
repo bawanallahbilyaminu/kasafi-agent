@@ -72,6 +72,7 @@ async def reply_for_voice(
     t0 = time.perf_counter()
     try:
         audio = await wa.download_media(media_id)
+        download_s = time.perf_counter() - t0
     except MediaError as e:
         log.warning("voice note download failed for %s: %s", mask_phone(sender), e)
         return VoiceOutcome(t("not_heard", lang))
@@ -93,9 +94,13 @@ async def reply_for_voice(
         except httpx.HTTPError as e:  # best effort; the reply still goes out
             log.info("media delete failed: %s", type(e).__name__)
 
-    log.info("voice note from %s: confidence=%s read_back=%s hypotheses=%s took=%.1fs",
-             mask_phone(sender), result.confidence, result.needs_confirmation,
-             sorted(result.hypotheses), time.perf_counter() - t0)
+    # Timings only, never the transcript. asr and spark_audio run in parallel, then reconcile.
+    tm = result.timings
+    log.info("voice note from %s: confidence=%s read_back=%s hypotheses=%s audio=%.0fs | download=%.1fs "
+             "convert=%.1fs asr=%.1fs spark_audio=%.1fs reconcile=%.1fs total=%.1fs",
+             mask_phone(sender), result.confidence, result.needs_confirmation, sorted(result.hypotheses),
+             tm.get("audio", 0), download_s, tm.get("convert", 0), tm.get("asr", 0), tm.get("spark_audio", 0),
+             tm.get("reconcile", 0), time.perf_counter() - t0)
     return VoiceOutcome(compose_reply(result, lang), result if result.transcript.strip() else None)
 
 

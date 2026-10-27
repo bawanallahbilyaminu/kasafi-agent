@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -127,6 +128,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
 
     # 5a. Eh / A'a to a pending read-back: no model, no limit used
     if pending and text and (quick := quick_resolve(text)):
+        log.info("read-back reply from %s: %s (typed, no model)", mask_phone(sender), quick.kind)
         store.clear_pending(key)
         if quick.kind == "confirm":
             return [Out(t("confirmed", lang, question=pending[0]))]
@@ -174,11 +176,14 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
 
 
 async def _resolve_safely(pending: str, reply: str, resolve_fn: ResolveFn, settings: Settings) -> Resolution:
+    t0 = time.perf_counter()
     try:
-        return await resolve_fn(pending, reply, settings=settings)
+        res = await resolve_fn(pending, reply, settings=settings)
     except (ProviderError, httpx.HTTPError, ValueError) as e:  # model down or bad JSON
-        log.warning("correction merge failed: %s", type(e).__name__)
+        log.warning("correction merge failed: %s after %.1fs", type(e).__name__, time.perf_counter() - t0)
         return Resolution("failed")
+    log.info("read-back reply resolved: %s in %.1fs", res.kind, time.perf_counter() - t0)
+    return res
 
 
 def _resolution_reply(res: Resolution, pending: str, lang: str) -> Out:
