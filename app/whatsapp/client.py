@@ -18,7 +18,7 @@ GRAPH_URL = "https://graph.facebook.com"
 
 def mask_phone(number: str) -> str:
     """For logs only: keep the last 2 digits."""
-    return f"…{number[-2:]}" if number else "?"
+    return f"**{number[-2:]}" if number else "?"
 
 
 class WhatsAppClient:
@@ -45,7 +45,12 @@ class WhatsAppClient:
             "text": {"preview_url": False, "body": body[:4096]},
         })
         if not resp.is_success:
-            # The Graph error body has no secrets in it, but it can echo the number, so log only the status.
-            log.warning("WhatsApp send to %s failed: HTTP %s", mask_phone(to), resp.status_code)
+            # The Graph error body can echo the number, so log only the status and numeric error code.
+            try:
+                code = resp.json().get("error", {}).get("code")
+            except ValueError:
+                code = None
+            log.warning("WhatsApp send to %s failed: HTTP %s, Graph error code %s",
+                        mask_phone(to), resp.status_code, code)
             resp.raise_for_status()
         return resp.json()

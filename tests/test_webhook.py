@@ -82,3 +82,14 @@ def test_empty_secrets_count_as_unconfigured(monkeypatch: pytest.MonkeyPatch) ->
     c = TestClient(app)
     assert c.get("/webhook", params={"hub.mode": "subscribe", "hub.verify_token": "", "hub.challenge": "1"}).status_code == 503
     assert _post(c, _payload(), secret="").status_code == 503
+
+
+def test_access_log_redacts_query_string() -> None:
+    import logging
+
+    from app.main import _RedactQuery
+
+    rec = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %d',
+                            ("1.2.3.4", "GET", "/webhook?hub.verify_token=secret", "1.1", 200), None)
+    _RedactQuery().filter(rec)
+    assert "secret" not in rec.getMessage() and "/webhook?[redacted]" in rec.getMessage()

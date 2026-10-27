@@ -9,6 +9,20 @@ from app.whatsapp.webhook import router as whatsapp_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
+
+class _RedactQuery(logging.Filter):
+    """Drop query strings from access logs: Meta's verify request carries the verify token in the URL."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple) and len(record.args) >= 3 and isinstance(record.args[2], str):
+            path, sep, _ = record.args[2].partition("?")
+            if sep:
+                record.args = (*record.args[:2], f"{path}?[redacted]", *record.args[3:])
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_RedactQuery())
+
 app = FastAPI(title="Kasafi", version="0.1.0")
 app.include_router(whatsapp_router)
 app.include_router(legal_router)
