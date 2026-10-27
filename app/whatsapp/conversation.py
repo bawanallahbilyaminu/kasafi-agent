@@ -28,6 +28,7 @@ from app.data_rights import DELETED_REPLY, delete_user_data, is_delete_command
 from app.guardrails.emergency import EMERGENCY_REPLY, is_medical_emergency
 from app.language import detect_language
 from app.providers.chat import ProviderError
+from app.providers.stt import heard_texts
 from app.users import UserStore, user_key
 from app.whatsapp.client import mask_phone
 from app.whatsapp.messages import LANG_BUTTONS, NOT_IN_PILOT, NOTICE_BUTTONS, first_contact_notice, t
@@ -151,7 +152,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                 return [_resolution_reply(res, pending[0], lang)]
         store.clear_pending(key)                  # a new question replaces any pending one
         r = outcome.result
-        if r and r.needs_confirmation and not is_medical_emergency(r.transcript, r.english):
+        if r and r.needs_confirmation and not is_medical_emergency(*heard_texts(r)):
             store.set_pending(key, r.transcript, r.english)
         return [Out(outcome.text)]
 

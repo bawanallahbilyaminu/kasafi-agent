@@ -25,7 +25,7 @@ from app.config import Settings, get_settings
 from app.guardrails.emergency import EMERGENCY_REPLY, is_medical_emergency
 from app.providers.chat import ProviderError
 from app.providers.meta import MetaClient
-from app.providers.stt import SpeechResult, TranscriptionFailed, VoiceNoteTooLong, transcribe_voice_note
+from app.providers.stt import SpeechResult, TranscriptionFailed, VoiceNoteTooLong, heard_texts, transcribe_voice_note
 from app.whatsapp.client import MediaError, WhatsAppClient, mask_phone
 from app.whatsapp.messages import t
 
@@ -47,7 +47,7 @@ def compose_reply(result: SpeechResult, lang: str = "ha") -> str:
     if not transcript:
         return t("not_heard", lang)
     # Safety first: an emergency gets a referral now, never a read-back or "answer coming soon".
-    if is_medical_emergency(transcript, result.english):
+    if is_medical_emergency(*heard_texts(result)):
         return EMERGENCY_REPLY
     # Read back exactly what was said, in the language it was spoken. The English translation
     # (result.english) is only for searching documents, never shown as the read-back.

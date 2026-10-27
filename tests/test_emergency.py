@@ -29,3 +29,20 @@ def test_emergency_beats_read_back_and_echo() -> None:
     assert compose_reply(r) == EMERGENCY_REPLY
     outs, _ = run_handle({"type": "text", "from": "2340000000001", "text": {"body": "My wife is bleeding, what medicine?"}})
     assert [o.text for o in outs] == [EMERGENCY_REPLY]  # even before consent: local check, no model
+
+
+def test_emergency_found_in_raw_hypothesis_even_if_merge_dropped_it() -> None:
+    # The merge can confidently lose the key words; the raw Voice Transcribe text still has them.
+    r = SpeechResult(transcript="Matata tana da ciki, wane magani zan ba ta?", english="My wife is pregnant, what medicine?",
+                     language="ha", confidence="high", needs_confirmation=False,
+                     hypotheses={"asr": "Matata dan ada ciki, kuma tana zubar da jini.", "spark_audio": "Matata tana da ciki"})
+    assert compose_reply(r) == EMERGENCY_REPLY
+
+
+def test_budget_question_about_emergency_care_does_not_trigger_on_raw_text() -> None:
+    r = SpeechResult(transcript="Me rahoton UNFPA kan kulawar gaggawa ga mata masu haihuwa ya gano?",
+                     english="What did the UNFPA report on emergency care for mothers find?", language="ha",
+                     confidence="high", needs_confirmation=False,
+                     hypotheses={"asr": "Merohoto nyu NFT kan kulawar gaggawa ga mata masu ayyuwa da jarirai",
+                                 "spark_audio": "Mirahoto NFE kan kulawa ta gaggawa || English: emergency care report"})
+    assert compose_reply(r) != EMERGENCY_REPLY

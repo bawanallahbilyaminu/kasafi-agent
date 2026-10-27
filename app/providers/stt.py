@@ -80,6 +80,13 @@ class SpeechResult:
     timings: dict[str, float] = field(default_factory=dict)
 
 
+def heard_texts(result: "SpeechResult") -> list[str]:
+    """Every version of what was heard: the merged transcript, its translation, and both raw
+    hypotheses. Safety checks read all of them, because the merge can confidently drop the
+    words that matter (e.g. "'yan bindiga" in evals/stt-hausa-2026-10-26.md)."""
+    return [result.transcript, result.english, *result.hypotheses.values()]
+
+
 class TranscriptionFailed(RuntimeError):
     pass
 
