@@ -42,11 +42,10 @@ def compose_reply(result: SpeechResult, lang: str = "ha") -> str:
     # Safety first: an emergency gets a referral now, never a read-back or "answer coming soon".
     if is_medical_emergency(transcript, result.english):
         return EMERGENCY_REPLY
-    extra = ""
-    if lang == "en" and result.english and result.language != "en" and result.english.strip() != transcript:
-        extra = f"\n(English: {result.english.strip()[:1000]})"
+    # Read back exactly what was said, in the language it was spoken. The English translation
+    # (result.english) is only for searching documents, never shown as the read-back.
     key = "read_back" if result.needs_confirmation else "heard"
-    return t(key, lang, transcript=transcript[:1000], extra=extra)
+    return t(key, lang, transcript=transcript[:1000])
 
 
 async def reply_for_voice(

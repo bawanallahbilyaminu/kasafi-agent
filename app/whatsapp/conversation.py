@@ -48,8 +48,10 @@ def _button_id(msg: dict[str, Any]) -> str | None:
     return (inter.get("button_reply") or {}).get("id") if inter.get("type") == "button_reply" else None
 
 
-def _notice(lang: str | None, source: str | None) -> Out:
-    return Out(first_contact_notice(lang, source), NOTICE_BUTTONS)
+def _notice(lang: str | None, source: str | None) -> list[Out]:
+    """Two messages: Hausa, then English carrying the [OK / Na yarda] [Hausa] [English] buttons."""
+    ha, en = first_contact_notice(lang, source)
+    return [Out(ha), Out(en, NOTICE_BUTTONS)]
 
 
 VoiceFn = Callable[..., Awaitable[str]]
@@ -82,14 +84,14 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             store.create(key, None)
         store.set_lang(key, chosen)
         user = store.get(key)
-        return [Out(t("lang_set", chosen))] if user.consented else [_notice(chosen, "chosen")]
+        return [Out(t("lang_set", chosen))] if user.consented else _notice(chosen, "chosen")
 
     # 4. Consent
     if user is None:
         user = store.create(key, detect_language(text) if text else None)
         if not (button == "consent_ok" or _norm(text) in CONSENT_TEXTS):
             log.info("first contact from %s: consent notice sent (lang=%s)", mask_phone(sender), user.lang)
-            return [_notice(user.lang, user.lang_source)]
+            return _notice(user.lang, user.lang_source)
     if not user.consented:
         if button == "consent_ok" or _norm(text) in CONSENT_TEXTS:
             store.give_consent(key)
@@ -97,7 +99,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             if user.lang is None:
                 return [Out(t("consent_thanks_ask_lang", None), LANG_BUTTONS)]
             return [Out(t("consent_thanks", user.lang))]
-        return [_notice(user.lang, user.lang_source)]
+        return _notice(user.lang, user.lang_source)
 
     # 5. Consented: limits (skipped for our own test numbers), then work
     lang = user.lang or "ha"

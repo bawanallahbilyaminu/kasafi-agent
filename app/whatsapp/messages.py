@@ -1,5 +1,8 @@
-"""User-facing texts in Hausa and English, and the bilingual first-contact consent notice.
+"""User-facing texts in Hausa and English, and the first-contact consent notice.
 
+Style rules (tests/test_messages.py enforces them):
+- A blank line between paragraphs.
+- Hausa always uses the hooked letters ɓ ɗ ƙ ƴ (saƙo, karɓi, kuɗi, ƙasa, ...).
 The notice must keep matching the privacy policy (docs/site/privacy.md, published at
 halalnumeriq.com.ng/kasafi/privacy).
 """
@@ -12,22 +15,38 @@ BTN_ENGLISH = ("lang_en", "English")
 NOTICE_BUTTONS = [BTN_CONSENT, BTN_HAUSA, BTN_ENGLISH]
 LANG_BUTTONS = [BTN_HAUSA, BTN_ENGLISH]
 
-_NOTICE = {
-    "ha": (
-        "Barka da zuwa Kasafi (gwaji). Ina amsa tambayoyi game da takardun kasafi da manufofin gwamnati.\n"
-        "• Sabis ɗin AI na Meta ne ke sarrafa saƙonninka da saƙon murya. Yayin da muke amfani da kuɗin "
-        "gwaji kyauta, Meta na iya amfani da su don inganta ayyukansa.\n"
-        "• Kada ka tura bayanan sirri.\n"
-        "• Ana goge saƙon murya bayan an mayar da shi rubutu."
-    ),
-    "en": (
-        "Welcome to Kasafi (pilot). I answer questions about public budget and policy documents.\n"
-        "• Your messages and voice notes are processed by Meta AI services. While we use free credits, "
-        "Meta may use them to improve its services.\n"
-        "• Don't share personal details.\n"
-        "• Voice notes are deleted after transcription."
-    ),
-}
+_NOTICE_HA = """*Barka da zuwa Kasafi* (gwaji).
+
+Ina amsa tambayoyi game da takardun kasafi da manufofin gwamnati.
+
+• Sabis ɗin AI na Meta ne ke sarrafa saƙonninka da saƙon murya. Yayin da muke amfani da kuɗin gwaji kyauta, Meta na iya amfani da su don inganta ayyukansa.
+
+• Kada ka tura bayanan sirri.
+
+• Ana goge saƙon murya bayan an mayar da shi rubutu.
+
+{lang_line}
+
+Sirri: {url}
+
+Danna *OK / Na yarda* a saƙon da ke ƙasa idan ka yarda."""
+
+_NOTICE_EN = """*Welcome to Kasafi* (pilot).
+
+I answer questions about public budget and policy documents.
+
+• Your messages and voice notes are processed by Meta AI services. While we use free credits, Meta may use them to improve its services.
+
+• Don't share personal details.
+
+• Voice notes are deleted after transcription.
+
+{lang_line}
+
+Privacy: {url}
+
+Tap *OK / Na yarda* to agree."""
+
 _LANG_LINE = {
     ("detected", "ha"): ("Bisa ga saƙonka na farko, zan riƙa amsa da Hausa. Don sauyawa, aika /english.",
                          "Based on your first message, I'll reply in Hausa. Switch any time with /english."),
@@ -37,75 +56,88 @@ _LANG_LINE = {
                        "I'll reply in Hausa. Switch any time with /english."),
     ("chosen", "en"): ("Zan riƙa amsa da Turanci. Don sauyawa, aika /hausa.",
                        "I'll reply in English. Switch any time with /hausa."),
-    (None, None): ("Da wane harshe zan riƙa amsa? Danna Hausa ko English.",
-                   "Which language should I reply in? Tap Hausa or English."),
 }
-_AGREE = ("Danna *OK / Na yarda* idan ka yarda.", "Tap *OK / Na yarda* to agree.")
+_ASK_LANG = ("Da wane harshe zan riƙa amsa? Danna *Hausa* ko *English* a ƙasa.",
+             "Which language should I reply in? Tap *Hausa* or *English* below.")
 
 
-def first_contact_notice(lang: str | None, source: str | None) -> str:
-    """Bilingual consent and language notice. The user's language comes first; Hausa first when unknown."""
-    line = _LANG_LINE.get((source or "detected", lang)) if lang else None
-    ha_line, en_line = line or _LANG_LINE[(None, None)]
-    ha = f"{_NOTICE['ha']}\n{ha_line}\n{_AGREE[0]}"
-    en = f"{_NOTICE['en']}\n{en_line}\n{_AGREE[1]}"
-    first, second = (en, ha) if lang == "en" else (ha, en)
-    return f"{first}\n\n{second}\n\n{PRIVACY_URL}"
+def first_contact_notice(lang: str | None, source: str | None) -> tuple[str, str]:
+    """The consent notice as two messages: Hausa first, then English (which carries the buttons)."""
+    ha_line, en_line = (_LANG_LINE.get((source or "detected", lang)) if lang else None) or _ASK_LANG
+    return (_NOTICE_HA.format(lang_line=ha_line, url=PRIVACY_URL),
+            _NOTICE_EN.format(lang_line=en_line, url=PRIVACY_URL))
 
 
 TEXTS = {
     "consent_thanks": {
-        "ha": "Na gode. Yanzu ka aiko da tambayarka, a rubuce ko da saƙon murya.",
-        "en": "Thank you. Now send your question, as text or a voice note.",
+        "ha": "Na gode.\n\nYanzu ka aiko da tambayarka, a rubuce ko da saƙon murya.",
+        "en": "Thank you.\n\nNow send your question, as text or a voice note.",
     },
     "consent_thanks_ask_lang": {
-        "both": "Na gode. Da wane harshe zan riƙa amsa?\nThank you. Which language should I reply in?",
+        "both": "Na gode. Da wane harshe zan riƙa amsa?\n\nThank you. Which language should I reply in?",
     },
     "lang_set": {
-        "ha": "To, zan riƙa amsa da Hausa. Don sauyawa, aika /english.",
-        "en": "OK, I'll reply in English. Switch any time with /hausa.",
+        "ha": "To, zan riƙa amsa da Hausa.\n\nDon sauyawa, aika /english.",
+        "en": "OK, I'll reply in English.\n\nSwitch any time with /hausa.",
     },
     "voice_limit": {
-        "ha": "Ka kai iyakar saƙon murya {n} na yau. Don Allah ka rubuta tambayarka, ko ka sake gwadawa gobe.",
-        "en": "You've reached today's limit of {n} voice notes. Please type your question, or try again tomorrow.",
+        "ha": "Ka kai iyakar saƙon murya {n} na yau.\n\nDon Allah ka rubuta tambayarka, ko ka sake gwadawa gobe.",
+        "en": "You've reached today's limit of {n} voice notes.\n\nPlease type your question, or try again tomorrow.",
     },
     "question_limit": {
-        "ha": "Ka kai iyakar tambayoyi {n} na yau. Don Allah ka sake gwadawa gobe. Mun gode!",
-        "en": "You've reached today's limit of {n} questions. Please try again tomorrow. Thank you!",
+        "ha": "Ka kai iyakar tambayoyi {n} na yau.\n\nDon Allah ka sake gwadawa gobe. Mun gode!",
+        "en": "You've reached today's limit of {n} questions.\n\nPlease try again tomorrow. Thank you!",
     },
     "busy": {
-        "ha": "Yi haƙuri, Kasafi ya kai iyakar aikinsa na yau. Don Allah ka sake gwadawa gobe.",
-        "en": "Sorry, Kasafi has reached its capacity for today. Please try again tomorrow.",
+        "ha": "Yi haƙuri, Kasafi ya kai iyakar aikinsa na yau.\n\nDon Allah ka sake gwadawa gobe.",
+        "en": "Sorry, Kasafi has reached its capacity for today.\n\nPlease try again tomorrow.",
     },
     "echo": {
-        "ha": "Kasafi (gwaji): na karɓi saƙonka: «{text}»",
-        "en": "Kasafi (test): I received your message: «{text}»",
+        "ha": "Kasafi (gwaji): na karɓi saƙonka:\n\n«{text}»",
+        "en": "Kasafi (test): I received your message:\n\n«{text}»",
     },
     "other": {
         "ha": "Kasafi (gwaji): don Allah ka aiko da rubutu ko saƙon murya.",
         "en": "Kasafi (test): please send text or a voice note.",
     },
     # Voice notes
+    "listening": {
+        "ha": "🎧 Ina sauraro…",
+        "en": "🎧 Listening…",
+    },
     "read_back": {
-        "ha": "Na ji kamar ka ce:\n«{transcript}»{extra}\n\nKana nufin haka? Ka amsa *Eh*, ko ka sake faɗa ko rubuta tambayarka.",
-        "en": "I heard:\n«{transcript}»{extra}\n\nDid you mean that? Reply *Yes*, or say or type your question again.",
+        "ha": "Na ji kamar ka ce:\n\n«{transcript}»\n\nKana nufin haka? Ka amsa *Eh*, ko ka gyara, misali da shekarar da ta dace.",
+        "en": "I heard:\n\n«{transcript}»\n\nDid you mean that? Reply *Yes*, or send a correction, for example the right year.",
     },
     "heard": {
-        "ha": "Na ji tambayarka:\n«{transcript}»{extra}\n\n(Kasafi yana gwaji: amsoshi za su zo nan ba da jimawa ba.)",
-        "en": "I heard your question:\n«{transcript}»{extra}\n\n(Kasafi is in testing: answers are coming soon.)",
+        "ha": "Na ji tambayarka:\n\n«{transcript}»\n\n(Kasafi yana gwaji: amsoshi za su zo nan ba da jimawa ba.)",
+        "en": "I heard your question:\n\n«{transcript}»\n\n(Kasafi is in testing: answers are coming soon.)",
     },
     "not_heard": {
-        "ha": "Yi haƙuri, ban ji saƙon muryar sosai ba. Don Allah ka sake turawa, ko ka rubuta tambayarka.",
-        "en": "Sorry, I couldn't hear that voice note clearly. Please send it again, or type your question.",
+        "ha": "Yi haƙuri, ban ji saƙon muryar sosai ba.\n\nDon Allah ka sake turawa, ko ka rubuta tambayarka.",
+        "en": "Sorry, I couldn't hear that voice note clearly.\n\nPlease send it again, or type your question.",
     },
     "too_long": {
-        "ha": "Saƙon murya ya yi tsawo. Don Allah ka tura gajere (ƙasa da minti {minutes}), ko ka rubuta tambayarka.",
-        "en": "That voice note is too long. Please send a shorter one (under {minutes} minutes), or type your question.",
+        "ha": "Saƙon murya ya yi tsawo.\n\nDon Allah ka tura gajere (ƙasa da minti {minutes}), ko ka rubuta tambayarka.",
+        "en": "That voice note is too long.\n\nPlease send a shorter one (under {minutes} minutes), or type your question.",
+    },
+    # Read-back confirmation and corrections
+    "confirmed": {
+        "ha": "Na gode. Tambayarka:\n\n«{question}»\n\n(Kasafi yana gwaji: amsoshi za su zo nan ba da jimawa ba.)",
+        "en": "Thank you. Your question:\n\n«{question}»\n\n(Kasafi is in testing: answers are coming soon.)",
+    },
+    "corrected": {
+        "ha": "Na gyara:\n\n«{question}»\n\n(Kasafi yana gwaji: amsoshi za su zo nan ba da jimawa ba.)",
+        "en": "Corrected:\n\n«{question}»\n\n(Kasafi is in testing: answers are coming soon.)",
+    },
+    "cancelled": {
+        "ha": "To, an soke wannan tambayar.\n\nKa aiko da sabuwar tambaya a duk lokacin da kake so.",
+        "en": "OK, that question is cancelled.\n\nSend a new question whenever you like.",
     },
 }
 
 NOT_IN_PILOT = (
-    "Kasafi yana cikin gwaji, kuma ba a buɗe shi ga kowa ba tukuna.\n"
+    "Kasafi yana cikin gwaji, kuma ba a buɗe shi ga kowa ba tukuna.\n\n"
     "Kasafi is in a closed pilot and isn't open to everyone yet."
 )
 

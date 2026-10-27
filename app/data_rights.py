@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 DELETE_COMMANDS = {"goge bayanai na", "goge bayanaina", "goge bayanai", "delete my data"}
 DELETED_REPLY = (
-    "An goge duk bayananka daga Kasafi: saƙonninka, rubutun saƙon murya da amsoshinmu.\n"
+    "An goge duk bayananka daga Kasafi: saƙonninka, rubutun saƙon murya, amsoshinmu da zaɓinka na harshe.\n\n"
     "Your Kasafi data has been deleted."
 )
 

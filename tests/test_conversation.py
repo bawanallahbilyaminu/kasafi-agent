@@ -33,8 +33,8 @@ def test_first_contact_gets_notice_with_buttons_and_no_model_call() -> None:
     calls: list = []
     outs, store = run_handle(voice(), voice_calls=calls)
     assert calls == []                                   # nothing reached a model
-    assert outs[0].buttons == NOTICE_BUTTONS
-    assert PRIVACY_URL in outs[0].text and "Meta" in outs[0].text
+    assert len(outs) == 2 and outs[0].buttons is None and outs[1].buttons == NOTICE_BUTTONS
+    assert all(PRIVACY_URL in o.text and "Meta" in o.text for o in outs)
     assert not store.get(user_key(A, make_settings())).consented
 
 
@@ -43,7 +43,7 @@ def test_messages_before_consent_keep_getting_the_notice() -> None:
     calls: list = []
     run_handle(text("Nawa aka ware wa ilimi?"), store=store)
     outs, _ = run_handle(voice(), store=store, voice_calls=calls)
-    assert calls == [] and outs[0].buttons == NOTICE_BUTTONS
+    assert calls == [] and outs[-1].buttons == NOTICE_BUTTONS
 
 
 @pytest.mark.parametrize("agree", [button("consent_ok"), text("OK"), text("Na yarda"), text("i agree")])
@@ -61,7 +61,7 @@ def test_yes_is_not_consent() -> None:
     store = UserStore(":memory:")
     run_handle(text("Sannu"), store=store)
     outs, _ = run_handle(text("Eh"), store=store)
-    assert outs[0].buttons == NOTICE_BUTTONS
+    assert outs[-1].buttons == NOTICE_BUTTONS
 
 
 def test_consent_with_unknown_language_asks_for_it() -> None:
@@ -81,26 +81,25 @@ def test_deletion_resets_consent() -> None:
     run_handle(text("GOGE BAYANAI NA"), store=store)
     assert store.get(user_key(A, make_settings())) is None
     outs, _ = run_handle(text("Sannu"), store=store)
-    assert outs[0].buttons == NOTICE_BUTTONS
+    assert outs[-1].buttons == NOTICE_BUTTONS
 
 
 # --- notice -------------------------------------------------------------------
 
 @pytest.mark.parametrize("lang, source", [("ha", "detected"), ("en", "detected"), ("ha", "chosen"),
                                           ("en", "chosen"), (None, None)])
-def test_notice_fits_whatsapp_limits_and_is_bilingual(lang, source) -> None:
-    body = first_contact_notice(lang, source)
-    assert len(body) <= 1024
-    assert "Barka da zuwa Kasafi" in body and "Welcome to Kasafi" in body
+def test_notice_is_two_messages_hausa_then_english_within_limits(lang, source) -> None:
+    ha, en = first_contact_notice(lang, source)
+    assert ha.startswith("*Barka da zuwa Kasafi*") and en.startswith("*Welcome to Kasafi*")
+    assert len(en) <= 1024                                   # the English one carries the buttons
     assert all(len(title) <= 20 for _, title in NOTICE_BUTTONS) and len(NOTICE_BUTTONS) <= 3
 
 
 def test_notice_states_detected_language_in_both_languages() -> None:
-    body = first_contact_notice("en", "detected")
-    assert body.startswith("Welcome")                                    # user's language first
-    assert "I'll reply in English. Switch any time with /hausa" in body
-    assert "zan riƙa amsa da Turanci. Don sauyawa, aika /hausa" in body
-    assert "Which language" in first_contact_notice(None, None)
+    ha, en = first_contact_notice("en", "detected")
+    assert "I'll reply in English. Switch any time with /hausa" in en
+    assert "zan riƙa amsa da Turanci. Don sauyawa, aika /hausa" in ha
+    assert "Which language" in first_contact_notice(None, None)[1]
 
 
 # --- language -----------------------------------------------------------------
@@ -126,8 +125,7 @@ def test_language_button_before_consent_resends_notice_in_that_language() -> Non
     store = UserStore(":memory:")
     run_handle(text("Sannu"), store=store)
     outs, _ = run_handle(button("lang_en"), store=store)
-    assert outs[0].buttons == NOTICE_BUTTONS and outs[0].text.startswith("Welcome")
-    assert "I'll reply in English." in outs[0].text
+    assert outs[-1].buttons == NOTICE_BUTTONS and "I'll reply in English." in outs[-1].text
     assert not store.get(user_key(A, make_settings())).consented   # choosing a language isn't consent
 
 
@@ -174,7 +172,7 @@ def test_closed_mode_serves_only_pilot_numbers() -> None:
     s = make_settings(kasafi_open_access=False, kasafi_pilot_numbers=A)
     from app.whatsapp.messages import NOT_IN_PILOT
     assert run_handle(text("Sannu", "2349999999999"), settings=s)[0][0].text == NOT_IN_PILOT
-    assert run_handle(text("Sannu"), settings=s)[0][0].buttons == NOTICE_BUTTONS     # pilot still needs consent
+    assert run_handle(text("Sannu"), settings=s)[0][-1].buttons == NOTICE_BUTTONS     # pilot still needs consent
 
 
 def test_exempt_number_skips_limits_and_cap_but_still_counts_spend() -> None:
@@ -195,4 +193,4 @@ def test_exempt_number_still_needs_consent() -> None:
     s = make_settings(kasafi_exempt_numbers=A)
     calls: list = []
     outs, _ = run_handle(voice(), settings=s, voice_calls=calls)
-    assert calls == [] and outs[0].buttons == NOTICE_BUTTONS
+    assert calls == [] and outs[-1].buttons == NOTICE_BUTTONS

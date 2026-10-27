@@ -12,9 +12,9 @@ care (e.g. EmONC, "kulawar gaggawa") are in scope and must not trigger it.
 import re
 
 EMERGENCY_REPLY = (
-    "⚠️ Wannan na iya zama gaggawar lafiya. Kasafi ba ya ba da shawarar magani.\n"
+    "⚠️ Wannan na iya zama gaggawar lafiya. Kasafi ba ya ba da shawarar magani.\n\n"
     "Don Allah ku je asibiti ko cibiyar lafiya mafi kusa *nan take*, ko ku kira *112*.\n\n"
-    "This may be a medical emergency. Kasafi cannot give medical advice. "
+    "This may be a medical emergency. Kasafi cannot give medical advice.\n\n"
     "Please go to the nearest health facility *now*, or call *112*."
 )
 

@@ -85,11 +85,12 @@ def test_empty_transcript_and_download_failure(monkeypatch) -> None:
     assert _run(monkeypatch, result=_result(), wa=FakeWA(fail=True))[0] == t("not_heard", "ha")
 
 
-def test_english_mode_replies_in_english_with_translation(monkeypatch) -> None:
+def test_read_back_shows_what_was_spoken_not_the_translation(monkeypatch) -> None:
     r = SpeechResult(transcript="Nawa aka ware wa ilimi?", english="How much went to education?", language="ha",
                      confidence="high", needs_confirmation=True)
-    out, _ = _run(monkeypatch, result=r, lang="en")
-    assert out.startswith("I heard:") and "(English: How much went to education?)" in out and "Did you mean" in out
+    out, _ = _run(monkeypatch, result=r, lang="en")              # English-mode user who spoke Hausa
+    assert out.startswith("I heard:") and "«Nawa aka ware wa ilimi?»" in out and "Did you mean" in out
+    assert "How much went to education" not in out
 
 
 def test_voice_replies_only_in_hausa_mode() -> None:
