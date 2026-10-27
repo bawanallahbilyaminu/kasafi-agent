@@ -175,3 +175,24 @@ def test_closed_mode_serves_only_pilot_numbers() -> None:
     from app.whatsapp.messages import NOT_IN_PILOT
     assert run_handle(text("Sannu", "2349999999999"), settings=s)[0][0].text == NOT_IN_PILOT
     assert run_handle(text("Sannu"), settings=s)[0][0].buttons == NOTICE_BUTTONS     # pilot still needs consent
+
+
+def test_exempt_number_skips_limits_and_cap_but_still_counts_spend() -> None:
+    s = make_settings(kasafi_voice_per_day=1, kasafi_questions_per_day=1, kasafi_daily_spend_cap_usd=0.01,
+                      kasafi_cost_per_voice_usd=0.02, kasafi_exempt_numbers="+234 000 000 0001")
+    store = consented(consented(UserStore(":memory:")), sender="2340000000002")
+    calls: list = []
+    for _ in range(3):
+        run_handle(voice(), store=store, settings=s, voice_calls=calls)
+        assert run_handle(text("Tambaya"), store=store, settings=s)[0][0].text.startswith("Kasafi (gwaji)")
+    assert len(calls) == 3                                           # no voice limit, no cap for the exempt number
+    assert store.spent_today() == pytest.approx(0.06)                # ...but its spend still counts
+    outs, _ = run_handle(voice("2340000000002"), store=store, settings=s, voice_calls=calls)
+    assert outs[0].text == t("busy", "ha") and len(calls) == 3       # everyone else is capped
+
+
+def test_exempt_number_still_needs_consent() -> None:
+    s = make_settings(kasafi_exempt_numbers=A)
+    calls: list = []
+    outs, _ = run_handle(voice(), settings=s, voice_calls=calls)
+    assert calls == [] and outs[0].buttons == NOTICE_BUTTONS

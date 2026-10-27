@@ -99,20 +99,21 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             return [Out(t("consent_thanks", user.lang))]
         return [_notice(user.lang, user.lang_source)]
 
-    # 5. Consented: limits, then work
+    # 5. Consented: limits (skipped for our own test numbers), then work
     lang = user.lang or "ha"
+    exempt = "".join(ch for ch in sender if ch.isdigit()) in settings.exempt_numbers
     voice_used, questions_used = store.usage(key)
     if kind == "audio":
-        if voice_used >= settings.kasafi_voice_per_day:
+        if not exempt and voice_used >= settings.kasafi_voice_per_day:
             return [Out(t("voice_limit", lang, n=settings.kasafi_voice_per_day))]
-        if store.spent_today() + settings.kasafi_cost_per_voice_usd > settings.kasafi_daily_spend_cap_usd:
+        if not exempt and store.spent_today() + settings.kasafi_cost_per_voice_usd > settings.kasafi_daily_spend_cap_usd:
             log.warning("daily spend cap reached")
             return [Out(t("busy", lang))]
         store.count(key, "voice")
         store.add_spend(settings.kasafi_cost_per_voice_usd)
         return [Out(await voice_fn(msg, wa, lang=lang, settings=settings))]
     if kind == "text":
-        if questions_used >= settings.kasafi_questions_per_day:
+        if not exempt and questions_used >= settings.kasafi_questions_per_day:
             return [Out(t("question_limit", lang, n=settings.kasafi_questions_per_day))]
         store.count(key, "questions")
         # Text answers don't call a model yet. When the agent lands, check the spend cap and

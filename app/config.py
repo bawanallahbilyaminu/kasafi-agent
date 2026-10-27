@@ -37,9 +37,17 @@ class Settings(BaseSettings):
     kasafi_cost_per_voice_usd: float = 0.02
     kasafi_cost_per_question_usd: float = 0.01
 
+    # Our own test numbers: no per-number daily limits and no global spend cap. They still need
+    # consent, and their usage still counts toward the daily spend total.
+    kasafi_exempt_numbers: str = ""
+
     @property
     def pilot_numbers(self) -> set[str]:
-        return {"".join(ch for ch in n if ch.isdigit()) for n in self.kasafi_pilot_numbers.split(",") if n.strip()}
+        return _parse_numbers(self.kasafi_pilot_numbers)
+
+    @property
+    def exempt_numbers(self) -> set[str]:
+        return _parse_numbers(self.kasafi_exempt_numbers)
 
     # Speech-to-text pipeline (see evals/stt-hausa-2026-10-26.md)
     stt_asr_model: str = "muse-voice-transcribe-1.0"
@@ -75,6 +83,10 @@ class Settings(BaseSettings):
     # Admin page basic auth
     admin_user: str | None = None
     admin_password: SecretStr | None = None
+
+
+def _parse_numbers(value: str) -> set[str]:
+    return {"".join(ch for ch in n if ch.isdigit()) for n in value.split(",") if n.strip()}
 
 
 @lru_cache
