@@ -32,8 +32,8 @@ from app.providers.chat import ProviderError
 from app.providers.stt import heard_texts
 from app.users import UserStore, user_key
 from app.whatsapp.client import mask_phone
-from app.whatsapp.messages import LANG_BUTTONS, NOT_IN_PILOT, NOTICE_BUTTONS, first_contact_notice, t
-from app.whatsapp.corrections import Resolution, quick_resolve, resolve
+from app.whatsapp.messages import FIX_BUTTONS, LANG_BUTTONS, NOT_IN_PILOT, NOTICE_BUTTONS, first_contact_notice, t
+from app.whatsapp.corrections import Resolution, choose_option, quick_resolve, resolve
 from app.agent.answer import answer_from_documents
 from app.whatsapp.voice import VoiceOutcome, is_pilot, reply_for_voice
 
@@ -154,7 +154,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             body = t("answer_failed", lang)
         return [Out(f"{prefix}\n\n{body}" if prefix else body)]
 
-    async def resolution_reply(res: Resolution, pending_q: str) -> list[Out]:
+    async def resolution_reply(res: Resolution, pending_q: str, reply: str = "") -> list[Out]:
+        if res.kind == "ambiguous":            # replace or add? Ask once; the pending question stays
+            store.set_pending_options(key, {"replace": res.replace, "add": res.add, "value": reply[:200]})
+            return [Out(t("ask_replace_or_add", lang, value=reply[:200]), FIX_BUTTONS.get(lang, FIX_BUTTONS["ha"]))]
         if res.kind == "confirm":
             return await respond(pending_q, t("confirmed_prefix", lang, question=pending_q),
                                  Out(t("confirmed", lang, question=pending_q)))
@@ -169,7 +172,26 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         q = res.question[:1000]
         return await respond(q, t("corrected_prefix", lang, question=q), Out(t("corrected", lang, question=q)))
 
-    # 5a. Eh / A'a to a pending read-back: no model needed to decide
+    # 5a. Answering "replace or add?": a button or a typed choice picks one of the two versions
+    options = store.get_pending_options(key) if pending else None
+    if options:
+        if choice := choose_option(button or text):
+            q = options[choice][:1000]
+            log.info("read-back choice from %s: %s", mask_phone(sender), choice)
+            store.clear_pending(key)
+            if answer is not None:
+                if not exempt and questions_used >= settings.kasafi_questions_per_day:
+                    return [Out(t("question_limit", lang, n=settings.kasafi_questions_per_day))]
+                store.count(key, "questions")
+            if refusal := await _guarded([q], lang, guard_fn, settings):
+                return [refusal]
+            return await respond(q, t("corrected_prefix", lang, question=q), Out(t("corrected", lang, question=q)))
+        if text and (quick := quick_resolve(text)) and quick.kind == "confirm":
+            # "Eh" doesn't say which: answering it would mean answering the misheard version. Ask again.
+            return [Out(t("ask_replace_or_add", lang, value=options.get("value", "")), FIX_BUTTONS.get(lang, FIX_BUTTONS["ha"]))]
+        store.clear_pending_options(key)       # anything else: drop the question and carry on as usual
+
+    # 5b. Eh / A'a to a pending read-back: no model needed to decide
     if pending and text and (quick := quick_resolve(text)):
         log.info("read-back reply from %s: %s (typed, no model)", mask_phone(sender), quick.kind)
         if quick.kind == "confirm" and answer is not None:
@@ -192,8 +214,9 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         if pending and outcome.result:            # a spoken Eh / A'a / correction
             res = await _resolve_safely(pending[0], outcome.result.transcript, resolve_fn, settings)
             if res.kind != "new":
-                store.clear_pending(key)
-                return await resolution_reply(res, pending[0])
+                if res.kind != "ambiguous":
+                    store.clear_pending(key)
+                return await resolution_reply(res, pending[0], outcome.result.transcript)
         store.clear_pending(key)                  # a new question replaces any pending one
         r = outcome.result
         if r and outcome.text != EMERGENCY_REPLY and (refusal := await _guarded(heard_texts(r), lang, guard_fn, settings)):
@@ -215,9 +238,11 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                 return [Out(t("busy", lang))]
             store.add_spend(settings.kasafi_cost_per_question_usd)
             res = await _resolve_safely(pending[0], text, resolve_fn, settings)
-            store.clear_pending(key)
             if res.kind != "new":
-                return await resolution_reply(res, pending[0])
+                if res.kind != "ambiguous":
+                    store.clear_pending(key)
+                return await resolution_reply(res, pending[0], text)
+            store.clear_pending(key)
         if refusal := await _guarded([text], lang, guard_fn, settings):
             return [refusal]
         return await respond(text[:1000], "", Out(t("echo", lang, text=text[:500])))

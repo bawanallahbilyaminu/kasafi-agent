@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import logging
 import sqlite3
 import threading
@@ -37,7 +38,8 @@ CREATE TABLE IF NOT EXISTS users (
     created_at  TEXT NOT NULL,
     pending_question TEXT,         -- read-back awaiting Eh / A'a / a correction (short-lived)
     pending_english  TEXT,
-    pending_at       TEXT
+    pending_at       TEXT,
+    pending_options  TEXT          -- JSON {"replace": ..., "add": ...} while asking which one was meant
 );
 CREATE TABLE IF NOT EXISTS usage (
     user_key  TEXT NOT NULL,
@@ -91,7 +93,7 @@ class UserStore:
     def _migrate(self) -> None:
         """Add columns introduced after the first deploy (the server DB already exists)."""
         have = {row[1] for row in self._db.execute("PRAGMA table_info(users)")}
-        for col in ("pending_question", "pending_english", "pending_at"):
+        for col in ("pending_question", "pending_english", "pending_at", "pending_options"):
             if col not in have:
                 self._db.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
 
@@ -132,8 +134,19 @@ class UserStore:
             return None
         return row[0], row[1] or ""
 
+    def set_pending_options(self, key: str, options: dict[str, str]) -> None:
+        self._exec("UPDATE users SET pending_options=? WHERE user_key=?", (json.dumps(options, ensure_ascii=False), key))
+
+    def get_pending_options(self, key: str) -> dict[str, str] | None:
+        row = self._exec("SELECT pending_options FROM users WHERE user_key=?", (key,)).fetchone()
+        return json.loads(row[0]) if row and row[0] else None
+
+    def clear_pending_options(self, key: str) -> None:
+        self._exec("UPDATE users SET pending_options=NULL WHERE user_key=?", (key,))
+
     def clear_pending(self, key: str) -> None:
-        self._exec("UPDATE users SET pending_question=NULL, pending_english=NULL, pending_at=NULL WHERE user_key=?",
+        self._exec("UPDATE users SET pending_question=NULL, pending_english=NULL, pending_at=NULL, "
+                   "pending_options=NULL WHERE user_key=?",
                    (key,))
 
     def delete(self, key: str) -> None:

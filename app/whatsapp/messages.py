@@ -14,6 +14,9 @@ BTN_HAUSA = ("lang_ha", "Hausa")
 BTN_ENGLISH = ("lang_en", "English")
 NOTICE_BUTTONS = [BTN_CONSENT, BTN_HAUSA, BTN_ENGLISH]
 LANG_BUTTONS = [BTN_HAUSA, BTN_ENGLISH]
+# Asking whether a correction replaces or adds to what was heard (app/whatsapp/corrections.py)
+FIX_BUTTONS = {"ha": [("fix_replace", "Maye gurbi"), ("fix_add", "Ƙara")],
+               "en": [("fix_replace", "Replace"), ("fix_add", "Add")]}
 
 _NOTICE_HA = """*Barka da zuwa Kasafi* (gwaji).
 
@@ -150,6 +153,10 @@ TEXTS = {
     "corrected": {
         "ha": "Na gyara:\n\n«{question}»\n\n(Kasafi yana gwaji: amsoshi za su zo nan ba da jimawa ba.)",
         "en": "Corrected:\n\n«{question}»\n\n(Kasafi is in testing: answers are coming soon.)",
+    },
+    "ask_replace_or_add": {
+        "ha": "Kana nufin «{value}» ya maye gurbin abin da na ji, ko in ƙara shi?\n\nDanna *Maye gurbi* ko *Ƙara*.",
+        "en": "Should «{value}» replace what I heard, or be added to it?\n\nTap *Replace* or *Add*.",
     },
     "correction_failed": {
         "ha": "Yi haƙuri, ban iya yin wannan gyaran ba.\n\nDon Allah ka sake aiko da cikakkiyar tambayar.",
