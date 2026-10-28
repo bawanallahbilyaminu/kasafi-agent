@@ -253,3 +253,67 @@ def run_budget_query(conn: psycopg.Connection, spec: dict) -> QueryResult:
     elif op == "share" and len(totals) >= 2 and totals[0] is not None and totals[1]:
         q.share_pct = (totals[0] / totals[1] * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
     return q
+
+
+# --- showing the working ----------------------------------------------------------------------------
+
+WORDS = {
+    "en": {"head": "🧮 *Working* (the rows used):", "missing": "not found in the budget tables",
+           "also": "also", "total": "Total", "difference": "Difference", "share": "Share", "of": "of",
+           "calc": "Kasafi's calculation", "included": "included in", "not_found": "not found"},
+    "ha": {"head": "🧮 *Yadda aka lissafa* (layukan da aka yi amfani da su):", "missing": "ba a samu a teburorin kasafi ba",
+           "also": "har ila yau", "total": "Jimilla", "difference": "Bambanci", "share": "Kaso", "of": "na",
+           "calc": "lissafin Kasafi", "included": "yana cikin", "not_found": "ba a samu ba"},
+}
+
+
+def _line(p: Picked, nmap: dict) -> str:
+    code = f" ({p.code})" if p.code else ""
+    return f"{p.name}{code}, {p.column_label}: {fmt(p.amount)} [{nmap[(p.doc_id, p.page)]}]"
+
+
+def _signed(x: Decimal) -> str:
+    return ("+" if x > 0 else "-" if x < 0 else "") + fmt(abs(x))
+
+
+def render_working(q: QueryResult, nmap: dict, lang: str) -> str:
+    """The rows used and the arithmetic, written by code (exact figures; the app makes them readable)."""
+    w = WORDS.get(lang, WORDS["en"])
+    out = [w["head"]]
+    if q.operation == "rank":
+        out += [f"{i}. {_line(p, nmap)}" for i, p in enumerate(q.ranking, 1)]
+        return "\n".join(out)
+    for r in q.items:
+        if not r.rows:
+            out.append(f"• {r.item.label}: {w['missing']}")
+            continue
+        if len(r.rows) == 1 and not r.item.units:
+            out.append(f"• {r.item.label}: {_line(r.rows[0], nmap)}")
+        else:
+            out.append(f"• {r.item.label}:")
+            out += [f"   – {_line(p, nmap)}" for p in r.rows]
+            out += [f"   – {u}: {w['included']} {parent}" for u, parent in r.included.items()]
+            out += [f"   – {u}: {w['not_found']}" for u in r.missing]
+            out.append(f"   = {w['total']}: {fmt(r.total)} ({w['calc']})")
+        if r.alt:
+            out.append(f"   ({w['also']} {_line(r.alt, nmap)})")
+    if q.difference is not None:
+        pct = f" ({'+' if q.change_pct and q.change_pct > 0 else ''}{q.change_pct}%)" if q.change_pct is not None else ""
+        out.append(f"• {w['difference']}: {_signed(q.difference)}{pct} ({w['calc']})")
+    if q.total is not None and len(q.items) > 1:          # one item already shows its own total
+        out.append(f"• {w['total']}: {fmt(q.total)} ({w['calc']})")
+    if q.share_pct is not None:
+        out.append(f"• {w['share']}: {q.share_pct}% ({w['calc']})")
+    return "\n".join(out)
+
+
+def context_text(q: QueryResult, nmap: dict) -> str:
+    """What the composer is told: the computed results, with exact figures and evidence numbers."""
+    lines = ["BUDGET QUERY RESULTS (computed by the app from the evidence rows; the app shows these rows and the "
+             "arithmetic under your answer):"]
+    lines += render_working(q, nmap, "en").splitlines()[1:]
+    lines.append("Write 'summary' as one or two sentences that answer the question with these exact figures and "
+                 "their [n]; leave 'items' empty. After a computed figure (difference, total, share) add "
+                 "\"(Kasafi's calculation)\" (Hausa: \"(lissafin Kasafi)\"). If anything is 'not found', say "
+                 "so and set found to \"partial\".")
+    return "\n".join(lines)

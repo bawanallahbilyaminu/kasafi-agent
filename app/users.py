@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS users (
     pending_at       TEXT,
     pending_options  TEXT,         -- JSON {"replace": ..., "add": ...} while asking which one was meant
     pending_calc     TEXT,         -- JSON calculation offered ("Reply Eh to calculate"), until the next message
-    images_off       INTEGER       -- 1 = no evidence images with answers ("images off"); NULL/0 = send them
+    images_off       INTEGER,      -- 1 = no evidence images with answers ("images off"); NULL/0 = send them
+    pending_clarify  TEXT          -- JSON options while Kasafi asks which reading of a question was meant
 );
 CREATE TABLE IF NOT EXISTS usage (
     user_key  TEXT NOT NULL,
@@ -120,6 +121,8 @@ class UserStore:
                 self._db.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
         if "images_off" not in have:
             self._db.execute("ALTER TABLE users ADD COLUMN images_off INTEGER")
+        if "pending_clarify" not in have:
+            self._db.execute("ALTER TABLE users ADD COLUMN pending_clarify TEXT")
 
     def _exec(self, sql: str, args: tuple = ()) -> sqlite3.Cursor:
         with self._lock:
@@ -175,6 +178,14 @@ class UserStore:
 
     def set_images(self, key: str, on: bool) -> None:
         self._exec("UPDATE users SET images_off=? WHERE user_key=?", (0 if on else 1, key))
+
+    def set_pending_clarify(self, key: str, options: list[dict] | None) -> None:
+        self._exec("UPDATE users SET pending_clarify=? WHERE user_key=?",
+                   (json.dumps(options, ensure_ascii=False) if options else None, key))
+
+    def get_pending_clarify(self, key: str) -> list[dict] | None:
+        row = self._exec("SELECT pending_clarify FROM users WHERE user_key=?", (key,)).fetchone()
+        return json.loads(row[0]) if row and row[0] else None
 
     def set_pending_calc(self, key: str, calc: dict | None) -> None:
         self._exec("UPDATE users SET pending_calc=? WHERE user_key=?",

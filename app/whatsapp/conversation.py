@@ -174,6 +174,9 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         offer = getattr(result, "offer", None)
         store.set_pending_calc(key, offer.to_dict() if offer else None)
         text_out = f"{prefix}\n\n{body}" if prefix else body
+        if options := getattr(result, "clarify", None):     # two readings: ask which one, with buttons
+            store.set_pending_clarify(key, options)
+            return [Out(text_out[:1024], [(f"clar_{i}", o["title"][:20]) for i, o in enumerate(options[:3])])]
         crops = (plan_crops(result, settings.kasafi_max_images)
                  if result is not None and settings.kasafi_evidence_images and store.images_on(key) else None)
         return [Out(text_out, CALC_BUTTONS.get(lang, CALC_BUTTONS["en"]) if offer else None, crops or None, lang)]
@@ -214,6 +217,20 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             # "Eh" doesn't say which: answering it would mean answering the misheard version. Ask again.
             return [Out(t("ask_replace_or_add", lang, value=options.get("value", "")), FIX_BUTTONS.get(lang, FIX_BUTTONS["ha"]))]
         store.clear_pending_options(key)       # anything else: drop the question and carry on as usual
+
+    # 5a1. The answer to "which did you mean?": a button, the option's number or its title
+    if (clarify := store.get_pending_clarify(key)) and not pending:
+        store.set_pending_clarify(key, None)
+        choice = _clarify_choice(button, text, clarify)
+        if choice is not None:
+            q = clarify[choice]["question"][:1000]
+            log.info("clarification chosen by %s: option %d", mask_phone(sender), choice + 1)
+            if answer is not None:
+                if not exempt and questions_used >= settings.kasafi_questions_per_day:
+                    return [Out(t("question_limit", lang, n=settings.kasafi_questions_per_day))]
+                store.count(key, "questions")
+            return await respond(q, "", Out(t("echo", lang, text=q[:500])))
+        # anything else: the question lapses and the message is handled as usual
 
     # 5a2. Eh to a calculation offer: computed here from the stored, checked inputs (no model call)
     calc = store.get_pending_calc(key)
@@ -316,3 +333,13 @@ async def _resolve_safely(pending: str, reply: str, resolve_fn: ResolveFn, setti
     return res
 
 
+
+
+def _clarify_choice(button: str | None, text: str, options: list[dict]) -> int | None:
+    """Which option a reply picks: the button "clar_<i>", its number ("1", "2"), or its title."""
+    if button and button.startswith("clar_") and button[5:].isdigit() and int(button[5:]) < len(options):
+        return int(button[5:])
+    n = _norm(text)
+    if n.isdigit() and 1 <= int(n) <= len(options):
+        return int(n) - 1
+    return next((i for i, o in enumerate(options) if n and n == _norm(o.get("title", ""))), None)
