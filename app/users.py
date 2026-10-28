@@ -3,7 +3,9 @@
 Privacy: the phone number is never stored. Users are keyed by HMAC-SHA256(number) with a
 server secret (KASAFI_HASH_KEY). A plain SHA-256 of a phone number can be reversed by trying
 every number. Usage rows are pruned after 30 days, matching the log retention. A read-back
-question waiting for confirmation is kept for at most KASAFI_PENDING_TTL_MINUTES. Everything
+question waiting for confirmation is kept for at most KASAFI_PENDING_TTL_MINUTES. The last few
+turns (question, answer, cited documents) are kept for follow-ups such as "check again", and
+deleted after 90 days (the conversation retention in the privacy policy). Everything
 for a user is removed by GOGE BAYANAI NA / DELETE MY DATA (app/data_rights.py).
 
 SQLite on a Docker volume for the pilot (KASAFI_STATE_DB). It moves to Postgres with the rest
@@ -28,6 +30,9 @@ from app.config import Settings, get_settings
 log = logging.getLogger(__name__)
 LAGOS = timezone(timedelta(hours=1))  # Nigeria has no DST; "per day" means a Lagos calendar day
 USAGE_RETENTION_DAYS = 30
+TURN_RETENTION_DAYS = 90
+TURNS_KEPT = 5
+TURN_ANSWER_CHARS = 1500
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -48,6 +53,15 @@ CREATE TABLE IF NOT EXISTS usage (
     questions INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (user_key, day)
 );
+CREATE TABLE IF NOT EXISTS turns (
+    user_key  TEXT NOT NULL,
+    at        TEXT NOT NULL,       -- ISO time
+    lang      TEXT,
+    question  TEXT NOT NULL,
+    answer    TEXT NOT NULL,
+    sources   TEXT                 -- JSON [{"doc_id", "title", "page", "series", "edition"}]
+);
+CREATE INDEX IF NOT EXISTS turns_user_idx ON turns (user_key, at);
 CREATE TABLE IF NOT EXISTS spend (
     day TEXT PRIMARY KEY,
     usd REAL NOT NULL DEFAULT 0
@@ -153,6 +167,28 @@ class UserStore:
         with self._lock:
             self._db.execute("DELETE FROM users WHERE user_key=?", (key,))
             self._db.execute("DELETE FROM usage WHERE user_key=?", (key,))
+            self._db.execute("DELETE FROM turns WHERE user_key=?", (key,))
+
+    # conversation context for follow-ups
+    def add_turn(self, key: str, lang: str, question: str, answer: str, sources: list[dict] | None = None) -> None:
+        now = datetime.now(timezone.utc)
+        with self._lock:
+            self._db.execute("INSERT INTO turns (user_key, at, lang, question, answer, sources) VALUES (?,?,?,?,?,?)",
+                             (key, now.isoformat(), lang, question[:1000], answer[:TURN_ANSWER_CHARS],
+                              json.dumps(sources or [], ensure_ascii=False)))
+            # keep only the last few turns per user, and nothing older than the retention period
+            self._db.execute("DELETE FROM turns WHERE user_key=? AND at NOT IN (SELECT at FROM turns WHERE user_key=? "
+                             "ORDER BY at DESC LIMIT ?)", (key, key, TURNS_KEPT))
+            self._db.execute("DELETE FROM turns WHERE at < ?",
+                             ((now - timedelta(days=TURN_RETENTION_DAYS)).isoformat(),))
+
+    def recent_turns(self, key: str) -> list[dict]:
+        """Oldest first, at most TURNS_KEPT, within the retention period."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=TURN_RETENTION_DAYS)).isoformat()
+        rows = self._exec("SELECT at, lang, question, answer, sources FROM turns WHERE user_key=? AND at >= ? "
+                          "ORDER BY at DESC LIMIT ?", (key, cutoff, TURNS_KEPT)).fetchall()
+        return [{"at": r[0], "lang": r[1], "question": r[2], "answer": r[3], "sources": json.loads(r[4] or "[]")}
+                for r in reversed(rows)]
 
     # limits
     def usage(self, key: str, day: str | None = None) -> tuple[int, int]:

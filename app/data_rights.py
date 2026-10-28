@@ -27,11 +27,8 @@ def is_delete_command(text: str) -> bool:
 
 
 def delete_user_data(phone: str, *, store: UserStore | None = None, settings: Settings | None = None) -> None:
-    """Delete everything stored for this number: consent, language and usage counts.
-
-    Messages, transcripts and replies aren't stored yet. When conversation storage lands,
-    delete them here too.
-    """
+    """Delete everything stored for this number: consent, language, usage counts and the recent
+    conversation turns (questions, answers, cited documents) kept for follow-ups."""
     settings = settings or get_settings()
     (store or get_store()).delete(user_key(phone, settings))
     log.info("data deletion completed for %s", mask_phone(phone))

@@ -26,7 +26,8 @@ def heard(transcript: str, *, confirm: bool = False, english: str = "") -> Speec
 def run_handle(msg: dict, *, store: UserStore | None = None, settings: Settings | None = None, voice_calls=None,
                notified: list | None = None, spoken: SpeechResult | None = None, corrections: dict | None = None,
                resolve_calls: list | None = None, model_verdicts: dict | None = None, guard_calls: list | None = None,
-               answer_calls: list | None = None, answer_error: Exception | None = None):
+               answer_calls: list | None = None, answer_error: Exception | None = None,
+               history_calls: list | None = None):
     """Run the conversation flow with fakes.
 
     spoken:      what the fake voice pipeline "heard" (None means a plain VOICE[lang] reply)
@@ -62,11 +63,13 @@ def run_handle(msg: dict, *, store: UserStore | None = None, settings: Settings 
                 return Verdict(model_verdicts[text], "model")
         return Verdict("ok", "none")
 
-    async def fake_answer(question, lang, *, settings, notify=None):
+    async def fake_answer(question, lang, *, settings, notify=None, history=None):
         """Stands in for answer_from_documents. Only used when answer_calls is given."""
         if answer_error is not None:
             raise answer_error
         answer_calls.append((question, lang))
+        if history_calls is not None:
+            history_calls.append(history)
         return f"ANSWER[{lang}]: {question}"
 
     async def notify(out):

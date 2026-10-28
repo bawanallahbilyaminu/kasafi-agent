@@ -150,7 +150,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         try:
             async def send_now(text: str) -> None:   # e.g. "Ina neman takardar…" while a document is fetched
                 await notify(Out(text))
-            body = await answer(question, lang, settings=settings, notify=send_now)
+            result = await answer(question, lang, settings=settings, notify=send_now, history=store.recent_turns(key))
+            body = result if isinstance(result, str) else result.text
+            # Keep the turn for follow-ups ("check again", "what about 2024?"): 5 turns, 90 days, no number.
+            store.add_turn(key, lang, question, body, getattr(result, "sources", []))
         except Exception as e:  # DB or model down: tell the user rather than go silent
             log.exception("answer failed: %s", type(e).__name__)
             body = t("answer_failed", lang)
