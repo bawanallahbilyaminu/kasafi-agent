@@ -45,6 +45,10 @@ LANG_COMMANDS = {"/hausa": "ha", "hausa": "ha", "/english": "en", "english": "en
 LANG_BUTTON_IDS = {"lang_ha": "ha", "lang_en": "en"}
 CALC_BUTTONS = {"ha": [("calc_yes", "Eh, lissafa"), ("calc_no", "A'a")],
                 "en": [("calc_yes", "Yes, calculate"), ("calc_no", "No")]}
+IMAGE_COMMANDS = {"images off": False, "/images off": False, "no images": False, "kashe hotuna": False,
+                  "hotuna a kashe": False, "/hotuna kashe": False,
+                  "images on": True, "/images on": True, "kunna hotuna": True, "hotuna a kunna": True,
+                  "/hotuna kunna": True}
 CONSENT_TEXTS = {"ok", "okay", "na yarda", "na amince", "i agree", "agree", "ok na yarda"}
 
 
@@ -130,6 +134,9 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
 
     # 5. Consented: limits (skipped for our own test numbers), then work
     lang = user.lang or "ha"
+    if (images := IMAGE_COMMANDS.get(_norm(text))) is not None:     # "images off" / "kashe hotuna": no model needed
+        store.set_images(key, images)
+        return [Out(t("images_on" if images else "images_off", lang))]
     exempt = "".join(ch for ch in sender if ch.isdigit()) in settings.exempt_numbers
     voice_used, questions_used = store.usage(key)
     pending = store.get_pending(key, settings.kasafi_pending_ttl_minutes)

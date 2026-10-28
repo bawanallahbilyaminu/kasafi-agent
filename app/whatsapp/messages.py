@@ -179,6 +179,15 @@ TEXTS = {
         "ha": "Kasafi ba ya ba da shawarar magani ko ta abinci mai gina jiki.\n\nDon Allah ka tuntuɓi ma'aikacin lafiya. Zan iya taimaka maka da alƙaluman kasafin lafiya, misali: «Nawa aka ware wa lafiya a 2026?»",
         "en": "Kasafi doesn't give medical or nutrition advice.\n\nPlease speak to a health worker. I can help with health budget figures, for example: «How much was allocated to health in 2026?»",
     },
+    "images_off": {
+        "ha": "To, daga yanzu ba zan riƙa aiko da hotunan shaida ba.\n\nRubuta *kunna hotuna* idan kana so a dawo da su.",
+        "en": "OK, I won't send evidence images from now on.\n\nSend *images on* to turn them back on.",
+    },
+    "images_on": {
+        "ha": "To, zan riƙa aiko da hoton layin teburin da na ɗauko alƙaluman daga ciki.\n\nRubuta *kashe hotuna* "
+              "idan kana so in daina.",
+        "en": "OK, I'll send a picture of the table row each figure comes from.\n\nSend *images off* to stop.",
+    },
     "calc_cancelled": {
         "ha": "To, ban lissafa ba.",
         "en": "OK, I won't calculate it.",

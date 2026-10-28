@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS users (
     pending_english  TEXT,
     pending_at       TEXT,
     pending_options  TEXT,         -- JSON {"replace": ..., "add": ...} while asking which one was meant
-    pending_calc     TEXT          -- JSON calculation offered ("Reply Eh to calculate"), until the next message
+    pending_calc     TEXT,         -- JSON calculation offered ("Reply Eh to calculate"), until the next message
+    images_off       INTEGER       -- 1 = no evidence images with answers ("images off"); NULL/0 = send them
 );
 CREATE TABLE IF NOT EXISTS usage (
     user_key  TEXT NOT NULL,
@@ -111,6 +112,8 @@ class UserStore:
         for col in ("pending_question", "pending_english", "pending_at", "pending_options", "pending_calc"):
             if col not in have:
                 self._db.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
+        if "images_off" not in have:
+            self._db.execute("ALTER TABLE users ADD COLUMN images_off INTEGER")
 
     def _exec(self, sql: str, args: tuple = ()) -> sqlite3.Cursor:
         with self._lock:
@@ -158,6 +161,14 @@ class UserStore:
 
     def clear_pending_options(self, key: str) -> None:
         self._exec("UPDATE users SET pending_options=NULL WHERE user_key=?", (key,))
+
+    # evidence images ("images off" / "kashe hotuna")
+    def images_on(self, key: str) -> bool:
+        row = self._exec("SELECT images_off FROM users WHERE user_key=?", (key,)).fetchone()
+        return not (row and row[0])
+
+    def set_images(self, key: str, on: bool) -> None:
+        self._exec("UPDATE users SET images_off=? WHERE user_key=?", (0 if on else 1, key))
 
     def set_pending_calc(self, key: str, calc: dict | None) -> None:
         self._exec("UPDATE users SET pending_calc=? WHERE user_key=?",

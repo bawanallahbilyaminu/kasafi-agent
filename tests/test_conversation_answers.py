@@ -115,3 +115,14 @@ def test_nothing_is_answered_before_consent() -> None:
     calls = []
     outs, _ = run_handle(text(Q), answer_calls=calls)
     assert calls == [] and outs[-1].buttons == NOTICE_BUTTONS
+
+
+@pytest.mark.parametrize("off, on, lang", [("images off", "images on", "en"), ("kashe hotuna", "kunna hotuna", "ha")])
+def test_user_can_turn_evidence_images_off_and_on(off: str, on: str, lang: str) -> None:
+    store = consented(lang)
+    key = store._exec("SELECT user_key FROM users").fetchone()[0]
+    assert store.images_on(key)                                   # on by default
+    outs, _ = run_handle(text(off), store=store, answer_calls=(calls := []))
+    assert not store.images_on(key) and outs[0].text == t("images_off", lang) and calls == []   # no model call
+    run_handle(text(on), store=store, answer_calls=[])
+    assert store.images_on(key)

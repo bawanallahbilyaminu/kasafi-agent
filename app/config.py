@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     # Self-growing library: live document fetches per day (all users), and where fetched PDFs are kept
     kasafi_fetches_per_day: int = 20
     kasafi_fetch_dir: str = "data/fetched"
+    # Evidence images: a SAM 3.1 crop of the cited table row, sent after the text answer (users can turn them off)
+    kasafi_evidence_images: bool = True
+    kasafi_max_images: int = 2
+    kasafi_crop_timeout_s: float = 25.0     # for all of an answer's images; the text has already been sent
+    kasafi_pdf_dir: str = "data/pdfs"       # seed PDFs on the server (deploy/deploy.sh --sync-pdfs); dev uses data/
+    sam_model: str = "sam-3.1"
 
     # WhatsApp Cloud API
     whatsapp_token: SecretStr | None = None
