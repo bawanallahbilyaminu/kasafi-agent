@@ -415,7 +415,7 @@ def context_text(q: QueryResult, nmap: dict) -> str:
                  "\"(Kasafi's calculation)\" (Hausa: \"(lissafin Kasafi)\"). If anything is 'not found', say "
                  "so and set found to \"partial\". A line marked \"doesn't show ... separately\" is a broader total "
                  "(a whole ministry or function): say the item isn't shown separately and give that total named as "
-                 "what it is (e.g. \"The budget doesn't show drugs separately; the Ministry of Health's total "
+                 "what it is (e.g. \"The budget doesn't show <item> separately; <the ministry>'s total "
                  "capital is ...\"); never present it as the item's own figure, and set found to \"partial\". "
                  "For a local government area, say that state budget lines for institutions located there are not "
                  "an allocation to the LGA, and give only what the evidence shows for the LGA itself.")

@@ -29,7 +29,7 @@ PER_DOC_NAME = 4        # copies of one line per document (total, personnel, ove
 _SQL = """
 WITH t AS (SELECT * FROM unnest(%(terms)s::text[], %(weights)s::float8[]) WITH ORDINALITY AS t(term, w, i))
 SELECT l.id, d.title, l.doc_id, l.page, COALESCE(l.table_title, ''), l.name, l.row_text, l.classification,
-       COALESCE(d.series, ''), COALESCE(d.edition, ''),
+       COALESCE(d.series, ''), COALESCE(d.edition, ''), COALESCE(l.code, ''),
        -- the best single match counts: in the line's own name most, elsewhere in the row (codes, function and
        -- location columns of a project) less; more matched terms add only a little
        (SELECT COALESCE(max(w), 0) FROM t WHERE l.name ILIKE '%%' || t.term || '%%') * 4
@@ -73,6 +73,7 @@ class Line:
     edition: str
     score: float
     cells: list[Cell] = field(default_factory=list)
+    code: str = ""             # the administrative / economic code printed on the line, if any
 
     def cell(self, column: str) -> Cell | None:
         return next((c for c in self.cells if c.column == column), None)
@@ -98,7 +99,8 @@ def search_lines(conn: psycopg.Connection, terms: list[str], *, year: int | None
     rows = conn.execute(_SQL, {"terms": terms, "weights": weights, "pats": [f"%{t}%" for t in terms], "years": years,
                                "docs": docs, "spend": spend if spend in ("expenditure", "revenue") else "any",
                                "cap": max(limit, 1) * 4}).fetchall()
-    lines = [Line(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], score=float(r[10])) for r in rows]
+    lines = [Line(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], score=float(r[11]), code=r[10])
+             for r in rows]
     lines.sort(key=lambda x: (-x.score, -int(x.edition[:4]) if x.edition[:4].isdigit() else 0, x.page))
     kept, copies = [], Counter()
     for x in lines:

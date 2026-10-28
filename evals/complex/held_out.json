@@ -1,0 +1,65 @@
+{
+  "about": "Held-out check written by Bilyaminu (Oct 29). Never tune prompts or rules on these; run and score only.",
+  "questions": [
+    {
+      "id": "h01",
+      "lang": "en",
+      "text": "Beyond the Ministry of Environment's direct allocation, if you combine all climate-adaptation and flood-control capital projects scattered across Agriculture, Water Resources, and Emergency Management in the 2026 budget, how does that combined total compare to their actual cumulative releases by Q2 2026?",
+      "note": "Cross-MDA thematic aggregation rather than single-ministry lookup."
+    },
+    {
+      "id": "h02",
+      "lang": "en",
+      "text": "Since the Ministry of Health already spent 89.4% of its ₦124.41 billion allocation by June 2026, how much supplementary funding was approved for it in the Q2 2026 report?",
+      "note": "False-premise detection: only 10.6% was spent by June; 89.4% is the unspent balance."
+    },
+    {
+      "id": "h03",
+      "lang": "en",
+      "text": "Looking across both the 2026 approved budget and the Q2 2026 implementation report, which specific ministries had already exhausted more than 50% of their annual overhead allocation by June while recording 0% capital expenditure release, and on which pages do these figures appear?",
+      "note": "Multi-condition filtering across recurrent and capital columns."
+    },
+    {
+      "id": "h04",
+      "lang": "ha",
+      "text": "Idan muka hada duka kudaden da gwamnati ta ware domun farfado da kananan sana'o'in hannu da tallafin kasuwanci a ma'aikatu daban-daban a 2026, shin kudin da aka saki a zahiri zuwa watan Yuni ya kai rabin abin da aka kashe a shekarar 2025?",
+      "note": "Dialectal Hausa, cross-year synthesis, multi-agency summation."
+    },
+    {
+      "id": "h05",
+      "lang": "en",
+      "text": "If we strip out personnel salaries and routine office overheads across all education-related agencies in the 2026 budget, what exact percentage of the remaining capital development fund is dedicated to Tsangaya and Almajiri school integration versus conventional schooling?",
+      "note": "Sub-sector disaggregation and a percentage after excluding recurrent lines."
+    },
+    {
+      "id": "h06",
+      "lang": "en",
+      "text": "Given that the Ministry of Health spent 10.6% of its ₦124.41 billion allocation by the end of Q2 2026, if the ministry continues at that exact six-month burn rate for the remainder of the year, what will its unspent naira balance be on December 31, 2026, and how does that compare to its 2025 full-year unspent balance?",
+      "note": "Multi-step arithmetic projection with historical retrieval."
+    },
+    {
+      "id": "h07",
+      "lang": "ha",
+      "text": "Idan muka kwatanta actual debt servicing expenditure a Q2 2026 report da kuma combined capital releases na Ministry of Water Resources da Primary Healthcare a wannan lokacin, wanne ya fi yawa kuma da nawa suka bambanta?",
+      "note": "Hausa-English code-switching; debt service vs social-sector comparison."
+    },
+    {
+      "id": "h08",
+      "lang": "en",
+      "text": "Rural feeder road construction and rehabilitation often appear under both the Ministry of Works and the Ministry of Rural Development; can you identify any potentially overlapping or similarly named road projects between these two ministries in the 2026 budget and cite their exact budget codes and page numbers?",
+      "note": "Similarity search across separate administrative sections."
+    },
+    {
+      "id": "h09",
+      "lang": "en",
+      "text": "What proportion of the 2026 capital budget is scheduled to be financed through domestic and external loans versus recurrent revenue surplus, and according to the Q2 2026 report, which expected capital receipts failed to record any inflows during the first half of the year?",
+      "note": "Deficit-financing structure rather than expenditure lines."
+    },
+    {
+      "id": "h10",
+      "lang": "en",
+      "text": "Between the 2025 and 2026 budgets, which ministry received the highest percentage increase in its nominal capital allocation, yet recorded one of the lowest percentage rates of actual funds released by the end of Q2 2026?",
+      "note": "Cross-year growth paired with inverse ranking on implementation."
+    }
+  ]
+}

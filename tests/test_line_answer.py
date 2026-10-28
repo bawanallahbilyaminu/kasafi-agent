@@ -129,3 +129,37 @@ def test_lga_question_with_nothing_found_explains_state_vs_lga_money() -> None:
     from app.agent.budget_query import lga_in
     assert lga_in("Karamar Hukumar Wamakko") == "Wamakko" and lga_in("Ministry of Health") is None
     assert "statutory allocations" in ans.LGA_NOT_FOUND["en"].format(lga="Wamakko")
+
+
+def test_compare_is_always_the_change_from_the_earlier_year() -> None:
+    old = L(10, "State Universal Basic Education Board (SUBEB)", 16, [("2025 Approved Budget", "8420000000.00")],
+            doc="budget-2025-approved", table="Capital Expenditure by Administrative Classification")
+    new = L(11, "State Universal Basic Education Board (SUBEB)", 27, [("2026 Approved Budget", "9150000000.00")],
+            table="Capital Expenditure by Administrative Classification")
+    res, _ = verify({"operation": "compare", "found": "full", "selected": [
+        {"line": "L1", "column": "2025 Approved Budget"}, {"line": "L2", "column": "2026 Approved Budget"}]}, [old, new])
+    assert res.difference == Decimal("730000000.00") and res.change_pct == Decimal("8.7")      # a rise, not a cut
+    assert res.compared == "2026 Approved Budget vs 2025 Approved Budget"
+
+
+def test_lines_from_different_tables_of_one_budget_are_not_added() -> None:
+    programme = L(12, "Animal health and livestock diseases management", 40, [("2026 Approved Budget", "12930000000.00")],
+                  table="Expenditure by Programme")
+    project = L(13, "Development of Grazing Reserve", 61, [("2026 Approved Budget", "50000000.00")])
+    res, _ = verify({"operation": "sum", "found": "full", "selected": [
+        {"line": "L1", "column": "2026 Approved Budget"}, {"line": "L2", "column": "2026 Approved Budget"}]},
+        [programme, project])
+    assert res.total is None and res.not_summed
+    a = ans.line_answer(None, ans.Plan("q", [], []), res, [programme, project], "en", {}, None)
+    assert "Not added up" in a.text and "Total:" not in a.text
+
+
+def test_the_code_of_a_line_is_shown_to_the_model_and_the_reader() -> None:
+    siec = L(14, "Sokoto State Independent Electoral Commission", 16, [("2026 Approved Budget", "460480000.00")],
+             table="Total Expenditure by Administrative Classification")
+    siec.code = "014800000000"
+    from app.agent.line_answer import listing
+    assert "code 014800000000" in listing([siec])
+    res, _ = verify({"selected": [{"line": "L1", "column": "2026 Approved Budget"}], "found": "full"}, [siec])
+    a = ans.line_answer(None, ans.Plan("q", [], []), res, [siec], "en", {}, None)
+    assert "(code 014800000000)" in a.text and "page 16" in a.text
