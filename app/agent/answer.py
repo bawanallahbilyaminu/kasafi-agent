@@ -2,6 +2,8 @@
 
 1. PLAN     Muse Spark turns the question (Hausa or English) into English search queries and
             picks up to 3 likely documents from the catalog (title, type, year).
+1a. LATEST  For "latest / most recent / current" questions about a recurring report, find the newest
+            edition that should be out today (app/acquisition/editions.py), not the newest we have.
 1b. ACQUIRE If the plan names a document that isn't in the catalog, find it on trusted sites, fetch
             and index it (app/acquisition/library.py), telling the user "Ina neman takardar…" meanwhile.
             Not found -> the gap goes to the review queue.
@@ -22,11 +24,15 @@ import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta, timezone
+from functools import partial
 from urllib.parse import urlsplit
 
 import psycopg
 
-from app.acquisition.library import Acquired, find_and_fetch, log_gap
+from app.acquisition.editions import (SERIES, Latest, Series, editions_back, find_latest, generic_series, label,
+                                     month_label, release_date, series_doc_ids)
+from app.acquisition.library import Acquired, fetch_and_index, find_and_fetch, log_gap
 from app.config import Settings, get_settings
 from app.providers.chat import ChatClient
 from app.providers.meta import MetaClient
@@ -56,7 +62,14 @@ PLAN_SYSTEM = (
     '"missing_document": "<ONLY if answering needs a specific public document that is NOT in the catalog, e.g. a '
     "quarterly report for a quarter the catalog lacks, or a partner report it doesn't list: describe it for a web "
     "search, e.g. 'Sokoto State Budget Implementation Report Q3 2025'. Empty when a catalog document can answer "
-    "(e.g. the Q4 report already has year-to-date figures).>\"}\n"
+    "(e.g. the Q4 report already has year-to-date figures).>\", "
+    '"latest": <null, or when the question asks for the latest / most recent / current / newest edition of a '
+    "recurring report or statistic (or 'this year', 'now') without naming a specific edition: {\"series\": \"<one "
+    'of: ' + ", ".join(SERIES) + ', other>\", \"name\": \"<report name, e.g. NBS CPI and Inflation Report>\", '
+    '\"frequency\": \"monthly|quarterly|yearly\"}. nbs_cpi = NBS consumer price index / inflation; sokoto_bir '
+    "= Sokoto budget implementation (performance) reports; sokoto_budget = approved budgets; sokoto_audited_fs = "
+    "audited financial statements. When latest is set, leave missing_document empty.>}\n"
+    "TODAY is given: work out years and periods from it, never from the catalog alone. "
     "For 'how much was allocated to <sector>' (Hausa 'fanni'), include a query like 'Total Expenditure by "
     "Programme <sector>'; for a ministry or agency (Hausa 'ma'aikata', 'hukuma'), include 'Total Expenditure by "
     "Administrative Classification <ministry name in English>'. Budgets list each one in total, personnel, "
@@ -171,6 +184,7 @@ class Plan:
     assumption: str = ""
     assumption_ha: str = ""
     missing_document: str = ""
+    latest: dict = field(default_factory=dict)      # {"series", "name", "frequency"} for "latest" questions
 
     def assumption_for(self, lang: str) -> str:
         if not self.assumption:
@@ -203,6 +217,7 @@ class Answer:
     partial: bool = False                      # answered part of the question and said what's missing
     exact: str = ""                            # the model's wording with exact figures (what was checked)
     acquired: Acquired | None = None           # a missing document that was looked for
+    latest: Latest | None = None               # the edition used for a "latest" question
 
 
 def load_catalog(conn: psycopg.Connection) -> list[dict]:
@@ -210,10 +225,17 @@ def load_catalog(conn: psycopg.Connection) -> list[dict]:
     return [{"id": r[0], "title": r[1], "type": r[2], "year": r[3]} for r in rows]
 
 
-async def plan_question(question: str, catalog: list[dict], client: ChatClient, settings: Settings) -> Plan:
+def lagos_today() -> date:
+    return datetime.now(timezone(timedelta(hours=1))).date()
+
+
+async def plan_question(question: str, catalog: list[dict], client: ChatClient, settings: Settings,
+                        today: date | None = None) -> Plan:
+    today = today or lagos_today()
     r = await client.chat(
         [{"role": "system", "content": PLAN_SYSTEM},
-         {"role": "user", "content": f"CATALOG:\n{json.dumps(catalog, ensure_ascii=False)}\n\nQUESTION: {question}"}],
+         {"role": "user", "content": f"TODAY: {today.isoformat()}\n\nCATALOG:\n{json.dumps(catalog, ensure_ascii=False)}"
+                                     f"\n\nQUESTION: {question}"}],
         model=settings.meta_model, reasoning_effort=settings.kasafi_plan_reasoning, max_tokens=3000,
     )
     d = parse_json_reply(r.content)
@@ -225,7 +247,15 @@ async def plan_question(question: str, catalog: list[dict], client: ChatClient, 
         assumption=str(d.get("assumption") or ""),
         assumption_ha=str(d.get("assumption_ha") or ""),
         missing_document=str(d.get("missing_document") or "").strip()[:300],
+        latest=_latest_field(d.get("latest")),
     )
+
+
+def _latest_field(v) -> dict:
+    if not isinstance(v, dict) or not (v.get("series") or v.get("name")):
+        return {}
+    return {"series": str(v.get("series") or "other"), "name": str(v.get("name") or "")[:120],
+            "frequency": str(v.get("frequency") or "")}
 
 
 def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
@@ -315,11 +345,12 @@ def format_citations(cited: list[Evidence], lang: str) -> str:
 
 
 async def compose(question: str, lang: str, plan: Plan, evidence: list[Evidence], client: ChatClient,
-                  settings: Settings, feedback: str = "") -> dict:
+                  settings: Settings, feedback: str = "", context: str = "") -> dict:
     ev = "\n\n".join(f"[{e.n}] {e.title} ({e.year or 'n.d.'}), page {e.page}:\n{e.text}" for e in evidence)
     user = (f"Reply in {LANG_NAME.get(lang, 'English')}.\nQUESTION: {question}\n"
             f"(English: {plan.english_question})\n"
             + (f"ASSUMPTION MADE: {plan.assumption}\n" if plan.assumption else "")
+            + (f"CONTEXT: {context}\n" if context else "")
             + f"\nEVIDENCE:\n{ev}" + (f"\n\nCORRECTION NEEDED: {feedback}" if feedback else ""))
     r = await client.chat([{"role": "system", "content": ANSWER_SYSTEM}, {"role": "user", "content": user}],
                           model=settings.meta_model, reasoning_effort="low", max_tokens=4000)
@@ -336,6 +367,25 @@ ADDED = {
     "ha": "📥 Na samo kuma na ƙara sabuwar takarda a ɗakin karatu: _{title}_ ({host}).",
     "en": "📥 Found and added a new document to the library: _{title}_ ({host}).",
 }
+CHECKING_LATEST = {
+    "ha": "🔎 Ina duba ko akwai sabon bugu na {name} (wanda ake tsammani: {label})…",
+    "en": "🔎 Checking for the newest {name} (expected: {label})…",
+}
+EDITION_NOTE = {
+    "ha": "📅 {name}, {label}: bugu mafi sabo (an fitar da shi kusan {release}).",
+    "en": "📅 {name}, {label}: the newest edition (released around {release}).",
+}
+OLDER_NOTE = {
+    "ha": "📅 Mafi sabon da na samu shi ne {name}, {label}; akwai yiwuwar wani sabo (har zuwa {expected}). "
+          "Na ajiye wannan domin a duba.",
+    "en": "📅 The newest I could get is {name}, {label}; a newer one (up to {expected}) may exist. "
+          "I've logged it for review.",
+}
+NO_EDITION = {
+    "ha": "Ban samo wani bugu na kwanan nan na {name} ba (na nemi {tried}). Na ajiye buƙatar domin a duba.",
+    "en": "I couldn't find a recent edition of {name} (I looked for {tried}). I've logged it for review.",
+}
+
 DOC_NOT_FOUND = {
     "ha": "Ban samo takardar da ake buƙata a shafukan da na amince da su ba ({doc}). Na ajiye buƙatar domin "
           "ma'aikatanmu su duba.",
@@ -371,17 +421,74 @@ async def acquire_missing(conn: psycopg.Connection, plan: Plan, lang: str, clien
     return acq
 
 
+def plan_series(plan: Plan) -> Series:
+    return SERIES.get(plan.latest.get("series", "")) or generic_series(plan.latest.get("name") or "report",
+                                                                        plan.latest.get("frequency", ""))
+
+
+async def resolve_latest(conn: psycopg.Connection, plan: Plan, lang: str, client: ChatClient, settings: Settings,
+                         notify: Notify | None, today: date, latest_fn=None, newer_than: str | None = None) -> Latest:
+    """Find the newest edition of the planned series and put it first in the plan (other editions out)."""
+    series = plan_series(plan)
+    expected = label(_expected(series, today), lang)
+    run = latest_fn or partial(find_latest, find_fn=partial(find_and_fetch, settings=settings, client=client),
+                               fetch_fn=partial(fetch_and_index, settings=settings, client=client))
+    res = await run(conn, series, today, newer_than=newer_than, notify=notify,
+                    notify_text=CHECKING_LATEST.get(lang, CHECKING_LATEST["en"]).format(name=series.name, label=expected))
+    log.info("latest: series=%s expected=%s got=%s status=%s tried=%s", series.key, res.expected, res.edition,
+             res.status, res.tried)
+    if res.doc_id:
+        others = series_doc_ids(conn, series.key) if series.key != "other" else set()
+        plan.doc_ids = [res.doc_id] + [d for d in plan.doc_ids if d != res.doc_id and d not in others][:MAX_DOCS - 1]
+    if res.status in ("older", "not_found") and not newer_than:
+        log_gap(conn, plan.english_question, series.search.format(edition=label(res.expected)), "older_edition"
+                if res.doc_id else "not_found", {"expected": res.expected, "got": res.edition, "tried": res.tried})
+    return res
+
+
+def _expected(series: Series, today: date) -> str:
+    return editions_back(series, today, 1)[0]
+
+
+def edition_note(res: Latest | None, lang: str) -> str:
+    if not res or not res.doc_id or not res.edition:
+        return ""
+    name, lab = res.series.name, label(res.edition, lang)
+    if res.status == "older":
+        return OLDER_NOTE.get(lang, OLDER_NOTE["en"]).format(name=name, label=lab, expected=label(res.expected, lang))
+    release = month_label(release_date(res.series, res.edition), lang)
+    return EDITION_NOTE.get(lang, EDITION_NOTE["en"]).format(name=name, label=lab, release=release)
+
+
+def edition_context(res: Latest | None) -> str:
+    if not res or not res.doc_id:
+        return ""
+    return (f"The question asks for the latest figures. Answer from {res.series.name}, {label(res.edition)} "
+            f"(document {res.doc_id}) and name that edition; don't use figures from other editions of this report.")
+
+
 async def answer_question(question: str, lang: str, conn: psycopg.Connection, *, settings: Settings | None = None,
                           client_factory: type[MetaClient] = MetaClient, notify: Notify | None = None,
-                          acquire_fn=None) -> Answer:
+                          acquire_fn=None, latest_fn=None, today: date | None = None) -> Answer:
     settings = settings or get_settings()
+    today = today or lagos_today()
     t: dict[str, float] = {}
     acq: Acquired | None = None
+    latest: Latest | None = None
     async with client_factory(settings) as client:
         t0 = time.perf_counter()
-        plan = await plan_question(question, load_catalog(conn), client, settings)
+        plan = await plan_question(question, load_catalog(conn), client, settings, today)
         t["plan"] = time.perf_counter() - t0
-        if plan.missing_document:
+        if plan.latest:
+            t0 = time.perf_counter()
+            latest = await resolve_latest(conn, plan, lang, client, settings, notify, today, latest_fn)
+            t["acquire"] = time.perf_counter() - t0
+            acq = latest.acquired if latest.fetched else None
+            if not latest.doc_id:
+                text = NO_EDITION.get(lang, NO_EDITION["en"]).format(
+                    name=latest.series.name, tried=", ".join(label(k, lang) for k in latest.tried) or "-")
+                return Answer(text, False, True, plan=plan, timings=t, latest=latest)
+        elif plan.missing_document:
             t0 = time.perf_counter()
             acq = await acquire_missing(conn, plan, lang, client, settings, notify, acquire_fn)
             t["acquire"] = time.perf_counter() - t0
@@ -392,11 +499,12 @@ async def answer_question(question: str, lang: str, conn: psycopg.Connection, *,
             return _not_found(conn, plan, lang, acq, t)
 
         t0 = time.perf_counter()
-        d = await compose(question, lang, plan, evidence, client, settings)
+        context = edition_context(latest)
+        d = await compose(question, lang, plan, evidence, client, settings, context=context)
         by_n = {e.n: e for e in evidence}
         bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n])
         if bad and _found(d) != "none":
-            d = await compose(question, lang, plan, evidence, client, settings,
+            d = await compose(question, lang, plan, evidence, client, settings, context=context,
                               feedback=f"These figures are not in the cited evidence: {', '.join(bad)}. "
                                        "Use only figures copied exactly from the evidence, and cite them.")
             bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n])
@@ -407,18 +515,20 @@ async def answer_question(question: str, lang: str, conn: psycopg.Connection, *,
     if found == "none" or not cited or not answer_text(d).strip():
         return _not_found(conn, plan, lang, acq, t)
     added = _added_note(acq, lang)
+    ed = edition_note(latest, lang)
+    added += f"{ed}\n\n" if ed else ""
     if bad:
         log.warning("answer had unverifiable figures after retry: %d", len(bad))
         return Answer(f"{added}{UNVERIFIED.get(lang, UNVERIFIED['en'])}\n\n{format_citations(cited, lang)}",
-                      True, False, cited, plan, t, acquired=acq)
+                      True, False, cited, plan, t, acquired=acq, latest=latest)
     note = plan.assumption_for(lang)
     body = added + (f"_{note}_\n\n" if note else "") + render_answer(d, lang)
     return Answer(f"{body}\n\n{format_citations(cited, lang)}", True, True, cited, plan, t,
-                  partial=found == "partial", exact=answer_text(d), acquired=acq)
+                  partial=found == "partial", exact=answer_text(d), acquired=acq, latest=latest)
 
 
 def _added_note(acq: Acquired | None, lang: str) -> str:
-    if not acq or acq.status != "indexed":
+    if not acq or getattr(acq, "status", "") != "indexed":
         return ""
     host = urlsplit(acq.url).hostname or ""
     return ADDED.get(lang, ADDED["en"]).format(title=acq.title, host=host) + "\n\n"

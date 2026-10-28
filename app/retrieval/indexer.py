@@ -319,11 +319,11 @@ def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bo
         conn.execute("DELETE FROM documents WHERE id = %s", (doc["id"],))   # cascades to pages/chunks
         conn.execute(
             """INSERT INTO documents (id, title, category, year, publisher, source_url, acquisition, sha256, page_count,
-                                      final_url, fetched_at)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                      final_url, fetched_at, series, edition)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (doc["id"], doc["title"], doc.get("category"), doc.get("year"), doc.get("publisher"),
              doc.get("source_url"), doc.get("acquisition"), sha, len(pages), doc.get("final_url"),
-             doc.get("fetched_at")),
+             doc.get("fetched_at"), doc.get("series"), doc.get("edition")),
         )
         n_chunks = 0
         with conn.cursor() as cur:

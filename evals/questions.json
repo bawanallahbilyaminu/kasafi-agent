@@ -163,6 +163,23 @@
       "text_ha": "Nawa Ma'aikatar Lafiya ta kashe a watanni tara na farkon 2025, bisa ga rahoton aiwatar da kasafi na kwata na uku (Q3 2025)?",
       "english": "How much did the Ministry of Health spend in the first nine months of 2025, according to the Q3 2025 budget implementation report?",
       "expected": "The Q3 2025 report isn't pre-indexed: Kasafi says it's looking for it, fetches it from an allowlisted state site, indexes it, then answers with the Q1-Q3 figure and cites it."
+    },
+    {
+      "id": "20",
+      "audio": null,
+      "category": "latest-edition",
+      "text_ha": "A rahoton hauhawar farashi (CPI) na NBS mafi sabo, nawa ne hauhawar farashi a Sokoto yanzu, kuma yaya ya kwatanta da sauran jihohi?",
+      "english": "In the most recent NBS inflation (CPI) report, what is the current inflation rate of Sokoto and how does it compare to other states?",
+      "expected": "Uses the newest CPI edition (September 2026 on Oct 28 2026, from the NBS microdata catalog), names it, and doesn't answer from an older edition in the library.",
+      "source": "Bilyaminu's test, Oct 28 2026 (Kasafi first answered from June 2025)"
+    },
+    {
+      "id": "21",
+      "audio": null,
+      "category": "latest-edition",
+      "text_ha": "Nawa gwamnatin Sokoto ta kashe gaba ɗaya bisa ga rahoton aiwatar da kasafi mafi sabo?",
+      "english": "How much did the Sokoto government spend in total according to the most recent budget implementation report?",
+      "expected": "Looks for Q3 2026 first; if it isn't published, answers from Q2 2026 and says a newer one may exist."
     }
   ]
 }

@@ -38,7 +38,13 @@ def check(case: dict, a) -> list[str]:
     if case.get("numbers_any") and not any(all(n in a.exact for n in group) for group in case["numbers_any"]):
         fails.append(f"none of the accepted figures {case['numbers_any']}")
     cites = [(e.doc_id, e.page) for e in a.cited]
-    if not any(d in case["docs"] and (not case.get("pages") or p in case["pages"]) for d, p in cites):
+    if case.get("edition"):    # "latest" questions: the edition used, named in the reply
+        got = a.latest.edition if a.latest else None
+        if got not in case["edition"]["any"]:
+            fails.append(f"edition {got}, expected one of {case['edition']['any']}")
+        if "📅" not in a.text:
+            fails.append("edition not named")
+    elif not any(d in case["docs"] and (not case.get("pages") or p in case["pages"]) for d, p in cites):
         fails.append(f"no citation from {case['docs']} {case.get('pages', '')} (got {cites})")
     lowered = a.text.lower()
     for alts in case.get("terms_any", []):

@@ -27,12 +27,14 @@ import psycopg
 from app.acquisition.fetch import FetchError, download_pdf
 from app.acquisition.find import find_local, pick_candidate, search_candidates
 from app.acquisition.policy import USER_AGENT, Robots
-from app.acquisition.sandbox import ParseError, extract_pages_sandboxed, render_pages_sandboxed
+from app.acquisition.editions import SERIES, valid_edition
+from app.acquisition.fetch import MAX_BYTES
+from app.acquisition.sandbox import ParseError, extract_pages_sandboxed, render_pages_sandboxed, unzip_pdf_sandboxed
 from app.config import Settings
 from app.providers.chat import ChatClient, ProviderError
 from app.providers.meta import MetaClient
 from app.providers.stt import parse_json_reply
-from app.retrieval.indexer import MIN_PAGE_CHARS, chunk_page, index_document
+from app.retrieval.indexer import MIN_PAGE_CHARS, chunk_page, index_document, sha256_file
 from app.retrieval.ocr import ocr_image
 
 log = logging.getLogger(__name__)
@@ -84,7 +86,10 @@ CONFIRM_SYSTEM = (
     'Reply with JSON only: {"match": true|false, "excluded": true|false, "why": "<short>", '
     '"title": "<the document\'s own title, e.g. \'Sokoto State Budget Implementation Report Q3 2025\'>", '
     '"year": <the year it covers, or null>, "publisher": "<publisher>", "category": "<one of: '
-    + ", ".join(CATEGORIES) + '>", "id": "<short lowercase id in the style of EXISTING IDS, e.g. bir-2025-q3>"}'
+    + ", ".join(CATEGORIES) + '>", "id": "<short lowercase id in the style of EXISTING IDS, e.g. bir-2025-q3>", '
+    '"series": "<if it is an edition of one of these recurring reports: ' + ", ".join(SERIES) + '; else null>", '
+    '"edition": "<its edition: YYYY-MM for a monthly report, YYYY-Qn for a quarterly one, YYYY for a yearly '
+    'one; else null>"}'
 )
 
 
@@ -116,20 +121,27 @@ def _known(conn: psycopg.Connection, *, url: str = "", sha: str = "") -> str | N
 # --- fetch_and_index ---------------------------------------------------------------------------
 
 async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, *, settings: Settings,
-                          client: ChatClient, http: httpx.AsyncClient, robots: Robots | None = None) -> Acquired:
+                          client: ChatClient, http: httpx.AsyncClient, robots: Robots | None = None,
+                          series: str | None = None, edition: str | None = None) -> Acquired:
+    """`series`/`edition`: the edition we were looking for (find_latest); the document must match it."""
     t: dict[str, float] = {}
     if known := _known(conn, url=url):
         return Acquired("known", known, url=url)
     fetch_dir = Path(settings.kasafi_fetch_dir)
-    incoming = fetch_dir / f"incoming-{secrets.token_hex(8)}.pdf"
+    tag = secrets.token_hex(8)
+    incoming, unzipped = fetch_dir / f"incoming-{tag}.download", fetch_dir / f"incoming-{tag}.pdf"
     try:
         t0 = time.perf_counter()
         dl = await download_pdf(url, incoming, http, robots or Robots(http))
         t["download"] = time.perf_counter() - t0
-        if known := _known(conn, sha=dl.sha256):        # same file under another URL
+        pdf, sha = dl.path, dl.sha256
+        if dl.kind == "zip":
+            pdf = await unzip_pdf_sandboxed(dl.path, unzipped, MAX_BYTES)
+            sha = sha256_file(pdf)                     # provenance is the PDF we index
+        if known := _known(conn, sha=sha):             # same file under another URL
             return Acquired("known", known, url=url, timings=t)
         t0 = time.perf_counter()
-        pages = await extract_pages_sandboxed(dl.path)
+        pages = await extract_pages_sandboxed(pdf)
         t["parse"] = time.perf_counter() - t0
         t0 = time.perf_counter()
         ids = [r[0] for r in conn.execute("SELECT id FROM documents ORDER BY id").fetchall()]
@@ -138,20 +150,26 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
         if not meta.get("match") or meta.get("excluded"):
             why = "excluded content" if meta.get("excluded") else "not the wanted document"
             return Acquired("failed", url=url, detail=f"{why}: {str(meta.get('why', ''))[:200]}", timings=t)
+        if edition and meta.get("edition") and meta.get("edition") != edition:
+            return Acquired("failed", url=url, detail=f"wrong edition: wanted {edition}, got {meta.get('edition')}",
+                            timings=t)
         doc_id = unique_id(conn, str(meta.get("id") or meta.get("title") or ""))
         path = fetch_dir / f"{doc_id}.pdf"
-        dl.path.replace(path)
+        pdf.replace(path)
+        got_series = series or (meta.get("series") if meta.get("series") in SERIES else None)
+        got_edition = edition or (meta.get("edition") if valid_edition(meta.get("edition")) else None)
         year = meta.get("year") if isinstance(meta.get("year"), int) else None
         doc = {"id": doc_id, "title": str(meta.get("title") or description)[:300],
                "category": meta.get("category") if meta.get("category") in CATEGORIES else None,
                "year": year, "publisher": str(meta.get("publisher") or "")[:200] or None,
-               "source_url": url, "final_url": dl.final_url, "fetched_at": dl.fetched_at, "acquisition": "fetched"}
+               "source_url": url, "final_url": dl.final_url, "fetched_at": dl.fetched_at, "acquisition": "fetched",
+               "series": got_series, "edition": got_edition if got_series else None}
         t0 = time.perf_counter()
-        res = index_document(conn, doc, path, pages=pages, sha=dl.sha256)
+        res = index_document(conn, doc, path, pages=pages, sha=sha)
         conn.commit()      # searchable now, and visible to the background OCR's own connection
         t["index"] = time.perf_counter() - t0
-        log.info("fetched and indexed %s: %d pages, %d chunks, %d need OCR, sha=%s", doc_id, res.pages, res.chunks,
-                 res.empty_pages, dl.sha256[:12])
+        log.info("fetched and indexed %s (%s %s): %d pages, %d chunks, %d need OCR, sha=%s", doc_id, doc["series"],
+                 doc["edition"], res.pages, res.chunks, res.empty_pages, sha[:12])
         scanned = [i for i, p in enumerate(pages, 1) if len(p) < MIN_PAGE_CHARS]
         if scanned:
             schedule_ocr(doc_id, path, scanned[:BACKGROUND_OCR_PAGES], settings)
@@ -160,11 +178,13 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
         return Acquired("failed", url=url, detail=str(e)[:300], timings=t)
     finally:
         incoming.unlink(missing_ok=True)
+        unzipped.unlink(missing_ok=True)
 
 
 async def find_and_fetch(conn: psycopg.Connection, description: str, *, settings: Settings, client: ChatClient,
-                         http: httpx.AsyncClient | None = None) -> Acquired:
-    if local := find_local(conn, description):
+                         http: httpx.AsyncClient | None = None, series: str | None = None, edition: str | None = None,
+                         check_local: bool = True) -> Acquired:
+    if check_local and (local := find_local(conn, description)):
         return Acquired("local", local)
     if fetches_today(conn) >= settings.kasafi_fetches_per_day:
         log.warning("daily document fetch limit reached")
@@ -191,7 +211,7 @@ async def find_and_fetch(conn: psycopg.Connection, description: str, *, settings
                 detail += f"; local-only sites skipped: {', '.join(sorted(local_only))}"
             return Acquired("not_found", detail=detail, timings={"find": found_s})
         result = await fetch_and_index(conn, chosen.url, description, settings=settings, client=client, http=http,
-                                       robots=robots)
+                                       robots=robots, series=series, edition=edition)
         result.timings = {"find": found_s, **result.timings}
         return result
     finally:

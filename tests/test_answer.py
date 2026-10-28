@@ -240,3 +240,62 @@ def test_model_calls_get_excerpts_not_whole_documents() -> None:
     spy = Spy()
     asyncio.run(library.confirm_document("d", ["x" * 5000] * 50, [], spy, make_settings()))
     assert len(spy.sent) < library.CONFIRM_CHARS + 200          # 3 pages at most, cut to the limit
+
+
+# --- "latest" questions: newest edition, named, older edition flagged -------------------------
+
+from datetime import date  # noqa: E402
+
+from app.acquisition.editions import SERIES, Latest  # noqa: E402
+
+LATEST_PLAN = {**PLAN, "latest": {"series": "nbs_cpi", "name": "NBS CPI", "frequency": "monthly"}}
+CPI_GOOD = {"summary": "128,495,868,362.13 [1].", "items": [], "found": "full", "cited": [1]}
+
+
+def run_latest(monkeypatch, result: Latest, replies, gaps=None, lang="en"):
+    seen = {}
+
+    async def latest_fn(conn, series, today, *, newer_than=None, notify=None, notify_text=""):
+        seen.update(series=series.key, today=today, notify_text=notify_text)
+        return result
+
+    monkeypatch.setattr(ans, "series_doc_ids", lambda conn, s: {"cpi-2025-06"})
+    fake = FakeClient(replies)
+    monkeypatch.setattr(ans, "load_catalog", lambda conn: [{"id": "cpi-2025-06", "title": "t"}])
+    monkeypatch.setattr(ans, "gather_evidence", lambda conn, plan: EV)
+    monkeypatch.setattr(ans, "log_gap", lambda conn, q, doc, reason, detail=None: (gaps if gaps is not None else []
+                                                                                    ).append((doc, reason)))
+    a = asyncio.run(ans.answer_question("latest CPI?", lang, conn=None, settings=make_settings(),
+                                        client_factory=lambda s: fake, latest_fn=latest_fn, today=date(2026, 10, 28)))
+    return a, seen, fake
+
+
+def test_planner_gets_todays_date(monkeypatch) -> None:
+    _, _, fake = run_latest(monkeypatch, Latest(SERIES["nbs_cpi"], "2026-09", "cpi-2026-09", "2026-09", "newest"),
+                            [{**LATEST_PLAN, "doc_ids": ["cpi-2025-06"]}, CPI_GOOD])
+    assert "TODAY: 2026-10-28" in fake.calls[0][1]["content"]
+
+
+def test_latest_question_names_the_newest_edition(monkeypatch) -> None:
+    a, seen, fake = run_latest(monkeypatch, Latest(SERIES["nbs_cpi"], "2026-09", "cpi-2026-09", "2026-09", "newest"),
+                               [{**LATEST_PLAN, "doc_ids": ["cpi-2025-06"]}, CPI_GOOD])
+    assert seen["series"] == "nbs_cpi" and "September 2026" in seen["notify_text"]
+    assert a.text.startswith("📅 NBS CPI and Inflation Report, September 2026: the newest edition "
+                             "(released around October 2026).")
+    assert a.plan.doc_ids == ["cpi-2026-09"]                       # the older June 2025 edition is out of the plan
+    assert "September 2026" in fake.calls[1][1]["content"]         # the composer is told which edition
+
+
+def test_older_edition_is_said_plainly_and_logged(monkeypatch) -> None:
+    gaps = []
+    a, _, _ = run_latest(monkeypatch, Latest(SERIES["nbs_cpi"], "2026-09", "cpi-2025-06", "2025-06", "older",
+                                             tried=["2026-09"]), [LATEST_PLAN, CPI_GOOD], gaps=gaps)
+    assert a.text.startswith("📅 The newest I could get is NBS CPI and Inflation Report, June 2025; "
+                             "a newer one (up to September 2026) may exist.")
+    assert gaps == [("NBS Nigeria Consumer Price Index (CPI) and Inflation Report September 2026", "older_edition")]
+
+
+def test_no_edition_at_all(monkeypatch) -> None:
+    a, _, fake = run_latest(monkeypatch, Latest(SERIES["nbs_cpi"], "2026-09", tried=["2026-09", "2026-08"]),
+                            [LATEST_PLAN], lang="ha")
+    assert not a.found and "Satumba 2026, Agusta 2026" in a.text and len(fake.calls) == 1

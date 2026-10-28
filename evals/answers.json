@@ -169,6 +169,47 @@
         "14,061,818,373.87"
       ],
       "source": "Fetched live (not pre-indexed): BIR Q3 2025 p19, Total Expenditure by Administrative Classification, 052100000000 Ministry of Health, 2025 Performance Year to Date (Q1-Q3) 14,061,818,373.87 (30.3% of the revised budget 46,369,252,082.91). Source: mof.sk.gov.ng/wp-content/uploads/Sokoto-State-2025-Q3-BIRCN-CR-Final-1.pdf."
+    },
+    {
+      "id": "20",
+      "lang": "ha",
+      "may_fetch": true,
+      "docs": [],
+      "edition": {
+        "series": "nbs_cpi",
+        "any": [
+          "2026-09"
+        ]
+      },
+      "numbers_any": [
+        [
+          "3.01"
+        ],
+        [
+          "14.63"
+        ]
+      ],
+      "terms_any": [
+        [
+          "Satumba 2026",
+          "September 2026"
+        ]
+      ],
+      "source": "NBS CPI September 2026 (microdata catalog 154, download 1440, a ZIP): national headline 14.63% y/y (p6); Sokoto 3.01% m/m, third-highest (p16-17)."
+    },
+    {
+      "id": "21",
+      "lang": "ha",
+      "may_fetch": true,
+      "docs": [],
+      "edition": {
+        "series": "sokoto_bir",
+        "any": [
+          "2026-Q3",
+          "2026-Q2"
+        ]
+      },
+      "source": "On Oct 28 2026 no Q3 2026 report was found online; Q2 2026 (p9): Q1-Q2 2026 total 139.63 bn, 18.4% of the revised budget."
     }
   ]
 }

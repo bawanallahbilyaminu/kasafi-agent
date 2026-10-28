@@ -61,6 +61,12 @@ async def extract_pages_sandboxed(path: Path, timeout: float = TIMEOUT_S) -> lis
     return (await _run_worker(["text", str(path), str(MAX_PAGES)], timeout))["pages"]
 
 
+async def unzip_pdf_sandboxed(path: Path, out: Path, max_bytes: int, timeout: float = TIMEOUT_S) -> Path:
+    """The PDF inside a downloaded ZIP (NBS ships reports that way), extracted in the sandbox."""
+    d = await _run_worker(["unzip", str(path), str(out), str(max_bytes)], timeout)
+    return Path(d["pdf"])
+
+
 async def render_pages_sandboxed(path: Path, pages: list[int], out_dir: Path,
                                  timeout: float = TIMEOUT_S) -> dict[int, Path]:
     """Render pages (1-based) to JPEG files for OCR. Only the images leave the sandbox."""

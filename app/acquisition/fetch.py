@@ -2,7 +2,8 @@
 
 Every hop (the URL and each redirect target) must pass the allowlist and robots.txt. The
 download is streamed with a size limit, must start with %PDF- and end with %%EOF, and must
-match its Content-Length. The file's SHA-256 is recorded for provenance.
+match its Content-Length. Some publishers (NBS) ship a report as a ZIP holding the PDF: a ZIP is
+accepted too and unpacked later, inside the sandbox. The file's SHA-256 is recorded for provenance.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ class Downloaded:
     url: str            # the URL we were asked to fetch
     final_url: str      # after redirects
     fetched_at: str     # ISO 8601, UTC
+    kind: str = "pdf"   # pdf | zip
 
 
 async def check_url(url: str, robots: Robots) -> None:
@@ -66,12 +68,15 @@ async def _save(resp: httpx.Response, url: str, final_url: str, dest: Path, max_
         raise FetchError(f"too large ({int(length)} bytes > {max_bytes})")
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(dest.suffix + ".part")
-    sha, size, tail, first = hashlib.sha256(), 0, b"", True
+    sha, size, tail, first, kind = hashlib.sha256(), 0, b"", True, "pdf"
     try:
         with tmp.open("wb") as f:
             async for chunk in resp.aiter_bytes(64 * 1024):
-                if first and not chunk.startswith(b"%PDF-"):
-                    raise FetchError(f"not a PDF (Content-Type: {resp.headers.get('content-type')})")
+                if first:
+                    if chunk.startswith(b"PK\x03\x04"):
+                        kind = "zip"
+                    elif not chunk.startswith(b"%PDF-"):
+                        raise FetchError(f"not a PDF (Content-Type: {resp.headers.get('content-type')})")
                 first = False
                 size += len(chunk)
                 if size > max_bytes:
@@ -83,10 +88,10 @@ async def _save(resp: httpx.Response, url: str, final_url: str, dest: Path, max_
             raise FetchError("empty response")
         if length and length.isdigit() and size != int(length):
             raise FetchError(f"truncated: got {size} of {int(length)} bytes")
-        if b"%%EOF" not in tail:
+        if kind == "pdf" and b"%%EOF" not in tail:
             raise FetchError("truncated: no %%EOF at end of file")
         tmp.replace(dest)
     finally:
         tmp.unlink(missing_ok=True)
     return Downloaded(dest, sha.hexdigest(), size, url, final_url,
-                      datetime.now(timezone.utc).isoformat(timespec="seconds"))
+                      datetime.now(timezone.utc).isoformat(timespec="seconds"), kind)
