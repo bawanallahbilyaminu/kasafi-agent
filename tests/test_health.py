@@ -24,3 +24,11 @@ def test_db_url_built_from_password_and_host() -> None:
     assert Settings(_env_file=None, postgres_password=SecretStr("x")).db_url().endswith("@127.0.0.1:5432/kasafi")
     assert Settings(_env_file=None, database_url=SecretStr("postgresql+psycopg://u:p@h/d")).db_url() == "postgresql://u:p@h/d"
     assert not Settings(_env_file=None).has_database
+
+
+def test_api_docs_are_not_public() -> None:
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    c = TestClient(app)
+    assert all(c.get(p).status_code == 404 for p in ("/docs", "/redoc", "/openapi.json"))

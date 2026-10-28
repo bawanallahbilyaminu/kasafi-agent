@@ -24,7 +24,8 @@ class _RedactQuery(logging.Filter):
 
 logging.getLogger("uvicorn.access").addFilter(_RedactQuery())
 
-app = FastAPI(title="Kasafi", version="0.1.0")
+# No /docs, /redoc or /openapi.json in production: they list the routes and help nobody but a scanner.
+app = FastAPI(title="Kasafi", version="0.1.0", docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(whatsapp_router)
 app.include_router(legal_router)
 
