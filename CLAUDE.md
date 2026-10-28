@@ -69,7 +69,9 @@ Some details are not confirmed yet. Look them up (dev.meta.ai docs, provider doc
 
 - Meta Model API: $150 hackathon credits applied, payment method verified. Set a $150 spend limit.
 - Baseten ($100 + 2M TPM): **confirmed (Oct 27)**. `BASETEN_API_KEY` is set and Muse Spark Open works via `app/providers/baseten.py`.
-- Modal ($100), Fireworks ($25/team): requested, **not yet confirmed**. Don't depend on them until they're confirmed. Design so providers can be swapped.
+- Modal ($100): **active (Oct 28)**, workspace `bawanallahbilyaminu`; credits expire 365 days after redemption, not at hackathon end. Set up with `modal setup` when we reach SAM 3.1; the token stays in `~/.modal.toml`, never in the repo.
+- Fireworks ($100): **active (Oct 28)**, redeemed, no expiry.
+- All four providers are active (Meta $150, Baseten $100, Modal $100, Fireworks $100). Keep providers swappable.
 - Serper search API: account created (free 2,500 queries).
 - WhatsApp: Meta app created with the WhatsApp use case under the "Halal Numeriq Limited" business portfolio. Uses the test number (5 verified recipients max) during the build.
 - Deploy target: Bilyaminu's own VPS (Docker), with HTTPS for the WhatsApp webhook.
