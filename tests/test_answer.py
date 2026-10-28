@@ -306,3 +306,39 @@ def test_L17_edition_year_from_the_title_is_not_an_unverified_figure() -> None:
                    "Sokoto | Sep 2026 All Items: 135.1 | Year-on-Year All Items: 8.0")]
     assert unverified_numbers("In September 2026 Sokoto's rate was 8.0 [1].", ev) == []
     assert unverified_numbers("In September 2027 it was 8.0 [1].", ev) == ["2027"]
+
+
+def test_page_references_and_asked_years_are_not_figures() -> None:
+    ev = [Evidence(1, "d", "Budget Implementation Report Q2 2026", 2026, 18, "text", "Ministry of Health | x: 10.6%")]
+    assert unverified_numbers("Release rate 10.6%, page 18 [1].", ev) == []
+    assert unverified_numbers("Kashi 10.6%, shafi na 18 [1].", ev) == []
+    assert unverified_numbers("Release rate 10.6%, page 44 [1].", ev) == ["44"]          # not a cited page
+    years = ans.question_years("What is the 2026 target compared with 2025?")
+    assert unverified_numbers("No 2026 target was found [1].", ev, years) == []
+    assert unverified_numbers("A difference of 6,309,344,300.00 [1].", ev, years) == ["6,309,344,300.00"]
+
+
+def test_invalid_json_is_retried_then_the_user_is_asked_to_rephrase(monkeypatch) -> None:
+    class Garbled:
+        def __init__(self, replies):
+            self.replies, self.calls = list(replies), 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return None
+
+        async def chat(self, messages, **kw):
+            self.calls += 1
+            return ChatResult(content=self.replies.pop(0), model="m", finish_reason="stop")
+
+    monkeypatch.setattr(ans, "load_catalog", lambda conn: [])
+    monkeypatch.setattr(ans, "gather_evidence", lambda conn, plan: [])
+    monkeypatch.setattr(ans, "log_gap", lambda *a, **k: None)
+    g = Garbled(["{not json", "still not json"])
+    a = asyncio.run(ans.answer_question("q", "ha", conn=None, settings=make_settings(), client_factory=lambda s: g))
+    assert not a.found and a.text == ans.REPHRASE["ha"] and g.calls == 2
+    g = Garbled(["{not json", json.dumps(PLAN)])                    # the retry works: carry on
+    a = asyncio.run(ans.answer_question("q", "en", conn=None, settings=make_settings(), client_factory=lambda s: g))
+    assert a.text == ans.NOT_FOUND["en"] and g.calls == 2

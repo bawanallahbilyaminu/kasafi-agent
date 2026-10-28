@@ -42,6 +42,8 @@ class Item:
     names: list[str] = field(default_factory=list)      # keywords for one line, e.g. ["tertiary education"]
     units: list[str] = field(default_factory=list)      # several lines to add up (ministries and institutions)
     alt_measure: str = ""                               # a second reading shown alongside, e.g. "revised"
+    topic: str = ""                                     # the specific thing asked about, e.g. "drugs and equipment"
+    container: bool = False                             # the rows are a broader total that contains the topic
 
     @classmethod
     def from_dict(cls, d: dict) -> Item:
@@ -52,7 +54,7 @@ class Item:
                    str(d.get("spend_kind") or "total"), int(year) if str(year or "").isdigit() else None,
                    str(d.get("measure") or "approved"), str(d.get("period") or "full_year"),
                    [c for c in strs(d.get("codes")) if c.isdigit()], strs(d.get("names")), strs(d.get("units")),
-                   str(d.get("alt_measure") or ""))
+                   str(d.get("alt_measure") or ""), str(d.get("topic") or "")[:150], d.get("container") is True)
 
 
 @dataclass
@@ -75,10 +77,40 @@ class ItemResult:
     missing: list[str] = field(default_factory=list)    # units not found
     included: dict[str, str] = field(default_factory=dict)   # unit -> the picked parent that already contains it
     alt: Picked | None = None                           # the alternative reading's row
+    container: bool = False                             # rows are a broader total, not the topic itself
+    located_in: list[str] = field(default_factory=list)  # LGA names: institutions located there aren't LGA money
 
     @property
     def total(self) -> Decimal | None:
-        return sum((r.amount for r in self.rows), Decimal(0)) if self.rows else None
+        """Sum of distinct rows (by document, page and code): a row is never counted twice."""
+        return sum((r.amount for r in distinct(self.rows)), Decimal(0)) if self.rows else None
+
+
+def row_key(p: Picked) -> tuple:
+    """One printed figure: document, page, code and column (the revised column of the same row is another figure)."""
+    return (p.doc_id, p.page, p.code or p.name, p.column_label)
+
+
+def distinct(rows: list[Picked]) -> list[Picked]:
+    seen, out = set(), []
+    for p in rows:
+        if row_key(p) not in seen:
+            seen.add(row_key(p))
+            out.append(p)
+    return out
+
+
+# Sokoto's 23 local government areas. A state institution located in one (Orthopedic Hospital Wamakko) is a
+# state budget line, not an allocation to that LGA; LGAs get statutory allocations, shown separately if at all.
+SOKOTO_LGAS = ("Binji", "Bodinga", "Dange Shuni", "Gada", "Goronyo", "Gudu", "Gwadabawa", "Illela", "Isa", "Kebbe",
+               "Kware", "Rabah", "Sabon Birni", "Shagari", "Silame", "Sokoto North", "Sokoto South", "Tambuwal",
+               "Tangaza", "Tureta", "Wamakko", "Wurno", "Yabo")
+
+
+def lga_in(text: str) -> str | None:
+    """The LGA a unit or name refers to as a place ("Wamakko", "Karamar Hukumar Wamakko"), if any."""
+    t = text.lower()
+    return next((lga for lga in SOKOTO_LGAS if re.search(rf"\b{lga.lower()}\b", t)), None)
 
 
 @dataclass
@@ -97,7 +129,8 @@ class QueryResult:
 
     @property
     def complete(self) -> bool:
-        return all(r.rows and not r.missing for r in self.items) if self.items else bool(self.ranking)
+        return (all(r.rows and not r.missing and not r.container and not r.located_in for r in self.items)
+                if self.items else bool(self.ranking))
 
     def computed_numbers(self) -> list[str]:
         """Figures computed here (not in any document): the number check accepts these too."""
@@ -203,6 +236,20 @@ def _top_row(rows: list[tuple]) -> tuple:
 
 
 def run_item(conn: psycopg.Connection, item: Item) -> ItemResult:
+    res = _run_item(conn, item)
+    # An LGA asked about as a place: rows that only carry its name (a hospital in Wamakko) are not its money
+    places = {lga for x in item.units + item.names + [item.topic, item.label] if (lga := lga_in(x))}
+    if places:
+        res.rows = [p for p in res.rows if "local government" in p.name.lower()]
+        res.located_in = sorted(places)
+        res.alt = None
+    # A ministry or function total offered for a specific item is a container, never the item's figure
+    if res.rows and (item.container or (item.topic and not any(_words(item.topic) & _words(p.name) for p in res.rows))):
+        res.container = True
+    return res
+
+
+def _run_item(conn: psycopg.Connection, item: Item) -> ItemResult:
     res = ItemResult(item)
     if item.units:
         rows = _candidates(conn, item, item.measure, [])     # matched by meaningful words below, not by SQL
@@ -270,14 +317,18 @@ def run_budget_query(conn: psycopg.Connection, spec: dict) -> QueryResult:
         return QueryResult(op, [], ranking=run_rank(conn, items[0], top))
     results = [run_item(conn, it) for it in items]
     q = QueryResult(op, results)
-    totals = [r.total for r in results]
-    if op == "compare" and len(totals) >= 2 and totals[0] is not None and totals[1] is not None:
+    # Arithmetic only on the items themselves: a container (a whole ministry offered for a specific item) is shown
+    # for what it is, never added, compared or shared.
+    usable = [r for r in results if not r.container]
+    totals = [r.total for r in usable]
+    if op == "compare" and len(usable) == len(results) >= 2 and totals[0] is not None and totals[1] is not None:
         q.difference = totals[0] - totals[1]
         if totals[1]:
             q.change_pct = (q.difference / totals[1] * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
-    elif op == "total" and all(t is not None for t in totals) and totals:
-        q.total = sum(totals, Decimal(0))
-    elif op == "share" and len(totals) >= 2 and totals[0] is not None and totals[1]:
+    elif op == "total" and usable and all(t is not None for t in totals):
+        # Distinct rows across all items: three items that found the same row add it once (m12 added it 3 times)
+        q.total = sum((p.amount for p in distinct([p for r in usable for p in r.rows])), Decimal(0))
+    elif op == "share" and len(usable) == len(results) >= 2 and totals[0] is not None and totals[1]:
         q.share_pct = (totals[0] / totals[1] * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
     return q
 
@@ -287,10 +338,18 @@ def run_budget_query(conn: psycopg.Connection, spec: dict) -> QueryResult:
 WORDS = {
     "en": {"head": "🧮 *Working* (the rows used):", "missing": "not found in the budget tables",
            "also": "also", "total": "Total", "difference": "Difference", "share": "Share", "of": "of",
-           "calc": "Kasafi's calculation", "included": "included in", "not_found": "not found"},
+           "calc": "Kasafi's calculation", "included": "included in", "not_found": "not found",
+           "container": "the budget doesn't show {topic} separately; this is the whole line that contains it:",
+           "repeat": "same row as above, counted once",
+           "lga": "state budget lines for institutions located in {lga} are not an allocation to {lga} LGA; LGAs get "
+                  "their statutory allocations separately, and these documents don't show one for {lga}"},
     "ha": {"head": "🧮 *Yadda aka lissafa* (layukan da aka yi amfani da su):", "missing": "ba a samu a teburorin kasafi ba",
            "also": "har ila yau", "total": "Jimilla", "difference": "Bambanci", "share": "Kaso", "of": "na",
-           "calc": "lissafin Kasafi", "included": "yana cikin", "not_found": "ba a samu ba"},
+           "calc": "lissafin Kasafi", "included": "yana cikin", "not_found": "ba a samu ba",
+           "container": "kasafin bai nuna {topic} daban ba; ga jimillar layin da ya ƙunshe shi:",
+           "repeat": "layi ɗaya da na sama, an ƙidaya shi sau ɗaya",
+           "lga": "layukan kasafin jiha na cibiyoyin da ke {lga} ba kuɗin Ƙaramar Hukumar {lga} ba ne; ƙananan "
+                  "hukumomi suna samun kasonsu na doka daban, kuma waɗannan takardun ba su nuna na {lga} ba"},
 }
 
 
@@ -310,20 +369,32 @@ def render_working(q: QueryResult, nmap: dict, lang: str) -> str:
     if q.operation == "rank":
         out += [f"{i}. {_line(p, nmap)}" for i, p in enumerate(q.ranking, 1)]
         return "\n".join(out)
+    shown: set = set()
+
+    def row(p: Picked) -> str:
+        text = _line(p, nmap) + (f" ({w['repeat']})" if row_key(p) in shown else "")
+        shown.add(row_key(p))
+        return text
     for r in q.items:
+        for lga in r.located_in:
+            out.append(f"• {r.item.label}: " + w["lga"].format(lga=lga))
         if not r.rows:
-            out.append(f"• {r.item.label}: {w['missing']}")
+            if not r.located_in:
+                out.append(f"• {r.item.label}: {w['missing']}")
             continue
+        head = f"• {r.item.label}: " + (w["container"].format(topic=r.item.topic or r.item.label) + " "
+                                         if r.container else "")
         if len(r.rows) == 1 and not r.item.units:
-            out.append(f"• {r.item.label}: {_line(r.rows[0], nmap)}")
+            out.append(head + row(r.rows[0]))
         else:
-            out.append(f"• {r.item.label}:")
-            out += [f"   – {_line(p, nmap)}" for p in r.rows]
+            out.append(head.rstrip())
+            out += [f"   – {row(p)}" for p in r.rows]
             out += [f"   – {u}: {w['included']} {parent}" for u, parent in r.included.items()]
             out += [f"   – {u}: {w['not_found']}" for u in r.missing]
-            out.append(f"   = {w['total']}: {fmt(r.total)} ({w['calc']})")
+            if len(distinct(r.rows)) > 1 and not r.container:
+                out.append(f"   = {w['total']}: {fmt(r.total)} ({w['calc']})")
         if r.alt:
-            out.append(f"   ({w['also']} {_line(r.alt, nmap)})")
+            out.append(f"   ({w['also']} {row(r.alt)})")
     if q.difference is not None:
         pct = f" ({'+' if q.change_pct and q.change_pct > 0 else ''}{q.change_pct}%)" if q.change_pct is not None else ""
         out.append(f"• {w['difference']}: {_signed(q.difference)}{pct} ({w['calc']})")
@@ -342,5 +413,12 @@ def context_text(q: QueryResult, nmap: dict) -> str:
     lines.append("Write 'summary' as one or two sentences that answer the question with these exact figures and "
                  "their [n]; leave 'items' empty. After a computed figure (difference, total, share) add "
                  "\"(Kasafi's calculation)\" (Hausa: \"(lissafin Kasafi)\"). If anything is 'not found', say "
-                 "so and set found to \"partial\".")
+                 "so and set found to \"partial\". A line marked \"doesn't show ... separately\" is a broader total "
+                 "(a whole ministry or function): say the item isn't shown separately and give that total named as "
+                 "what it is (e.g. \"The budget doesn't show drugs separately; the Ministry of Health's total "
+                 "capital is ...\"); never present it as the item's own figure, and set found to \"partial\". "
+                 "For a local government area, say that state budget lines for institutions located there are not "
+                 "an allocation to the LGA, and give only what the evidence shows for the LGA itself.")
+    if any(r.container or r.located_in for r in q.items):
+        lines.append("Some items are only shown as a broader total or as a place: found must be \"partial\".")
     return "\n".join(lines)

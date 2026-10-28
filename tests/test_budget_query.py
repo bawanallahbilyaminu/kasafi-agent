@@ -30,7 +30,7 @@ def P(amount: str, code: str = "7094", page: int = 1) -> Picked:
 
 
 def run_ops(monkeypatch, op: str, totals: list[str]):
-    results = iter([ItemResult(Item(f"i{i}"), [P(t)]) for i, t in enumerate(totals)])
+    results = iter([ItemResult(Item(f"i{i}"), [P(t, code=f"70{i}")]) for i, t in enumerate(totals)])
     monkeypatch.setattr(bq, "run_item", lambda conn, it: next(results))
     return run_budget_query(None, {"operation": op, "items": [{"label": f"i{i}"} for i in range(len(totals))]})
 
@@ -113,3 +113,54 @@ def test_every_college_counts_once(conn) -> None:
     names = [p.name for p in r.rows]
     assert any("Polytechnic" in n for n in names) and any("Coll" in n for n in names) and not r.missing
     assert len({p.code for p in r.rows}) == len(r.rows)
+
+
+# --- fix 1: no substitution, no double counting, LGAs are not institutions located in them --------------
+
+def MoW(page: int = 26) -> Picked:
+    return Picked("budget-2026-approved", "Budget", page, "t", "023400000000", "Ministry of Works", "2026 Approved Budget",
+                  Decimal("58129741319.77"), "row")
+
+
+def test_same_row_found_by_three_items_is_added_once(monkeypatch) -> None:
+    results = iter([ItemResult(Item(f"i{i}"), [MoW()]) for i in range(3)])
+    monkeypatch.setattr(bq, "_run_item", lambda conn, it: next(results))
+    q = run_budget_query(None, {"operation": "total", "items": [{"label": "flyovers"}, {"label": "dualisation"},
+                                                                {"label": "feeder roads"}]})
+    assert q.total == Decimal("58129741319.77")                    # m12 had added it three times (174.39 bn)
+    text = bq.render_working(q, {("budget-2026-approved", 26): 1}, "en")
+    assert text.count("same row as above, counted once") == 2
+
+
+def test_ministry_total_for_a_specific_item_is_a_container(monkeypatch) -> None:
+    moh = Picked("budget-2026-approved", "Budget", 27, "t", "052100000000", "Ministry of Health", "2026 Approved Budget",
+                 Decimal("104644218330.85"), "row")
+    monkeypatch.setattr(bq, "_run_item", lambda conn, it: ItemResult(it, [moh]))
+    q = run_budget_query(None, {"operation": "lookup", "items": [{"label": "drugs", "topic": "drugs and hospital equipment",
+                                                                 "classification": "administrative"}]})
+    assert q.items[0].container and not q.complete
+    text = bq.render_working(q, {("budget-2026-approved", 27): 1}, "en")
+    assert "the budget doesn't show drugs and hospital equipment separately" in text and "Ministry of Health" in text
+    # a topic the row really is stays a normal answer
+    tert = Picked("d", "B", 38, "t", "7094", "TERTIARY EDUCATION", "2026 Approved Budget", Decimal("1"), "row")
+    monkeypatch.setattr(bq, "_run_item", lambda conn, it: ItemResult(it, [tert]))
+    q = run_budget_query(None, {"operation": "lookup", "items": [{"label": "x", "topic": "tertiary education"}]})
+    assert not q.items[0].container and q.complete
+
+
+def test_containers_are_never_compared_or_added(monkeypatch) -> None:
+    monkeypatch.setattr(bq, "_run_item", lambda conn, it: ItemResult(it, [MoW()]))
+    q = run_budget_query(None, {"operation": "compare", "items": [
+        {"label": "a", "topic": "flyovers", "container": True}, {"label": "b", "topic": "feeder roads", "container": True}]})
+    assert q.difference is None and q.total is None
+
+
+def test_an_institution_in_an_lga_is_not_the_lga_allocation(monkeypatch) -> None:
+    hosp = Picked("d", "B", 18, "t", "052104100100", "Orthopedic Hospital Wamakko", "2026 Approved Budget", Decimal("1.00"), "row")
+    monkeypatch.setattr(bq, "_run_item", lambda conn, it: ItemResult(it, [hosp]))
+    q = run_budget_query(None, {"operation": "lookup", "items": [{"label": "Wamakko LGA", "names": ["Wamakko"],
+                                                                 "classification": "administrative"}]})
+    r = q.items[0]
+    assert r.rows == [] and r.located_in == ["Wamakko"] and not q.complete
+    text = bq.render_working(q, {}, "en")
+    assert "not an allocation to Wamakko LGA" in text and "Orthopedic" not in text
