@@ -23,6 +23,9 @@ def main() -> int:
         if mode == "unzip":
             print(json.dumps(unzip_pdf(path, Path(sys.argv[3]), int(sys.argv[4]))))
             return 0
+        if mode == "evidence":
+            print(json.dumps(locate_and_render(path, int(sys.argv[3]), sys.argv[4], Path(sys.argv[5]), float(sys.argv[6]))))
+            return 0
         if mode == "text":
             max_pages = int(sys.argv[3])
             n = len(pdfium.PdfDocument(str(path)))
@@ -42,6 +45,43 @@ def main() -> int:
     except pdfium.PdfiumError as e:
         print(json.dumps({"error": f"unreadable PDF: {e}"}))
     return 0
+
+
+def locate_and_render(path: Path, page_no: int, figure: str, out: Path, scale: float) -> dict:
+    """Evidence crops: render one page to a JPEG and find a figure's characters and its whole row, in pixels.
+
+    The row is every character whose vertical centre lies on the figure's line, from the row name to the
+    last column. Pages without a text layer (scanned) return no row; the caller segments the table instead.
+    """
+    pdf = pdfium.PdfDocument(str(path))
+    if not 1 <= page_no <= len(pdf):
+        return {"error": f"no page {page_no}"}
+    page = pdf[page_no - 1]
+    w, h = page.get_size()
+    img = page.render(scale=scale).to_pil().convert("RGB")
+    img.save(out, format="JPEG", quality=88)
+    result = {"image": str(out), "w": img.width, "h": img.height, "hit": None, "row": None}
+
+    def px(left: float, bottom: float, right: float, top: float) -> list[int]:
+        return [int(left * scale), int((h - top) * scale), int(right * scale) + 1, int((h - bottom) * scale) + 1]
+
+    textpage = page.get_textpage()
+    needle = figure.lstrip("-")
+    found = textpage.search(needle, match_case=True).get_next() if needle else None
+    if not found:
+        return result
+    start, count = found
+    boxes = [textpage.get_charbox(i) for i in range(start, start + count)]
+    left, bottom = min(b[0] for b in boxes), min(b[1] for b in boxes)
+    right, top = max(b[2] for b in boxes), max(b[3] for b in boxes)
+    result["hit"] = px(left, bottom, right, top)
+    row_l, row_r = left, right
+    for i in range(textpage.count_chars()):
+        cl, cb, cr, ct = textpage.get_charbox(i)
+        if cr - cl > 0 and bottom <= (cb + ct) / 2 <= top:
+            row_l, row_r = min(row_l, cl), max(row_r, cr)
+    result["row"] = px(row_l, bottom, row_r, top)
+    return result
 
 
 MAX_ENTRIES = 50

@@ -69,6 +69,13 @@ async def unzip_pdf_sandboxed(path: Path, out: Path, max_bytes: int, timeout: fl
     return Path(d["pdf"])
 
 
+async def locate_sandboxed(path: Path, page: int, figure: str, out: Path, scale: float,
+                           timeout: float = 30) -> dict:
+    """Render a page and find a figure's row on it (pixels), in the sandbox: fetched PDFs are untrusted."""
+    out.parent.mkdir(parents=True, exist_ok=True)
+    return await _run_worker(["evidence", str(path), str(page), figure, str(out), str(scale)], timeout)
+
+
 async def render_pages_sandboxed(path: Path, pages: list[int], out_dir: Path,
                                  timeout: float = TIMEOUT_S) -> dict[int, Path]:
     """Render pages (1-based) to JPEG files for OCR. Only the images leave the sandbox."""
