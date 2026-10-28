@@ -130,3 +130,15 @@ def test_figure_not_on_the_page_falls_back_to_the_table(monkeypatch) -> None:
 def test_missing_pdf_gives_no_image(monkeypatch) -> None:
     img, calls = run_crop(monkeypatch, CropRequest(1, "no-such-doc", "No such document", 1, "1,000.00"))
     assert img is None and calls == []
+
+
+def test_each_page_shows_the_figure_the_answer_cites_to_it() -> None:
+    e1 = Evidence(1, "budget-2025-approved", "Budget", 2025, 12, "text", "Ministry of Health | 2025 Approved Budget: 52,179,252,082.91")
+    e4 = Evidence(4, "bir-2025-q4", "BIR Q4", 2025, 19, "text",
+                  "Ministry of Health | 2025 Original Budget: 52,179,252,082.91 | 2025 Final Budget: 41,869,252,082.91 | "
+                  "2025 Performance Year to Date (Q1-Q4): 17,506,884,680.90")
+    exact = ("Allocated 52,179,252,082.91 and spent 17,506,884,680.90 [1][4].\n"
+             "2025 approved budget: 52,179,252,082.91 [1]\n2025 final budget: 41,869,252,082.91 [4]")
+    got = plan_crops(answer(exact, [e1, e4]), 2)
+    assert [(c.n, c.figure, c.label) for c in got] == [(1, "52,179,252,082.91", "2025 Approved Budget"),
+                                                       (4, "41,869,252,082.91", "2025 Final Budget")]

@@ -60,14 +60,35 @@ def _is_figure(s: str) -> bool:
     return ("," in s and len(digits) >= 4) or ("." in s and len(digits) >= 2)
 
 
+def _figures_by_citation(exact: str) -> tuple[dict[int, list[str]], list[str]]:
+    """Figures in each line/sentence of the answer, keyed by the evidence numbers that line cites."""
+    only: dict[int, list[str]] = {}          # lines citing just this evidence come first
+    shared: dict[int, list[str]] = {}
+    for part in re.split(r"(?<=[.;])\s+|\n", exact):
+        figs = [f for f in _FIGURE.findall(re.sub(r"\[\d+\]", " ", part)) if _is_figure(f)]
+        ns = {int(n) for n in re.findall(r"\[(\d+)\]", part)}
+        for n in ns:
+            (only if len(ns) == 1 else shared).setdefault(n, []).extend(figs)
+    by_n = {n: only.get(n, []) + shared.get(n, []) for n in only.keys() | shared.keys()}
+    every = [f for f in _FIGURE.findall(re.sub(r"\[\d+\]", " ", exact)) if _is_figure(f)]
+    return by_n, every
+
+
 def plan_crops(answer, max_images: int = 2) -> list[CropRequest]:
-    """One crop per cited page, best evidence first: the first figure of the answer found in that evidence."""
-    figures = [f for f in _FIGURE.findall(re.sub(r"\[\d+\]", " ", getattr(answer, "exact", "") or "")) if _is_figure(f)]
+    """One crop per cited page, best evidence first: the figure the answer cites to that evidence.
+
+    A figure from a line citing [n] wins for evidence n ("41,869,252,082.91 [4]"), so a page that repeats
+    another document's figure (the Q4 report also lists the approved budget) shows the one quoted from it.
+    """
+    by_n, every = _figures_by_citation(getattr(answer, "exact", "") or "")
     out, seen = [], set()
     for e in getattr(answer, "cited", None) or []:
         if (e.doc_id, e.page) in seen:
             continue
-        figure = next((f for f in figures if re.search(rf"(?<![\d,.]){re.escape(f.lstrip('-'))}(?![\d,])", e.text)), None)
+
+        def on_page(f: str) -> bool:
+            return bool(re.search(rf"(?<![\d,.]){re.escape(f.lstrip('-'))}(?![\d,])", e.text))
+        figure = next((f for f in by_n.get(e.n, []) if on_page(f)), None) or next((f for f in every if on_page(f)), None)
         if not figure:
             continue
         m = re.search(rf"([^|:\n]{{3,80}}): -?{re.escape(figure.lstrip('-'))}(?![\d,])", e.text)
