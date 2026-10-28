@@ -94,3 +94,22 @@ def test_units_inside_a_picked_ministry_are_not_counted_twice(conn) -> None:
     r = q.items[0]
     assert [p.code for p in r.rows] == ["056900000000"] and r.included == {"Sokoto State University": "Ministry for Higher Education"}
     assert r.missing == ["No Such Agency"] and not q.complete
+
+
+def test_unit_names_match_by_meaningful_words() -> None:
+    m = bq._unit_matches
+    assert m("State Polytechnic", "Umaru Ali Shinkafi Polytechnic Sokoto")
+    assert m("Colleges of Education", "Shehu Shagari Collage of Education Sokoto")      # plural and misprint
+    assert m("Ministry for Higher Education", "Ministry for Higher Education")
+    assert not m("Ministry headquarters", "Ministry for Higher Education")
+    assert not m("Sokoto State", "Ministry of Health")                                   # only filler words
+
+
+def test_every_college_counts_once(conn) -> None:
+    q = run_budget_query(conn, {"operation": "total", "items": [{
+        "label": "x", "classification": "administrative", "spend_kind": "total", "year": 2026,
+        "units": ["State Polytechnic", "Colleges of Education"]}]})
+    r = q.items[0]
+    names = [p.name for p in r.rows]
+    assert any("Polytechnic" in n for n in names) and any("Coll" in n for n in names) and not r.missing
+    assert len({p.code for p in r.rows}) == len(r.rows)

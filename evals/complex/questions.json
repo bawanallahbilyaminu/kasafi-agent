@@ -1,0 +1,25 @@
+{
+  "_about": "Complex questions (comparison, ranking, share, total) for the query_budget path. Seed cases c01-c03 were written and checked by Claude on Oct 29 2026; Bilyaminu adds his 10-15 with checked answers (see README.md).",
+  "questions": [
+    {
+      "id": "c01",
+      "lang": "en",
+      "text": "What is the total capital expenditure allocated to tertiary education in the 2026 Sokoto State budget compared to the 2025 allocation?",
+      "expected": "Functional classification 7094 TERTIARY EDUCATION, capital: 2026 approved vs 2025 approved (and 2025 revised), with the difference as Kasafi's calculation and the rows shown.",
+      "source": "Bilyaminu's failing test, Oct 29 2026"
+    },
+    {
+      "id": "c02",
+      "lang": "ha",
+      "text": "Waɗanne ma'aikatu biyar ne suka fi samun kuɗin manyan ayyuka a kasafin 2026?",
+      "english": "Which five ministries got the most capital expenditure in the 2026 budget?",
+      "expected": "Ranking of ministries (not sector groupings) by 2026 approved capital, from Capital Expenditure by Administrative Classification."
+    },
+    {
+      "id": "c03",
+      "lang": "en",
+      "text": "How much did the 2026 budget allocate in total to the Ministry for Higher Education and the state's universities and polytechnics?",
+      "expected": "Ministry for Higher Education total (its code 0569... already contains the university and polytechnic, which are reported as included, not added twice)."
+    }
+  ]
+}

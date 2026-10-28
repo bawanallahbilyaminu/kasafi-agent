@@ -161,6 +161,26 @@ def _level(code: str | None) -> tuple:
     return (len(c) if len(c) < 12 else 12, -len(c) + len(c.rstrip("0")))
 
 
+_FILLER = {"state", "sokoto", "the", "of", "for", "and", "government", "s"}
+_SPELLING = {"collage": "college"}          # the 2026 budget prints "Shehu Shagari Collage of Education"
+
+
+def _words(s: str) -> set[str]:
+    out = set()
+    for w in re.findall(r"[a-z]+", s.lower()):
+        w = _SPELLING.get(w, w)
+        w = w[:-1] if len(w) > 4 and w.endswith("s") and not w.endswith("ss") else w   # colleges -> college
+        if w not in _FILLER:
+            out.add(w)
+    return out
+
+
+def _unit_matches(unit: str, name: str) -> bool:
+    """'State Polytechnic' matches 'Umaru Ali Shinkafi Polytechnic Sokoto': every meaningful word is there."""
+    want = _words(unit)
+    return bool(want) and want <= _words(name)
+
+
 def _contains(parent: str | None, child: str | None) -> bool:
     """056900000000 contains 056900400100: the parent's code without its trailing zeros is the child's prefix."""
     if not parent or not child or parent == child or len(parent) != len(child):
@@ -185,23 +205,30 @@ def _top_row(rows: list[tuple]) -> tuple:
 def run_item(conn: psycopg.Connection, item: Item) -> ItemResult:
     res = ItemResult(item)
     if item.units:
-        rows = _candidates(conn, item, item.measure, item.units)
+        rows = _candidates(conn, item, item.measure, [])     # matched by meaningful words below, not by SQL
         doc = _best_doc(rows, item)
         picked: list[tuple[str, Picked]] = []
         for unit in item.units:
-            mine = [r for r in rows if r[0] == doc and _like(unit).lower() in r[5].lower()]
-            if mine:
-                picked.append((unit, _picked(_top_row(mine))))
-            else:
+            mine = [r for r in rows if r[0] == doc and _unit_matches(unit, r[5])]
+            if not mine:
                 res.missing.append(unit)
+                continue
+            # Every matching line counts ("college of education" = all of them), once per code, top level first
+            by_code: dict = {}
+            for r in sorted(mine, key=lambda r: (_level(r[4]), r[2])):
+                by_code.setdefault(r[4] or r[5], r)
+            picked += [(unit, _picked(r)) for r in by_code.values() if all(p.code != r[4] for _, p in picked)]
         # Codes are hierarchical: a university (056900400100) is inside its ministry (056900000000). Count a
         # unit only once: drop it when a picked parent already contains it, and say so.
+        kept_units, folded = set(), {}
         for unit, p in picked:
             parent = next((q for _, q in picked if q is not p and _contains(q.code, p.code)), None)
             if parent:
-                res.included[unit] = parent.name
+                folded.setdefault(unit, parent.name)
             elif p not in res.rows:
                 res.rows.append(p)
+                kept_units.add(unit)
+        res.included = {u: name for u, name in folded.items() if u not in kept_units}
     else:
         rows = _candidates(conn, item, item.measure, item.names)
         if doc := _best_doc(rows, item):

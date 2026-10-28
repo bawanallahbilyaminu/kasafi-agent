@@ -32,6 +32,12 @@ Read this before changing `app/retrieval/indexer.py`, `app/retrieval/quality.py`
 | L18 | "Year-on-year" questions didn't find a column headed "YoY". | Keyword search doesn't know abbreviations. | Pipe-table headers are spelled out (YoY → Year-on-Year, MoM → Month-on-Month, Sep-25 → Sep 2025). | `tests/test_ocr_tables.py` |
 | L19 | The BIRs' "22 - OTHER RECURRENT COSTS (EXCLUDING 2201)" row was unlabelled in all three reports. | "2201)" (half a bracket) was accepted as a value, so the row seemed to have one value too many. Found by the totals quality check. | Values need balanced brackets. | `test_L19_name_ending_in_a_bracketed_code_is_labelled_bir_q4_2025_p9` |
 
+| L20 | "Tertiary education capital 2026 vs 2025" got "I couldn't find the answer". | The figures are 4-digit function rows (7094) in two documents; page search can't find a row in two documents and compare them. | Structured `budget_rows` from every labelled table cell (`app/retrieval/tables.py`) and `query_budget` computing in code (`app/agent/budget_query.py`). | `tests/test_budget_query.py`, `evals/complex` c01 |
+| L21 | Rankings listed "Social Sector"; totals counted a ministry and its own university twice. | Administrative codes are hierarchical: 050000000000 is a sector grouping, 056900400100 sits inside 056900000000. | Ministries are 4 digits + 8 zeros (not 2 + 10); a unit inside a picked parent is folded in and reported as "included". | `test_ranking_lists_ministries_not_sectors`, `test_units_inside_a_picked_ministry_are_not_counted_twice` |
+| L22 | "College of Education" found nothing. | The 2026 budget prints "Shehu Shagari **Collage** of Education"; names were matched as whole phrases. | Units match by meaningful words (filler words dropped, plurals and that misprint normalised). | `test_unit_names_match_by_meaningful_words` |
+| L23 | "Other Non-Debt Recurrent" tables were typed as debt. | The word "Non-Debt" contains "debt". | Overhead is checked before debt. | `tests/test_budget_tables.py` |
+| L24 | "How much for education?" switched from the programme sector (₦128.50 bn) to the function line (₦117.75 bn). | Two classifications total a sector differently. | A whole sector is the programme sector line; a level within it (tertiary) is the function line; one-sector lookups stay on normal search. | eval 01, 11 |
+
 ## Quality checks at indexing time
 
 `app/retrieval/quality.py` runs on every document as it's indexed (seed or fetched):

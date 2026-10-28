@@ -54,23 +54,29 @@ def check(case: dict, a) -> list[str]:
         note = a.plan.assumption_for(case["lang"]) if a.plan else ""
         if not note or note not in a.text:
             fails.append("assumption not stated")
+    if case.get("working") and "🧮" not in a.text:          # complex questions must show the rows and arithmetic
+        fails.append("working not shown")
+    if case.get("partial") is not None and bool(a.partial) != case["partial"]:
+        fails.append(f"partial should be {case['partial']}")
     return fails
 
 
-async def main(ids: list[str] | None, runs: int, plan_reasoning: str | None = None) -> int:
+async def main(ids: list[str] | None, runs: int, plan_reasoning: str | None = None, suite: str = "main") -> int:
     s = get_settings()
     if plan_reasoning:
         s = s.model_copy(update={"kasafi_plan_reasoning": plan_reasoning})
-    print(f"planner reasoning: {s.kasafi_plan_reasoning}")
-    cases = json.loads((ROOT / "evals/answers.json").read_text(encoding="utf-8"))["cases"]
-    questions = {q["id"]: q for q in json.loads((ROOT / "evals/questions.json").read_text(encoding="utf-8"))["questions"]}
+    base = ROOT / "evals" if suite == "main" else ROOT / "evals" / suite
+    print(f"suite: {suite} | planner reasoning: {s.kasafi_plan_reasoning}")
+    cases = json.loads((base / "answers.json").read_text(encoding="utf-8"))["cases"]
+    questions = {q["id"]: q for q in json.loads((base / "questions.json").read_text(encoding="utf-8"))["questions"]}
     cases = [c for c in cases if not ids or c["id"] in ids]
     passed, times, plan_t, answer_t = 0, [], [], []
     with psycopg.connect(s.db_url()) as conn:
         for run in range(runs):
             for c in cases:
                 t0 = time.perf_counter()
-                a = await answer_question(questions[c["id"]]["text_ha"], c["lang"], conn, settings=s)
+                q = questions[c["id"]]
+                a = await answer_question(q.get("text_ha") or q["text"], c["lang"], conn, settings=s)
                 times.append(time.perf_counter() - t0)
                 plan_t.append(a.timings.get("plan", 0))
                 answer_t.append(a.timings.get("answer", 0))
@@ -95,5 +101,6 @@ if __name__ == "__main__":
     p.add_argument("--ids", nargs="+")
     p.add_argument("--runs", type=int, default=1)
     p.add_argument("--plan-reasoning", choices=["minimal", "low", "medium"])
+    p.add_argument("--suite", default="main", help="main (evals/) or a folder under evals/, e.g. complex")
     a = p.parse_args()
-    raise SystemExit(asyncio.run(main(a.ids, a.runs, a.plan_reasoning)))
+    raise SystemExit(asyncio.run(main(a.ids, a.runs, a.plan_reasoning, a.suite)))

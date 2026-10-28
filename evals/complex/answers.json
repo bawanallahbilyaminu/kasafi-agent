@@ -1,0 +1,35 @@
+{
+  "_about": "Checked answers for evals/complex/questions.json. `numbers`: every one must appear in the answer (exactly as printed, or as computed by Kasafi); `numbers_any`: at least one group; `docs`/`pages`: at least one citation from these; `working`: the rows and arithmetic must be shown; `partial`: whether the answer should say something is missing.",
+  "cases": [
+    {
+      "id": "c01",
+      "lang": "en",
+      "docs": ["budget-2026-approved", "budget-2025-approved"],
+      "pages": [38, 22],
+      "numbers": ["20,666,975,000.00", "7,824,339,750.89"],
+      "numbers_any": [["12,842,635,249.11"], ["164.1"]],
+      "working": true,
+      "partial": false,
+      "source": "2026 budget p38, Capital Expenditure by Functional Classification, 7094 TERTIARY EDUCATION, 2026 Approved Budget 20,666,975,000.00 (same row: 2025 Revised Budget 6,707,032,782.20). 2025 budget p22, same table, 2025 Approved Budget 7,824,339,750.89. Difference 12,842,635,249.11 (+164.1%) is Kasafi's calculation."
+    },
+    {
+      "id": "c02",
+      "lang": "ha",
+      "docs": ["budget-2026-approved"],
+      "pages": [26, 27],
+      "numbers": ["104,644,218,330.85", "58,129,741,319.77", "47,672,000,000.00", "46,307,373,149.26", "40,858,283,643.50"],
+      "working": true,
+      "partial": false,
+      "source": "2026 budget pp26-27, Capital Expenditure by Administrative Classification, 2026 Approved Budget: Ministry of Health 052100000000 104,644,218,330.85 (p27); Works 023400000000 58,129,741,319.77; Transport 022900000000 47,672,000,000.00; Education 051700000000 46,307,373,149.26; Water Resources 025200000000 40,858,283,643.50 (p26). The 050000000000 Social Sector line is a grouping, not a ministry."
+    },
+    {
+      "id": "c03",
+      "lang": "en",
+      "docs": ["budget-2026-approved"],
+      "pages": [18],
+      "numbers": ["33,986,201,399.04"],
+      "working": true,
+      "source": "2026 budget p18, Total Expenditure by Administrative Classification, 056900000000 Ministry for Higher Education, 2026 Approved Budget 33,986,201,399.04. Sokoto State University (0569004...) and Umaru Ali Shinkafi Polytechnic (0569018...) are inside that code."
+    }
+  ]
+}
