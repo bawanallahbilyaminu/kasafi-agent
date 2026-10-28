@@ -2,6 +2,9 @@
 
 1. PLAN     Muse Spark turns the question (Hausa or English) into English search queries and
             picks up to 3 likely documents from the catalog (title, type, year).
+1b. ACQUIRE If the plan names a document that isn't in the catalog, find it on trusted sites, fetch
+            and index it (app/acquisition/library.py), telling the user "Ina neman takardar…" meanwhile.
+            Not found -> the gap goes to the review queue.
 2. FIND     Full-text search inside those documents, then across all of them if nothing turns up.
 3. ANSWER   Muse Spark answers ONLY from the numbered evidence, citing every fact as [n], in the
             user's language, naming no politicians and drawing no conclusions about performance.
@@ -17,10 +20,13 @@ import json
 import logging
 import re
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from urllib.parse import urlsplit
 
 import psycopg
 
+from app.acquisition.library import Acquired, find_and_fetch, log_gap
 from app.config import Settings, get_settings
 from app.providers.chat import ChatClient
 from app.providers.meta import MetaClient
@@ -46,7 +52,11 @@ PLAN_SYSTEM = (
     '"assumption": "<if the question leaves something open, e.g. no year, the assumption you made, e.g. '
     "'used the latest budget, 2026'; else empty>\", "
     '"assumption_ha": "<the same assumption as one short Hausa sentence, e.g. \'Ban ga shekara a tambayarka ba, '
-    "don haka na yi amfani da kasafin 2026 mafi sabo.'; else empty>\"}\n"
+    "don haka na yi amfani da kasafin 2026 mafi sabo.'; else empty>\", "
+    '"missing_document": "<ONLY if answering needs a specific public document that is NOT in the catalog, e.g. a '
+    "quarterly report for a quarter the catalog lacks, or a partner report it doesn't list: describe it for a web "
+    "search, e.g. 'Sokoto State Budget Implementation Report Q3 2025'. Empty when a catalog document can answer "
+    "(e.g. the Q4 report already has year-to-date figures).>\"}\n"
     "For 'how much was allocated to <sector>' (Hausa 'fanni'), include a query like 'Total Expenditure by "
     "Programme <sector>'; for a ministry or agency (Hausa 'ma'aikata', 'hukuma'), include 'Total Expenditure by "
     "Administrative Classification <ministry name in English>'. Budgets list each one in total, personnel, "
@@ -160,6 +170,7 @@ class Plan:
     doc_ids: list[str]
     assumption: str = ""
     assumption_ha: str = ""
+    missing_document: str = ""
 
     def assumption_for(self, lang: str) -> str:
         if not self.assumption:
@@ -191,6 +202,7 @@ class Answer:
     timings: dict[str, float] = field(default_factory=dict)
     partial: bool = False                      # answered part of the question and said what's missing
     exact: str = ""                            # the model's wording with exact figures (what was checked)
+    acquired: Acquired | None = None           # a missing document that was looked for
 
 
 def load_catalog(conn: psycopg.Connection) -> list[dict]:
@@ -212,6 +224,7 @@ async def plan_question(question: str, catalog: list[dict], client: ChatClient, 
         doc_ids=[i for i in d.get("doc_ids") or [] if i in known][:MAX_DOCS],
         assumption=str(d.get("assumption") or ""),
         assumption_ha=str(d.get("assumption_ha") or ""),
+        missing_document=str(d.get("missing_document") or "").strip()[:300],
     )
 
 
@@ -313,6 +326,22 @@ async def compose(question: str, lang: str, plan: Plan, evidence: list[Evidence]
     return parse_json_reply(r.content)
 
 
+FETCHING = {
+    "ha": "📥 Ba ni da wannan takardar tukuna. Ina neman takardar a shafukan gwamnati da na abokan hulɗa: _{doc}_…\n"
+          "Zai iya ɗaukar minti ɗaya.",
+    "en": "📥 I don't have this document yet. Looking for it on government and partner sites: _{doc}_…\n"
+          "This can take a minute.",
+}
+ADDED = {
+    "ha": "📥 Na samo kuma na ƙara sabuwar takarda a ɗakin karatu: _{title}_ ({host}).",
+    "en": "📥 Found and added a new document to the library: _{title}_ ({host}).",
+}
+DOC_NOT_FOUND = {
+    "ha": "Ban samo takardar da ake buƙata a shafukan da na amince da su ba ({doc}). Na ajiye buƙatar domin "
+          "ma'aikatanmu su duba.",
+    "en": "I couldn't find the document needed on the trusted sites ({doc}). I've logged it for our team to review.",
+}
+
 NOT_FOUND = {
     "ha": "Ban sami amsar wannan tambayar a cikin takardun da nake da su ba.",
     "en": "I couldn't find the answer to that in the documents I have.",
@@ -323,19 +352,44 @@ UNVERIFIED = {
 }
 
 
+Notify = Callable[[str], Awaitable[None]]
+
+
+async def acquire_missing(conn: psycopg.Connection, plan: Plan, lang: str, client: ChatClient, settings: Settings,
+                          notify: Notify | None, acquire_fn=None) -> Acquired:
+    """Find, fetch and index the document the planner says is missing; put it first in the plan."""
+    if notify:
+        await notify(FETCHING.get(lang, FETCHING["en"]).format(doc=plan.missing_document))
+    acq = await (acquire_fn or find_and_fetch)(conn, plan.missing_document, settings=settings, client=client)
+    log.info("acquire: status=%s doc=%s %s timings=%s", acq.status, acq.doc_id, acq.detail[:120],
+             {k: round(v, 1) for k, v in acq.timings.items()})
+    if acq.doc_id:
+        plan.doc_ids = [acq.doc_id] + [d for d in plan.doc_ids if d != acq.doc_id][:MAX_DOCS - 1]
+    else:
+        reason = {"not_found": "not_found", "limit": "limit"}.get(acq.status, "fetch_failed")
+        log_gap(conn, plan.english_question, plan.missing_document, reason, {"detail": acq.detail, "url": acq.url})
+    return acq
+
+
 async def answer_question(question: str, lang: str, conn: psycopg.Connection, *, settings: Settings | None = None,
-                          client_factory: type[MetaClient] = MetaClient) -> Answer:
+                          client_factory: type[MetaClient] = MetaClient, notify: Notify | None = None,
+                          acquire_fn=None) -> Answer:
     settings = settings or get_settings()
     t: dict[str, float] = {}
+    acq: Acquired | None = None
     async with client_factory(settings) as client:
         t0 = time.perf_counter()
         plan = await plan_question(question, load_catalog(conn), client, settings)
         t["plan"] = time.perf_counter() - t0
+        if plan.missing_document:
+            t0 = time.perf_counter()
+            acq = await acquire_missing(conn, plan, lang, client, settings, notify, acquire_fn)
+            t["acquire"] = time.perf_counter() - t0
         t0 = time.perf_counter()
         evidence = gather_evidence(conn, plan)
         t["search"] = time.perf_counter() - t0
         if not evidence:
-            return Answer(NOT_FOUND.get(lang, NOT_FOUND["en"]), False, True, plan=plan, timings=t)
+            return _not_found(conn, plan, lang, acq, t)
 
         t0 = time.perf_counter()
         d = await compose(question, lang, plan, evidence, client, settings)
@@ -351,15 +405,34 @@ async def answer_question(question: str, lang: str, conn: psycopg.Connection, *,
     cited = sorted({by_n[n].n: by_n[n] for n in d.get("cited") or [] if n in by_n}.values(), key=lambda e: e.n)
     found = _found(d)
     if found == "none" or not cited or not answer_text(d).strip():
-        return Answer(NOT_FOUND.get(lang, NOT_FOUND["en"]), False, True, plan=plan, timings=t)
+        return _not_found(conn, plan, lang, acq, t)
+    added = _added_note(acq, lang)
     if bad:
         log.warning("answer had unverifiable figures after retry: %d", len(bad))
-        return Answer(f"{UNVERIFIED.get(lang, UNVERIFIED['en'])}\n\n{format_citations(cited, lang)}",
-                      True, False, cited, plan, t)
+        return Answer(f"{added}{UNVERIFIED.get(lang, UNVERIFIED['en'])}\n\n{format_citations(cited, lang)}",
+                      True, False, cited, plan, t, acquired=acq)
     note = plan.assumption_for(lang)
-    body = (f"_{note}_\n\n" if note else "") + render_answer(d, lang)
+    body = added + (f"_{note}_\n\n" if note else "") + render_answer(d, lang)
     return Answer(f"{body}\n\n{format_citations(cited, lang)}", True, True, cited, plan, t,
-                  partial=found == "partial", exact=answer_text(d))
+                  partial=found == "partial", exact=answer_text(d), acquired=acq)
+
+
+def _added_note(acq: Acquired | None, lang: str) -> str:
+    if not acq or acq.status != "indexed":
+        return ""
+    host = urlsplit(acq.url).hostname or ""
+    return ADDED.get(lang, ADDED["en"]).format(title=acq.title, host=host) + "\n\n"
+
+
+def _not_found(conn: psycopg.Connection, plan: Plan, lang: str, acq: Acquired | None, t: dict) -> Answer:
+    """Nothing to answer from. If a missing document wasn't found, say so (its gap is already logged)."""
+    if acq and not acq.doc_id:
+        text = DOC_NOT_FOUND.get(lang, DOC_NOT_FOUND["en"]).format(doc=plan.missing_document)
+    else:
+        log_gap(conn, plan.english_question, plan.missing_document, "no_answer",
+                {"docs": plan.doc_ids, "acquired": acq.doc_id if acq else None})
+        text = NOT_FOUND.get(lang, NOT_FOUND["en"])
+    return Answer(text, False, True, plan=plan, timings=t, acquired=acq)
 
 
 def _found(d: dict) -> str:
@@ -370,13 +443,17 @@ def _found(d: dict) -> str:
     return "partial" if v == "partial" else "none"
 
 
-async def answer_from_documents(question: str, lang: str, *, settings: Settings) -> str:
-    """Entry point for the WhatsApp flow: one DB connection per question (the DB is on the same host)."""
+async def answer_from_documents(question: str, lang: str, *, settings: Settings, notify: Notify | None = None) -> str:
+    """Entry point for the WhatsApp flow: one DB connection per question (the DB is on the same host).
+
+    `notify` sends a message right away (the two-step reply while a missing document is fetched).
+    """
     with psycopg.connect(settings.db_url(), connect_timeout=5) as conn:
-        a = await answer_question(question, lang, conn, settings=settings)
+        a = await answer_question(question, lang, conn, settings=settings, notify=notify)
     tm = a.timings
     # No question text in logs: only what was searched where, and how it went.
-    log.info("answer: found=%s partial=%s verified=%s docs=%s cited=%s plan=%.1fs search=%.2fs answer=%.1fs",
-             a.found, a.partial, a.verified, a.plan.doc_ids if a.plan else [],
-             [f"{e.doc_id}:{e.page}" for e in a.cited], tm.get("plan", 0), tm.get("search", 0), tm.get("answer", 0))
+    log.info("answer: found=%s partial=%s verified=%s docs=%s cited=%s acquired=%s plan=%.1fs acquire=%.1fs "
+             "search=%.2fs answer=%.1fs", a.found, a.partial, a.verified, a.plan.doc_ids if a.plan else [],
+             [f"{e.doc_id}:{e.page}" for e in a.cited], a.acquired.status if a.acquired else "-",
+             tm.get("plan", 0), tm.get("acquire", 0), tm.get("search", 0), tm.get("answer", 0))
     return a.text

@@ -62,7 +62,7 @@ def run_handle(msg: dict, *, store: UserStore | None = None, settings: Settings 
                 return Verdict(model_verdicts[text], "model")
         return Verdict("ok", "none")
 
-    async def fake_answer(question, lang, *, settings):
+    async def fake_answer(question, lang, *, settings, notify=None):
         """Stands in for answer_from_documents. Only used when answer_calls is given."""
         if answer_error is not None:
             raise answer_error

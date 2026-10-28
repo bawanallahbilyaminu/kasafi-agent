@@ -148,7 +148,9 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         store.add_spend(settings.kasafi_cost_per_question_usd)
         await notify(Out(t("searching", lang)))   # planning + search + answer takes ~8 s
         try:
-            body = await answer(question, lang, settings=settings)
+            async def send_now(text: str) -> None:   # e.g. "Ina neman takardar…" while a document is fetched
+                await notify(Out(text))
+            body = await answer(question, lang, settings=settings, notify=send_now)
         except Exception as e:  # DB or model down: tell the user rather than go silent
             log.exception("answer failed: %s", type(e).__name__)
             body = t("answer_failed", lang)

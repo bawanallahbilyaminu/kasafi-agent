@@ -59,12 +59,14 @@ PLAN = {"english_question": "How much for education?", "search_queries": ["educa
         "assumption_ha": "Na yi amfani da kasafin 2026 mafi sabo."}
 
 
-def run(monkeypatch, replies: list[dict], evidence=EV):
+def run(monkeypatch, replies: list[dict], evidence=EV, gaps: list | None = None, **kw):
     fake = FakeClient(replies)
     monkeypatch.setattr(ans, "load_catalog", lambda conn: [{"id": "budget-2026-approved", "title": "t"}])
     monkeypatch.setattr(ans, "gather_evidence", lambda conn, plan: evidence)
+    monkeypatch.setattr(ans, "log_gap", lambda conn, q, doc, reason, detail=None: (gaps if gaps is not None else []
+                                                                                    ).append((q, doc, reason)))
     a = asyncio.run(ans.answer_question("Nawa aka ware wa ilimi?", "ha", conn=None, settings=make_settings(),
-                                        client_factory=lambda s: fake))
+                                        client_factory=lambda s: fake, **kw))
     return a, fake
 
 
@@ -171,3 +173,55 @@ def test_naira_word_before_an_amount_is_replaced_by_the_sign() -> None:
     assert readable_amounts("An ware Naira 9,076,557,198.38 [1]", "ha") == "An ware ₦9.08 biliyan [1]"
     assert readable_amounts("naira ₦9,076,557,198.38", "ha") == "₦9.08 biliyan"
     assert readable_amounts("Naira nawa aka ware?", "ha") == "Naira nawa aka ware?"
+
+
+# --- self-growing library: a missing document is fetched, or the gap is logged ---------------
+
+from app.acquisition.library import Acquired  # noqa: E402
+
+MISSING = {**PLAN, "missing_document": "Sokoto State Budget Implementation Report Q3 2025"}
+GOOD = {"summary": "An ware 128,495,868,362.13 [1].", "items": [], "found": "full", "cited": [1]}
+
+
+def test_missing_document_is_fetched_announced_and_searched_first(monkeypatch) -> None:
+    sent, asked = [], []
+
+    async def notify(text):
+        sent.append(text)
+
+    async def acquire(conn, description, *, settings, client):
+        asked.append(description)
+        return Acquired("indexed", "bir-2025-q3", "Budget Implementation Report Q3 2025",
+                        "https://mof.sk.gov.ng/q3.pdf")
+
+    a, _ = run(monkeypatch, [MISSING, GOOD], notify=notify, acquire_fn=acquire)
+    assert a.plan.doc_ids == ["bir-2025-q3", "budget-2026-approved"]          # the new document is searched first
+    assert asked == ["Sokoto State Budget Implementation Report Q3 2025"]
+    assert sent and "Ina neman takardar" in sent[0] and "Q3 2025" in sent[0]
+    assert a.found and a.text.startswith("📥 Na samo kuma na ƙara sabuwar takarda")
+    assert "mof.sk.gov.ng" in a.text and a.acquired.doc_id == "bir-2025-q3"
+
+
+def test_document_not_found_is_logged_and_said(monkeypatch) -> None:
+    gaps = []
+
+    async def acquire(conn, description, *, settings, client):
+        return Acquired("not_found", detail="3 candidates, none matched")
+
+    a, _ = run(monkeypatch, [MISSING], evidence=[], gaps=gaps, acquire_fn=acquire)
+    assert not a.found and "Ban samo takardar" in a.text and "Q3 2025" in a.text
+    assert gaps == [("How much for education?", "Sokoto State Budget Implementation Report Q3 2025", "not_found")]
+
+
+def test_no_missing_document_means_no_fetch(monkeypatch) -> None:
+    async def acquire(*a, **k):
+        raise AssertionError("should not fetch")
+
+    a, _ = run(monkeypatch, [PLAN, GOOD], acquire_fn=acquire)
+    assert a.found and a.acquired is None and "📥" not in a.text
+
+
+def test_unanswered_question_goes_to_the_review_queue(monkeypatch) -> None:
+    gaps = []
+    run(monkeypatch, [PLAN, {"summary": "", "items": [], "found": "none", "cited": []}], gaps=gaps)
+    assert gaps and gaps[0][2] == "no_answer"
