@@ -1,0 +1,202 @@
+{
+  "_about": "Bilyaminu's mid-tier complex questions (Oct 29 2026), no checked answers yet. Run: uv run python evals/complex/run_open.py",
+  "questions": [
+    {
+      "id": "m01",
+      "lang": "ha",
+      "text": "Shin akwai kudaden alawus ko tallafin karatu (scholarships) da aka ware wa daliban jihar Sokoto a kasafin 2026, kuma nawa ne adadin?"
+    },
+    {
+      "id": "m02",
+      "lang": "en",
+      "text": "How much was allocated to the Sokoto State Universal Basic Education Board (SUBEB) for primary school classroom construction and renovation in 2025 versus 2026?"
+    },
+    {
+      "id": "m03",
+      "lang": "en",
+      "text": "What specific budget lines exist for girl-child education, boarding school feeding, and retention programs in the 2026 budget?"
+    },
+    {
+      "id": "m04",
+      "lang": "en",
+      "text": "What percentage of the overall 2026 Sokoto State budget is allocated to the health sector, and does it meet the 15% Abuja Declaration benchmark?"
+    },
+    {
+      "id": "m05",
+      "lang": "ha",
+      "text": "Nawa aka ware wa sayen magunguna da kayan aiki na asibitoci a karkashin Ma'aikatar Lafiya a kasafin 2026?"
+    },
+    {
+      "id": "m06",
+      "lang": "en",
+      "text": "What is the exact counterpart funding allocation provided by Sokoto State for routine immunization and primary healthcare in the 2026 budget?"
+    },
+    {
+      "id": "m07",
+      "lang": "en",
+      "text": "How much was released and spent for maternal and child healthcare centers across rural local government areas by Q2 2026?"
+    },
+    {
+      "id": "m08",
+      "lang": "ha",
+      "text": "Nawa gwamnatin jihar Sokoto ta ware don sayen takin zamani da tallafin kayan noma a shekarar 2026, kuma nawa aka riga aka kashe?"
+    },
+    {
+      "id": "m09",
+      "lang": "en",
+      "text": "What are the specific line-item capital allocations for dry-season irrigation schemes and solar-powered tube wells in the 2025 and 2026 budgets?"
+    },
+    {
+      "id": "m10",
+      "lang": "ha",
+      "text": "Shin akwai kudaden da aka ware don gyaran madatsun ruwa da samar da ruwan famfo a cikin birnin Sokoto a kasafin 2026?"
+    },
+    {
+      "id": "m11",
+      "lang": "en",
+      "text": "What is the total allocation for livestock disease control, grazing reserves, and veterinary services in the 2026 budget?"
+    },
+    {
+      "id": "m12",
+      "lang": "en",
+      "text": "What is the capital expenditure breakdown for flyovers, inner-city dualization, and rural feeder roads under the Ministry of Works for 2026?"
+    },
+    {
+      "id": "m13",
+      "lang": "en",
+      "text": "How much was budgeted for the payment of ongoing contractor liabilities and retention fees across MDAs in 2025 and 2026?"
+    },
+    {
+      "id": "m14",
+      "lang": "ha",
+      "text": "Nawa aka ware don gina sabbin gidajen ma’aikata ko matsakaitan masu karamin karfi a kasafin kudin 2026?"
+    },
+    {
+      "id": "m15",
+      "lang": "ha",
+      "text": "Shin akwai wani shiri ko kudi da aka ware a kasafin 2026 don saukaka sufurin jama'a ko tallafin motocin bas a jihar?"
+    },
+    {
+      "id": "m16",
+      "lang": "en",
+      "text": "What was the projected Internally Generated Revenue (IGR) for 2025 compared to actual collections, and what is the target set for 2026?"
+    },
+    {
+      "id": "m17",
+      "lang": "en",
+      "text": "What is the exact ratio of Capital Expenditure to Recurrent Expenditure in Sokoto State’s approved 2026 budget?"
+    },
+    {
+      "id": "m18",
+      "lang": "en",
+      "text": "How much has Sokoto State earmarked for domestic debt servicing versus external debt deductions in the 2026 fiscal year?"
+    },
+    {
+      "id": "m19",
+      "lang": "en",
+      "text": "What is the total allocation for office running costs and overhead expenditures for the Office of the Executive Governor in 2025 versus 2026?"
+    },
+    {
+      "id": "m20",
+      "lang": "ha",
+      "text": "Zuwa karshen zangon farko (Q1) na 2026, kashi nawa na kasafin babban aiki (capital expenditure) aka riga aka kashe a daukacin jihar?"
+    },
+    {
+      "id": "m21",
+      "lang": "en",
+      "text": "Which three state ministries had the lowest capital budget absorption rates according to the Q2 2026 Budget Implementation Report?"
+    },
+    {
+      "id": "m22",
+      "lang": "en",
+      "text": "What was the actual budget release rate for the Ministry of Health at the end of the second quarter of 2026, and what document and page confirms this?"
+    },
+    {
+      "id": "m23",
+      "lang": "en",
+      "text": "What was the variance between budgeted personnel expenditure and actual payroll outturn through the first half of 2026?"
+    },
+    {
+      "id": "m24",
+      "lang": "ha",
+      "text": "Nawa aka ware wa Ma’aikatar Matasa da Wasanni don horar da matasa sana’o’i da tallafin kudi a shekarar 2026?"
+    },
+    {
+      "id": "m25",
+      "lang": "en",
+      "text": "Are there specific, dedicated budget lines for assistive devices, special schools, and welfare support for persons with disabilities in the 2026 budget?"
+    },
+    {
+      "id": "m26",
+      "lang": "en",
+      "text": "What is the budgetary provision for women empowerment programs, orphanages, and destitute homes in 2025 and 2026?"
+    },
+    {
+      "id": "m27",
+      "lang": "ha",
+      "text": "Nawa aka ware a kasafin 2026 domin ayyukan raya yankunan karkara da rage radadin talauci a kananan hukumomin kan iyaka?"
+    },
+    {
+      "id": "m28",
+      "lang": "en",
+      "text": "Does the personnel budget for 2026 incorporate the full financial implementation of the national minimum wage across all state MDAs?"
+    },
+    {
+      "id": "m29",
+      "lang": "ha",
+      "text": "Nawa gwamnati ta ware a kasafin 2025 da 2026 don biyan bashin kudin sallama na fansho da garatuti (gratuity) ga tsofaffin ma’aikata?"
+    },
+    {
+      "id": "m30",
+      "lang": "en",
+      "text": "How much was budgeted for staff training, civil service computerization, and promotion arrears in the 2026 budget?"
+    },
+    {
+      "id": "m31",
+      "lang": "en",
+      "text": "What is the approved 2026 budget line for the Sokoto State Community Guard Corps and internal security logistics support?"
+    },
+    {
+      "id": "m32",
+      "lang": "en",
+      "text": "What is the capital and recurrent allocation for the administration of justice and renovation of Shari’ah courts in 2026?"
+    },
+    {
+      "id": "m33",
+      "lang": "en",
+      "text": "What is the total expenditure allocated to security votes and contingency funds across the 2025 and 2026 fiscal years?"
+    },
+    {
+      "id": "m34",
+      "lang": "ha",
+      "text": "Nawa aka ware wa Masarautar Musulmi (Sultanate Council) don gudanar da harkokin gargajiya da adana kayan tarihi a kasafin 2026?"
+    },
+    {
+      "id": "m35",
+      "lang": "en",
+      "text": "Can you state the exact administrative code, budget amount, and page number for the Sokoto State Independent Electoral Commission (SIEC) in the 2026 budget?"
+    },
+    {
+      "id": "m36",
+      "lang": "en",
+      "text": "Is there an approved line item of ₦50 billion for the construction of an international cargo airport in the 2026 Sokoto budget?",
+      "note": "Hallucination test: no such line should be invented."
+    },
+    {
+      "id": "m37",
+      "lang": "ha",
+      "text": "Ina son ganin jimillar kudin da aka ware wa bangaren fasahar sadarwa (ICT and Innovation) a 2025 da 2026, tare da shafin da bayanin ya fito."
+    },
+    {
+      "id": "m38",
+      "lang": "ha",
+      "text": "Nawa ne ainihin kudin da aka ware wa Karamar Hukumar Wamakko kai tsaye a cikin kasafin jihar na 2026?",
+      "note": "Tests state-level allocations vs local government statutory funds."
+    },
+    {
+      "id": "m39",
+      "lang": "en",
+      "text": "What was the exact capital budget execution rate for the Ministry of Environment in the Q2 2026 implementation report, and which document is cited?"
+    }
+  ]
+}
