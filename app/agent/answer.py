@@ -38,6 +38,8 @@ from app.acquisition.editions import (SERIES, Latest, Series, doc_edition, editi
 from app.acquisition.library import Acquired, fetch_and_index, find_and_fetch, log_gap
 from app.agent.budget_query import QueryResult, context_text, render_working, run_budget_query
 from app.agent.calculate import MIXED, CalcError, Calculation, MixedBases, offer_text, validate
+from app.agent.line_answer import LineResult, fmt, read_lines, short_name
+from app.retrieval.line_search import MAX_LINES, search_lines
 from app.config import Settings, get_settings
 from app.providers.chat import ChatClient
 from app.providers.meta import MetaClient
@@ -83,33 +85,22 @@ PLAN_SYSTEM = (
     "(e.g. 'How much was allocated to the Ministry of Health in 2024?'), and search_queries and doc_ids must "
     "serve it. For recheck also give \"recheck_doc_id\": the catalog id of the main document the previous answer "
     "cited.\n"
-    "BUDGET QUESTIONS: for a question that compares, ranks, totals or takes a share of budget figures, or asks "
-    "for a figure by function, ministry or type of spending, add \"budget_query\": {\"operation\": \"lookup\"|"
-    "\"compare\"|\"total\"|\"share\"|\"rank\", \"top\": <rank only>, \"items\": [{\"label\": \"<short, in the "
-    "user's language>\", \"classification\": \"function\"|\"administrative\"|\"economic\"|\"programme\", "
-    "\"spend_kind\": \"total\"|\"capital\"|\"personnel\"|\"overhead\"|\"revenue\", \"year\": YYYY, \"measure\": "
-    "\"approved\"|\"revised\"|\"original\"|\"final\"|\"actual\", \"period\": \"full_year\"|\"jan_sep\"|\"q1_q4\"|"
-    "\"q1_q2\"|\"q1_q3\", \"names\": [\"<the line as budgets print it, e.g. tertiary education>\"], \"units\": "
-    "[\"<only to add up several ministries/institutions>\"], \"alt_measure\": \"<optional second reading>\", "
-    "\"topic\": \"<the specific thing asked about, e.g. drugs and hospital equipment>\", \"container\": "
-    "<true if names/units are only a broader ministry or function that contains the topic, not the topic "
-    "itself>}]}. Never put a ministry or function in names/units as if it were a specific item: mark it "
-    "container true (the app then says the item isn't shown separately). A local government area (LGA) is not "
-    "an institution located in it: never use a hospital or school in Wamakko as Wamakko LGA's allocation. "
-    "Don't use budget_query for one whole sector or one ministry, including its allocation vs its spending (e.g. "
-    "'how much was allocated to education / to the Ministry of Health, and how much was spent'): normal search "
-    "answers those and quotes the report's own % performance. "
-    "Term mapping: map everyday words to the budget classification first. A WHOLE sector (education, health, "
-    "agriculture) is the PROGRAMME sector line (classification programme, e.g. names ['Education']); a level or "
-    "area WITHIN a sector (tertiary / secondary / primary education, primary health care, roads) is a FUNCTION "
-    "line ('tertiary education'); a ministry, agency, university or hospital is ADMINISTRATIVE; salaries = "
-    "personnel, running costs = overhead, projects = capital. If no function line fits, list the relevant "
-    "ministries and institutions (always including every ministry or agency the question names) "
-    "as units (e.g. Ministry for Higher Education, Sokoto State University, polytechnic, college of education). "
-    "compare: first the item asked about (e.g. 2026), then the one it is compared with (e.g. 2025). share: the "
-    "part, then the whole. rank: one item describing what to rank (e.g. ministries by 2026 capital). An "
-    "'allocation' for a year is measure approved; add alt_measure revised so both readings are shown. Spending "
-    "is actual (period q1_q4 for a whole year from an implementation report). Otherwise budget_query is null.\n"
+    "BUDGET LINES: for a question about the amount of specific budget items, programmes, projects, funds or "
+    "agencies, including comparisons, totals and shares of them, add \"line_search\": {\"terms\": [\"<5-10 search "
+    "terms: the key words as Nigerian state budgets print them, synonyms, abbreviations AND their expansions "
+    "(e.g. BHCPF and Basic Health Care Provision Fund), spelling variants, and English equivalents of Hausa "
+    "words>; most specific first, e.g. the exact item before its sector\"], \"years\": [<the years asked about>], "
+    "\"spend\": \"expenditure\"|\"revenue\"}. The app searches every budget line with these terms and "
+    "reads the rows itself, so give terms, not answers. "
+    "Don't use line_search for one whole sector or one ministry's allocation and spending (e.g. 'how much was "
+    "allocated to education / to the Ministry of Health, and how much was spent'): normal search answers those "
+    "and quotes the report's own % performance. A local government area (LGA) is not an institution located in "
+    "it: a hospital or school in Wamakko is not Wamakko LGA's allocation. "
+    "RANKING: only to rank whole ministries or functions (e.g. 'which five ministries got the most capital'), add "
+    "\"budget_query\": {\"operation\": \"rank\", \"top\": N, \"items\": [{\"label\": \"<short>\", "
+    "\"classification\": \"administrative\"|\"function\", \"spend_kind\": \"total\"|\"capital\"|"
+    "\"personnel\"|\"overhead\", \"year\": YYYY, \"measure\": \"approved\"|\"actual\", \"period\": "
+    "\"full_year\"|\"q1_q2\"|\"q1_q4\"}]}. Otherwise line_search and budget_query are null.\n"
     "CLARIFY: only if the question has two reasonable readings that give materially different answers AND both "
     "can't simply be shown, add \"clarify\": {\"question\": \"<short question, user's language>\", \"options\": "
     "[{\"title\": \"<2-4 words>\", \"question\": \"<the full question for that reading, user's language>\"}]} "
@@ -262,6 +253,7 @@ class Plan:
     recheck_doc_id: str = ""
     budget_query: dict = field(default_factory=dict)   # query_budget spec (app/agent/budget_query.py)
     clarify: dict = field(default_factory=dict)        # {"question", "options"} when two readings differ
+    line_search: dict = field(default_factory=dict)    # {"terms": [...], "years": [...]} for budget-line questions
 
     def assumption_for(self, lang: str) -> str:
         if not self.assumption:
@@ -299,6 +291,7 @@ class Answer:
     offer: Calculation | None = None           # a calculation offered to the user ("Reply Eh to calculate")
     clarify: list[dict] = field(default_factory=list)   # options when Kasafi asks which reading was meant
     budget: QueryResult | None = None          # the query_budget result behind a computed answer
+    lines: LineResult | None = None            # the verified budget lines behind a line answer
 
 
 def load_catalog(conn: psycopg.Connection) -> list[dict]:
@@ -347,7 +340,17 @@ async def plan_question(question: str, catalog: list[dict], client: ChatClient, 
         budget_query=d["budget_query"] if isinstance(d.get("budget_query"), dict) and d["budget_query"].get("items")
         else {},
         clarify=_clarify_field(d.get("clarify")),
+        line_search=_line_search_field(d.get("line_search")),
     )
+
+
+def _line_search_field(v) -> dict:
+    if not isinstance(v, dict):
+        return {}
+    terms = [str(t)[:80] for t in v.get("terms") or [] if str(t).strip()][:10]
+    years = [int(y) for y in v.get("years") or [] if str(y).isdigit() and 1990 < int(y) < 2100][:4]
+    spend = v.get("spend") if v.get("spend") in ("expenditure", "revenue") else "any"
+    return {"terms": terms, "years": years, "spend": spend} if terms else {}
 
 
 def _clarify_field(v) -> dict:
@@ -698,6 +701,22 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             t0 = time.perf_counter()
             acq = await acquire_missing(conn, plan, lang, client, settings, notify, acquire_fn)
             t["acquire"] = time.perf_counter() - t0
+        if plan.line_search and not plan.budget_query:      # wide search, model reads, code verifies
+            t0 = time.perf_counter()
+            hits = search_lines(conn, plan.line_search["terms"], years=plan.line_search["years"],
+                                spend=plan.line_search.get("spend", "any"))
+            t["search"] = time.perf_counter() - t0
+            log.info("line search: %d terms, %d hits", len(plan.line_search["terms"]), len(hits))
+            if hits:
+                t0 = time.perf_counter()
+                res = await read_lines(question, plan.english_question, lang, hits, client, settings,
+                                       question_years(question, plan.english_question), chat_json)
+                t["answer"] = time.perf_counter() - t0
+                if res.clarify:                  # the lines show several different things: ask which one
+                    return Answer(res.clarify_question, False, True, plan=plan, timings=t, clarify=res.clarify)
+                if res.selections:
+                    return line_answer(conn, plan, res, hits, lang, t, acq)
+            log.info("line search gave no verified rows; falling back to page search")
         t0 = time.perf_counter()
         budget, nmap = None, {}
         if plan.budget_query:                 # compare / total / share / rank: computed from the table rows
@@ -762,6 +781,61 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
     return Answer(f"{body}\n\n{format_citations(cited, lang)}", True, True, cited, plan, t,
                   partial=found == "partial", exact=exact, acquired=acq, latest=latest, sources=sources,
                   offer=offer, budget=budget)
+
+
+LINE_WORDS = {
+    "en": {"head": "🧮 *Working* (the rows used):", "total": "Total", "difference": "Difference", "share": "Share",
+           "calc": "Kasafi's calculation", "missing": "Not found",
+           "aggregate": "⚠️ The budget doesn't show this item separately; the line above is the broader total that "
+                        "contains it."},
+    "ha": {"head": "🧮 *Yadda aka lissafa* (layukan da aka yi amfani da su):", "total": "Jimilla",
+           "difference": "Bambanci", "share": "Kaso", "calc": "lissafin Kasafi", "missing": "Ba a samu ba",
+           "aggregate": "⚠️ Kasafin bai nuna wannan abu daban ba; layin da ke sama jimilla ce mai faɗi da ta "
+                        "ƙunshe shi."},
+}
+
+
+def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dict, acq) -> Answer:
+    """The verified rows as an answer: summary, the rows used with citations, and the arithmetic."""
+    w = LINE_WORDS.get(lang, LINE_WORDS["en"])
+    pages: dict[tuple[str, int], list] = {}
+    for s in res.selections:
+        pages.setdefault((s.line.doc_id, s.line.page), []).append(s.line)
+    evidence, nmap = [], {}
+    for n, ((doc_id, page), ls) in enumerate(pages.items(), start=1):
+        text = "\n".join(dict.fromkeys(f"[Table: {x.table_title}]\n{x.row_text}" for x in ls))
+        evidence.append(Evidence(n, doc_id, ls[0].title, None, page, "text", text))
+        nmap[(doc_id, page)] = n
+    # [L#] in the model's summary -> the citation number of that line's page; other line refs are dropped
+    lnum = {i: nmap.get((x.doc_id, x.page)) for i, x in enumerate(hits[:MAX_LINES], start=1)}
+    summary = re.sub(r"\[L(\d+)\]", lambda m: f"[{lnum[int(m.group(1))]}]" if lnum.get(int(m.group(1))) else "",
+                     res.summary)
+    working = [w["head"]]
+    working += [f"• {short_name(s.line)}, {s.cell.column}: {fmt(s.cell.amount)} [{nmap[(s.line.doc_id, s.line.page)]}]"
+                for s in res.selections]
+    if res.aggregate_only:
+        working.append(w["aggregate"])
+    if res.total is not None:
+        working.append(f"• {w['total']}: {fmt(res.total)} ({w['calc']})")
+    if res.difference is not None:
+        pct = f" ({'+' if res.change_pct and res.change_pct > 0 else ''}{res.change_pct}%)" if res.change_pct is not None else ""
+        sign = "+" if res.difference > 0 else "-" if res.difference < 0 else ""
+        working.append(f"• {w['difference']}: {sign}{fmt(abs(res.difference))}{pct} ({w['calc']})")
+    if res.share_pct is not None:
+        working.append(f"• {w['share']}: {res.share_pct}% ({w['calc']})")
+    if res.missing:
+        working.append(f"• {w['missing']}: {res.missing}")
+    working_text = "\n".join(working)
+    note = plan.assumption_for(lang)
+    body = (f"_{note}_\n\n" if note else "") + (render_answer({"summary": summary, "items": []}, lang) + "\n\n"
+                                                 if summary.strip() else "")
+    body += readable_amounts(working_text, lang)
+    partial = res.found == "partial" or res.aggregate_only or bool(res.missing)
+    sources = cited_sources(conn, evidence) if conn is not None else []
+    log.info("line answer: %d rows, op=%s, aggregate_only=%s, partial=%s", len(res.selections), res.operation,
+             res.aggregate_only, partial)
+    return Answer(f"{body}\n\n{format_citations(evidence, lang)}", True, True, evidence, plan, t, partial=partial,
+                  exact=f"{summary}\n{working_text}", acquired=acq, sources=sources, lines=res)
 
 
 def budget_evidence(q: QueryResult) -> tuple[list[Evidence], dict]:

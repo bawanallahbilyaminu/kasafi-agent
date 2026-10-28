@@ -22,19 +22,30 @@ import psycopg
 MAX_TERMS = 10
 MAX_LINES = 40          # what the model reads in one go
 CANDIDATES = 400        # read from the database before scoring
+PER_DOC_NAME = 4        # copies of one line per document (total, personnel, overhead, capital tables)
 
+# Terms come most specific first; earlier terms weigh more. Ordered in SQL, so a broad term can't crowd out the
+# lines that match the core term before scoring.
 _SQL = """
+WITH t AS (SELECT * FROM unnest(%(terms)s::text[], %(weights)s::float8[]) WITH ORDINALITY AS t(term, w, i))
 SELECT l.id, d.title, l.doc_id, l.page, COALESCE(l.table_title, ''), l.name, l.row_text, l.classification,
        COALESCE(d.series, ''), COALESCE(d.edition, ''),
-       (SELECT count(*) FROM unnest(%(pats)s::text[]) p WHERE l.row_text ILIKE p) AS kw,
-       (SELECT count(*) FROM unnest(%(terms)s::text[]) t WHERE l.tsv @@ plainto_tsquery('english', t)) AS ft,
-       (SELECT COALESCE(max(similarity(l.name, t)), 0) FROM unnest(%(terms)s::text[]) t) AS sim
+       -- the best single match counts: in the line's own name most, elsewhere in the row (codes, function and
+       -- location columns of a project) less; more matched terms add only a little
+       (SELECT COALESCE(max(w), 0) FROM t WHERE l.name ILIKE '%%' || t.term || '%%') * 4
+       + (SELECT COALESCE(max(w), 0) FROM t WHERE l.row_text ILIKE '%%' || t.term || '%%') * 2
+       + (SELECT COALESCE(max(w), 0) FROM t WHERE l.tsv @@ plainto_tsquery('english', t.term))
+       + (SELECT COALESCE(max(similarity(l.name, t.term) * w), 0) FROM t) * 2
+       + (SELECT count(*) FROM t WHERE l.row_text ILIKE '%%' || t.term || '%%') * 0.3 AS score
 FROM budget_lines l JOIN documents d ON d.id = l.doc_id
 WHERE (l.row_text ILIKE ANY(%(pats)s)
-       OR EXISTS (SELECT 1 FROM unnest(%(terms)s::text[]) t WHERE l.tsv @@ plainto_tsquery('english', t))
-       OR EXISTS (SELECT 1 FROM unnest(%(terms)s::text[]) t WHERE l.name %% t))
-  AND (%(year)s::int IS NULL OR EXISTS (SELECT 1 FROM budget_rows b WHERE b.line_id = l.id AND b.year = %(year)s))
+       OR EXISTS (SELECT 1 FROM t WHERE l.tsv @@ plainto_tsquery('english', t.term))
+       OR EXISTS (SELECT 1 FROM t WHERE l.name %% t.term))
+  AND (cardinality(%(years)s::int[]) = 0
+       OR EXISTS (SELECT 1 FROM budget_rows b WHERE b.line_id = l.id AND b.year = ANY(%(years)s)))
   AND (%(docs)s::text[] IS NULL OR l.doc_id = ANY(%(docs)s))
+  AND (%(spend)s = 'any' OR (%(spend)s = 'revenue') = (l.spend_kind = 'revenue'))
+ORDER BY score DESC
 LIMIT %(cap)s
 """
 
@@ -71,18 +82,31 @@ def _clean(term: str) -> str:
     return " ".join(term.replace("%", " ").replace("_", " ").split())[:80]
 
 
-def search_lines(conn: psycopg.Connection, terms: list[str], *, year: int | None = None,
-                 docs: list[str] | None = None, limit: int = CANDIDATES) -> list[Line]:
-    """All lines matching any term, best first, with their cells. Up to `limit` lines."""
+def search_lines(conn: psycopg.Connection, terms: list[str], *, year: int | None = None, years: list[int] | None = None,
+                 docs: list[str] | None = None, spend: str = "any", limit: int = CANDIDATES,
+                 per_doc_name: int = PER_DOC_NAME) -> list[Line]:
+    """Lines matching any term, best first, with their cells; `spend` is expenditure, revenue or any.
+
+    At most `per_doc_name` copies of one line per document (the same agency is printed in many tables), so one
+    item can't fill the list the model reads.
+    """
     terms = list(dict.fromkeys(t for t in (_clean(t) for t in terms) if len(t) >= 3))[:MAX_TERMS]
     if not terms:
         return []
-    rows = conn.execute(_SQL, {"terms": terms, "pats": [f"%{t}%" for t in terms], "year": year, "docs": docs,
-                               "cap": max(limit, 1) * 3}).fetchall()
-    lines = [Line(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9],
-                  score=3.0 * r[10] + 2.0 * r[11] + float(r[12])) for r in rows]
-    lines.sort(key=lambda x: (-x.score, x.edition and -int(x.edition[:4]) if x.edition[:4].isdigit() else 0, x.page))
-    lines = lines[:limit]
+    years = list(years or []) + ([year] if year else [])
+    weights = [max(0.3, 1.0 - 0.15 * i) for i in range(len(terms))]
+    rows = conn.execute(_SQL, {"terms": terms, "weights": weights, "pats": [f"%{t}%" for t in terms], "years": years,
+                               "docs": docs, "spend": spend if spend in ("expenditure", "revenue") else "any",
+                               "cap": max(limit, 1) * 4}).fetchall()
+    lines = [Line(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], score=float(r[10])) for r in rows]
+    lines.sort(key=lambda x: (-x.score, -int(x.edition[:4]) if x.edition[:4].isdigit() else 0, x.page))
+    kept, copies = [], Counter()
+    for x in lines:
+        key = (x.doc_id, " ".join(x.name.lower().split())[:80])
+        if copies[key] < per_doc_name:
+            copies[key] += 1
+            kept.append(x)
+    lines = kept[:limit]
     if lines:
         by_id = {x.id: x for x in lines}
         for lid, col, yr, measure, period, amount in conn.execute(
