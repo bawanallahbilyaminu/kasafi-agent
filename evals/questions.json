@@ -155,6 +155,14 @@
       "english": "How much was allocated to the Ministry for Religious Affairs in 2025, and how much did it spend that year?",
       "expected": "Whole-ministry total (not headquarters only): allocation from the 2025 budget, spending from the Q4 2025 report, with the kind of figure and the period labelled.",
       "source": "Bilyaminu's live test, Oct 27 2026 (the corrected question)"
+    },
+    {
+      "id": "19",
+      "audio": null,
+      "category": "live-fetch",
+      "text_ha": "Nawa Ma'aikatar Lafiya ta kashe a watanni tara na farkon 2025, bisa ga rahoton aiwatar da kasafi na kwata na uku (Q3 2025)?",
+      "english": "How much did the Ministry of Health spend in the first nine months of 2025, according to the Q3 2025 budget implementation report?",
+      "expected": "The Q3 2025 report isn't pre-indexed: Kasafi says it's looking for it, fetches it from an allowlisted state site, indexes it, then answers with the Q1-Q3 figure and cites it."
     }
   ]
 }

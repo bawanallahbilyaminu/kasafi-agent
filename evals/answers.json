@@ -154,6 +154,21 @@
         ]
       ],
       "source": "Whole ministry, code 017200000000. Allocated: 2025 budget p11, Total Expenditure by Administrative Classification, 2025 Approved Budget 11,255,447,389.16; final budget 12,477,910,002.01 (BIR Q4 2025 p17). Spent: BIR Q4 2025 p17, Q1-Q4 8,457,842,546.60 (67.8%). 9,076,557,198.38 is headquarters only (017200100100), what Kasafi first gave."
+    },
+    {
+      "id": "19",
+      "lang": "ha",
+      "may_fetch": true,
+      "docs": [
+        "bir-2025-q3"
+      ],
+      "pages": [
+        19
+      ],
+      "numbers": [
+        "14,061,818,373.87"
+      ],
+      "source": "Fetched live (not pre-indexed): BIR Q3 2025 p19, Total Expenditure by Administrative Classification, 052100000000 Ministry of Health, 2025 Performance Year to Date (Q1-Q3) 14,061,818,373.87 (30.3% of the revised budget 46,369,252,082.91). Source: mof.sk.gov.ng/wp-content/uploads/Sokoto-State-2025-Q3-BIRCN-CR-Final-1.pdf."
     }
   ]
 }

@@ -69,9 +69,13 @@ async def main(ids: list[str] | None, runs: int, plan_reasoning: str | None = No
                 plan_t.append(a.timings.get("plan", 0))
                 answer_t.append(a.timings.get("answer", 0))
                 fails = check(c, a)
+                # A fetch on a question the library can already answer costs ~15 s and money: flag it.
+                if a.plan and a.plan.missing_document and not c.get("may_fetch"):
+                    fails.append(f"unexpected fetch for '{a.plan.missing_document}'")
                 passed += not fails
                 print(f"[run {run + 1}] {c['id']:>3} {'PASS' if not fails else 'FAIL'} {times[-1]:5.1f}s  "
-                      f"{'; '.join(fails)}")
+                      f"{'; '.join(fails)}"
+                      + (f"  [fetch: {a.acquired.status} {a.acquired.doc_id or ''}]" if a.acquired else ""))
                 if fails:
                     print("      " + a.text.replace("\n", "\n      "))
     total = len(cases) * runs
