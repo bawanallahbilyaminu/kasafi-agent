@@ -40,12 +40,6 @@ Some details are not confirmed yet. Look them up (dev.meta.ai docs, provider doc
 
 ## Git workflow (Claude Code owns this)
 
-**Repo setup (first session only):**
-1. Check the tools: `git --version`, `gh --version`, `gh auth status`. If `gh` is missing or not logged in, stop and give Bilyaminu exact steps (install GitHub CLI, run `gh auth login` himself; never handle his GitHub password or token).
-2. If this folder is not a git repo yet: `git init -b main`.
-3. Create the **public** GitHub repo and push: `gh repo create kasafi-agent --public --source=. --remote=origin --description "Kasafi: Hausa voice-first WhatsApp agent for public budget & policy documents (Meta Global AI Developer Hackathon 2026)"`.
-4. Add an MIT `LICENSE` and a README skeleton with the sections "Built during the hackathon" and "Pre-existing assets". Commit and push.
-
 **After every meaningful change: commit and push.** A meaningful change is one working step: a new tool, an endpoint, a fix, a docs update, a config change. Don't batch a whole day into one commit.
 - Before every commit: run `git status` and `git diff --cached --stat`. Confirm that **no `.env`, keys, tokens, phone numbers or data files** are staged. If anything looks like a secret, stop, unstage it and tell Bilyaminu.
 - Use Conventional Commits: `feat: …`, `fix: …`, `docs: …`, `chore: …`, `test: …`, `refactor: …`. Messages say *what* changed and *why* in one line.
@@ -62,10 +56,6 @@ Some details are not confirmed yet. Look them up (dev.meta.ai docs, provider doc
 - Bilyaminu's working language is English and his first language is Hausa. User-facing bot text is in **Hausa**, with English as a fallback. Code, comments and docs are in English.
 - When something needs a human (API keys, Meta dashboard settings, WhatsApp setup), stop and give Bilyaminu exact click-by-click steps.
 
-## Environment variables (see `.env.example`)
-
-`META_API_KEY`, `BASETEN_API_KEY`, `SERPER_API_KEY`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`, `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`, `FIREWORKS_API_KEY` (optional), `DATABASE_URL`, `ADMIN_USER`, `ADMIN_PASSWORD`.
-
 ## Status (as of Oct 26, 2026)
 
 - Meta Model API: $150 hackathon credits applied, payment method verified. Set a $150 spend limit.
@@ -74,5 +64,5 @@ Some details are not confirmed yet. Look them up (dev.meta.ai docs, provider doc
 - Fireworks ($100): **active (Oct 28)**, redeemed, no expiry.
 - All four providers are active (Meta $150, Baseten $100, Modal $100, Fireworks $100). Keep providers swappable.
 - Serper search API: account created (free 2,500 queries).
-- WhatsApp: Meta app created with the WhatsApp use case under the "Halal Numeriq Limited" business portfolio. Uses the test number (5 verified recipients max) during the build.
+- WhatsApp: Meta app created with the WhatsApp use case under the "Halal Numeriq Limited" business portfolio. Our own number is registered (since Oct 27); the app is published.
 - Deploy target: Bilyaminu's own VPS (Docker), with HTTPS for the WhatsApp webhook.
