@@ -36,10 +36,10 @@ def child_env() -> dict[str, str]:
     return {k: os.environ[k] for k in keep if k in os.environ}
 
 
-async def extract_pages_sandboxed(path: Path, timeout: float = TIMEOUT_S) -> list[str]:
+async def _run_worker(args: list[str], timeout: float) -> dict:
     # -E -s: ignore PYTHON* variables and user site-packages; -m from ROOT finds the app package.
     proc = await asyncio.create_subprocess_exec(
-        sys.executable, "-E", "-s", "-m", "app.acquisition.parse_worker", str(path), str(MAX_PAGES),
+        sys.executable, "-E", "-s", "-m", "app.acquisition.parse_worker", *args,
         cwd=str(ROOT), env=child_env(), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         preexec_fn=_limits if os.name == "posix" else None,
     )
@@ -54,4 +54,16 @@ async def extract_pages_sandboxed(path: Path, timeout: float = TIMEOUT_S) -> lis
     d = json.loads(out)
     if "error" in d:
         raise ParseError(d["error"])
-    return d["pages"]
+    return d
+
+
+async def extract_pages_sandboxed(path: Path, timeout: float = TIMEOUT_S) -> list[str]:
+    return (await _run_worker(["text", str(path), str(MAX_PAGES)], timeout))["pages"]
+
+
+async def render_pages_sandboxed(path: Path, pages: list[int], out_dir: Path,
+                                 timeout: float = TIMEOUT_S) -> dict[int, Path]:
+    """Render pages (1-based) to JPEG files for OCR. Only the images leave the sandbox."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    files = (await _run_worker(["render", str(path), str(out_dir), *map(str, pages)], timeout))["files"]
+    return {int(p): Path(f) for p, f in files.items()}

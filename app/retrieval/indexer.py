@@ -295,13 +295,15 @@ def chunk_page(text: str, size: int = CHUNK_CHARS, overlap: int = CHUNK_OVERLAP)
     return chunks
 
 
-def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bool = False) -> IndexResult:
-    sha = sha256_file(path)
+def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bool = False,
+                   pages: list[str] | None = None, sha: str | None = None) -> IndexResult:
+    """Index one PDF. `pages` (already extracted, e.g. by the sandbox for a fetched PDF) skips extraction."""
+    sha = sha or sha256_file(path)
     if not force:
         row = conn.execute("SELECT sha256 FROM documents WHERE id = %s", (doc["id"],)).fetchone()
         if row and row[0] == sha:
             return IndexResult(doc["id"], "unchanged")
-    pages = extract_pages(path)
+    pages = list(pages) if pages is not None else extract_pages(path)
     # Keep OCR text from earlier runs for pages that still have no text layer.
     ocr = dict(conn.execute("SELECT page, text FROM pages WHERE doc_id = %s AND source = 'ocr'", (doc["id"],)).fetchall())
     sources = []
@@ -316,10 +318,12 @@ def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bo
     with conn.transaction():
         conn.execute("DELETE FROM documents WHERE id = %s", (doc["id"],))   # cascades to pages/chunks
         conn.execute(
-            """INSERT INTO documents (id, title, category, year, publisher, source_url, acquisition, sha256, page_count)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            """INSERT INTO documents (id, title, category, year, publisher, source_url, acquisition, sha256, page_count,
+                                      final_url, fetched_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (doc["id"], doc["title"], doc.get("category"), doc.get("year"), doc.get("publisher"),
-             doc.get("source_url"), doc.get("acquisition"), sha, len(pages)),
+             doc.get("source_url"), doc.get("acquisition"), sha, len(pages), doc.get("final_url"),
+             doc.get("fetched_at")),
         )
         n_chunks = 0
         with conn.cursor() as cur:
