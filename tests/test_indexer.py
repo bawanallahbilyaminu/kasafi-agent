@@ -120,3 +120,47 @@ def test_2024_style_header_wrapped_one_word_per_line() -> None:
             "21 PERSONNEL 1.00 2.00 3.00 4.00 5.00 6.00")
     text, cols, _ = label_tables(page, [])
     assert "2024 Executive Budget Proposal" in cols and "2024 Approved Budget: 5.00" in text
+
+
+# --- table titles: stored last on the page, missing, or starting mid-page ------------------------
+
+from app.retrieval.indexer import contextual_chunks, next_title, spend_kind  # noqa: E402
+
+
+def test_total_row_of_a_different_kind_starts_a_new_table() -> None:
+    title = "Sokoto State Government 2026 Approved Budget - Total Expenditure by Programme"
+    t2 = next_title("Total Personnel Expenditure 15,759,333,245.71 61,211,091,739.44", title)
+    assert spend_kind(t2) == "personnel" and "Total row" in t2
+    # a subtotal of the same kind (inside a capital table) doesn't switch
+    cap = "Sokoto State Government 2026 Approved Budget - Capital Expenditure by Programme"
+    assert next_title("Total Capital Health Sector Expenditure - 31,270,451,691.50", cap) == cap
+    assert next_title("05 Education 8,139,687,377.37", title) == title
+
+
+def test_spend_kind() -> None:
+    assert spend_kind("Other Non-Debt Recurrent Expenditure by Fund Source") == "overhead"
+    assert spend_kind("Debt Service Expenditure by Administrative Classification") == "debt"
+    assert spend_kind("Total Expenditure by Administrative Classification") == "total"
+
+
+def test_rows_after_a_total_row_get_its_kind() -> None:
+    page = ("Code Unit 2025 Approved Budget 2026 Out-Year Estimate\n"
+            "017200000000 Ministry for Religious Affairs 117,147,389.16 117,147,389.16\n"
+            "Total Other Non-Debt Recurrent Expenditure 21,124,915,008.82 90,717,647,352.31\n"
+            "017200000000 Ministry for Religious Affairs 3,139,900,000.00 2,667,130,000.00")
+    chunks = contextual_chunks(["Sokoto State Government 2025 Approved Budget - Personnel Expenditure by "
+                                "Administrative Classification", page])[1]
+    key = [c for c in chunks if c.count("\n") == 1 and "3,139,900,000.00" in c]
+    assert key and "Other Non-Debt Recurrent Expenditure" in key[0]                # overhead, not personnel
+    personnel = [c for c in chunks if c.count("\n") == 1 and "117,147,389.16" in c and "Religious" in c]
+    assert personnel and "Personnel Expenditure" in personnel[0]
+
+
+SEED_2025 = Path("data/budget-2025-approved.pdf")
+
+
+@pytest.mark.skipif(not SEED_2025.exists(), reason="seed PDF not present (data/ is gitignored)")
+def test_title_printed_at_the_top_comes_first() -> None:
+    from app.retrieval.indexer import extract_pages
+    p11 = extract_pages(SEED_2025)[10]
+    assert p11.splitlines()[0].endswith("Total Expenditure by Administrative Classification")

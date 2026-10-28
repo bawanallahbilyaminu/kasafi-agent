@@ -67,10 +67,43 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
+TOP_OF_PAGE = 0.85   # a title whose text starts above 85% of the page height is printed at the top
+
+
+def titles_first(page: pdfium.PdfPage, text: str) -> str:
+    """Move table titles printed at the top of the page to the start of its text.
+
+    PDFium returns text in the PDF's content order, and the budget PDFs store each table's title
+    (printed at the top of the page) as the LAST line. A title carried forward from there landed on
+    the next page's table, so the 2025 budget's total-expenditure rows were labelled with the
+    previous table's title. Only title lines move; everything else keeps its order, because the
+    content order is what keeps wrapped column headers intact (a full visual re-order scrambled them).
+    """
+    lines = text.splitlines()
+    tail = [i for i in range(max(0, len(lines) - 3), len(lines)) if is_table_title(lines[i])]
+    if not tail:
+        return text
+    textpage = page.get_textpage()
+    height = page.get_height()
+    move = []
+    for i in tail:
+        searcher = textpage.search(lines[i].strip()[:60], match_case=True)
+        hit = searcher.get_next()
+        if hit and textpage.get_charbox(hit[0])[3] >= TOP_OF_PAGE * height:
+            move.append(i)
+    if not move:
+        return text
+    return "\n".join([lines[i] for i in move] + [line for i, line in enumerate(lines) if i not in move])
+
+
 def extract_pages(path: Path) -> list[str]:
     pdf = pdfium.PdfDocument(str(path))
     try:
-        return [clean_text(pdf[i].get_textpage().get_text_range()) for i in range(len(pdf))]
+        pages = []
+        for i in range(len(pdf)):
+            page = pdf[i]
+            pages.append(clean_text(titles_first(page, page.get_textpage().get_text_range())))
+        return pages
     finally:
         pdf.close()
 
@@ -94,6 +127,33 @@ def is_table_title(line: str) -> bool:
         return False
     long_words = [w for w in re.findall(r"[A-Za-z]+", s) if len(w) > 3]
     return bool(long_words) and sum(w[0].isupper() for w in long_words) / len(long_words) >= 0.7
+
+
+# A table often opens with its own "Total <kind> Expenditure" row, and that row is a better guide to
+# where the table starts than the title: some titles are drawn as images, and some are stored at the
+# end of the page although printed mid-page (2026 budget p42: personnel rows start at line 28).
+_TOTAL_ROW = re.compile(r"^\s*Total ((?:[A-Za-z\-]+ ){0,4}?Expenditure)\b.*\d")
+
+
+def spend_kind(s: str) -> str | None:
+    """'personnel' | 'overhead' | 'debt' | 'capital' | 'total' for a title or 'Total ...' row."""
+    s = s.lower()
+    if "non-debt recurrent" in s or "overhead" in s:
+        return "overhead"
+    for word, kind in (("personnel", "personnel"), ("debt service", "debt"), ("capital", "capital")):
+        if word in s:
+            return kind
+    return "total" if "expenditure" in s else None
+
+
+def next_title(line: str, title: str) -> str:
+    """The table title in force after this line."""
+    if is_table_title(line):
+        return line.strip()
+    m = _TOTAL_ROW.match(line)
+    if m and spend_kind(m.group(1)) != spend_kind(title):
+        return f"{m.group(1)} (table starting at its Total row)"
+    return title
 
 
 # --- column labelling --------------------------------------------------------------------------
@@ -188,21 +248,25 @@ def contextual_chunks(pages: list[str]) -> list[list[str]]:
     for text in pages:
         page_chunks = []
         text, columns, open_header = label_tables(text, columns, open_header)
-        # Sector-total and "Total ..." rows also get their own one-row chunk (with the table title): in a
-        # big table they're outranked by the many sub-programme rows that repeat the sector's name.
+        # Sector-total rows ("04 Health"), ministry-total rows (12-digit codes ending in eight zeros, e.g.
+        # "017200000000 Ministry for Religious Affairs") and "Total ..." rows also get their own one-row
+        # chunk with the table title: in a big table they're outranked by the many rows below them that
+        # repeat the same name.
         key_rows, row_title = [], title
         for line in text.splitlines():
-            if is_table_title(line):
-                row_title = line.strip()
-            elif " | " in line and (re.match(r"^\d{2}\s", line) or line.lower().startswith("total")):
+            new_title = next_title(line, row_title)
+            if new_title != row_title and is_table_title(line):
+                row_title = new_title
+                continue
+            row_title = new_title
+            if " | " in line and (re.match(r"^(\d{2}|\d{4}0{8})\s", line) or line.lower().startswith("total")):
                 key_rows.append((f"[Table: {row_title}]" + chr(10) if row_title else "") + line)
         for chunk in chunk_page(text) if len(text) >= MIN_PAGE_CHARS else []:
             lines = chunk.splitlines()
             prefix = f"[Table: {title}]" + chr(10) if title and not is_table_title(lines[0]) else ""
             page_chunks.append(prefix + chunk)
             for line in lines:
-                if is_table_title(line):
-                    title = line.strip()
+                title = next_title(line, title)
         out.append(page_chunks + key_rows)
     return out
 
