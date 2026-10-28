@@ -151,7 +151,10 @@ def next_title(line: str, title: str) -> str:
     if is_table_title(line):
         return line.strip()
     m = _TOTAL_ROW.match(line)
-    if m and spend_kind(m.group(1)) != spend_kind(title):
+    # Only a specific kind starts a new table. A plain "Total Expenditure" row is also each ministry's
+    # subtotal in the amended budget; switching on it replaced real titles with a generic one.
+    kind = spend_kind(m.group(1)) if m else None
+    if kind and kind != "total" and kind != spend_kind(title):
         return f"{m.group(1)} (table starting at its Total row)"
     return title
 

@@ -164,3 +164,8 @@ def test_title_printed_at_the_top_comes_first() -> None:
     from app.retrieval.indexer import extract_pages
     p11 = extract_pages(SEED_2025)[10]
     assert p11.splitlines()[0].endswith("Total Expenditure by Administrative Classification")
+
+
+def test_plain_total_expenditure_row_does_not_replace_the_title() -> None:
+    title = "Sokoto State Government 2025 Amended Budget - Capital Expenditure by Project"
+    assert next_title("Total Expenditure 5,310,642,079.76 541,100,922.18", title) == title
