@@ -22,7 +22,7 @@ from pathlib import Path
 import psycopg
 import pypdfium2 as pdfium
 
-from app.retrieval import quality
+from app.retrieval import quality, tables
 
 log = logging.getLogger(__name__)
 
@@ -383,10 +383,12 @@ def label_pipe_tables(text: str) -> tuple[str, set[str]]:
     return chr(10).join(out), labelled
 
 
-def contextual_chunks(pages: list[str], labelled: list[str] | None = None) -> list[list[str]]:
+def contextual_chunks(pages: list[str], labelled: list[str] | None = None,
+                      line_titles: list[list[str]] | None = None) -> list[list[str]]:
     """Label table columns, chunk every page, and prefix each chunk with the table title in force at its start.
 
-    `labelled`, if given, receives each page's labelled text (for the quality checks)."""
+    `labelled`, if given, receives each page's labelled text (for the quality checks); `line_titles` the
+    table title in force for each of its lines (for the structured budget rows)."""
     out, title, columns, open_header = [], "", [], []
     for text in pages:
         page_chunks = []
@@ -394,6 +396,7 @@ def contextual_chunks(pages: list[str], labelled: list[str] | None = None) -> li
         text, columns, open_header = label_tables(text, columns, open_header)
         if labelled is not None:
             labelled.append(text)
+        page_titles: list[str] = []
         # Sector-total rows ("04 Health"), ministry-total rows (12-digit codes ending in eight zeros, e.g.
         # "017200000000 Ministry for Religious Affairs") and "Total ..." rows also get their own one-row
         # chunk with the table title: in a big table they're outranked by the many rows below them that
@@ -403,8 +406,10 @@ def contextual_chunks(pages: list[str], labelled: list[str] | None = None) -> li
             new_title = next_title(line, row_title)
             if new_title != row_title and is_table_title(line):
                 row_title = new_title
+                page_titles.append(row_title)
                 continue
             row_title = new_title
+            page_titles.append(row_title)
             if " | " in line and (re.match(r"^(\d{2}|\d{4}0{8})\s", line) or line.lower().startswith("total")
                                   or line in pipe_rows):
                 key_rows.append((f"[Table: {row_title}]" + chr(10) if row_title else "") + line)
@@ -415,6 +420,8 @@ def contextual_chunks(pages: list[str], labelled: list[str] | None = None) -> li
             for line in lines:
                 title = next_title(line, title)
         out.append(page_chunks + key_rows)
+        if line_titles is not None:
+            line_titles.append(page_titles)
     return out
 
 
@@ -469,7 +476,9 @@ def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bo
     empty = sources.count("none")
     pages = [accounting_negatives(p) for p in pages]
     labelled: list[str] = []
-    chunked = contextual_chunks(pages, labelled)
+    line_titles: list[list[str]] = []
+    chunked = contextual_chunks(pages, labelled, line_titles)
+    rows = tables.extract_rows(labelled, line_titles) if doc.get("category") in tables.TABLE_CATEGORIES else []
     with conn.transaction():
         conn.execute("DELETE FROM documents WHERE id = %s", (doc["id"],))   # cascades to pages/chunks
         conn.execute(
@@ -490,6 +499,11 @@ def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bo
                     for j, chunk in enumerate(page_chunks):
                         cp.write_row((doc["id"], i, j, chunk))
                         n_chunks += 1
+            with cur.copy("COPY budget_rows (doc_id, page, table_title, classification, spend_kind, code, name, "
+                          "column_label, year, measure, period, amount_naira, row_text) FROM STDIN") as cp:
+                for r in rows:
+                    cp.write_row((doc["id"], r.page, r.table_title, r.classification, r.spend_kind, r.code, r.name,
+                                  r.column_label, r.year, r.measure, r.period, r.amount_naira, r.row_text))
     quality.run(conn, doc["id"], doc.get("category"),
                 [(i, text, src) for i, (text, src) in enumerate(zip(labelled, sources), start=1)])
     return IndexResult(doc["id"], "indexed", len(pages), empty, n_chunks)
