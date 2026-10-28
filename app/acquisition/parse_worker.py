@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pypdfium2 as pdfium
 
-from app.retrieval.indexer import extract_pages
+from app.retrieval.indexer import extract_pages, image_table_pages
 from app.retrieval.ocr import render_page
 
 
@@ -29,7 +29,7 @@ def main() -> int:
             if n > max_pages:
                 print(json.dumps({"error": f"too many pages ({n} > {max_pages})"}))
                 return 0
-            print(json.dumps({"pages": extract_pages(path)}))
+            print(json.dumps({"pages": extract_pages(path), "image_pages": sorted(image_table_pages(path))}))
         else:   # render: one JPEG per page, for OCR
             out_dir, pages = Path(sys.argv[3]), [int(p) for p in sys.argv[4:]]
             pdf = pdfium.PdfDocument(str(path))

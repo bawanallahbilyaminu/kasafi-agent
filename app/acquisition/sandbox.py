@@ -57,8 +57,10 @@ async def _run_worker(args: list[str], timeout: float) -> dict:
     return d
 
 
-async def extract_pages_sandboxed(path: Path, timeout: float = TIMEOUT_S) -> list[str]:
-    return (await _run_worker(["text", str(path), str(MAX_PAGES)], timeout))["pages"]
+async def extract_pages_sandboxed(path: Path, timeout: float = TIMEOUT_S) -> tuple[list[str], set[int]]:
+    """Page texts, and the pages that are pictures of tables (to OCR)."""
+    d = await _run_worker(["text", str(path), str(MAX_PAGES)], timeout)
+    return d["pages"], set(d.get("image_pages", []))
 
 
 async def unzip_pdf_sandboxed(path: Path, out: Path, max_bytes: int, timeout: float = TIMEOUT_S) -> Path:

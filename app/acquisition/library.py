@@ -141,7 +141,7 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
         if known := _known(conn, sha=sha):             # same file under another URL
             return Acquired("known", known, url=url, timings=t)
         t0 = time.perf_counter()
-        pages = await extract_pages_sandboxed(pdf)
+        pages, image_pages = await extract_pages_sandboxed(pdf)
         t["parse"] = time.perf_counter() - t0
         t0 = time.perf_counter()
         ids = [r[0] for r in conn.execute("SELECT id FROM documents ORDER BY id").fetchall()]
@@ -165,12 +165,12 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
                "source_url": url, "final_url": dl.final_url, "fetched_at": dl.fetched_at, "acquisition": "fetched",
                "series": got_series, "edition": got_edition if got_series else None}
         t0 = time.perf_counter()
-        res = index_document(conn, doc, path, pages=pages, sha=sha)
+        res = index_document(conn, doc, path, pages=pages, sha=sha, image_pages=image_pages)
         conn.commit()      # searchable now, and visible to the background OCR's own connection
         t["index"] = time.perf_counter() - t0
         log.info("fetched and indexed %s (%s %s): %d pages, %d chunks, %d need OCR, sha=%s", doc_id, doc["series"],
                  doc["edition"], res.pages, res.chunks, res.empty_pages, sha[:12])
-        scanned = [i for i, p in enumerate(pages, 1) if len(p) < MIN_PAGE_CHARS]
+        scanned = [i for i, p in enumerate(pages, 1) if len(p) < MIN_PAGE_CHARS or i in image_pages]
         if scanned:
             schedule_ocr(doc_id, path, scanned[:BACKGROUND_OCR_PAGES], settings)
         return Acquired("indexed", doc_id, doc["title"], url, timings=t)

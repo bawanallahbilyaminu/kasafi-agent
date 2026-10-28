@@ -53,3 +53,13 @@ def test_audited_statements_cash_flow_negative() -> None:
 def test_budget_quantity_in_brackets_is_not_negative() -> None:
     text = real_page("budget-2026-approved.pdf", 58)
     assert "(25,000)" in text and "-25,000" not in text
+
+
+def test_cpi_state_table_page_is_an_image_to_ocr() -> None:
+    """p19's table (with Sokoto's published year-on-year rate) is an image under a 92-character title."""
+    from app.retrieval.indexer import image_table_pages
+    path = DATA / "fetched" / "nbs-cpi-2026-09.pdf"
+    if not path.exists():
+        pytest.skip("CPI not fetched")
+    pages = image_table_pages(path)
+    assert {19, 21} <= pages and 16 not in pages and 6 not in pages

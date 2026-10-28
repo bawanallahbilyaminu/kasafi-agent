@@ -96,6 +96,36 @@ def titles_first(page: pdfium.PdfPage, text: str) -> str:
     return "\n".join([lines[i] for i in move] + [line for i, line in enumerate(lines) if i not in move])
 
 
+IMAGE_PAGE_CHARS = 400   # a page with less text than this...
+IMAGE_SHARE = 0.25       # ...and an image covering a quarter of it is a picture of a table: OCR it
+
+
+def image_table_pages(path: Path) -> set[int]:
+    """Pages (1-based) whose content is an image with only a short text layer, e.g. a title.
+
+    The NBS CPI prints its state tables as images under a text title ("Combined Urban and Rural State
+    Consumer Price Index (Base Period: 2024 = 100)", 92 characters): more than MIN_PAGE_CHARS, so the
+    page counted as text and the table, with Sokoto's published year-on-year rate, was never OCR'd.
+    """
+    pdf = pdfium.PdfDocument(str(path))
+    out = set()
+    try:
+        for i in range(len(pdf)):
+            page = pdf[i]
+            if len(page.get_textpage().get_text_range().strip()) >= IMAGE_PAGE_CHARS:
+                continue
+            w, h = page.get_size()
+            for obj in page.get_objects():
+                if obj.type == pdfium.raw.FPDF_PAGEOBJ_IMAGE:
+                    left, bottom, right, top = obj.get_bounds()
+                    if (right - left) * (top - bottom) >= IMAGE_SHARE * w * h:
+                        out.add(i + 1)
+                        break
+    finally:
+        pdf.close()
+    return out
+
+
 def extract_pages(path: Path) -> list[str]:
     pdf = pdfium.PdfDocument(str(path))
     try:
@@ -309,23 +339,27 @@ def chunk_page(text: str, size: int = CHUNK_CHARS, overlap: int = CHUNK_OVERLAP)
 
 
 def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bool = False,
-                   pages: list[str] | None = None, sha: str | None = None) -> IndexResult:
-    """Index one PDF. `pages` (already extracted, e.g. by the sandbox for a fetched PDF) skips extraction."""
+                   pages: list[str] | None = None, sha: str | None = None,
+                   image_pages: set[int] | None = None) -> IndexResult:
+    """Index one PDF. `pages` (already extracted, e.g. by the sandbox for a fetched PDF) skips extraction;
+    `image_pages` (pages that are pictures of tables) is computed from the file when not given."""
     sha = sha or sha256_file(path)
     if not force:
         row = conn.execute("SELECT sha256 FROM documents WHERE id = %s", (doc["id"],)).fetchone()
         if row and row[0] == sha:
             return IndexResult(doc["id"], "unchanged")
     pages = list(pages) if pages is not None else extract_pages(path)
-    # Keep OCR text from earlier runs for pages that still have no text layer.
+    image_pages = image_pages if image_pages is not None else image_table_pages(path)
+    # Keep OCR text from earlier runs for pages that still have no (useful) text layer.
     ocr = dict(conn.execute("SELECT page, text FROM pages WHERE doc_id = %s AND source = 'ocr'", (doc["id"],)).fetchall())
     sources = []
     for i, text in enumerate(pages):
-        if len(text) < MIN_PAGE_CHARS and (i + 1) in ocr:
+        needs_ocr = len(text) < MIN_PAGE_CHARS or (i + 1) in image_pages
+        if needs_ocr and (i + 1) in ocr:
             pages[i] = ocr[i + 1]
             sources.append("ocr")
         else:
-            sources.append("text" if len(text) >= MIN_PAGE_CHARS else "none")
+            sources.append("none" if needs_ocr else "text")   # "none" keeps its title text until OCR'd
     empty = sources.count("none")
     pages = [accounting_negatives(p) for p in pages]
     chunked = contextual_chunks(pages)

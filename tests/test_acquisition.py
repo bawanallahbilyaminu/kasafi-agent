@@ -139,5 +139,5 @@ def test_sandbox_extracts_a_real_pdf() -> None:
     pdf = ROOT / "data" / "berap-2025.pdf"
     if not pdf.exists():
         pytest.skip("seed PDF not downloaded")
-    pages = asyncio.run(extract_pages_sandboxed(pdf))
+    pages, image_pages = asyncio.run(extract_pages_sandboxed(pdf))
     assert pages and any(len(p) > 100 for p in pages)
