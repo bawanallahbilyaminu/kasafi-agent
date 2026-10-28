@@ -165,3 +165,9 @@ def test_over_hooked_hausa_is_fixed_but_correct_hooks_stay() -> None:
     d = {"summary": "Ƙasafin 2025 ya ware, kuma an ƙashe kuɗi a ƙaramar hukuma [1].", "items": []}
     assert render_answer(d, "ha") == "Kasafin 2025 ya ware, kuma an kashe kuɗi a ƙaramar hukuma [1]."
     assert render_answer({"summary": "ƙasafi", "items": []}, "en") == "ƙasafi"     # only for Hausa replies
+
+
+def test_naira_word_before_an_amount_is_replaced_by_the_sign() -> None:
+    assert readable_amounts("An ware Naira 9,076,557,198.38 [1]", "ha") == "An ware ₦9.08 biliyan [1]"
+    assert readable_amounts("naira ₦9,076,557,198.38", "ha") == "₦9.08 biliyan"
+    assert readable_amounts("Naira nawa aka ware?", "ha") == "Naira nawa aka ware?"

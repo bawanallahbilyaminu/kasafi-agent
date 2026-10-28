@@ -32,12 +32,16 @@ all_terms AS (
     SELECT c.id, ts_rank_cd(c.tsv, q.q_all) + 1.0 AS rank          -- matching every term ranks first
     FROM chunks c, q WHERE c.tsv @@ q.q_all
       AND (%(docs)s::text[] IS NULL OR c.doc_id = ANY(%(docs)s::text[]))
+      AND (NOT %(key_rows)s OR (c.text LIKE '%% | %%'
+           AND length(c.text) - length(replace(c.text, chr(10), '')) <= 1))
     ORDER BY rank DESC LIMIT %(k)s
 ),
 any_term AS (
     SELECT c.id, ts_rank_cd(c.tsv, q.q_any) AS rank
     FROM chunks c, q WHERE c.tsv @@ q.q_any
       AND (%(docs)s::text[] IS NULL OR c.doc_id = ANY(%(docs)s::text[]))
+      AND (NOT %(key_rows)s OR (c.text LIKE '%% | %%'
+           AND length(c.text) - length(replace(c.text, chr(10), '')) <= 1))
       AND (SELECT count(*) FROM all_terms) < %(k)s
     ORDER BY rank DESC LIMIT %(k)s
 ),
@@ -50,6 +54,9 @@ ORDER BY b.rank DESC LIMIT %(k)s
 """
 
 
-def search(conn: psycopg.Connection, query: str, *, k: int = 8, doc_ids: list[str] | None = None) -> list[Hit]:
-    rows = conn.execute(SQL, {"q": query, "k": k, "docs": doc_ids}).fetchall()
+def search(conn: psycopg.Connection, query: str, *, k: int = 8, doc_ids: list[str] | None = None,
+           key_rows: bool = False) -> list[Hit]:
+    """key_rows=True searches only labelled single-row chunks ("[Table: ...]" + one table row): exact facts
+    such as a ministry's total, which keyword ranking over whole pages tends to bury."""
+    rows = conn.execute(SQL, {"q": query, "k": k, "docs": doc_ids, "key_rows": key_rows}).fetchall()
     return [Hit(*r) for r in rows]
