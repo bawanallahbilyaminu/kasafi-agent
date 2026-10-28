@@ -39,6 +39,26 @@ Assets created before the hackathon and reused here. No code is reused.
 
 An earlier, separate Kasafi prototype was built for a different competition. No code from it is used in this repository.
 
+## Data sources and use
+
+Kasafi answers only from **public documents**: Sokoto State budgets, implementation reports, plans and policies, and
+reports from development partners. Seed documents are listed in `data/manifest.json` with their source URLs; documents
+Kasafi finds and fetches by itself are recorded in the database with their URL, SHA-256 hash and fetch date, as
+`auto-indexed` until a person verifies them.
+
+- **Fetching rules.** Only https links on an allowlist of government and partner domains
+  (`app/acquisition/policy.py`), only when the site's robots.txt allows our user agent (`KasafiBot`), with a size
+  limit, and parsed in a sandboxed process. Text in documents is treated as data, never as instructions.
+- **Content-Signals.** Some sites publish Cloudflare Content-Signals in robots.txt. sokotostate.gov.ng, for example,
+  says `search=yes, ai-train=no, use=reference`. Kasafi uses documents for reference only: it cites the page, it does
+  not train or fine-tune any model, and it refuses a site that says `ai-input=no`.
+- **Minimal excerpts.** Model calls get only what a step needs, never a whole document: the answer step gets at most
+  6 page excerpts of up to 4,500 characters each (the matching table rows and their neighbours); checking a fetched
+  document reads its first 3 pages (up to 4,000 characters); OCR sends one page image at a time.
+- **Open question (Oct 28).** Meta's hackathon free-credit API usage "may be used to improve Meta's products". We have
+  asked Meta whether that includes training on API inputs, and whether it can be turned off, because of sites that
+  say `ai-train=no`. After the hackathon we plan to move to paid usage if that avoids it.
+
 ## Setup
 
 Requires Python 3.12, [uv](https://docs.astral.sh/uv/), Docker and FFmpeg.

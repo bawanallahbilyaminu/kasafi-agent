@@ -5,7 +5,7 @@ permalink: /privacy/
 
 # Kasafi Privacy Policy
 
-*Last updated: 27 October 2026 (consent notice, language preference, daily limits)*
+*Last updated: 28 October 2026 (document search, review queue)*
 
 Kasafi is a WhatsApp assistant run by **Halal Numeriq Limited**, Sokoto, Nigeria ("we"). We are the data controller
 under the **Nigeria Data Protection Act 2023 (NDPA)**. Contact: [bilyaminu@halalnumeriq.com.ng](mailto:bilyaminu@halalnumeriq.com.ng).
@@ -37,6 +37,9 @@ We do not sell your data, use it for advertising, or profile your political view
 - **Meta, Meta Model API**: AI models that transcribe voice notes and help write answers. **During the hackathon pilot,
   content sent to the Meta Model API may be used by Meta to improve its products.**
 - **Baseten**: runs an open-weight Meta AI model that helps write answers.
+- **Document search (Serper web search, World Bank and ReliefWeb search services)**: when Kasafi needs a public document
+  it doesn't have yet, it searches for that document by its name, for example "Sokoto State Budget Implementation
+  Report Q3 2025". Your question itself, your phone number and your name are never sent to them.
 - **Our server (VPS) and our database (Microsoft Azure)**: host Kasafi and store conversations.
 
 The AI services (Meta Model API and Baseten) receive your question and extracts from documents. **They never receive
@@ -49,7 +52,10 @@ protection terms and the NDPA's rules on transfers.
 - **Conversations** (your messages and our replies): **90 days**, then deleted.
 - **Technical logs:** 30 days.
 - **Daily usage counts:** 30 days. **Consent and language settings:** until you ask us to delete them.
-- Unanswered questions kept for improving Kasafi are stored **without** your phone number.
+- **Review queue:** when Kasafi can't answer a question, or can't find a document it needs, we keep the English
+  wording of the question, what was missing and which trusted sites were searched for **90 days**, so our team can add
+  the missing document. This record has **no phone number or ID linked to you**, so it can't be traced back to you
+  (and so can't be picked out for deletion on request); it is deleted automatically after 90 days.
 
 To keep the free pilot fair and affordable, each number has a daily limit (currently 20 voice notes and 50 questions),
 and Kasafi has an overall daily limit. When a limit is reached, Kasafi tells you and starts again the next day.

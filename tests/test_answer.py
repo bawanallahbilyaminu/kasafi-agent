@@ -225,3 +225,18 @@ def test_unanswered_question_goes_to_the_review_queue(monkeypatch) -> None:
     gaps = []
     run(monkeypatch, [PLAN, {"summary": "", "items": [], "found": "none", "cited": []}], gaps=gaps)
     assert gaps and gaps[0][2] == "no_answer"
+
+
+def test_model_calls_get_excerpts_not_whole_documents() -> None:
+    """README "Data sources and use" promises these limits (some sites say ai-train=no). Update both together."""
+    from app.acquisition import library
+    assert ans.MAX_EVIDENCE <= 6 and ans.EVIDENCE_CHARS <= 4500 and library.CONFIRM_CHARS <= 4000
+
+    class Spy:
+        async def chat(self, messages, **kw):
+            self.sent = messages[1]["content"]
+            return ChatResult(content='{"match": false}', model="m", finish_reason="stop")
+
+    spy = Spy()
+    asyncio.run(library.confirm_document("d", ["x" * 5000] * 50, [], spy, make_settings()))
+    assert len(spy.sent) < library.CONFIRM_CHARS + 200          # 3 pages at most, cut to the limit
