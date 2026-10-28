@@ -30,7 +30,9 @@ SYSTEM = (
     "Decide:\n"
     '- "correction": the reply fixes or adds to the pending question (e.g. just "2025", "na ce 2025", '
     '"ilimi, ba lafiya ba", "Sokoto North"). Rewrite the pending question with ONLY that change, keeping '
-    "everything else, including its language and wording.\n"
+    "everything else, including its language and wording. If the reply names a ministry, agency or place with "
+    "a typo or informal spelling (e.g. 'Maikatar kula da harakokin addini'), write its correct official Hausa "
+    "name in the corrected question (e.g. 'Ma'aikatar Kula da Harkokin Addini').\n"
     '- "ambiguous": the reply could either REPLACE part of the pending question or be ADDED to it, and you '
     "can't tell which. Example: the pending question lists several years (2024, 2023 and 2022) and the reply is "
     "one year (\"A shekarar 2025\"). Give both versions: \"replace\" (the reply replaces that part) and \"add\" "
