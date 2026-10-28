@@ -32,7 +32,7 @@ DATA_DIR = ROOT / "data"
 MANIFEST = DATA_DIR / "manifest.json"
 PROVENANCE = DATA_DIR / "provenance.json"
 
-USER_AGENT = "KasafiBot/0.1 (+https://github.com/bawanallahbilyaminu/kasafi-agent)"
+USER_AGENT = "KasafiBot/1.0 (+https://halalnumeriq.com.ng/kasafi)"  # same as app/acquisition/policy.py
 MAX_BYTES = 100 * 1024 * 1024  # 100 MB per document
 TIMEOUT = 60
 DELAY_SECONDS = 2.0  # politeness delay between requests to the same host
@@ -58,13 +58,19 @@ class Robots:
         self._cache: dict[str, urllib.robotparser.RobotFileParser | None] = {}
 
     def allowed(self, url: str) -> bool:
+        return self.check(url) == ""
+
+    def check(self, url: str) -> str:
+        """"" if allowed, else why not. Unreadable and disallowed are reported separately."""
         parts = urllib.parse.urlsplit(url)
         origin = f"{parts.scheme}://{parts.netloc}"
         if origin not in self._cache:
             self._cache[origin] = self._load(origin)
         parser = self._cache[origin]
         # None = robots.txt could not be read for a reason other than 4xx: be conservative.
-        return parser is not None and parser.can_fetch(USER_AGENT, url)
+        if parser is None:
+            return "robots.txt unreadable (network error or 5xx); not fetched, try again later"
+        return "" if parser.can_fetch(USER_AGENT, url) else "disallowed by robots.txt (mark as 'local' and download manually)"
 
     @staticmethod
     def _load(origin: str) -> urllib.robotparser.RobotFileParser | None:
@@ -205,8 +211,8 @@ def main() -> int:
         if not host_allowed(url, allowlist):
             failed.append((doc_id, f"not on allowlist / not https: {url}"))
             continue
-        if not robots.allowed(url):
-            failed.append((doc_id, "disallowed by robots.txt (mark as 'local' and download manually)"))
+        if why := robots.check(url):
+            failed.append((doc_id, why))
             continue
         if dest.exists() and not args.force:
             if doc_id not in provenance:

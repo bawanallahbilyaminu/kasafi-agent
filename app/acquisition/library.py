@@ -26,7 +26,7 @@ import psycopg
 
 from app.acquisition.fetch import FetchError, download_pdf
 from app.acquisition.find import find_local, pick_candidate, search_candidates
-from app.acquisition.policy import Robots
+from app.acquisition.policy import USER_AGENT, Robots
 from app.acquisition.sandbox import ParseError, extract_pages_sandboxed, render_pages_sandboxed
 from app.config import Settings
 from app.providers.chat import ChatClient, ProviderError
@@ -116,7 +116,7 @@ def _known(conn: psycopg.Connection, *, url: str = "", sha: str = "") -> str | N
 # --- fetch_and_index ---------------------------------------------------------------------------
 
 async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, *, settings: Settings,
-                          client: ChatClient, http: httpx.AsyncClient) -> Acquired:
+                          client: ChatClient, http: httpx.AsyncClient, robots: Robots | None = None) -> Acquired:
     t: dict[str, float] = {}
     if known := _known(conn, url=url):
         return Acquired("known", known, url=url)
@@ -124,7 +124,7 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
     incoming = fetch_dir / f"incoming-{secrets.token_hex(8)}.pdf"
     try:
         t0 = time.perf_counter()
-        dl = await download_pdf(url, incoming, http, Robots(http))
+        dl = await download_pdf(url, incoming, http, robots or Robots(http))
         t["download"] = time.perf_counter() - t0
         if known := _known(conn, sha=dl.sha256):        # same file under another URL
             return Acquired("known", known, url=url, timings=t)
@@ -170,16 +170,28 @@ async def find_and_fetch(conn: psycopg.Connection, description: str, *, settings
         log.warning("daily document fetch limit reached")
         return Acquired("limit", detail="daily fetch limit")
     own = http is None
-    http = http or httpx.AsyncClient()
+    http = http or httpx.AsyncClient(headers={"User-Agent": USER_AGENT})
     try:
         t0 = time.perf_counter()
-        candidates = await search_candidates(http, description, settings)
+        robots = Robots(http)
+        candidates, local_only = [], set()
+        for c in await search_candidates(http, description, settings):
+            ok, why = await robots.allowed(c.url)
+            if ok:
+                candidates.append(c)
+            else:     # the site doesn't allow us: "local only" (a person adds its documents by hand)
+                local_only.add(f"{httpx.URL(c.url).host}: {why}")
+        if local_only:
+            log.info("skipped sites that disallow KasafiBot: %s", sorted(local_only))
         chosen = await pick_candidate(description, candidates, client, settings)
         found_s = time.perf_counter() - t0
         if chosen is None:
-            return Acquired("not_found", detail=f"{len(candidates)} candidates, none matched",
-                            timings={"find": found_s})
-        result = await fetch_and_index(conn, chosen.url, description, settings=settings, client=client, http=http)
+            detail = f"{len(candidates)} fetchable candidates, none matched"
+            if local_only:
+                detail += f"; local-only sites skipped: {', '.join(sorted(local_only))}"
+            return Acquired("not_found", detail=detail, timings={"find": found_s})
+        result = await fetch_and_index(conn, chosen.url, description, settings=settings, client=client, http=http,
+                                       robots=robots)
         result.timings = {"find": found_s, **result.timings}
         return result
     finally:

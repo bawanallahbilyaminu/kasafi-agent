@@ -16,7 +16,8 @@ import httpx
 
 log = logging.getLogger(__name__)
 
-USER_AGENT = "KasafiBot/0.1 (+https://github.com/bawanallahbilyaminu/kasafi-agent)"
+# Honest identification: robots.txt rules are matched on the "KasafiBot" token, and the URL explains who we are.
+USER_AGENT = "KasafiBot/1.0 (+https://halalnumeriq.com.ng/kasafi)"
 
 # Keep in sync with data/manifest.json "allowlist_domains" (tests check). sk.gov.ng covers the
 # Sokoto State ministries' own sites (mof.sk.gov.ng, mbep.sk.gov.ng, ...).
