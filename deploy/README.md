@@ -152,6 +152,9 @@ The first time, run a normal deploy **before** `--sync-env`. The health check ne
   load keeps the old index. It also replaces documents the server fetched live (it names them first); they are
   fetched again when a question needs them. Keep the live-fetch demo document (`bir-2025-q3`) out of the dev
   index, or the server will already have it.
+- **Source PDFs** for the evidence images: `deploy/deploy.sh --sync-pdfs` packs the seed PDFs (as `<doc id>.pdf`)
+  and `data/fetched/`, about 200 MB, into the data volume at `/data/pdfs`. Files are replaced, never deleted.
+  Without them the answers still work, just without images for those documents.
 - **Fetched documents** (self-growing library) are saved in the `kasafi-agent-data` volume at `/data/fetched`,
   and the review queue is the `gaps` table (`SELECT * FROM gaps WHERE status = 'open'`).
 - **Backups:** the `backup` service writes `deploy/backups/kasafi-YYYY-MM-DD.dump` every 24 h and keeps 7 days.

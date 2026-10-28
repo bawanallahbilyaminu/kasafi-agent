@@ -4,6 +4,7 @@
 #   deploy/deploy.sh --rollback    go back one release
 #   deploy/deploy.sh --sync-env    update the server's deploy/.env from your local .env (allowed keys only)
 #   deploy/deploy.sh --sync-index  copy the document index (documents/pages/chunks) from the dev DB to the server
+#   deploy/deploy.sh --sync-pdfs   copy the source PDFs (public documents) to the server, for evidence crops
 #
 # SSH host alias: KASAFI_SSH_HOST (default "vps"; see deploy/README.md for the ~/.ssh/config entry).
 # The server's IP is never stored in this repo. Server-side steps live in deploy/remote.sh.
@@ -13,6 +14,7 @@ HOST=${KASAFI_SSH_HOST:-vps}
 PUBLIC_URL=${KASAFI_PUBLIC_URL:-https://kasafi-api.halalnumeriq.com.ng}
 REMOTE_ENV=/opt/kasafi-agent/deploy/.env.incoming
 REMOTE_INDEX=/opt/kasafi-agent/deploy/index.incoming.sql.gz
+REMOTE_PDFS=/opt/kasafi-agent/deploy/pdfs.incoming.tar
 # Keys the server may receive. DATABASE_URL is left out until the production database exists
 # (the local one points at dev Postgres).
 ALLOWED_KEYS='KASAFI_OPEN_ACCESS|KASAFI_ALLOW_SECURITY_BUDGET|KASAFI_PILOT_NUMBERS|KASAFI_EXEMPT_NUMBERS|KASAFI_HASH_KEY|KASAFI_VOICE_PER_DAY|KASAFI_QUESTIONS_PER_DAY|KASAFI_DAILY_SPEND_CAP_USD|KASAFI_COST_PER_VOICE_USD|KASAFI_COST_PER_QUESTION_USD|KASAFI_FETCHES_PER_DAY|META_API_KEY|BASETEN_API_KEY|SERPER_API_KEY|RELIEFWEB_APPNAME|WHATSAPP_TOKEN|WHATSAPP_PHONE_NUMBER_ID|WHATSAPP_VERIFY_TOKEN|WHATSAPP_APP_SECRET|WHATSAPP_BUSINESS_ACCOUNT_ID|WHATSAPP_WABA_ID|WABA_ID'
@@ -88,6 +90,13 @@ case "${1:-}" in
     echo "→ uploading keys (values not shown): $keys"
     tr -d '\r' < .env | grep -E "^($ALLOWED_KEYS)=" | "$SSH" "$HOST" "umask 077; cat > $REMOTE_ENV"
     remote_and_report sync-env
+    ;;
+  --sync-pdfs)
+    tmp=$(mktemp)
+    uv run python scripts/pack_pdfs.py "$tmp" || { rm -f "$tmp"; die "packing the PDFs failed"; }
+    echo "→ uploading $(du -h "$tmp" | cut -f1) to $HOST"
+    "$SSH" "$HOST" "umask 077; cat > $REMOTE_PDFS" < "$tmp"; rm -f "$tmp"
+    remote_and_report sync-pdfs
     ;;
   --sync-index)
     echo "→ dumping documents/pages/chunks from the dev database (public documents only)"

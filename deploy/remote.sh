@@ -185,5 +185,24 @@ sync-index)
   exit 2
   ;;
 
+sync-pdfs)
+  # deploy.sh uploads a tar of the source PDFs (public documents, named <doc id>.pdf). They go into the
+  # app's data volume at /data/pdfs, where the evidence crops read them. Files are replaced, never deleted.
+  INCOMING=$APP/deploy/pdfs.incoming.tar
+  [ -s "$INCOMING" ] || { say "no $INCOMING uploaded"; exit 1; }
+  if dc exec -T api sh -c 'mkdir -p /data/pdfs && tar -x -m -C /data/pdfs' < "$INCOMING"; then
+    rm -f "$INCOMING"
+    n=$(dc exec -T api sh -c 'ls /data/pdfs | wc -l' | tr -d '[:space:]')
+    say "PDFs in /data/pdfs: $n"
+    log "sync-pdfs ok: $n files"
+    echo "RESULT=ok COMMIT=$(git rev-parse HEAD)"
+    exit 0
+  fi
+  rm -f "$INCOMING"
+  log "sync-pdfs FAILED"
+  echo "RESULT=failed COMMIT=none"
+  exit 1
+  ;;
+
 *) echo "remote: unknown mode $MODE"; exit 1 ;;
 esac

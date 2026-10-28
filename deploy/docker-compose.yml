@@ -29,6 +29,7 @@ services:
     environment:
       KASAFI_STATE_DB: /data/kasafi.db   # consent, language, limits (no phone numbers)
       KASAFI_FETCH_DIR: /data/fetched    # PDFs fetched live by the self-growing library (public documents)
+      KASAFI_PDF_DIR: /data/pdfs         # source PDFs for evidence crops (deploy/deploy.sh --sync-pdfs)
       POSTGRES_HOST: db
     volumes:
       - kasafi-agent-data:/data
