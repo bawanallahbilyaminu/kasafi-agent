@@ -3,7 +3,7 @@
 #   deploy/deploy.sh               deploy origin/main (must equal your pushed local main)
 #   deploy/deploy.sh --rollback    go back one release
 #   deploy/deploy.sh --sync-env    update the server's deploy/.env from your local .env (allowed keys only)
-#   deploy/deploy.sh --sync-index  copy the document index (documents/pages/chunks) from the dev DB to the server
+#   deploy/deploy.sh --sync-index  copy the document index (documents/pages/chunks/budget_rows) from the dev DB to the server
 #   deploy/deploy.sh --sync-pdfs   copy the source PDFs (public documents) to the server, for evidence crops
 #
 # SSH host alias: KASAFI_SSH_HOST (default "vps"; see deploy/README.md for the ~/.ssh/config entry).
@@ -101,7 +101,7 @@ case "${1:-}" in
   --sync-index)
     echo "→ dumping documents/pages/chunks from the dev database (public documents only)"
     tmp=$(mktemp)
-    MSYS_NO_PATHCONV=1 docker compose exec -T db pg_dump -U kasafi -d kasafi --data-only --no-owner       -t documents -t pages -t chunks | gzip > "$tmp" || { rm -f "$tmp"; die "pg_dump failed (is the dev DB running?)"; }
+    MSYS_NO_PATHCONV=1 docker compose exec -T db pg_dump -U kasafi -d kasafi --data-only --no-owner       -t documents -t pages -t chunks -t budget_rows | gzip > "$tmp" || { rm -f "$tmp"; die "pg_dump failed (is the dev DB running?)"; }
     echo "→ uploading $(du -h "$tmp" | cut -f1) to $HOST"
     "$SSH" "$HOST" "umask 077; cat > $REMOTE_INDEX" < "$tmp"; rm -f "$tmp"
     remote_and_report sync-index
