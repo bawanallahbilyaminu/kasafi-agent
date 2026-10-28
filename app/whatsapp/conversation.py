@@ -35,6 +35,7 @@ from app.whatsapp.client import mask_phone
 from app.whatsapp.messages import FIX_BUTTONS, LANG_BUTTONS, NOT_IN_PILOT, NOTICE_BUTTONS, first_contact_notice, t
 from app.whatsapp.corrections import Resolution, choose_option, quick_resolve, resolve
 from app.agent.calculate import CalcError, Calculation
+from app.evidence.crops import plan_crops
 from app.agent.calculate import result_text as calc_result_text
 from app.agent.answer import answer_from_documents
 from app.whatsapp.voice import VoiceOutcome, is_pilot, reply_for_voice
@@ -56,6 +57,8 @@ CONSENT_TEXTS = {"ok", "okay", "na yarda", "na amince", "i agree", "agree", "ok 
 class Out:
     text: str
     buttons: list[tuple[str, str]] | None = None
+    crops: list | None = None          # evidence images to send after this message (app/evidence/crops.py)
+    lang: str = "ha"
 
 
 def _norm(text: str) -> str:
@@ -171,7 +174,9 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         offer = getattr(result, "offer", None)
         store.set_pending_calc(key, offer.to_dict() if offer else None)
         text_out = f"{prefix}\n\n{body}" if prefix else body
-        return [Out(text_out, CALC_BUTTONS.get(lang, CALC_BUTTONS["en"]) if offer else None)]
+        crops = (plan_crops(result, settings.kasafi_max_images)
+                 if result is not None and settings.kasafi_evidence_images and store.images_on(key) else None)
+        return [Out(text_out, CALC_BUTTONS.get(lang, CALC_BUTTONS["en"]) if offer else None, crops or None, lang)]
 
     async def resolution_reply(res: Resolution, pending_q: str, reply: str = "") -> list[Out]:
         if res.kind == "ambiguous":            # replace or add? Ask once; the pending question stays

@@ -139,6 +139,22 @@ async def _table_crop(img: Image.Image, settings: Settings) -> Image.Image | Non
     return img.crop((int(b.x1 * k), int(b.y1 * k), int(b.x2 * k) + 1, int(b.y2 * k) + 1))
 
 
+async def send_evidence(wa, to: str, requests: list[CropRequest], lang: str, settings: Settings) -> int:
+    """Send the crops one image per message, best evidence first, under one timeout. Returns how many were sent."""
+    sent = 0
+    try:
+        async with asyncio.timeout(settings.kasafi_crop_timeout_s):
+            for req in requests[: settings.kasafi_max_images]:
+                if jpeg := await make_crop(req, settings):
+                    await wa.send_image(to, jpeg, req.caption(lang))
+                    sent += 1
+    except TimeoutError:
+        log.info("evidence images timed out after %d sent", sent)
+    except Exception as e:   # images are extra: never let them break the conversation
+        log.warning("evidence images failed after %d sent: %s", sent, type(e).__name__)
+    return sent
+
+
 async def make_crop(req: CropRequest, settings: Settings) -> bytes | None:
     path = pdf_path(req.doc_id, req.title, settings)
     if path is None:

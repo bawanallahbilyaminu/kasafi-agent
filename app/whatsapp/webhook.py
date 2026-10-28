@@ -23,6 +23,7 @@ from fastapi.responses import PlainTextResponse
 from pydantic import SecretStr
 
 from app.config import get_settings
+from app.evidence.crops import send_evidence
 from app.users import get_store
 from app.whatsapp.client import WhatsAppClient, mask_phone
 from app.whatsapp.conversation import handle
@@ -85,6 +86,9 @@ async def _reply(messages: list[dict[str, Any]]) -> None:
             try:
                 for out in await handle(msg, client, store=store, settings=settings, notify=send):
                     await send(out)
+                    if out.crops:          # after the text: a slow crop never delays the answer
+                        n = await send_evidence(client, msg["from"], out.crops, out.lang, settings)
+                        log.info("evidence images sent: %d of %d", n, len(out.crops))
                 log.info("reply sent to %s", mask_phone(msg["from"]))
             except Exception:  # one failed reply must not stop the rest
                 log.exception("reply to %s failed", mask_phone(msg.get("from", "")))

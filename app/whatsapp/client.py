@@ -6,6 +6,8 @@ Graph API at https://graph.facebook.com/<version> with `Authorization: Bearer <W
 - media:    GET /<media_id> returns {url, mime_type, sha256, file_size}. The url expires after
             5 minutes and must be downloaded with the same token.
 - delete:   DELETE /<media_id>. Received media otherwise persists on Meta's side for 30 days.
+- upload:   POST /<phone_number_id>/media (multipart: file, type, messaging_product) returns {id}; an
+            image message then sends that id with a caption (evidence crops of public documents).
 """
 
 from __future__ import annotations
@@ -114,6 +116,30 @@ class WhatsAppClient:
         })
         if not resp.is_success:
             log.warning("WhatsApp buttons to %s failed: HTTP %s, Graph error code %s",
+                        mask_phone(to), resp.status_code, _graph_code(resp))
+            resp.raise_for_status()
+        return resp.json()
+
+    async def upload_media(self, data: bytes, mime: str = "image/jpeg", filename: str = "evidence.jpg") -> str:
+        resp = await self._http.post(f"/{self.phone_number_id}/media",
+                                     data={"messaging_product": "whatsapp", "type": mime},
+                                     files={"file": (filename, data, mime)})
+        if not resp.is_success:
+            log.warning("WhatsApp media upload failed: HTTP %s, Graph error code %s", resp.status_code, _graph_code(resp))
+            resp.raise_for_status()
+        return str(resp.json()["id"])
+
+    async def send_image(self, to: str, jpeg: bytes, caption: str = "") -> dict:
+        media_id = await self.upload_media(jpeg)
+        resp = await self._http.post(f"/{self.phone_number_id}/messages", json={
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "image",
+            "image": {"id": media_id, "caption": caption[:1024]},
+        })
+        if not resp.is_success:
+            log.warning("WhatsApp image to %s failed: HTTP %s, Graph error code %s",
                         mask_phone(to), resp.status_code, _graph_code(resp))
             resp.raise_for_status()
         return resp.json()
