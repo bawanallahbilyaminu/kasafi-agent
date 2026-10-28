@@ -158,3 +158,15 @@ def extract_rows(labelled_pages: list[str], titles: list[list[str]]) -> list[Bud
         for line, title in zip(text.splitlines(), titles[i - 1]):
             rows.extend(rows_from_page(i, line, title, factor))
     return rows
+
+
+def line_ids(doc_id: str, rows: list[BudgetRow]) -> dict[tuple[int, str, str], tuple[str, BudgetRow]]:
+    """One id per printed line (page, table title, row text), in reading order: '<doc_id>:<page>:<n>'."""
+    out: dict[tuple[int, str, str], tuple[str, BudgetRow]] = {}
+    per_page: dict[int, int] = {}
+    for r in rows:
+        key = (r.page, r.table_title, r.row_text)
+        if key not in out:
+            per_page[r.page] = per_page.get(r.page, 0) + 1
+            out[key] = (f"{doc_id}:{r.page}:{per_page[r.page]}", r)
+    return out

@@ -499,11 +499,18 @@ def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bo
                     for j, chunk in enumerate(page_chunks):
                         cp.write_row((doc["id"], i, j, chunk))
                         n_chunks += 1
+            # One searchable line per printed table row; each typed cell points back to its line
+            line_ids = tables.line_ids(doc["id"], rows)
+            with cur.copy("COPY budget_lines (id, doc_id, page, table_title, classification, spend_kind, code, name, "
+                          "row_text) FROM STDIN") as cp:
+                for (page, title, row_text), (lid, r) in line_ids.items():
+                    cp.write_row((lid, doc["id"], page, title, r.classification, r.spend_kind, r.code, r.name, row_text))
             with cur.copy("COPY budget_rows (doc_id, page, table_title, classification, spend_kind, code, name, "
-                          "column_label, year, measure, period, amount_naira, row_text) FROM STDIN") as cp:
+                          "column_label, year, measure, period, amount_naira, row_text, line_id) FROM STDIN") as cp:
                 for r in rows:
                     cp.write_row((doc["id"], r.page, r.table_title, r.classification, r.spend_kind, r.code, r.name,
-                                  r.column_label, r.year, r.measure, r.period, r.amount_naira, r.row_text))
+                                  r.column_label, r.year, r.measure, r.period, r.amount_naira, r.row_text,
+                                  line_ids[(r.page, r.table_title, r.row_text)][0]))
     quality.run(conn, doc["id"], doc.get("category"),
                 [(i, text, src) for i, (text, src) in enumerate(zip(labelled, sources), start=1)])
     return IndexResult(doc["id"], "indexed", len(pages), empty, n_chunks)
