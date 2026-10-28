@@ -179,6 +179,10 @@ TEXTS = {
         "ha": "Kasafi ba ya ba da shawarar magani ko ta abinci mai gina jiki.\n\nDon Allah ka tuntuɓi ma'aikacin lafiya. Zan iya taimaka maka da alƙaluman kasafin lafiya, misali: «Nawa aka ware wa lafiya a 2026?»",
         "en": "Kasafi doesn't give medical or nutrition advice.\n\nPlease speak to a health worker. I can help with health budget figures, for example: «How much was allocated to health in 2026?»",
     },
+    "calc_cancelled": {
+        "ha": "To, ban lissafa ba.",
+        "en": "OK, I won't calculate it.",
+    },
     "cancelled": {
         "ha": "To, an soke wannan tambayar.\n\nKa aiko da sabuwar tambaya a duk lokacin da kake so.",
         "en": "OK, that question is cancelled.\n\nSend a new question whenever you like.",

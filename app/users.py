@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS users (
     pending_question TEXT,         -- read-back awaiting Eh / A'a / a correction (short-lived)
     pending_english  TEXT,
     pending_at       TEXT,
-    pending_options  TEXT          -- JSON {"replace": ..., "add": ...} while asking which one was meant
+    pending_options  TEXT,         -- JSON {"replace": ..., "add": ...} while asking which one was meant
+    pending_calc     TEXT          -- JSON calculation offered ("Reply Eh to calculate"), until the next message
 );
 CREATE TABLE IF NOT EXISTS usage (
     user_key  TEXT NOT NULL,
@@ -107,7 +108,7 @@ class UserStore:
     def _migrate(self) -> None:
         """Add columns introduced after the first deploy (the server DB already exists)."""
         have = {row[1] for row in self._db.execute("PRAGMA table_info(users)")}
-        for col in ("pending_question", "pending_english", "pending_at", "pending_options"):
+        for col in ("pending_question", "pending_english", "pending_at", "pending_options", "pending_calc"):
             if col not in have:
                 self._db.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
 
@@ -157,6 +158,14 @@ class UserStore:
 
     def clear_pending_options(self, key: str) -> None:
         self._exec("UPDATE users SET pending_options=NULL WHERE user_key=?", (key,))
+
+    def set_pending_calc(self, key: str, calc: dict | None) -> None:
+        self._exec("UPDATE users SET pending_calc=? WHERE user_key=?",
+                   (json.dumps(calc, ensure_ascii=False) if calc else None, key))
+
+    def get_pending_calc(self, key: str) -> dict | None:
+        row = self._exec("SELECT pending_calc FROM users WHERE user_key=?", (key,)).fetchone()
+        return json.loads(row[0]) if row and row[0] else None
 
     def clear_pending(self, key: str) -> None:
         self._exec("UPDATE users SET pending_question=NULL, pending_english=NULL, pending_at=NULL, "

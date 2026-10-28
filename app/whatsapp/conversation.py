@@ -34,6 +34,8 @@ from app.users import UserStore, user_key
 from app.whatsapp.client import mask_phone
 from app.whatsapp.messages import FIX_BUTTONS, LANG_BUTTONS, NOT_IN_PILOT, NOTICE_BUTTONS, first_contact_notice, t
 from app.whatsapp.corrections import Resolution, choose_option, quick_resolve, resolve
+from app.agent.calculate import CalcError, Calculation
+from app.agent.calculate import result_text as calc_result_text
 from app.agent.answer import answer_from_documents
 from app.whatsapp.voice import VoiceOutcome, is_pilot, reply_for_voice
 
@@ -41,6 +43,8 @@ log = logging.getLogger(__name__)
 
 LANG_COMMANDS = {"/hausa": "ha", "hausa": "ha", "/english": "en", "english": "en", "turanci": "en", "/turanci": "en"}
 LANG_BUTTON_IDS = {"lang_ha": "ha", "lang_en": "en"}
+CALC_BUTTONS = {"ha": [("calc_yes", "Eh, lissafa"), ("calc_no", "A'a")],
+                "en": [("calc_yes", "Yes, calculate"), ("calc_no", "No")]}
 CONSENT_TEXTS = {"ok", "okay", "na yarda", "na amince", "i agree", "agree", "ok na yarda"}
 
 
@@ -156,8 +160,11 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             store.add_turn(key, lang, question, body, getattr(result, "sources", []))
         except Exception as e:  # DB or model down: tell the user rather than go silent
             log.exception("answer failed: %s", type(e).__name__)
-            body = t("answer_failed", lang)
-        return [Out(f"{prefix}\n\n{body}" if prefix else body)]
+            body, result = t("answer_failed", lang), None
+        offer = getattr(result, "offer", None)
+        store.set_pending_calc(key, offer.to_dict() if offer else None)
+        text_out = f"{prefix}\n\n{body}" if prefix else body
+        return [Out(text_out, CALC_BUTTONS.get(lang, CALC_BUTTONS["en"]) if offer else None)]
 
     async def resolution_reply(res: Resolution, pending_q: str, reply: str = "") -> list[Out]:
         if res.kind == "ambiguous":            # replace or add? Ask once; the pending question stays
@@ -195,6 +202,21 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             # "Eh" doesn't say which: answering it would mean answering the misheard version. Ask again.
             return [Out(t("ask_replace_or_add", lang, value=options.get("value", "")), FIX_BUTTONS.get(lang, FIX_BUTTONS["ha"]))]
         store.clear_pending_options(key)       # anything else: drop the question and carry on as usual
+
+    # 5a2. Eh to a calculation offer: computed here from the stored, checked inputs (no model call)
+    calc = store.get_pending_calc(key)
+    if calc and not pending:
+        quick = quick_resolve(text) if text else None
+        if button in ("calc_yes", "calc_no") or quick:
+            store.set_pending_calc(key, None)
+            if button == "calc_yes" or (quick and quick.kind == "confirm"):
+                log.info("calculation run for %s", mask_phone(sender))
+                try:
+                    return [Out(calc_result_text(Calculation.from_dict(calc), lang))]
+                except CalcError:
+                    return [Out(t("answer_failed", lang))]
+            return [Out(t("calc_cancelled", lang))]
+        store.set_pending_calc(key, None)      # anything else: the offer lapses, carry on as usual
 
     # 5b. Eh / A'a to a pending read-back: no model needed to decide
     if pending and text and (quick := quick_resolve(text)):
