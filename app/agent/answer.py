@@ -39,7 +39,7 @@ from app.acquisition.editions import (SERIES, Latest, Series, doc_edition, editi
 from app.acquisition.library import Acquired, fetch_and_index, find_and_fetch, log_gap
 from app.agent.budget_query import QueryResult, context_text, lga_in, render_working, run_budget_query
 from app.agent.calculate import MIXED, CalcError, Calculation, MixedBases, offer_text, validate
-from app.agent.line_answer import LineResult, fmt, read_lines, short_name
+from app.agent.line_answer import LineResult, fmt, item_of, read_lines, short_name
 from app.retrieval.line_search import MAX_LINES, search_lines
 from app.config import Settings, get_settings
 from app.providers.chat import ChatClient
@@ -95,13 +95,17 @@ PLAN_SYSTEM = (
     "reads the rows itself, so give terms, not answers. Use the documents' own vocabulary too: IGR is printed as "
     "'Independent Revenue'; the budget prints its own totals as 'Total Expenditure', 'Recurrent Expenditure', "
     "'Capital Expenditure', 'Total Revenue', 'Debt Service'; a state's share of a jointly funded programme is "
-    "'counterpart' funding. For a share or ratio, add the terms for the whole too (e.g. 'Total Expenditure'). "
+    "'counterpart' funding; external debt and loans are printed as 'FOREIGN' (FOREIGN PRINCIPAL, FOREIGN "
+    "INTEREST). For a share or ratio, add the terms for the whole too (e.g. 'Total Expenditure'). "
     "Don't use line_search for one whole sector or one ministry's allocation and spending (e.g. 'how much was "
     "allocated to education / to the Ministry of Health, and how much was spent'): normal search answers those "
     "and quotes the report's own % performance. A local government area (LGA) is not an institution located in "
     "it: a state hospital or school in an LGA is not that LGA's allocation. "
-    "RANKING: only to rank whole ministries or functions (e.g. 'which five ministries got the most capital'), add "
-    "\"budget_query\": {\"operation\": \"rank\", \"top\": N, \"items\": [{\"label\": \"<short>\", "
+    "RANKING: only to rank whole ministries or functions, by amount (e.g. 'which five ministries got the most "
+    "capital') or by rate of spending against the budget (release, absorption, execution or performance rate), "
+    "highest or lowest first, add "
+    "\"budget_query\": {\"operation\": \"rank\", \"top\": N, \"by\": \"amount\"|\"rate\", \"order\": "
+    "\"highest\"|\"lowest\", \"items\": [{\"label\": \"<short>\", "
     "\"classification\": \"administrative\"|\"function\", \"spend_kind\": \"total\"|\"capital\"|"
     "\"personnel\"|\"overhead\", \"year\": YYYY, \"measure\": \"approved\"|\"actual\", \"period\": "
     "\"full_year\"|\"q1_q2\"|\"q1_q4\"}]}. Otherwise line_search and budget_query are null.\n"
@@ -829,6 +833,8 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
 
     def label(x) -> str:     # its code; and the same name from two tables (personnel, overhead): which table
         name = short_name(x) + (f" (code {x.code})" if x.code else "")
+        if (item := item_of(x)) and len(short_name(x).split()) <= 6:     # a short name may be only a place
+            name += f" – {item.lower()}"
         if names[(x.doc_id, short_name(x))] > 1 and " - " in x.table_title:
             name += f" [{x.table_title.rsplit(' - ', 1)[-1]}]"
         return name

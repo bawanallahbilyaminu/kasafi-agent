@@ -45,6 +45,8 @@ SELECT_SYSTEM = (
     "3. The same project can be printed in two tables of one budget: pick it once. When several lines ARE the "
     "item asked about, pick all of them. Prefer lines whose own words match the question's key words over "
     "lines that are only related.\n"
+    "3a. A project's printed name can be only a place or a fragment (long names wrap over printed rows); its "
+    "'item' says what the money buys. Judge a line by its item, never by a place name in it.\n"
     "4. For several things, pick a line for each; list what you couldn't find in 'missing'. Each line's page "
     "and code are shown to the reader, so never list a page or code as missing.\n"
     "5. operation: \"list\" (show each figure), \"sum\" (add all selections), \"compare\" (two selections; "
@@ -112,11 +114,21 @@ def short_name(line: Line) -> str:
     return head if agency == line.name or agency.lower() in head.lower() else f"{head} ({agency})"
 
 
+_ITEM = re.compile(r"\b\d{8}\s*-\s*([A-Z][A-Z0-9 /&,().'-]{3,90}?)\s*\d{5}")
+
+
+def item_of(line: Line) -> str:
+    """What a project line buys, from its economic code: 'CONSTRUCTION / PROVISION OF PUBLIC SCHOOLS'."""
+    m = _ITEM.search(line.row_text.split(" | ", 1)[0]) if line.classification == "project" else None
+    return " ".join(m.group(1).split()) if m else ""
+
+
 def listing(lines: list[Line]) -> str:
     out = []
     for i, x in enumerate(lines, 1):
         cols = " | ".join(f"{c.column}: {fmt(c.amount)}" for c in x.cells)
         code = f" | code {x.code}" if x.code else ""
+        code += f" | item: {item_of(x)}" if item_of(x) else ""
         out.append(f"L{i} | {x.title}, page {x.page} | table: {x.table_title[:110]} | {short_name(x)[:140]}{code} "
                    f"| {cols}")
     return "\n".join(out)

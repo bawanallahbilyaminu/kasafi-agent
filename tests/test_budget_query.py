@@ -164,3 +164,36 @@ def test_an_institution_in_an_lga_is_not_the_lga_allocation(monkeypatch) -> None
     assert r.rows == [] and r.located_in == ["Wamakko"] and not q.complete
     text = bq.render_working(q, {}, "en")
     assert "not an allocation to Wamakko LGA" in text and "Orthopedic" not in text
+
+
+def test_rank_by_rate_keeps_every_line_tied_with_the_last_place() -> None:
+    from app.agent.budget_query import rank_rates
+
+    def row(code, name, actual, base, measure="revised"):
+        return ("bir-2026-q2", "Budget Implementation Report Q2 2026", 27, "Capital", code, name,
+                "2026 Performance Year to Date (Q1-Q2)", actual, f"{code} {name}", measure,
+                f"2026 {measure.title()} Budget", base)
+    rows = [row("023100000000", "Ministry of Energy", "510359946.99", "19974978013.72"),
+            row("023100000000", "Ministry of Energy", "510359946.99", "22474978013.72", "original"),  # revised wins
+            row("023600000000", "Ministry of Culture", "0", "788590700"),
+            row("032600000000", "Ministry of Justice", "0", "3707170000"),
+            row("022200000000", "Ministry of Commerce", "0", "4106233650"),
+            row("023300000000", "Ministry of Solid Minerals", "0", "610100000"),
+            row("023300100100", "Department under Solid Minerals", "0", "610100000"),   # not a ministry code
+            row("021500000000", "Ministry of Agriculture", "4516625000", "14927700000")]
+    ranked = rank_rates(rows, r"^\d{2}(?!00)\d{2}0{8}$", 3, lowest=True)
+    assert [p.rate for p in ranked] == [Decimal("0.0")] * 4                 # four at 0.0%, none hidden
+    assert "Ministry of Energy" not in [p.name for p in ranked]
+    top = rank_rates(rows, r"^\d{2}(?!00)\d{2}0{8}$", 1, lowest=False)
+    assert top[0].name == "Ministry of Agriculture" and top[0].rate == Decimal("30.3")
+    assert rank_rates(rows, r"^\d{2}(?!00)\d{2}0{8}$", 6, lowest=False)[1].base_label == "2026 Revised Budget"
+
+
+def test_project_item_says_what_the_money_buys() -> None:
+    from app.agent.line_answer import item_of
+    from app.retrieval.line_search import Line
+    x = Line("d:65:12", "t", "d", 65, "Capital Expenditure by Project", "Arkilla Federal Low cost Housing",
+             "Arkilla Federal Low cost Housing 051700100100 - Ministry for Basic Education 23020107 - CONSTRUCTION / "
+             "PROVISION OF PUBLIC SCHOOLS 70922 - UPPER-SECONDARY EDUCATION33312100 - WAMAKKO | 2026 Approved Budget: "
+             "350,000,000.00", "project", "", "", 1.0)
+    assert item_of(x) == "CONSTRUCTION / PROVISION OF PUBLIC SCHOOLS"

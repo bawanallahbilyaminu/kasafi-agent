@@ -68,6 +68,9 @@ class Picked:
     column_label: str
     amount: Decimal
     row_text: str
+    rate: Decimal | None = None          # rank by rate: amount as a % of base_amount, computed here
+    base_label: str = ""
+    base_amount: Decimal | None = None
 
 
 @dataclass
@@ -294,13 +297,14 @@ _RANK_LEVEL = {"administrative": r"^\d{2}(?!00)\d{2}0{8}$", "function": r"^\d{4}
                "economic": r"^\d{2}$"}
 
 
-def run_rank(conn: psycopg.Connection, item: Item, top: int) -> list[Picked]:
+def run_rank(conn: psycopg.Connection, item: Item, top: int, lowest: bool = False) -> list[Picked]:
     """The biggest lines of one classification in one document: ministries, functions, sectors."""
     rows = _candidates(conn, item, item.measure, [])
     doc = _best_doc(rows, item)
     level = re.compile(_RANK_LEVEL.get(item.classification, r"^\d+$"))
     seen, out = set(), []
-    for r in sorted((r for r in rows if r[0] == doc and r[4] and level.match(r[4])), key=lambda r: -Decimal(r[7])):
+    for r in sorted((r for r in rows if r[0] == doc and r[4] and level.match(r[4])),
+                    key=lambda r: Decimal(r[7]) if lowest else -Decimal(r[7])):
         if r[4] not in seen:
             seen.add(r[4])
             out.append(_picked(r))
@@ -309,12 +313,58 @@ def run_rank(conn: psycopg.Connection, item: Item, top: int) -> list[Picked]:
     return out
 
 
+# Spending against the budget for each line of a report: the actual column joined to the same line's budget.
+_RATE_SQL = """
+SELECT a.doc_id, d.title, a.page, COALESCE(a.table_title, ''), a.code, a.name, a.column_label, a.amount_naira,
+       a.row_text, b.measure, b.column_label, b.amount_naira
+FROM budget_rows a JOIN documents d ON d.id = a.doc_id
+JOIN budget_rows b ON b.line_id = a.line_id AND b.period = 'full_year' AND b.year = a.year
+     AND b.measure IN ('revised', 'final', 'original', 'approved')
+WHERE a.doc_id = %(doc)s AND a.classification = %(cls)s AND a.spend_kind = %(kind)s AND a.measure = 'actual'
+  AND a.period = %(period)s AND (%(year)s::int IS NULL OR a.year = %(year)s)
+"""
+_BASE_ORDER = ("revised", "final", "original", "approved")
+
+
+def rank_rates(rows: list[tuple], level: str, top: int, lowest: bool) -> list[Picked]:
+    """Lines ranked by actual / budget (the revised budget when there is one). Lines tied with the last
+    place are all kept, so 'the three lowest' never hides a fourth line at the same rate."""
+    best: dict[str, tuple] = {}
+    for r in rows:
+        if not r[4] or not re.match(level, r[4]) or not Decimal(r[11]):
+            continue
+        prev = best.get(r[4])
+        if prev is None or _BASE_ORDER.index(r[9]) < _BASE_ORDER.index(prev[9]):
+            best[r[4]] = r
+    picked = []
+    for r in best.values():
+        rate = (Decimal(r[7]) / Decimal(r[11]) * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        picked.append(Picked(r[0], r[1], r[2], r[3], r[4], r[5], r[6], Decimal(r[7]), r[8], rate, r[10], Decimal(r[11])))
+    picked.sort(key=lambda p: (p.rate if lowest else -p.rate, p.name))
+    if len(picked) <= top:
+        return picked
+    cut = picked[top - 1].rate
+    return [p for i, p in enumerate(picked) if i < top or p.rate == cut][:MAX_RANK * 2]
+
+
+def run_rank_rate(conn: psycopg.Connection, item: Item, top: int, lowest: bool) -> list[Picked]:
+    doc = _best_doc(_candidates(conn, item, "actual", []), item)
+    if not doc:
+        return []
+    rows = conn.execute(_RATE_SQL, {"doc": doc, "cls": item.classification, "kind": item.spend_kind,
+                                    "period": item.period, "year": item.year}).fetchall()
+    return rank_rates(rows, _RANK_LEVEL.get(item.classification, r"^\d+$"), top, lowest)
+
+
 def run_budget_query(conn: psycopg.Connection, spec: dict) -> QueryResult:
     op = spec.get("operation") if spec.get("operation") in OPERATIONS else "lookup"
     items = [Item.from_dict(d) for d in (spec.get("items") or [])[:MAX_ITEMS] if isinstance(d, dict)]
     if op == "rank" and items:
         top = max(1, min(int(spec.get("top") or 5), MAX_RANK))
-        return QueryResult(op, [], ranking=run_rank(conn, items[0], top))
+        lowest = spec.get("order") == "lowest"
+        if spec.get("by") == "rate":
+            return QueryResult(op, [], ranking=run_rank_rate(conn, items[0], top, lowest))
+        return QueryResult(op, [], ranking=run_rank(conn, items[0], top, lowest))
     results = [run_item(conn, it) for it in items]
     q = QueryResult(op, results)
     # Arithmetic only on the items themselves: a container (a whole ministry offered for a specific item) is shown
@@ -339,14 +389,16 @@ WORDS = {
     "en": {"head": "🧮 *Working* (the rows used):", "missing": "not found in the budget tables",
            "also": "also", "total": "Total", "difference": "Difference", "share": "Share", "of": "of",
            "calc": "Kasafi's calculation", "included": "included in", "not_found": "not found",
-           "container": "the budget doesn't show {topic} separately; this is the whole line that contains it:",
+           "container": "the budget doesn't show {topic} separately; this is a broader line, and the documents "
+                        "don't say how much of it is for {topic}:",
            "repeat": "same row as above, counted once",
            "lga": "state budget lines for institutions located in {lga} are not an allocation to {lga} LGA; LGAs get "
                   "their statutory allocations separately, and these documents don't show one for {lga}"},
     "ha": {"head": "🧮 *Yadda aka lissafa* (layukan da aka yi amfani da su):", "missing": "ba a samu a teburorin kasafi ba",
            "also": "har ila yau", "total": "Jimilla", "difference": "Bambanci", "share": "Kaso", "of": "na",
            "calc": "lissafin Kasafi", "included": "yana cikin", "not_found": "ba a samu ba",
-           "container": "kasafin bai nuna {topic} daban ba; ga jimillar layin da ya ƙunshe shi:",
+           "container": "kasafin bai nuna {topic} daban ba; ga layi mai faɗi, kuma takardun ba su faɗi nawa "
+                        "daga cikinsa ne na {topic} ba:",
            "repeat": "layi ɗaya da na sama, an ƙidaya shi sau ɗaya",
            "lga": "layukan kasafin jiha na cibiyoyin da ke {lga} ba kuɗin Ƙaramar Hukumar {lga} ba ne; ƙananan "
                   "hukumomi suna samun kasonsu na doka daban, kuma waɗannan takardun ba su nuna na {lga} ba"},
@@ -355,6 +407,9 @@ WORDS = {
 
 def _line(p: Picked, nmap: dict) -> str:
     code = f" ({p.code})" if p.code else ""
+    if p.rate is not None:
+        return (f"{p.name}{code}: {p.rate}% ({p.column_label}: {fmt(p.amount)} of {p.base_label}: "
+                f"{fmt(p.base_amount)}) [{nmap[(p.doc_id, p.page)]}]")
     return f"{p.name}{code}, {p.column_label}: {fmt(p.amount)} [{nmap[(p.doc_id, p.page)]}]"
 
 
@@ -367,7 +422,11 @@ def render_working(q: QueryResult, nmap: dict, lang: str) -> str:
     w = WORDS.get(lang, WORDS["en"])
     out = [w["head"]]
     if q.operation == "rank":
-        out += [f"{i}. {_line(p, nmap)}" for i, p in enumerate(q.ranking, 1)]
+        place = 0
+        for i, p in enumerate(q.ranking, 1):     # equal rates share a place: "1. ... 1. ..."
+            if i == 1 or p.rate is None or p.rate != q.ranking[i - 2].rate:
+                place = i
+            out.append(f"{place}. {_line(p, nmap)}")
         return "\n".join(out)
     shown: set = set()
 
