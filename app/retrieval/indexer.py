@@ -140,8 +140,10 @@ def extract_pages(path: Path) -> list[str]:
 
 # A title names a kind of statement ("budget" alone isn't enough: "Procurement of software for tracking of
 # Budget" is a line item) and has a title shape ("... by Programme", "Summary of ...", "Total ...").
-_TITLE_WORDS = re.compile(r"(?i)\b(expenditure|revenue|receipts|appropriation|financing|summary|statement)\b")
-_TITLE_SHAPE = re.compile(r"(?i)(\bby\b|^summary\b|^total\b|\bsummary of\b|\bstatement of\b)")
+_TITLE_WORDS = re.compile(r"(?i)\b(expenditure|revenue|receipts|appropriation|financing|summary|statement|"
+                          r"price index|indices)\b")
+_TITLE_SHAPE = re.compile(r"(?i)(\bby\b|^summary\b|^total\b|\bsummary of\b|\bstatement of\b|\bprice index\b|"
+                          r"\bindices\b)")
 _HAS_AMOUNT = re.compile(r"\d{1,3}(,\d{3})+|\d+\.\d{2}\b")
 
 
@@ -288,11 +290,93 @@ def label_tables(text: str, columns: list[str], open_header: list[str] | None = 
     return chr(10).join(out), columns, []
 
 
+# --- OCR'd tables ------------------------------------------------------------------------------
+# OCR returns a table as "a | b | c" rows. Its header can take two lines, the first leaving a blank cell
+# where a heading spans two columns: "State | Sep-25 | | Aug-26 | ..." over "State | Food | All Items | ...".
+# Rows are labelled with the combined names ("Sokoto | Sep-25 Food: 127.0 | ... | YoY All Items: 8.0"),
+# again only when the value count matches the header exactly. Without this the NBS state CPI table was
+# bare numbers, and search for Sokoto's year-on-year rate never found it.
+_PIPE_NUMBER = re.compile(r"^(?:-|-?\(?[\d,]+(?:\.\d+)?\)?%?)$")
+_YEAR = re.compile(r"^(?:19|20)\d\d$")
+
+
+def _cells(line: str) -> list[str]:
+    return [c.strip() for c in line.split("|")]
+
+
+def _is_pipe_header(cells: list[str]) -> bool:
+    rest = [c for c in cells[1:] if c]
+    return len(cells) >= 3 and bool(rest) and not any(_PIPE_NUMBER.match(c) and not _YEAR.match(c) for c in rest)
+
+
+def _combine_headers(rows: list[list[str]]) -> list[str]:
+    width = max(len(r) for r in rows) - 1
+    filled = []
+    for r in rows:
+        cells, last = (r[1:] + [""] * width)[:width], ""
+        row = []
+        for c in cells:
+            last = c or last
+            row.append(last)
+        filled.append(row)
+    names = []
+    for parts in zip(*filled):
+        name = []
+        for p in parts:
+            p = _ABBREVIATIONS.get(p, p)
+            p = _MONTH_YY.sub(lambda m: f"{m.group(1)} 20{m.group(2)}", p)    # "Sep-25" -> "Sep 2025"
+            if p and p not in name:
+                name.append(p)
+        names.append(" ".join(name))
+    return names
+
+
+# Spelled out so a question saying "year-on-year" finds a column headed "YoY"
+_ABBREVIATIONS = {"YoY": "Year-on-Year", "MoM": "Month-on-Month"}
+_MONTH_YY = re.compile(r"^([A-Z][a-z]{2,8})-(\d{2})$")
+
+
+def label_pipe_tables(text: str) -> tuple[str, set[str]]:
+    """Label OCR'd pipe tables. Returns the new text and the labelled rows (indexed as key rows)."""
+    lines, out, labelled, columns, i = text.splitlines(), [], set(), [], 0
+    while i < len(lines):
+        line = lines[i]
+        if "|" not in line:
+            if line.strip():
+                columns = []                       # a table ends at the first line of text
+            out.append(line)
+            i += 1
+            continue
+        cells = _cells(line)
+        if _is_pipe_header(cells):
+            header, j = [cells], i + 1
+            while j < len(lines) and len(header) < 3 and "|" in lines[j] and _is_pipe_header(_cells(lines[j])):
+                header.append(_cells(lines[j]))
+                j += 1
+            columns = _combine_headers(header)
+            out.extend(lines[i:j])
+            i = j
+            continue
+        values = cells[1:]
+        while values and not values[-1] and len(values) > len(columns):
+            values.pop()                           # a trailing "|" leaves an empty last cell
+        if columns and cells[0] and len(values) == len(columns) and all(_PIPE_NUMBER.match(v) for v in values if v) \
+                and any(values):
+            row = cells[0] + " | " + " | ".join(f"{c}: {v}" for c, v in zip(columns, values) if v)
+            out.append(row)
+            labelled.add(row)
+        else:
+            out.append(line)
+        i += 1
+    return chr(10).join(out), labelled
+
+
 def contextual_chunks(pages: list[str]) -> list[list[str]]:
     """Label table columns, chunk every page, and prefix each chunk with the table title in force at its start."""
     out, title, columns, open_header = [], "", [], []
     for text in pages:
         page_chunks = []
+        text, pipe_rows = label_pipe_tables(text)
         text, columns, open_header = label_tables(text, columns, open_header)
         # Sector-total rows ("04 Health"), ministry-total rows (12-digit codes ending in eight zeros, e.g.
         # "017200000000 Ministry for Religious Affairs") and "Total ..." rows also get their own one-row
@@ -305,7 +389,8 @@ def contextual_chunks(pages: list[str]) -> list[list[str]]:
                 row_title = new_title
                 continue
             row_title = new_title
-            if " | " in line and (re.match(r"^(\d{2}|\d{4}0{8})\s", line) or line.lower().startswith("total")):
+            if " | " in line and (re.match(r"^(\d{2}|\d{4}0{8})\s", line) or line.lower().startswith("total")
+                                  or line in pipe_rows):
                 key_rows.append((f"[Table: {row_title}]" + chr(10) if row_title else "") + line)
         for chunk in chunk_page(text) if len(text) >= MIN_PAGE_CHARS else []:
             lines = chunk.splitlines()
@@ -315,6 +400,11 @@ def contextual_chunks(pages: list[str]) -> list[list[str]]:
                 title = next_title(line, title)
         out.append(page_chunks + key_rows)
     return out
+
+
+def ocr_page_chunks(text: str) -> list[str]:
+    """Chunks for one page OCR'd after indexing: the same table labelling and key rows as any page."""
+    return contextual_chunks([text])[0]
 
 
 def chunk_page(text: str, size: int = CHUNK_CHARS, overlap: int = CHUNK_OVERLAP) -> list[str]:

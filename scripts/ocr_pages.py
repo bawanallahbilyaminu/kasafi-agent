@@ -23,12 +23,13 @@ import pypdfium2 as pdfium  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.providers.chat import ProviderError  # noqa: E402
 from app.providers.meta import MetaClient  # noqa: E402
-from app.retrieval.indexer import chunk_page, find_file  # noqa: E402
+from app.retrieval.indexer import accounting_negatives, find_file, ocr_page_chunks  # noqa: E402
 from app.retrieval.ocr import ocr_image, render_page  # noqa: E402
 
 
 def save_page(conn: psycopg.Connection, doc_id: str, page: int, text: str) -> int:
-    chunks = chunk_page(text)
+    text = accounting_negatives(text)
+    chunks = ocr_page_chunks(text)
     with conn.transaction():
         conn.execute("UPDATE pages SET text = %s, source = 'ocr' WHERE doc_id = %s AND page = %s", (text, doc_id, page))
         conn.execute("DELETE FROM chunks WHERE doc_id = %s AND page = %s", (doc_id, page))

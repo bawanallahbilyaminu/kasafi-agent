@@ -34,7 +34,7 @@ from app.config import Settings
 from app.providers.chat import ChatClient, ProviderError
 from app.providers.meta import MetaClient
 from app.providers.stt import parse_json_reply
-from app.retrieval.indexer import MIN_PAGE_CHARS, accounting_negatives, chunk_page, index_document, sha256_file
+from app.retrieval.indexer import MIN_PAGE_CHARS, accounting_negatives, index_document, ocr_page_chunks, sha256_file
 from app.retrieval.ocr import ocr_image
 
 log = logging.getLogger(__name__)
@@ -261,6 +261,6 @@ def save_ocr_page(conn: psycopg.Connection, doc_id: str, page: int, text: str) -
     with conn.transaction():
         conn.execute("UPDATE pages SET text = %s, source = 'ocr' WHERE doc_id = %s AND page = %s", (text, doc_id, page))
         conn.execute("DELETE FROM chunks WHERE doc_id = %s AND page = %s", (doc_id, page))
-        for i, chunk in enumerate(chunk_page(text)):
+        for i, chunk in enumerate(ocr_page_chunks(text)):
             conn.execute("INSERT INTO chunks (doc_id, page, idx, text) VALUES (%s, %s, %s, %s)",
                          (doc_id, page, i, chunk))
