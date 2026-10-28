@@ -25,7 +25,7 @@ from app.retrieval.line_search import MAX_LINES, Cell, Line, groups, ministry_of
 log = logging.getLogger(__name__)
 
 STRONG_HITS_TO_ASK = 80      # this many keyword hits over several agencies: ask which area is meant
-OPERATIONS = ("list", "sum", "compare", "share")
+OPERATIONS = ("list", "sum", "compare", "share", "ratio")
 
 SELECT_SYSTEM = (
     "You are Kasafi, answering questions about Sokoto State budget documents. You get the QUESTION and numbered "
@@ -39,22 +39,28 @@ SELECT_SYSTEM = (
     "implementation reports 'Y Original Budget' or 'Y Final Budget'); spending is a 'Performance' column for the "
     "period; never use out-year estimates or projections unless asked. You may pick approved and revised of the "
     "same line as two selections when both matter.\n"
-    "3. The same project can be printed in two tables of one budget: pick it once.\n"
+    "3. The same project can be printed in two tables of one budget: pick it once. When several lines ARE the "
+    "item asked about (e.g. two counterpart-fund lines), pick all of them. Prefer lines whose own words match "
+    "the question's key words (a question about counterpart funds needs lines that say counterpart).\n"
     "4. For several things, pick a line for each; list what you couldn't find in 'missing'.\n"
     "5. operation: \"list\" (show each figure), \"sum\" (add all selections), \"compare\" (first selection vs "
-    "second), \"share\" (first as a % of second).\n"
+    "second), \"share\" or \"ratio\" (selections marked \"part\": \"top\" summed, divided by those marked "
+    "\"bottom\" summed; share is shown as a %, ratio as x to 1). The share of 'the budget' uses the budget's "
+    "Total Expenditure line as the bottom, never revenue. Recurrent expenditure is personnel plus other "
+    "recurrent (overhead) lines.\n"
     "6. summary: one or two sentences in the reply language that answer the question, copying amounts exactly "
-    "as printed and citing [L#] after each. Never calculate: write {TOTAL}, {DIFFERENCE}, {CHANGE_PCT} or "
-    "{SHARE_PCT} where a calculated figure belongs, followed by (Kasafi's calculation) / (lissafin Kasafi). "
+    "as printed and citing [L#] after each. Never calculate: write {TOTAL}, {DIFFERENCE}, {CHANGE_PCT}, "
+    "{SHARE_PCT} or {RATIO} where a calculated figure belongs, followed by (Kasafi's calculation) / (lissafin "
+    "Kasafi). "
     "Neutral facts only.\n"
     "7. found: \"full\", \"partial\" (some of it, or only a broader total) or \"none\" (no line answers it; "
     "select nothing).\n"
     "8. Only if the lines show several clearly different things the question could mean and you can't tell which, "
     "select nothing and set clarify: a short question in the reply language and 2-3 options, each a title of at "
     "most 20 characters and the full question for that reading. Otherwise clarify is null.\n"
-    'Reply with JSON only: {"selected": [{"line": "L1", "column": "<column label exactly as shown>"}], '
-    '"operation": "list|sum|compare|share", "aggregate_only": false, "summary": "...", "missing": "", '
-    '"found": "full|partial|none", "clarify": null}'
+    'Reply with JSON only: {"selected": [{"line": "L1", "column": "<column label exactly as shown>", '
+    '"part": "top|bottom (share and ratio only)"}], "operation": "list|sum|compare|share|ratio", '
+    '"aggregate_only": false, "summary": "...", "missing": "", "found": "full|partial|none", "clarify": null}'
 )
 
 
@@ -62,6 +68,7 @@ SELECT_SYSTEM = (
 class Selection:
     line: Line
     cell: Cell
+    part: str = ""         # "top" / "bottom" for shares and ratios
 
 
 @dataclass
@@ -76,12 +83,14 @@ class LineResult:
     difference: Decimal | None = None
     change_pct: Decimal | None = None
     share_pct: Decimal | None = None
+    ratio: Decimal | None = None
     clarify: list[dict] = field(default_factory=list)
     clarify_question: str = ""
 
     def computed(self) -> dict[str, Decimal]:
         return {k: v for k, v in (("TOTAL", self.total), ("DIFFERENCE", self.difference),
-                                  ("CHANGE_PCT", self.change_pct), ("SHARE_PCT", self.share_pct)) if v is not None}
+                                  ("CHANGE_PCT", self.change_pct), ("SHARE_PCT", self.share_pct),
+                                  ("RATIO", self.ratio)) if v is not None}
 
 
 def fmt(x: Decimal) -> str:
@@ -154,7 +163,8 @@ def verify(d: dict, lines: list[Line]) -> tuple[LineResult, list[str]]:
         if key in seen:
             continue
         seen.add(key)
-        res.selections.append(Selection(line, cell))
+        part = s.get("part") if s.get("part") in ("top", "bottom") else ""
+        res.selections.append(Selection(line, cell, part))
     amounts = [s.cell.amount for s in res.selections]
     if res.operation == "sum" and amounts:
         res.total = sum(amounts, Decimal(0))
@@ -162,8 +172,16 @@ def verify(d: dict, lines: list[Line]) -> tuple[LineResult, list[str]]:
         res.difference = amounts[0] - amounts[1]
         if amounts[1]:
             res.change_pct = (res.difference / amounts[1] * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
-    elif res.operation == "share" and len(amounts) >= 2 and amounts[1]:
-        res.share_pct = (amounts[0] / amounts[1] * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+    elif res.operation in ("share", "ratio") and len(amounts) >= 2:
+        # top / bottom, each side summed (recurrent = personnel + overhead); without parts: first / second
+        marked = any(x.part for x in res.selections)
+        top = sum((x.cell.amount for x in res.selections if x.part == "top"), Decimal(0)) if marked else amounts[0]
+        bottom = sum((x.cell.amount for x in res.selections if x.part == "bottom"), Decimal(0)) if marked else amounts[1]
+        if bottom:
+            if res.operation == "share":
+                res.share_pct = (top / bottom * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+            else:
+                res.ratio = (top / bottom).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     if res.found not in ("full", "partial", "none"):
         res.found = "partial"
     if res.aggregate_only and res.found == "full":
@@ -181,7 +199,7 @@ def verify(d: dict, lines: list[Line]) -> tuple[LineResult, list[str]]:
 def fill(summary: str, res: LineResult) -> str:
     out = summary
     for k, v in res.computed().items():
-        out = out.replace("{" + k + "}", (f"{v}%" if k.endswith("PCT") else fmt(v)))
+        out = out.replace("{" + k + "}", f"{v}%" if k.endswith("PCT") else f"{v} : 1" if k == "RATIO" else fmt(v))
     return re.sub(r"\{[A-Z_]+\}", "", out)
 
 
@@ -190,7 +208,7 @@ def allowed_numbers(res: LineResult, extra: list[str]) -> set[str]:
     for s in res.selections:
         nums |= {_norm(m) for m in re.findall(r"\d[\d,]*(?:\.\d+)?", s.line.row_text + " " + s.line.table_title)}
         nums.add(_norm(fmt(s.cell.amount)))
-    nums |= {_norm(fmt(v)) if not k.endswith("PCT") else _norm(str(v)) for k, v in res.computed().items()}
+    nums |= {_norm(str(v)) if k.endswith("PCT") or k == "RATIO" else _norm(fmt(v)) for k, v in res.computed().items()}
     nums |= {_norm(m) for x in extra for m in re.findall(r"\d[\d,]*(?:\.\d+)?", x)}
     return nums
 

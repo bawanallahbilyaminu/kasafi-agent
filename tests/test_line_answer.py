@@ -104,3 +104,28 @@ def test_line_answer_shows_rows_with_citations(monkeypatch) -> None:
            "Budget: ₦70.00 million [1]" in a.text
     assert "[1] Sokoto State FY 2026 Budget, page 67" in a.text and "[2] Sokoto State FY 2026 Budget, page 70" in a.text
     assert "70,000,000.00" in a.exact and a.found and not a.partial
+
+
+def test_share_and_ratio_sum_each_side() -> None:
+    tot = L(5, "Total Expenditure", 16, [("2026 Approved Budget", "758700526537.89")], table="Total Expenditure")
+    hea = L(6, "Health", 40, [("2026 Approved Budget", "118827792994.59")], table="Expenditure by Programme")
+    per = L(7, "PERSONNEL COST", 1, [("2026 Approved Budget", "70571647882.76")], table="Summary")
+    ovh = L(8, "OTHER RECURRENT COSTS", 1, [("2026 Approved Budget", "134785286551.67")], table="Summary")
+    cap = L(9, "CAPITAL EXPENDITURE", 1, [("2026 Approved Budget", "553343592103.46")], table="Summary")
+    lines = [tot, hea, per, ovh, cap]
+    res, _ = verify({"operation": "share", "found": "full", "selected": [
+        {"line": "L2", "column": "2026 Approved Budget", "part": "top"},
+        {"line": "L1", "column": "2026 Approved Budget", "part": "bottom"}]}, lines)
+    assert res.share_pct == Decimal("15.7")                         # health / total expenditure, never revenue
+    res, _ = verify({"operation": "ratio", "found": "full", "selected": [
+        {"line": "L5", "column": "2026 Approved Budget", "part": "top"},
+        {"line": "L3", "column": "2026 Approved Budget", "part": "bottom"},
+        {"line": "L4", "column": "2026 Approved Budget", "part": "bottom"}]}, lines)
+    assert res.ratio == Decimal("2.69")                             # capital / (personnel + other recurrent)
+    assert fill("Ratio {RATIO} (Kasafi's calculation).", res) == "Ratio 2.69 : 1 (Kasafi's calculation)."
+
+
+def test_lga_question_with_nothing_found_explains_state_vs_lga_money() -> None:
+    from app.agent.budget_query import lga_in
+    assert lga_in("Karamar Hukumar Wamakko") == "Wamakko" and lga_in("Ministry of Health") is None
+    assert "statutory allocations" in ans.LGA_NOT_FOUND["en"].format(lga="Wamakko")

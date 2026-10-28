@@ -36,7 +36,7 @@ import psycopg
 from app.acquisition.editions import (SERIES, Latest, Series, doc_edition, editions_back, find_latest,
                                      generic_series, label, month_label, release_date, series_doc_ids)
 from app.acquisition.library import Acquired, fetch_and_index, find_and_fetch, log_gap
-from app.agent.budget_query import QueryResult, context_text, render_working, run_budget_query
+from app.agent.budget_query import QueryResult, context_text, lga_in, render_working, run_budget_query
 from app.agent.calculate import MIXED, CalcError, Calculation, MixedBases, offer_text, validate
 from app.agent.line_answer import LineResult, fmt, read_lines, short_name
 from app.retrieval.line_search import MAX_LINES, search_lines
@@ -91,7 +91,11 @@ PLAN_SYSTEM = (
     "(e.g. BHCPF and Basic Health Care Provision Fund), spelling variants, and English equivalents of Hausa "
     "words>; most specific first, e.g. the exact item before its sector\"], \"years\": [<the years asked about>], "
     "\"spend\": \"expenditure\"|\"revenue\"}. The app searches every budget line with these terms and "
-    "reads the rows itself, so give terms, not answers. "
+    "reads the rows itself, so give terms, not answers. Budget vocabulary for terms: IGR is printed as "
+    "'Independent Revenue'; recurrent spending is 'Personnel' plus 'Other Recurrent' (overhead); the whole "
+    "budget is 'Total Expenditure'; a state's share in a federal programme is 'counterpart' funding; Government "
+    "House is the Governor's office. For a share or ratio, include the whole in the terms too (e.g. 'Total "
+    "Expenditure'). "
     "Don't use line_search for one whole sector or one ministry's allocation and spending (e.g. 'how much was "
     "allocated to education / to the Ministry of Health, and how much was spent'): normal search answers those "
     "and quotes the report's own % performance. A local government area (LGA) is not an institution located in "
@@ -156,7 +160,8 @@ ANSWER_SYSTEM = (
     "(e.g. a year-on-year rate from two index values: (index this year / index a year earlier - 1) * 100), "
     "don't calculate it: say it isn't published (found=\"partial\"), give the published inputs, and propose "
     "the calculation in \"calculation\". Only combine index values with the same base period (e.g. 'Base "
-    "Period: 2024 = 100'). If the figure IS published, give it and leave calculation null.\n"
+    "Period: 2024 = 100'). If the figure IS published, give it and leave calculation null. A share of 'the "
+    "budget' divides by the budget's Total Expenditure, never by revenue.\n"
     "3d. Never give a broader total (a whole ministry, function or sector) as the figure for a specific item the "
     "question asks about (drugs, flyovers, scholarships, a programme). If the evidence only has the broader total, "
     "say the item isn't shown separately and give that total named as what it is, e.g. 'The budget doesn't show "
@@ -785,11 +790,13 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
 
 LINE_WORDS = {
     "en": {"head": "🧮 *Working* (the rows used):", "total": "Total", "difference": "Difference", "share": "Share",
+           "ratio": "Ratio",
            "calc": "Kasafi's calculation", "missing": "Not found",
            "aggregate": "⚠️ The budget doesn't show this item separately; the line above is the broader total that "
                         "contains it."},
     "ha": {"head": "🧮 *Yadda aka lissafa* (layukan da aka yi amfani da su):", "total": "Jimilla",
-           "difference": "Bambanci", "share": "Kaso", "calc": "lissafin Kasafi", "missing": "Ba a samu ba",
+           "difference": "Bambanci", "share": "Kaso", "ratio": "Rabo", "calc": "lissafin Kasafi",
+           "missing": "Ba a samu ba",
            "aggregate": "⚠️ Kasafin bai nuna wannan abu daban ba; layin da ke sama jimilla ce mai faɗi da ta "
                         "ƙunshe shi."},
 }
@@ -811,8 +818,9 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
     summary = re.sub(r"\[L(\d+)\]", lambda m: f"[{lnum[int(m.group(1))]}]" if lnum.get(int(m.group(1))) else "",
                      res.summary)
     working = [w["head"]]
+    side = {"top": " ↑", "bottom": " ↓"} if res.operation in ("share", "ratio") else {}
     working += [f"• {short_name(s.line)}, {s.cell.column}: {fmt(s.cell.amount)} [{nmap[(s.line.doc_id, s.line.page)]}]"
-                for s in res.selections]
+                + side.get(s.part, "") for s in res.selections]
     if res.aggregate_only:
         working.append(w["aggregate"])
     if res.total is not None:
@@ -823,6 +831,8 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
         working.append(f"• {w['difference']}: {sign}{fmt(abs(res.difference))}{pct} ({w['calc']})")
     if res.share_pct is not None:
         working.append(f"• {w['share']}: {res.share_pct}% ({w['calc']})")
+    if res.ratio is not None:
+        working.append(f"• {w['ratio']}: {res.ratio} : 1 ({w['calc']})")
     if res.missing:
         working.append(f"• {w['missing']}: {res.missing}")
     working_text = "\n".join(working)
@@ -892,7 +902,19 @@ def _not_found(conn: psycopg.Connection, plan: Plan, lang: str, acq: Acquired | 
         log_gap(conn, plan.english_question, plan.missing_document, "no_answer",
                 {"docs": plan.doc_ids, "acquired": acq.doc_id if acq else None})
         text = NOT_FOUND.get(lang, NOT_FOUND["en"])
+        if lga := lga_in(plan.english_question):         # an LGA question: say why the state budget can't answer it
+            text = LGA_NOT_FOUND.get(lang, LGA_NOT_FOUND["en"]).format(lga=lga)
     return Answer(text, False, True, plan=plan, timings=t, acquired=acq)
+
+
+LGA_NOT_FOUND = {
+    "ha": "Kasafin jihar bai nuna kuɗin da aka ware kai tsaye ga Ƙaramar Hukumar {lga} ba. Layukan kasafin jiha na "
+          "cibiyoyin da ke {lga} (misali asibiti ko makaranta) kuɗin jiha ne, ba na ƙaramar hukumar ba. Ƙananan "
+          "hukumomi suna samun kasonsu na doka daga asusun tarayya daban, kuma takardun da nake da su ba su nuna na {lga} ba.",
+    "en": "The state budget doesn't show money allocated directly to {lga} Local Government. State budget lines for "
+          "institutions located in {lga} (a hospital or a school, say) are state money, not the LGA's. LGAs get their "
+          "statutory allocations from the Federation Account separately, and the documents I have don't show {lga}'s.",
+}
 
 
 def _found(d: dict) -> str:

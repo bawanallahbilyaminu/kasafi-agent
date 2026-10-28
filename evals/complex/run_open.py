@@ -53,7 +53,8 @@ async def main(path: Path, ids: list[str] | None, out: Path) -> None:
                 print(f"{q['id']:>4} ERROR {type(e).__name__}")
                 continue
             dt = time.perf_counter() - t0
-            path_taken = (f"query_budget:{a.budget.operation}" if a.budget is not None else
+            path_taken = (f"lines:{a.lines.operation}" if getattr(a, "lines", None) is not None else
+                          f"query_budget:{a.budget.operation}" if a.budget is not None else
                           "latest" if a.latest else "fetch" if a.acquired else "search")
             res = (q["id"], outcome(a), a.verified, len(a.cited), "🧮" in a.text, path_taken, dt)
             rows.append(res)
