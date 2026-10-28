@@ -132,6 +132,26 @@
         ]
       ],
       "source": "Allocated: 2025 budget p12 (Total Expenditure by Administrative Classification, 052100000000 Ministry of Health, 2025 Approved Budget) 52,179,252,082.91; final budget 41,869,252,082.91 (BIR Q4 2025 p19). Spent: BIR Q4 2025 p19, 2025 Performance Year to Date (Q1-Q4) 17,506,884,680.90 (41.8% of final)."
+    },
+    {
+      "id": "18",
+      "lang": "ha",
+      "docs": [
+        "budget-2025-approved",
+        "bir-2025-q4"
+      ],
+      "numbers": [
+        "8,457,842,546.60"
+      ],
+      "numbers_any": [
+        [
+          "11,255,447,389.16"
+        ],
+        [
+          "12,477,910,002.01"
+        ]
+      ],
+      "source": "Whole ministry, code 017200000000. Allocated: 2025 budget p11, Total Expenditure by Administrative Classification, 2025 Approved Budget 11,255,447,389.16; final budget 12,477,910,002.01 (BIR Q4 2025 p17). Spent: BIR Q4 2025 p17, Q1-Q4 8,457,842,546.60 (67.8%). 9,076,557,198.38 is headquarters only (017200100100), what Kasafi first gave."
     }
   ]
 }

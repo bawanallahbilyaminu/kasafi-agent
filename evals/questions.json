@@ -146,6 +146,15 @@
       "english": "How much was allocated to the Ministry of Health in 2025, and how much did it spend that year?",
       "expected": "Allocation from the 2025 budget and spending from the Q4 2025 implementation report, side by side, with part-year labelled.",
       "source": "Bilyaminu's live test, Oct 27 2026 (typed text of what he said)"
+    },
+    {
+      "id": "18",
+      "audio": null,
+      "category": "multi-doc",
+      "text_ha": "Naira nawa aka ware wa Ma'aikatar Kula da Harkokin Addini a shekarar 2025 kuma naira nawa suka kashe a shekarar?",
+      "english": "How much was allocated to the Ministry for Religious Affairs in 2025, and how much did it spend that year?",
+      "expected": "Whole-ministry total (not headquarters only): allocation from the 2025 budget, spending from the Q4 2025 report, with the kind of figure and the period labelled.",
+      "source": "Bilyaminu's live test, Oct 27 2026 (the corrected question)"
     }
   ]
 }
