@@ -22,6 +22,8 @@ from pathlib import Path
 import psycopg
 import pypdfium2 as pdfium
 
+from app.retrieval import quality
+
 log = logging.getLogger(__name__)
 
 CHUNK_CHARS = 1500
@@ -126,11 +128,12 @@ def image_table_pages(path: Path) -> set[int]:
     return out
 
 
-def extract_pages(path: Path) -> list[str]:
+def extract_pages(path: Path, first: int = 1, last: int | None = None) -> list[str]:
+    """Text of pages first..last (1-based, inclusive; all pages by default)."""
     pdf = pdfium.PdfDocument(str(path))
     try:
         pages = []
-        for i in range(len(pdf)):
+        for i in range(first - 1, min(last or len(pdf), len(pdf))):
             page = pdf[i]
             pages.append(clean_text(titles_first(page, page.get_textpage().get_text_range())))
         return pages
@@ -210,7 +213,9 @@ def accounting_negatives(text: str) -> str:
 # is on an earlier line or page. A model counting positions picked the wrong column (eval 11), so rows
 # are labelled in code: "05 Education | 2026 Approved Budget: 128,495,868,362.13 | ...". A row is only
 # labelled when its value count matches the column count exactly; anything else stays as it was.
-_VALUE = re.compile(r"^(?:-|\(?-?[\d,]+(?:\.\d+)?\)?%?)$")
+# Brackets must be balanced: "2201)" in "OTHER RECURRENT COSTS (EXCLUDING 2201)" is part of the name, and
+# counting it as a value left the BIRs' "22" row unlabelled (found by the totals quality check).
+_VALUE = re.compile(r"^(?:-|-?[\d,]+(?:\.\d+)?%?|\(-?[\d,]+(?:\.\d+)?%?\))$")
 _COLUMN_SPLIT = re.compile(r"(?<!against)(?<!to)\s(?=20\d\d\b)|\s(?=%)|\s(?=Balance\b)")
 # Detail tables start their header with "Code ..."; summary tables with "Item ..." (2024/2025 budgets).
 _HEADER_START = re.compile(r"^(Code|Item)\b")
@@ -229,12 +234,19 @@ def parse_columns(header: str) -> list[str]:
     return cols if len(cols) >= 2 else []
 
 
+_BARE_CODE = re.compile(r"^\d{5,}$")
+
+
 def label_row(line: str, columns: list[str]) -> str:
     tokens = line.split()
     values: list[str] = []
     while tokens and _VALUE.match(tokens[-1]):
         values.insert(0, tokens.pop())
     if not columns or not tokens or len(values) != len(columns) or not any(v != "-" for v in values):
+        return line
+    # A bare 5+-digit number is a budget code (economic code 23020105), not an amount: amounts have commas.
+    # On the 2025 amended budget p114 a wrapped line put a code and a quantity "(25,000)" in value cells.
+    if any(_BARE_CODE.match(v) for v in values):
         return line
     return " ".join(tokens) + " | " + " | ".join(f"{c}: {v}" for c, v in zip(columns, values))
 
@@ -371,13 +383,17 @@ def label_pipe_tables(text: str) -> tuple[str, set[str]]:
     return chr(10).join(out), labelled
 
 
-def contextual_chunks(pages: list[str]) -> list[list[str]]:
-    """Label table columns, chunk every page, and prefix each chunk with the table title in force at its start."""
+def contextual_chunks(pages: list[str], labelled: list[str] | None = None) -> list[list[str]]:
+    """Label table columns, chunk every page, and prefix each chunk with the table title in force at its start.
+
+    `labelled`, if given, receives each page's labelled text (for the quality checks)."""
     out, title, columns, open_header = [], "", [], []
     for text in pages:
         page_chunks = []
         text, pipe_rows = label_pipe_tables(text)
         text, columns, open_header = label_tables(text, columns, open_header)
+        if labelled is not None:
+            labelled.append(text)
         # Sector-total rows ("04 Health"), ministry-total rows (12-digit codes ending in eight zeros, e.g.
         # "017200000000 Ministry for Religious Affairs") and "Total ..." rows also get their own one-row
         # chunk with the table title: in a big table they're outranked by the many rows below them that
@@ -452,7 +468,8 @@ def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bo
             sources.append("none" if needs_ocr else "text")   # "none" keeps its title text until OCR'd
     empty = sources.count("none")
     pages = [accounting_negatives(p) for p in pages]
-    chunked = contextual_chunks(pages)
+    labelled: list[str] = []
+    chunked = contextual_chunks(pages, labelled)
     with conn.transaction():
         conn.execute("DELETE FROM documents WHERE id = %s", (doc["id"],))   # cascades to pages/chunks
         conn.execute(
@@ -473,6 +490,8 @@ def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bo
                     for j, chunk in enumerate(page_chunks):
                         cp.write_row((doc["id"], i, j, chunk))
                         n_chunks += 1
+    quality.run(conn, doc["id"], doc.get("category"),
+                [(i, text, src) for i, (text, src) in enumerate(zip(labelled, sources), start=1)])
     return IndexResult(doc["id"], "indexed", len(pages), empty, n_chunks)
 
 

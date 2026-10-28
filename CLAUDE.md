@@ -5,6 +5,7 @@ Kasafi is a Hausa, voice-first WhatsApp agent. Citizens, civil servants and deve
 This repo is Bilyaminu Bawan Allah's entry, for Halal Numeriq Limited (Startup track), in the **Meta Global AI Developer Hackathon** (Oct 26 – Nov 4, 2026). The problem statement is **"Build for Your World"**.
 
 > Read `docs/hackathon-brief.md` (rules, judging, deadlines) and `docs/architecture.md` (design) before planning or writing code.
+> Before changing extraction, indexing or answer rules, read `docs/extraction-lessons.md`: every document problem fixed so far, each with a regression test on the real page, and the indexing-time quality checks.
 
 ---
 

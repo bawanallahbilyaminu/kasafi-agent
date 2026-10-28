@@ -299,3 +299,10 @@ def test_no_edition_at_all(monkeypatch) -> None:
     a, _, fake = run_latest(monkeypatch, Latest(SERIES["nbs_cpi"], "2026-09", tried=["2026-09", "2026-08"]),
                             [LATEST_PLAN], lang="ha")
     assert not a.found and "Satumba 2026, Agusta 2026" in a.text and len(fake.calls) == 1
+
+
+def test_L17_edition_year_from_the_title_is_not_an_unverified_figure() -> None:
+    ev = [Evidence(1, "cpi", "Consumer Price Index September 2026", 2026, 19, "ocr",
+                   "Sokoto | Sep 2026 All Items: 135.1 | Year-on-Year All Items: 8.0")]
+    assert unverified_numbers("In September 2026 Sokoto's rate was 8.0 [1].", ev) == []
+    assert unverified_numbers("In September 2027 it was 8.0 [1].", ev) == ["2027"]
