@@ -28,6 +28,7 @@ services:
     env_file: [.env, db.env]
     environment:
       KASAFI_STATE_DB: /data/kasafi.db   # consent, language, limits (no phone numbers)
+      KASAFI_FETCH_DIR: /data/fetched    # PDFs fetched live by the self-growing library (public documents)
       POSTGRES_HOST: db
     volumes:
       - kasafi-agent-data:/data
