@@ -81,6 +81,8 @@ class Settings(BaseSettings):
     kasafi_crop_timeout_s: float = 25.0     # for all of an answer's images; the text has already been sent
     kasafi_pdf_dir: str = "data/pdfs"       # seed PDFs on the server (deploy/deploy.sh --sync-pdfs); dev uses data/
     sam_model: str = "sam-3.1"
+    # dev.meta.ai/docs/pricing-rate-limits (Oct 29): SAM 3.1 image segmentation $2.50 per 1,000 images
+    kasafi_cost_per_sam_usd: float = 0.0025
 
     # WhatsApp Cloud API
     whatsapp_token: SecretStr | None = None

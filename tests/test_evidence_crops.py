@@ -13,9 +13,11 @@ from app.agent.answer import Answer, Evidence
 from app.evidence import crops
 from app.evidence.crops import CropRequest, make_crop, plan_crops
 from app.providers.sam import Box, SamError, box_prompt, parse_boxes, segment
+from app.users import UserStore
 from tests.helpers import make_settings
 
 DATA = Path(__file__).resolve().parents[1] / "data"
+STORE = UserStore(":memory:")
 
 E1 = Evidence(1, "budget-2025-approved", "Sokoto State Government 2025 Approved Budget", 2025, 11, "text",
               "[Table: Total Expenditure by Administrative Classification]\n017200000000 Ministry for Religious Affairs | "
@@ -94,6 +96,7 @@ def run_crop(monkeypatch, req: CropRequest, sam_boxes=None, sam_error=None):
             raise sam_error
         return sam_boxes(prompt) if callable(sam_boxes) else (sam_boxes or [])
     monkeypatch.setattr(crops, "segment", fake_segment)
+    monkeypatch.setattr(crops, "get_store", lambda: STORE)
     jpg = asyncio.run(make_crop(req, make_settings(kasafi_pdf_dir=str(DATA))))
     return (Image.open(io.BytesIO(jpg)) if jpg else None), calls
 
@@ -142,3 +145,14 @@ def test_each_page_shows_the_figure_the_answer_cites_to_it() -> None:
     got = plan_crops(answer(exact, [e1, e4]), 2)
     assert [(c.n, c.figure, c.label) for c in got] == [(1, "52,179,252,082.91", "2025 Approved Budget"),
                                                        (4, "41,869,252,082.91", "2025 Final Budget")]
+
+
+def test_each_sam_call_is_counted_per_day_and_added_to_spend(monkeypatch) -> None:
+    real("budget-2025-approved.pdf")
+    before = STORE._exec("SELECT COALESCE(SUM(n), 0) FROM api_calls WHERE name = 'sam'").fetchone()[0]
+    spent = STORE.spent_today()
+    run_crop(monkeypatch, REQ, [Box(1, 10, 10, 20, 20)])
+    assert STORE._exec("SELECT SUM(n) FROM api_calls WHERE name = 'sam'").fetchone()[0] == before + 1
+    assert abs(STORE.spent_today() - spent - 0.0025) < 1e-9
+    run_crop(monkeypatch, REQ, sam_error=SamError("HTTP 503"))          # a failed call isn't billed or counted
+    assert STORE._exec("SELECT SUM(n) FROM api_calls WHERE name = 'sam'").fetchone()[0] == before + 1

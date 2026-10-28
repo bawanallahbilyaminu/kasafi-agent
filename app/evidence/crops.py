@@ -28,6 +28,7 @@ from app.acquisition.sandbox import ParseError, locate_sandboxed
 from app.config import Settings
 from app.providers.sam import Box, SamError, box_prompt, segment
 from app.retrieval.indexer import find_file
+from app.users import get_store
 
 log = logging.getLogger(__name__)
 
@@ -115,6 +116,21 @@ def _jpeg(img: Image.Image, quality: int = 85) -> bytes:
     return buf.getvalue()
 
 
+async def _sam(jpeg: bytes, prompt: str, settings: Settings) -> list[Box]:
+    """One SAM 3.1 call, counted per day against the spend tally (billed per image segmented)."""
+    boxes = await segment(jpeg, prompt, settings=settings, timeout=SAM_TIMEOUT)
+    record_sam_call(settings)
+    return boxes
+
+
+def record_sam_call(settings: Settings) -> None:
+    try:
+        n = get_store().count_api_call("sam", settings.kasafi_cost_per_sam_usd)
+        log.info("SAM 3.1 calls today: %d (est. $%.4f)", n, n * settings.kasafi_cost_per_sam_usd)
+    except Exception as e:      # counting must never break an image
+        log.warning("SAM call count failed: %s", type(e).__name__)
+
+
 def _highlight(img: Image.Image, box: list[int]) -> Image.Image:
     overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
     ImageDraw.Draw(overlay).rectangle([box[0] - 4, box[1] - 3, box[2] + 4, box[3] + 3], fill=(255, 221, 0, 90),
@@ -131,8 +147,7 @@ async def _row_crop(img: Image.Image, row: list[int], hit: list[int], settings: 
     try:
         buf = io.BytesIO()
         band.save(buf, format="JPEG", quality=88)
-        found = await segment(buf.getvalue(), box_prompt(x1, y1 - top, x2, y2 - top, band.width, band.height),
-                              settings=settings, timeout=SAM_TIMEOUT)
+        found = await _sam(buf.getvalue(), box_prompt(x1, y1 - top, x2, y2 - top, band.width, band.height), settings)
         b = next((b for b in found if b.obj == 1), None)
         # Accept SAM's region when it is the row (not the whole table): about the row's height, at least its width.
         if b and (b.y2 - b.y1) <= 2.5 * rh and (b.x2 - b.x1) >= 0.6 * (x2 - x1):
@@ -152,7 +167,7 @@ async def _table_crop(img: Image.Image, settings: Settings) -> Image.Image | Non
     small.thumbnail((MAX_SAM_SIDE, MAX_SAM_SIDE))
     buf = io.BytesIO()
     small.save(buf, format="JPEG", quality=85)
-    boxes: list[Box] = await segment(buf.getvalue(), "table", settings=settings, timeout=SAM_TIMEOUT)
+    boxes: list[Box] = await _sam(buf.getvalue(), "table", settings)
     if not boxes:
         return None
     b = max(boxes, key=lambda b: b.area)

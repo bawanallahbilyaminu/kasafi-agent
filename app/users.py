@@ -68,6 +68,12 @@ CREATE TABLE IF NOT EXISTS spend (
     day TEXT PRIMARY KEY,
     usd REAL NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS api_calls (  -- per-day call counts for priced APIs (e.g. SAM 3.1), to watch spending
+    day  TEXT NOT NULL,
+    name TEXT NOT NULL,
+    n    INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, name)
+);
 """
 
 
@@ -230,6 +236,15 @@ class UserStore:
     def add_spend(self, usd: float) -> None:
         self._exec("INSERT INTO spend (day, usd) VALUES (?,?) ON CONFLICT(day) DO UPDATE SET usd=usd+excluded.usd",
                    (today(), usd))
+
+    def count_api_call(self, name: str, usd: float = 0.0) -> int:
+        """Count one call to a priced API today (and add its cost to the daily spend); returns today's count."""
+        day = today()
+        self._exec("INSERT INTO api_calls (day, name, n) VALUES (?,?,1) ON CONFLICT(day, name) DO UPDATE SET n=n+1",
+                   (day, name))
+        if usd:
+            self.add_spend(usd)
+        return self._exec("SELECT n FROM api_calls WHERE day=? AND name=?", (day, name)).fetchone()[0]
 
 
 @lru_cache
