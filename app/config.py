@@ -70,6 +70,11 @@ class Settings(BaseSettings):
 
     # Web search
     serper_api_key: SecretStr | None = None
+    # ReliefWeb API v2 needs a pre-approved appname (apidoc.reliefweb.int); its search is skipped without one
+    reliefweb_appname: str = ""
+    # Self-growing library: live document fetches per day (all users), and where fetched PDFs are kept
+    kasafi_fetches_per_day: int = 20
+    kasafi_fetch_dir: str = "data/fetched"
 
     # WhatsApp Cloud API
     whatsapp_token: SecretStr | None = None
