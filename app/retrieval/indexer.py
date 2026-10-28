@@ -159,6 +159,19 @@ def next_title(line: str, title: str) -> str:
     return title
 
 
+# --- bracketed negatives ------------------------------------------------------------------------
+# Financial statements write negatives the accounting way: "(56,893,525,653.90)". Only amounts in that
+# shape (thousands separators and two decimals), or a two-decimal value in a labelled cell, are turned
+# into "-56,893,525,653.90". Brackets in running text are just parentheses ("Sokoto (3.01%)" in the CPI
+# is +3.01%; the same sentence writes "Adamawa (-6.10%)"), and "(25,000)" in a budget line is a quantity.
+_ACCOUNTING_NEG = re.compile(r"(?<![\w-])\((\d{1,3}(?:,\d{3})+\.\d{2})\)(?![\w%])")
+_CELL_NEG = re.compile(r"(?<=: )\((\d+\.\d{2})\)(?=\s*(?:\||$))", re.M)
+
+
+def accounting_negatives(text: str) -> str:
+    return _CELL_NEG.sub(r"-\1", _ACCOUNTING_NEG.sub(r"-\1", text))
+
+
 # --- column labelling --------------------------------------------------------------------------
 # Budget tables reach us as rows of bare numbers ("05 Education 8,139,687,377.37 80,287,... -"), and the
 # column header ("Code Sector ... 2024 Full Year Actuals 2025 Revised Budget ... 2026 Approved Budget ...")
@@ -314,6 +327,7 @@ def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bo
         else:
             sources.append("text" if len(text) >= MIN_PAGE_CHARS else "none")
     empty = sources.count("none")
+    pages = [accounting_negatives(p) for p in pages]
     chunked = contextual_chunks(pages)
     with conn.transaction():
         conn.execute("DELETE FROM documents WHERE id = %s", (doc["id"],))   # cascades to pages/chunks
