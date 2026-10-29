@@ -86,9 +86,9 @@ class Fake:
 def test_a_wrong_figure_in_the_summary_is_retried_then_dropped() -> None:
     bad = {"selected": [{"line": "L1", "column": "2026 Approved Budget"}], "summary": "It is 75,000,000.00 [L1].",
            "found": "full"}
-    fake = Fake([bad, bad])
+    fake = Fake([bad] * 4)                                   # two readings, each retried once
     res = asyncio.run(read_lines("q", "q", "en", LINES, fake, make_settings(), [], ans.chat_json))
-    assert len(fake.calls) == 2 and "CORRECT" not in res.summary and res.summary == ""
+    assert len(fake.calls) == 4 and "CORRECT" not in res.summary and res.summary == ""
     assert res.selections[0].cell.amount == Decimal("70000000.00")      # the verified row still answers
 
 
@@ -231,3 +231,37 @@ def test_an_uncomputed_placeholder_drops_the_summary() -> None:
     res, _ = verify({"selected": [{"line": "L1", "column": "2026 Approved Budget"}], "operation": "list",
                      "found": "full"}, LINES)
     assert fill("It is {SPENT_PCT} (Kasafi's calculation) spent [L1].", res) == ""
+
+
+def _pick(*picks, op="list"):
+    return {"selected": [{"line": l, "column": "2026 Approved Budget"} for l in picks], "operation": op,
+            "found": "full", "summary": ""}
+
+
+def test_two_readings_that_agree_answer_as_one() -> None:
+    from app.agent.line_answer import reconcile
+    r1, _ = verify(_pick("L1", "L3"), LINES)
+    r2, _ = verify(_pick("L3", "L1"), LINES)
+    res = reconcile(r1, _pick("L1", "L3"), r2, LINES, [], "q", "en")
+    assert res is r1 and not res.uncertain
+
+
+def test_rows_only_one_reading_chose_are_named_but_not_counted() -> None:
+    from app.agent.line_answer import reconcile
+    d1 = _pick("L1", "L3", op="sum")
+    r1, _ = verify(d1, LINES)
+    r2, _ = verify(_pick("L1", "L4", op="sum"), LINES)
+    res = reconcile(r1, d1, r2, LINES, [], "q", "en")
+    assert [s.line.id for s in res.selections] == [BHC.id] and res.total == Decimal("70000000.00")
+    assert res.found == "partial" and len(res.uncertain) == 2 and any("SOCHEMA" in u for u in res.uncertain)
+    a = ans.line_answer(None, ans.Plan("q", [], []), res, LINES, "en", {}, None)
+    assert "not counted" in a.text and a.partial
+
+
+def test_two_readings_with_nothing_in_common_ask_which_one() -> None:
+    from app.agent.line_answer import reconcile
+    r1, _ = verify(_pick("L1"), LINES)
+    r2, _ = verify(_pick("L4"), LINES)
+    res = reconcile(r1, _pick("L1"), r2, LINES, [], "How much for counterpart funds?", "ha")
+    assert not res.selections and len(res.clarify) == 2 and res.clarify_question.startswith("Zan iya")
+    assert res.clarify[1]["question"].startswith("How much for counterpart funds? (Ministry of Health")

@@ -805,6 +805,7 @@ LINE_WORDS = {
            "location": "⚠️ This is state spending located in {place} (the budget's table by location). It is not "
                        "money allocated to {place} Local Government; LGAs get their statutory allocations "
                        "separately.",
+           "uncertain": "Possibly relevant too, not counted (I wasn't sure on a second reading)",
            "no_sum": "Not added up: these lines are printed in different tables of one budget, which can show the "
                      "same money twice."},
     "ha": {"head": "🧮 *Yadda aka lissafa* (layukan da aka yi amfani da su):", "total": "Jimilla",
@@ -815,6 +816,7 @@ LINE_WORDS = {
            "location": "⚠️ Wannan kuɗin jiha ne da ake kashewa a {place} (teburin kasafi bisa wuri). Ba kuɗin "
                        "da aka ware wa Ƙaramar Hukumar {place} ba ne; ƙananan hukumomi suna samun kasonsu na doka "
                        "daban.",
+           "uncertain": "Watakila suna da alaƙa, ba a ƙidaya su ba (ban tabbata ba a karatu na biyu)",
            "no_sum": "Ba a haɗa su ba: an buga waɗannan layuka a teburori daban-daban na kasafi ɗaya, wanda zai iya "
                      "nuna kuɗi ɗaya sau biyu."},
 }
@@ -906,12 +908,14 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
         working.append(f"• {w['ratio']} (↑ ÷ ↓): {res.ratio} : 1 ({w['calc']})")
     if res.missing:
         working.append(f"• {w['missing']}: {res.missing}")
+    if res.uncertain:
+        working.append(f"• {w['uncertain']}: {'; '.join(res.uncertain[:6])}")
     working_text = "\n".join(working)
     note = plan.assumption_for(lang)
     body = (f"_{note}_\n\n" if note else "") + (render_answer({"summary": summary, "items": []}, lang) + "\n\n"
                                                  if summary.strip() else "")
     body += readable_amounts(working_text, lang)
-    partial = res.found == "partial" or res.aggregate_only or bool(res.missing)
+    partial = res.found == "partial" or res.aggregate_only or bool(res.missing) or bool(res.uncertain)
     sources = cited_sources(conn, evidence) if conn is not None else []
     log.info("line answer: %d rows, op=%s, aggregate_only=%s, partial=%s", len(res.selections), res.operation,
              res.aggregate_only, partial)

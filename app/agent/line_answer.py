@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -105,6 +106,7 @@ class LineResult:
     not_summed: bool = False    # a sum over different tables of one document, refused
     clarify: list[dict] = field(default_factory=list)
     clarify_question: str = ""
+    uncertain: list[str] = field(default_factory=list)   # lines only one of the two readings chose: not counted
 
     def computed(self) -> dict[str, Decimal]:
         return {k: v for k, v in (("TOTAL", self.total), ("DIFFERENCE", self.difference),
@@ -304,12 +306,63 @@ def allowed_numbers(res: LineResult, extra: list[str]) -> set[str]:
 
 async def read_lines(question: str, english: str, lang: str, lines: list[Line], client: ChatClient,
                      settings: Settings, extra_numbers: list[str], chat_json) -> LineResult:
-    """One model call to pick rows (one retry if its ids, columns or numbers don't check out)."""
+    """The model picks rows twice, independently (in parallel); code compares the two picks. Rows both chose
+    are answered; rows only one chose are named as possibly relevant and not counted; two readings with nothing
+    in common become one clarifying question."""
     lines = lines[:MAX_LINES]
     reply_lang = {"ha": "Hausa", "en": "English"}.get(lang, "English")
     user = (f"Reply language: {reply_lang}\nQUESTION: {question}\n(English: {english})\n\nLINES:\n{listing(lines)}")
     messages = [{"role": "system", "content": SELECT_SYSTEM}, {"role": "user", "content": user}]
-    res = LineResult()
+    (r1, d1), (r2, _) = await asyncio.gather(_read_once(messages, lines, client, settings, extra_numbers, chat_json),
+                                             _read_once(messages, lines, client, settings, extra_numbers, chat_json))
+    return reconcile(r1, d1, r2, lines, extra_numbers, question, lang)
+
+
+def _key(res: LineResult) -> set[tuple[str, str]]:
+    return {(s.line.id, s.cell.column) for s in res.selections}
+
+
+CLARIFY_READINGS = {"en": "I can read your question two ways. Which do you mean?",
+                    "ha": "Zan iya fahimtar tambayarka ta hanyoyi biyu. Wanne kake nufi?"}
+
+
+def reconcile(r1: LineResult, d1: dict, r2: LineResult, lines: list[Line], extra_numbers: list[str],
+              question: str, lang: str) -> LineResult:
+    a, b = _key(r1), _key(r2)
+    if a == b:
+        return r1
+    if not a or not b:                   # one reading found nothing: what the other found is at most partial
+        res = r1 if a else r2
+        if res.selections:
+            res.found = "partial"
+        return res
+    common = a & b
+    if not common:                       # two different readings: ask, don't pick one
+        opts = []
+        for r in (r1, r2):
+            names = list(dict.fromkeys(short_name(s.line) for s in r.selections))
+            opts.append({"title": names[0][:20], "question": f"{question} ({'; '.join(names[:3])[:300]})"})
+        if opts[0]["title"] == opts[1]["title"]:
+            opts[1]["title"] = (opts[1]["title"][:17] + " 2")[:20]
+        return LineResult(clarify=opts, clarify_question=CLARIFY_READINGS.get(lang, CLARIFY_READINGS["en"]))
+    index = {x.id: i for i, x in enumerate(lines, 1)}
+    kept = {**d1, "selected": [{"line": f"L{index[s.line.id]}", "column": s.cell.column, "part": s.part}
+                               for s in r1.selections if (s.line.id, s.cell.column) in common]}
+    res, _ = verify(kept, lines)
+    res.summary = fill(str(d1.get("summary") or ""), res)
+    if _number_ok(res.summary, allowed_numbers(res, extra_numbers)):
+        res.summary = ""                 # it spoke of rows only one reading chose
+    res.found = "partial"
+    by_id = {x.id: x for x in lines}
+    res.uncertain = list(dict.fromkeys(f"{short_name(by_id[i])} ({col})" for i, col in sorted((a | b) - common)))
+    log.info("two readings differ: %d rows agreed, %d not counted", len(common), len(res.uncertain))
+    return res
+
+
+async def _read_once(messages: list[dict], lines: list[Line], client: ChatClient, settings: Settings,
+                     extra_numbers: list[str], chat_json) -> tuple[LineResult, dict]:
+    """One reading: a model call to pick rows (one retry if its ids, columns or numbers don't check out)."""
+    res, d = LineResult(), {}
     for attempt in range(2):
         d = await chat_json(client, messages, model=settings.meta_model, reasoning_effort="low", max_tokens=4000)
         res, problems = verify(d, lines)
@@ -324,4 +377,5 @@ async def read_lines(question: str, english: str, lang: str, lines: list[Line], 
     else:
         if bad:                                  # keep the verified rows, drop the unverifiable wording
             res.summary = ""
-    return res
+            d = {**d, "summary": ""}
+    return res, d
