@@ -54,9 +54,27 @@ ORDER BY b.rank DESC LIMIT %(k)s
 """
 
 
+PHRASE_SQL = """
+SELECT c.doc_id, d.title, d.year, c.page, c.text, ts_rank_cd(c.tsv, phraseto_tsquery('english', %(q)s)) AS rank, c.idx
+FROM chunks c JOIN documents d ON d.id = c.doc_id
+WHERE c.tsv @@ phraseto_tsquery('english', %(q)s)
+  AND c.text ~ '(N|₦)\\s?[0-9][0-9,.]{2,}|[0-9]{1,3},[0-9]{3}'     -- an amount, not a year or a chart axis
+  AND (%(docs)s::text[] IS NULL OR c.doc_id = ANY(%(docs)s::text[]))
+ORDER BY rank DESC LIMIT %(k)s
+"""
+
+
 def search(conn: psycopg.Connection, query: str, *, k: int = 8, doc_ids: list[str] | None = None,
            key_rows: bool = False) -> list[Hit]:
     """key_rows=True searches only labelled single-row chunks ("[Table: ...]" + one table row): exact facts
     such as a ministry's total, which keyword ranking over whole pages tends to bury."""
     rows = conn.execute(SQL, {"q": query, "k": k, "docs": doc_ids, "key_rows": key_rows}).fetchall()
+    return [Hit(*r) for r in rows]
+
+
+def phrase_search(conn: psycopg.Connection, phrase: str, *, k: int = 2, doc_ids: list[str] | None = None) -> list[Hit]:
+    """Chunks that print this exact phrase (as words in order) and a figure: a key term as the document names it
+    ("Debt Stock - Sokoto State Debt Stock ... N104,450 million in 2022"), which pages that only say "debt" a
+    lot (charts, ratio tables) outrank in keyword search."""
+    rows = conn.execute(PHRASE_SQL, {"q": phrase, "k": k, "docs": doc_ids}).fetchall()
     return [Hit(*r) for r in rows]

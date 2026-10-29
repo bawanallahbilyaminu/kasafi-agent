@@ -73,7 +73,11 @@ SELECT_SYSTEM = (
     "{SHARE_PCT}, {SPENT_PCT} or {RATIO} where a calculated figure belongs, followed by (Kasafi's calculation) / (lissafin "
     "Kasafi). Leave chosen lines whose figure is 0.00 out of the summary unless the question asks about them; "
     "the list under the summary still shows them. "
-    "Neutral facts only; for security agencies or lines, the figures alone with no commentary.\n"
+    "Neutral facts only; for security agencies or lines, the figures alone with no commentary. For a share, name "
+    "the whole it is of and whether it is approved or actual (e.g. 'of the 2026 approved budget's Total "
+    "Expenditure'). For a target or benchmark (e.g. the Abuja Declaration's 15% for health), put the two figures "
+    "side by side, e.g. '{SHARE_PCT} of the 2026 approved budget goes to health; the Abuja Declaration target is "
+    "15%.', and never say it meets, exceeds or falls short of it.\n"
     "7. found: \"full\", \"partial\" (some of it, or only a broader total) or \"none\" (no line answers it; "
     "select nothing).\n"
     "8. Only if the lines show several clearly different things the question could mean and you can't tell which, "
@@ -115,6 +119,7 @@ class LineResult:
     disputed: bool = False      # the readings disagreed on which rows a total takes: no arithmetic was done
     readers: list[str] = field(default_factory=list)     # the model behind each reading
     picks: list[list[str]] = field(default_factory=list)  # what each reading chose, for the admin trace
+    timings: dict[str, float] = field(default_factory=dict)  # each reading's seconds and model calls
 
     def computed(self) -> dict[str, Decimal]:
         return {k: v for k, v in (("TOTAL", self.total), ("DIFFERENCE", self.difference),
@@ -331,12 +336,19 @@ async def read_lines(question: str, english: str, lang: str, lines: list[Line], 
     reply_lang = {"ha": "Hausa", "en": "English"}.get(lang, "English")
     user = (f"Reply language: {reply_lang}\nQUESTION: {question}\n(English: {english})\n\nLINES:\n{listing(lines)}")
     messages = [{"role": "system", "content": SELECT_SYSTEM}, {"role": "user", "content": user}]
+    async def timed(key: str, coro):
+        t0 = time.perf_counter()
+        out = await coro
+        took[key] = time.perf_counter() - t0
+        return out
+    took: dict[str, float] = {}
     (r1, d1), (r2, _, reader2) = await asyncio.gather(
-        _read_once(messages, lines, client, settings.meta_model, extra_numbers, chat_json),
-        _second_reading(messages, lines, client, second, settings, extra_numbers, chat_json))
+        timed("read1", _read_once(messages, lines, client, settings.meta_model, extra_numbers, chat_json)),
+        timed("read2", _second_reading(messages, lines, client, second, settings, extra_numbers, chat_json)))
     res = reconcile(r1, d1, r2, lines, extra_numbers, question, lang)
     res.readers = [settings.meta_model, reader2]
     res.picks = [[pick_text(s) for s in r.selections] for r in (r1, r2)]
+    res.timings = {**took, "calls1": r1.timings.get("calls", 1), "calls2": r2.timings.get("calls", 1)}
     return res
 
 
@@ -422,6 +434,7 @@ async def _read_once(messages: list[dict], lines: list[Line], client: ChatClient
     for attempt in range(2):
         d = await chat_json(client, messages, model=model, reasoning_effort="low", max_tokens=8000)
         res, problems = verify(d, lines)
+        res.timings["calls"] = attempt + 1
         res.summary = fill(res.summary, res)
         bad = _number_ok(res.summary, allowed_numbers(res, extra_numbers))
         if not problems and not bad:

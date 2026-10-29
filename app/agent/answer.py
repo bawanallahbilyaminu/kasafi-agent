@@ -51,7 +51,7 @@ from app.providers.baseten import BasetenClient
 from app.providers.chat import ChatClient
 from app.providers.meta import MetaClient
 from app.providers.stt import parse_json_reply
-from app.retrieval.search import Hit, search
+from app.retrieval.search import Hit, phrase_search, search
 
 log = logging.getLogger(__name__)
 
@@ -200,7 +200,9 @@ ANSWER_SYSTEM = (
     "earlier year's approved figure).\n"
     "3d. Before saying a figure wasn't found, check every excerpt and table row for it, and never call missing a "
     "year or item that you give a figure for.\n"
-    "4. Neutral facts only (for security agencies or lines, the cited figures alone, with no commentary): no opinions, no praise or blame, no judgement of performance. Never name "
+    "4. Neutral facts only (for security agencies or lines, the cited figures alone, with no commentary): no opinions, no praise or blame, no judgement of performance. "
+    "For a target or benchmark, put the two figures side by side ('X% of the 2026 approved budget goes to health; "
+    "the Abuja Declaration target is 15%') and never say a figure meets, exceeds or falls short of it. Never name "
     "politicians or officials; refer to institutions (e.g. 'the State Government').\n"
     "5. Don't restate the ASSUMPTION MADE; it's shown to the user separately.\n"
     "6. Format for a phone, for someone who doesn't read budgets: 'summary' is 2 to 5 short, everyday sentences "
@@ -500,10 +502,14 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
     if scope and not any(per_query) and not any(key_hits):
         key_hits = [search(conn, q, k=3, key_rows=True) for q in plan.search_queries]
         per_query = [search(conn, q, k=6) for q in plan.search_queries]
+    # The planner's key terms, as printed phrases next to a figure, in the planned documents (case 06: the DSA's
+    # "Debt Stock ... N104,450 million" paragraph lost to chart pages that say "debt" more often)
+    phrase_hits = [phrase_search(conn, term, k=1, doc_ids=scope) for term in plan.key_terms
+                   if len(term.split()) >= 2] if scope else []
     # Take results in turn, query by query: scores from different queries don't compare, and the planner
-    # puts its most targeted query first. Key rows come before the rest.
+    # puts its most targeted query first. Key rows come before the rest, then the key-term phrases.
     ranked, seen = [], set()
-    for stage in (key_hits, per_query):
+    for stage in (key_hits, phrase_hits, per_query):
         for rank_pos in range(max((len(r) for r in stage), default=0)):
             for results in stage:
                 if rank_pos < len(results):
@@ -927,15 +933,19 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             t0 = time.perf_counter()
             hits = search_lines(conn, plan.line_search["terms"], years=plan.line_search["years"],
                                 spend=plan.line_search.get("spend", "any"), question=plan.english_question)
-            t["search"] = time.perf_counter() - t0
+            t["search"] = t["line_search"] = time.perf_counter() - t0
             log.info("line search: %d terms, %d hits", len(plan.line_search["terms"]), len(hits))
             if hits:
                 t0 = time.perf_counter()
                 res = await read_lines(question, plan.english_question, lang, hits, client, settings,
                                        question_years(question, plan.english_question), chat_json, second)
+                t["read"] = time.perf_counter() - t0
+                t.update({k: v for k, v in res.timings.items()})
                 if res.missing:                  # before saying "not found", search for exactly what's missing
+                    t1 = time.perf_counter()
                     res, hits = await _search_missing(conn, plan, question, lang, res, hits, client, settings,
                                                       second)
+                    t["reread"] = time.perf_counter() - t1
                 t["answer"] = time.perf_counter() - t0
                 if res.clarify:                  # the lines show several different things: ask which one
                     return Answer(res.clarify_question, False, True, plan=plan, timings=t, clarify=res.clarify)
@@ -953,7 +963,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         else:
             budget = None
             evidence = gather_evidence(conn, plan)
-        t["search"] = time.perf_counter() - t0
+        t["search"] = t["page_search"] = time.perf_counter() - t0
         if not evidence:
             return _not_found(conn, plan, lang, acq, t)
 
@@ -964,12 +974,14 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         if prev and plan.followup != "none":
             context += f"\nPREVIOUS QUESTION: {prev.get('question', '')[:300]}\nPREVIOUS ANSWER: {prev.get('answer', '')[:1200]}"
         d = await compose(question, lang, plan, evidence, client, settings, context=context)
+        t["compose"] = time.perf_counter() - t0
         by_n = {e.n: e for e in evidence}
         # The working (labels with the asked years, and computed figures) is written by code: its numbers count too
         extra = budget.computed_numbers() + [render_working(budget, nmap, "en")] if budget is not None else []
         extra = extra + question_years(question, plan.english_question)
         bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)
         if bad and _found(d) != "none":
+            t["compose_retry"] = 1.0
             d = await compose(question, lang, plan, evidence, client, settings, context=context,
                               feedback=f"These figures are not in the cited evidence: {', '.join(bad)}. "
                                        "Use only figures copied exactly from the evidence, and cite them.")
@@ -993,7 +1005,9 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         return Answer(f"{added}{UNVERIFIED.get(lang, UNVERIFIED['en'])}\n\n{format_citations(cited, lang)}",
                       True, False, cited, plan, t, acquired=acq, latest=latest, sources=sources)
     note = plan.assumption_for(lang)
-    shown = {**d, "items": (d.get("items") or [])[:TOP_ROWS]}
+    q_all = f"{question} {plan.english_question}"
+    shown = {**d, "summary": drop_verdicts(str(d.get("summary") or d.get("answer") or ""), q_all),
+             "items": [drop_verdicts(str(i), q_all) for i in (d.get("items") or [])[:TOP_ROWS]]}
     body = added + (f"_{note}_\n\n" if note else "") + plain(render_answer(shown, lang))
     exact = answer_text(d)
     working = ""
@@ -1150,6 +1164,7 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
     working_text = "\n".join(working)
     note = plan.assumption_for(lang)
     # the reply: plain sentences (or, without them, the computed figures), the top rows, the caveats
+    summary = drop_verdicts(summary, plan.english_question)
     lead = render_answer({"summary": summary, "items": []}, lang) if summary.strip() else \
         readable_amounts("\n".join(calc), lang)
     shown = rows[:TOP_ROWS] + ([f"• … +{len(rows) - TOP_ROWS}"] if len(rows) > TOP_ROWS else [])
@@ -1318,8 +1333,9 @@ ANALYSIS_WORDS = {
                "from {prev} ({n_started} had money spent in {prev}, {n_idle} had none), {n_new} are new, and "
                "{n_dropped} projects from {prev} are not in it.",
         "status_note": {
-            "started": "“Started” here means money was spent on the project in January–September {prev} (the "
-                       "latest spending the {year} budget prints); “continuing” means it also has a {year} allocation.",
+            "started": "This counts projects that had spending in January–September {prev} (the latest spending "
+                       "the {year} budget prints) and are budgeted again in {year}; some were already spending "
+                       "before {prev}.",
             "continuing": "“Continuing” here means the project has both a {prev} budget and a {year} allocation, "
                           "whether or not money was spent on it; spending is January–September {prev}.",
             "idle": "“Nothing spent” means no spending in January–September {prev}, the latest the {year} budget "
@@ -1389,9 +1405,9 @@ ANALYSIS_WORDS = {
                "daga {prev} ({n_started} an kashe musu kuɗi a {prev}, {n_idle} ba a kashe ba), {n_new} sababbi ne, "
                "kuma ayyuka {n_dropped} na {prev} ba su ciki.",
         "status_note": {
-            "started": "“An fara” a nan yana nufin an kashe kuɗi a kan aikin a Janairu–Satumba {prev} (abin da "
-                       "kasafin {year} ya buga na baya-bayan nan); “ana ci gaba” yana nufin yana da kuɗi a kasafin "
-                       "{year} ma.",
+            "started": "Wannan ya ƙidaya ayyukan da aka kashe musu kuɗi a Janairu–Satumba {prev} (abin da kasafin "
+                       "{year} ya buga na baya-bayan nan) kuma aka sake ware musu kuɗi a {year}; wasu an fara kashe "
+                       "musu kuɗi tun kafin {prev}.",
             "continuing": "“Ana ci gaba” a nan yana nufin aikin yana da kasafi a {prev} kuma yana da kuɗi a {year}, "
                           "ko an kashe masa kuɗi ko ba a kashe ba; kuɗin da aka kashe na Janairu–Satumba {prev} ne.",
             "idle": "“Ba a kashe ba” yana nufin babu kuɗin da aka kashe a Janairu–Satumba {prev}, abin da kasafin "
@@ -1449,6 +1465,18 @@ def _money(x) -> str:
 
 
 _REFS = re.compile(r"\s*(?:\[L?\d+\])+")
+BENCHMARK_Q = re.compile(r"(?i)\b(?:benchmark|target|declaration|threshold|standard|recommended|ma'auni|manufa)\b")
+VERDICT = re.compile(r"(?i)\b(?:meets?|met|exceeds?|exceeded|falls? short|surpass\w*|achiev\w*|"
+                     r"(?:below|above) (?:the|its|that)|ya kai|bai kai ba|ya wuce|ya zarce)\b")
+
+
+def drop_verdicts(text: str, question: str) -> str:
+    """For a benchmark question, the figures go side by side: a sentence judging one against the other is removed
+    (the prompt asks for no verdict; this makes sure)."""
+    if not BENCHMARK_Q.search(question or ""):
+        return text
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    return " ".join(s for s in sentences if not VERDICT.search(s)).strip()
 
 
 def plain(text: str) -> str:

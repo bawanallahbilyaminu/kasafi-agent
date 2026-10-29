@@ -169,6 +169,17 @@ def test_over_hooked_hausa_is_fixed_but_correct_hooks_stay() -> None:
     assert render_answer({"summary": "ƙasafi", "items": []}, "en") == "ƙasafi"     # only for Hausa replies
 
 
+def test_a_benchmark_gets_both_figures_and_no_verdict() -> None:
+    """m04: 'It meets the Abuja Declaration benchmark.' is a verdict; the figures side by side are the answer."""
+    q = "What % of the 2026 budget is health, and does it meet the 15% Abuja Declaration benchmark?"
+    text = ("15.8% of the 2026 approved budget goes to health; the Abuja Declaration target is 15%. "
+            "It meets the Abuja Declaration benchmark.")
+    assert ans.drop_verdicts(text, q) == ("15.8% of the 2026 approved budget goes to health; the Abuja Declaration "
+                                          "target is 15%.")
+    assert ans.drop_verdicts("Spending met the plan. The list is below.", "How much was spent?") == \
+        "Spending met the plan. The list is below."                 # no benchmark asked: untouched
+
+
 @pytest.mark.parametrize("raw, out", [
     ("2,345,000 IDPs", "2,345,000 IDPs"),                       # a count of people: no naira sign
     ("₦1,234,567.00 displaced people", "1,234,567.00 displaced people"),

@@ -97,7 +97,8 @@ def test_reply_leads_in_plain_words_counts_have_no_naira_and_one_sources_line(co
     n = r.facts["n_started"].value
     assert a.text.startswith(f"Ayyuka {n} ne aka kashe musu kuɗi a 2025") and f"₦{n}" not in a.text
     assert "an ware musu ₦" in a.text and "an kashe ₦" in a.text             # allocated and spent, said apart
-    assert "“An fara” a nan yana nufin an kashe kuɗi a kan aikin a Janairu–Satumba 2025" in a.text  # the definition
+    # the definition, in one line: spending in 2025 and budgeted again in 2026, not "started in 2025"
+    assert "Wannan ya ƙidaya ayyukan da aka kashe musu kuɗi a Janairu–Satumba 2025" in a.text and "An fara" not in a.text
     assert f"ayyuka {r.facts['n_continuing'].value} na kasafin 2025 suna ci gaba" in a.text   # the wider count too
     assert a.text.count("Madogara") == 1 and "nuna lissafi" in a.text
     assert "🧮" not in a.text and "started: jan_sep_2025 > 0" in a.working     # the working only on request

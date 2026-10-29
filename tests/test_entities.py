@@ -154,6 +154,16 @@ def test_ministry_of_health_projects_add_up_to_its_capital(conn) -> None:
     assert projects == capital == Decimal("92523418285.85")
 
 
+def test_a_key_term_printed_next_to_an_amount_is_found_by_phrase(conn) -> None:
+    """Main-suite case 06: the DSA's own debt stock (p16, 'N104,450 million in 2022') lost to chart pages that say
+    'debt' more often; chart axes and years don't count as an amount."""
+    if not conn.execute("SELECT 1 FROM documents WHERE id = 'dsa-2023'").fetchone():
+        pytest.skip("DSA not indexed")
+    from app.retrieval.search import phrase_search
+    hits = phrase_search(conn, "Debt Stock", k=3, doc_ids=["dsa-2023"])
+    assert 16 in [h.page for h in hits] and all("Chart 27" not in h.text[:200] for h in hits)
+
+
 def test_per_agency_economic_rows_belong_to_their_agency(conn) -> None:
     """The drugs line of the Ministry of Health's own economic table (the m05 category answer uses these)."""
     n = conn.execute("SELECT count(*) FROM budget_items WHERE doc_id = 'budget-2026-approved' AND code = '22020307' "

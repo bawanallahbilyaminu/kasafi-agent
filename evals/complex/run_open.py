@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import statistics
 import sys
 import time
@@ -27,6 +28,22 @@ from app.agent.answer import UNVERIFIED, answer_question  # noqa: E402
 from app.config import get_settings  # noqa: E402
 
 
+STAGES = ("plan", "acquire", "line_search", "read", "read1", "read2", "reread", "page_search", "compose",
+          "answer", "calls1", "calls2")
+
+
+def wrong(check: dict | None, a) -> str:
+    """Why a reply fails its checked facts (evals/complex/mid_tier_checks.json), or '' (also when unchecked)."""
+    if not check:
+        return ""
+    if check.get("must_not") and re.search(check["must_not"], a.text):
+        return f"says {re.search(check['must_not'], a.text).group(0)!r}"
+    exact = f"{a.exact}\n{a.text}"
+    if check.get("any") and not any(all(n in exact for n in group) for group in check["any"]):
+        return f"none of {check['any']}"
+    return ""
+
+
 def outcome(a) -> str:
     if a.clarify:
         return "clarify"
@@ -40,7 +57,9 @@ def outcome(a) -> str:
 async def main(path: Path, ids: list[str] | None, out: Path) -> None:
     s = get_settings()
     qs = [q for q in json.loads(path.read_text(encoding="utf-8"))["questions"] if not ids or q["id"] in ids]
-    rows, report = [], [f"# Open-question run: {path.name}\n"]
+    rows, report, stages, checked = [], [f"# Open-question run: {path.name}\n"], [], []
+    checks_file = path.parent / "mid_tier_checks.json"
+    checks = json.loads(checks_file.read_text(encoding="utf-8"))["checks"] if checks_file.exists() else {}
     with psycopg.connect(s.db_url()) as conn:
         for q in qs:
             t0 = time.perf_counter()
@@ -58,16 +77,36 @@ async def main(path: Path, ids: list[str] | None, out: Path) -> None:
                           f"lines:{a.lines.operation}" if getattr(a, "lines", None) is not None else
                           f"query_budget:{a.budget.operation}" if a.budget is not None else
                           "latest" if a.latest else "fetch" if a.acquired else "search")
-            res = (q["id"], outcome(a), a.verified, len(a.cited), "🧮" in a.text, path_taken, dt)
+            res = (q["id"], outcome(a), a.verified, len(a.cited), bool(getattr(a, "working", "")), path_taken, dt)
             rows.append(res)
-            print(f"{q['id']:>4} {res[1]:<10} cites={res[3]} working={'y' if res[4] else 'n'} {path_taken:<22} {dt:5.1f}s")
-            report.append(f"## {q['id']}: {res[1]} ({path_taken}, {dt:.1f}s)\n\n**Q:** {q['text']}\n"
+            stages.append(dict(a.timings))
+            why = wrong(checks.get(q["id"]), a)
+            if q["id"] in checks:
+                checked.append((q["id"], why))
+            parts = " ".join(f"{k}={v:.1f}" for k, v in a.timings.items() if k in STAGES)
+            print(f"{q['id']:>4} {res[1]:<10} {'WRONG ' if why else ''}cites={res[3]} {path_taken:<22} "
+                  f"{dt:5.1f}s  [{parts}]" + (f"  {why}" if why else ""))
+            report.append(f"## {q['id']}: {res[1]}{' WRONG: ' + why if why else ''} ({path_taken}, {dt:.1f}s)\n\n"
+                          f"**Q:** {q['text']}\n"
                           + (f"\n_{q['note']}_\n" if q.get("note") else "") + f"\n```\n{a.text}\n```\n")
     counts = Counter(r[1] for r in rows)
+    bad = [i for i, why in checked if why]
     summary = (f"{len(rows)} questions: " + ", ".join(f"{k} {v}" for k, v in counts.most_common())
+               + f" | wrong {len(bad)} of {len(checked)} checked" + (f" ({', '.join(bad)})" if bad else "")
                + f" | median {statistics.median(r[6] for r in rows):.1f}s")
-    print("\n" + summary)
-    report.insert(1, summary + "\n")
+    # where the time goes: per stage, the questions that had it, their median and their share of all seconds
+    total = sum(r[6] for r in rows) or 1
+    lines = []
+    for k in STAGES:
+        vals = [s[k] for s in stages if k in s]
+        if vals and not k.startswith("calls"):
+            lines.append(f"{k:<13} n={len(vals):>2} median {statistics.median(vals):5.1f}s  "
+                         f"{sum(vals) / total * 100:4.0f}% of all time")
+    calls = [s.get("calls1", 0) + s.get("calls2", 0) for s in stages if "read1" in s]
+    if calls:
+        lines.append(f"row readings: {sum(calls)} model calls for {len(calls)} questions (2 = no retry)")
+    print("\n" + summary + "\n" + "\n".join(lines))
+    report.insert(1, summary + "\n\n```\n" + "\n".join(lines) + "\n```\n")
     out.write_text("\n".join(report), encoding="utf-8")
     print(f"report: {out}")
 
