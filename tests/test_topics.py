@@ -142,3 +142,10 @@ def test_quoting_the_durable_solutions_report_says_it_covers_sokoto_town_only() 
 ])
 def test_a_question_naming_a_publisher_is_answered_from_it(q: str, ids: list) -> None:
     assert [p.id for p in tp.named_publishers(registry().topics["displacement_humanitarian"], q)] == ids
+
+
+def test_a_rate_keeps_its_percent_sign() -> None:
+    nbs = next(p for p in registry().topics["labour_employment"].publishers if p.id == "nbs_nlfs")
+    c = tp.Card(nbs, "nlfs", "NLFS 2023", 258, "1.2", "%", "unemployment rate", "2023", "Sokoto State")
+    text, _ = tp.compose(registry().topics["labour_employment"], [tp.SourceResult(nbs, "nlfs", cards=[c])], [], "en")
+    assert "*1.2%*" in text

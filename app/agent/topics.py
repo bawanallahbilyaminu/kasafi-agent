@@ -308,7 +308,9 @@ CARD_SYSTEM = (
     "households, %, ...), what (what it counts or measures, in a few words, with its definition if the page "
     "gives one), ref_date (the date or period the figure refers to, as printed, e.g. 'Round 18, Oct 2025', "
     "'March 2026', '2023'), geography (Sokoto State, an LGA, Sokoto town ...) and page (the page number shown). "
-    "Only figures printed on these pages; never compute, round or combine. {extra}"
+    "Where the page prints a rate for what is asked (e.g. the unemployment rate, the % of children stunted), "
+    "give that headline rate first, then counts. Only figures printed on these pages; never compute, round or "
+    "combine. {extra}"
     'Reply with JSON only: {{"figures": [{{"value": "", "unit": "", "what": "", "ref_date": "", "geography": "", '
     '"page": 0}}], "edition": "<the document\'s own edition or date, e.g. Round 18, December 2025>"}}'
 )
@@ -333,38 +335,49 @@ def topic_query(topic: Topic, question: str) -> str:
 
 async def fact_cards(conn: psycopg.Connection, src: SourceResult, topic: Topic, question: str, client: ChatClient,
                      settings: Settings) -> list[Card]:
-    hits = search(conn, topic_query(topic, question), k=12, doc_ids=[src.doc_id])
-    pages: dict[int, str] = {}
-    for h in hits:
-        if h.page not in pages and len(pages) < CARD_PAGES:
-            pages[h.page] = (conn.execute("SELECT text FROM pages WHERE doc_id = %s AND page = %s",
-                                          (src.doc_id, h.page)).fetchone() or [""])[0]
+    hits = search(conn, topic_query(topic, question), k=30, doc_ids=[src.doc_id])
+    ranked = list(dict.fromkeys(h.page for h in hits))
+    text = {p: (conn.execute("SELECT text FROM pages WHERE doc_id = %s AND page = %s", (src.doc_id, p)).fetchone()
+                or [""])[0] for p in ranked}
+    # a national report prints every state: the pages that name Sokoto (its table rows) come before the
+    # definitions and national totals that rank higher in keyword search
+    ranked.sort(key=lambda p: "sokoto" not in text[p].lower())
+    pages = {p: text[p] for p in ranked[:CARD_PAGES]}
     if not pages:
         return []
     p = src.publisher
-    extra = (f"Also copy, if printed for Sokoto: {p.definition_note.split(';')[-1].strip()}. "
-             if p.definition_note else "")
+    # a definition note names the figures that belong beside the headline one (NBS: underemployment,
+    # informality, NEET beside the unemployment rate): those are asked for too, up to 5 figures in all
+    most = 5 if p.definition_note else 3
+    extra = (f"Also copy, if printed for Sokoto, up to {most} figures in all: "
+             f"{p.definition_note.split(';')[-1].strip()}. " if p.definition_note else "")
     body = "\n\n".join(f"--- page {n} ---\n{t[:PAGE_CHARS]}" for n, t in pages.items())
-    r = await client.chat([{"role": "system", "content": CARD_SYSTEM.format(extra=extra)},
-                           {"role": "user", "content": f"QUESTION: {question}\nDOCUMENT: {src.title}\n\n{body}"}],
-                          model=settings.meta_model, reasoning_effort="low", max_tokens=3000)
-    try:
-        d = parse_json_reply(r.content)
-    except ValueError:
-        return []
+    messages = [{"role": "system", "content": CARD_SYSTEM.format(extra=extra)},
+                {"role": "user", "content": f"QUESTION: {question}\nDOCUMENT: {src.title}\n\n{body}"}]
+    d = {}
+    for _ in range(2):          # dense state tables can use up a reply on reasoning: once more on an empty one
+        r = await client.chat(messages, model=settings.meta_model, reasoning_effort="low", max_tokens=8000)
+        try:
+            d = parse_json_reply(r.content)
+            break
+        except ValueError:
+            log.info("fact card reply for %s was empty or not JSON; retrying", src.doc_id)
     cards = []
-    for f in (d.get("figures") or [])[:4]:
+    for f in (d.get("figures") or [])[:most + 1]:
         if not isinstance(f, dict):
             continue
-        page = f.get("page") if isinstance(f.get("page"), int) else next(iter(pages))
         value = str(f.get("value") or "").strip()
-        if page in pages and printed_on(value, pages[page]):        # the code check: printed on that page
+        # the code check: printed on a page we gave. The model may cite the page number printed in the
+        # document ("Page | 244" on PDF page 258), so the page is the one that prints the value, its own first
+        said = f.get("page") if isinstance(f.get("page"), int) else None
+        page = next((n for n in sorted(pages, key=lambda n: n != said) if printed_on(value, pages[n])), None)
+        if page is not None:
             cards.append(Card(p, src.doc_id, src.title, page, value, str(f.get("unit") or "")[:40],
                               str(f.get("what") or "")[:160], str(f.get("ref_date") or "")[:60],
                               str(f.get("geography") or "")[:60], str(d.get("edition") or "")[:60]))
         else:
-            log.info("fact card dropped (not printed on p%s): %s %s", page, p.id, value[:30])
-    return cards[:3]
+            log.info("fact card dropped (not printed on the pages read): %s %s", p.id, value[:30])
+    return cards[:most]
 
 
 # --- 4. the reply ----------------------------------------------------------------------------------------------
@@ -411,9 +424,10 @@ def short_pub(p: Publisher) -> str:
     """'IOM Displacement Tracking Matrix (DTM)' -> 'IOM Displacement Tracking Matrix'; a long report title named
     with its publishers in brackets -> the publishers ('Sokoto State Bureau of Statistics, JIPS, DRC')."""
     head, _, rest = p.name.partition(" (")
-    if len(head) > 45 and rest:
-        return rest.split(";")[0].rstrip(")").strip()
-    return re.split(r"\s[:/-]\s|\s–\s", head, maxsplit=1)[0].strip()
+    inside = rest.split(")")[0].split(";")[0].strip()
+    if len(head) > 45 and inside and not re.search(r"\d", inside):
+        return inside
+    return re.split(r"\s[:/-]\s|\s–\s|,\s", head, maxsplit=1)[0].strip()
 
 
 def _when(c: Card) -> str:
@@ -472,7 +486,9 @@ def compose(topic: Topic, sources: list[SourceResult], related: list[SourceResul
         return w["none"].format(names=", ".join(missing) or "-"), False
 
     def unit(c: Card) -> str:
-        return f" {c.unit}" if c.unit and c.unit != "%" and not c.value.endswith("%") else ""
+        if c.value.endswith("%") or not c.unit:
+            return ""
+        return "%" if c.unit.strip().lower() in ("%", "percent", "per cent", "percentage") else f" {c.unit}"
 
     def geo(c: Card) -> str:
         return f", {c.geography}" if c.geography else ""

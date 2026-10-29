@@ -44,6 +44,7 @@ from app.agent.analysis import TOOLS, AnalysisResult, run_analysis
 from app.agent.topics import TopicResult, topic_answer
 from app.agent.topics import note_of as topic_note
 from app.agent.topics import local_documents as topics_local
+from app.agent.topics import named_publishers
 from app.agent.topics import short_pub
 from app.agent.budget_query import QueryResult, context_text, lga_in, render_working, run_budget_query
 from app.agent import trace
@@ -1078,12 +1079,16 @@ def off_topic_note(conn, plan: Plan, question: str, cited: list[Evidence], lang:
 def topic_route(question: str, plan: Plan) -> str:
     """A statistics question on a multi-source topic (registry): its topic id, from the synonyms first and the
     planner's topic as the fallback; '' when the question is about budget money or no topic fits."""
-    if not (plan.statistics or plan.current) or plan.line_search or plan.budget_query or plan.analysis \
-            or plan.category:
+    if plan.line_search or plan.budget_query or plan.analysis or plan.category:
         return ""
-    tid = detect_topic(f"{question} {plan.english_question}") or plan.topic
+    text = f"{question} {plan.english_question}"
+    tid = detect_topic(text) or plan.topic
     topic = registry().topics.get(tid)
-    return tid if topic and topic.answer_pattern == "multi_source" else ""
+    if not topic or topic.answer_pattern != "multi_source":
+        return ""
+    # the planner may call a publisher's figure a missing document ("IDPs according to IOM"): still a topic
+    return tid if plan.statistics or plan.current or named_publishers(topic, f"{text} {plan.missing_document}") \
+        else ""
 
 
 async def _line_path(conn, plan: Plan, question: str, lang: str, client, second, settings: Settings, t: dict,
