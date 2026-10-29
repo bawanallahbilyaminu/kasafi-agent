@@ -111,6 +111,7 @@ class LineResult:
     uncertain: list[str] = field(default_factory=list)   # lines only one of the two readings chose: not counted
     disputed: bool = False      # the readings disagreed on which rows a total takes: no arithmetic was done
     readers: list[str] = field(default_factory=list)     # the model behind each reading
+    picks: list[list[str]] = field(default_factory=list)  # what each reading chose, for the admin trace
 
     def computed(self) -> dict[str, Decimal]:
         return {k: v for k, v in (("TOTAL", self.total), ("DIFFERENCE", self.difference),
@@ -332,7 +333,12 @@ async def read_lines(question: str, english: str, lang: str, lines: list[Line], 
         _second_reading(messages, lines, client, second, settings, extra_numbers, chat_json))
     res = reconcile(r1, d1, r2, lines, extra_numbers, question, lang)
     res.readers = [settings.meta_model, reader2]
+    res.picks = [[pick_text(s) for s in r.selections] for r in (r1, r2)]
     return res
+
+
+def pick_text(s: Selection) -> str:
+    return f"{short_name(s.line)} | {s.cell.column}: {fmt(s.cell.amount)} ({s.line.doc_id} p{s.line.page})"
 
 
 async def _second_reading(messages: list[dict], lines: list[Line], client: ChatClient, second: ChatClient | None,

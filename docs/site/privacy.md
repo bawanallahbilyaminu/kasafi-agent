@@ -5,7 +5,7 @@ permalink: /privacy/
 
 # Kasafi Privacy Policy
 
-*Last updated: 28 October 2026 (document search, review queue)*
+*Last updated: 29 October 2026 (answer traces)*
 
 Kasafi is a WhatsApp assistant run by **Halal Numeriq Limited**, Sokoto, Nigeria ("we"). We are the data controller
 under the **Nigeria Data Protection Act 2023 (NDPA)**. Contact: [bilyaminu@halalnumeriq.com.ng](mailto:bilyaminu@halalnumeriq.com.ng).
@@ -50,7 +50,9 @@ protection terms and the NDPA's rules on transfers.
 
 - **Voice notes:** deleted as soon as they have been turned into text.
 - **Conversations** (your messages and our replies): **90 days**, then deleted.
-- **Technical logs:** 30 days.
+- **Technical logs:** 30 days. These include an **answer trace** for each question Kasafi answers: the English wording
+  of the question, the steps Kasafi took (which documents and rows it read and checked) and the reply, with **no phone
+  number or ID linked to you**, so our team can check that answers are accurate.
 - **Daily usage counts:** 30 days. **Consent and language settings:** until you ask us to delete them.
 - **Review queue:** when Kasafi can't answer a question, or can't find a document it needs, we keep the English
   wording of the question, what was missing and which trusted sites were searched for **90 days**, so our team can add

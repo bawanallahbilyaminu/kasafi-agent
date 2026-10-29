@@ -39,6 +39,7 @@ from app.acquisition.editions import (SERIES, Latest, Series, doc_edition, editi
                                      generic_series, label, month_label, release_date, series_doc_ids)
 from app.acquisition.library import Acquired, fetch_and_index, find_and_fetch, log_gap
 from app.agent.budget_query import QueryResult, context_text, lga_in, render_working, run_budget_query
+from app.agent import trace
 from app.agent.calculate import MIXED, CalcError, Calculation, MixedBases, offer_text, validate
 from app.agent.line_answer import LineResult, fmt, is_location, item_of, read_lines, short_name
 from app.retrieval.line_search import MAX_LINES, name_key, nearest, search_lines
@@ -1102,7 +1103,9 @@ async def answer_from_documents(question: str, lang: str, *, settings: Settings,
     `history` is the user's last few turns, for follow-ups.
     """
     with psycopg.connect(settings.db_url(), connect_timeout=5) as conn:
+        t0 = time.perf_counter()
         a = await answer_question(question, lang, conn, settings=settings, notify=notify, history=history)
+        trace.save(conn, a, lang, time.perf_counter() - t0)
     tm = a.timings
     # No question text in logs: only what was searched where, and how it went.
     log.info("answer: found=%s partial=%s verified=%s docs=%s cited=%s acquired=%s plan=%.1fs acquire=%.1fs "

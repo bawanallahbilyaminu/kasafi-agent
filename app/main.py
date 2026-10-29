@@ -5,6 +5,7 @@ import os
 
 from fastapi import FastAPI
 
+from app.admin import router as admin_router
 from app.legal import router as legal_router
 from app.whatsapp.webhook import router as whatsapp_router
 
@@ -28,6 +29,7 @@ logging.getLogger("uvicorn.access").addFilter(_RedactQuery())
 app = FastAPI(title="Kasafi", version="0.1.0", docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(whatsapp_router)
 app.include_router(legal_router)
+app.include_router(admin_router)
 
 
 @app.get("/health")

@@ -118,6 +118,12 @@ WhatsApp webhook (FastAPI on VPS)
 - **Admin / review queue:** a minimal FastAPI + HTML admin page behind HTTP basic auth (`ADMIN_USER` / `ADMIN_PASSWORD` from `.env`, with a strong password). It moves to Clerk later, when the React app is built.
   - **Review queue:** logged gaps and `auto-indexed` documents waiting for `human-verified` status.
   - **Agent trace view** (used in the demo video): for each question it shows the plan, the documents found and fetched, the evidence list and the verification result. The agent therefore saves one trace record per question, written in a single insert at the end so the database round-trips stay low.
+  - **Built Oct 29** (`app/admin`, `app/agent/trace.py`, table `traces`):
+    - `/admin/traces`: every answer, with outcome, path, time, flags and readers; `?flagged=1` shows only flagged ones.
+    - `/admin/traces/{id}`: the plan, the two readings side by side (Muse Spark and Muse Spark Open, rows both chose marked ✓), what code verified and computed, citations, timings and the reply sent.
+    - `/admin/review`: open gaps, plus answers flagged partial, not found, unverified, readings disagreed, or Open fell back. Each has a close or mark button.
+    - A trace stores the English wording only, with no user key, and is purged after 30 days.
+    - Pages return 404 unless both `ADMIN_USER` and `ADMIN_PASSWORD` are set. Form posts must come from the same site.
 - **Seed documents:** about 20 core public Sokoto documents, a mix of URLs and local PDFs that Bilyaminu provides. The files go in the gitignored `data/`. Only `data/manifest.json` is committed, with the source URL, SHA-256 hash, title, year and publisher of each document.
 
 ## Proposed repo layout
