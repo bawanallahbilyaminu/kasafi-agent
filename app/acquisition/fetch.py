@@ -9,6 +9,7 @@ accepted too and unpacked later, inside the sandbox. The file's SHA-256 is recor
 from __future__ import annotations
 
 import hashlib
+import html as htmllib
 import re
 import urllib.parse
 from dataclasses import dataclass
@@ -49,15 +50,17 @@ async def check_url(url: str, robots: Robots) -> None:
 
 LANDING_BYTES = 2 * 1024 * 1024
 _HREF = re.compile(r"""href\s*=\s*["']([^"'#]+)["']""", re.I)
-_DOC_LINK = re.compile(r"(?i)\.pdf(?:$|\?)|/download(?:/|$|\?)|/documents?/download/")
+_DOC_LINK = re.compile(r"(?i)\.pdf(?:$|\?)|/(?:\w+_)?download(?:_\w+)?(?:/|$|\?)")
 
 
 def document_link(html: str, page_url: str) -> str | None:
     """The first link on a landing page to a document on the same site: a .pdf, or a download address
-    (NBS /download/<id>, UNHCR /documents/download/<id>, /api/documents/<slug>/download) without one."""
+    (NBS /download/<id>, UNHCR /documents/download/<id>, DTM /dtm_download_track/<id>, /api/documents/<slug>/
+    download) without one."""
     host = urllib.parse.urlsplit(page_url).hostname
     for href in _HREF.findall(html):
-        link = urllib.parse.urljoin(page_url, href.strip())
+        href = htmllib.unescape(htmllib.unescape(href.strip()))        # "&amp;amp;" is printed on some pages
+        link = urllib.parse.urljoin(page_url, href)
         if urllib.parse.urlsplit(link).hostname == host and _DOC_LINK.search(link) and link != page_url:
             return link
     return None

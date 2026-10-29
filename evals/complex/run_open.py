@@ -41,6 +41,10 @@ def wrong(check: dict | None, a) -> str:
     exact = f"{a.exact}\n{a.text}"
     if check.get("any") and not any(all(n in exact for n in group) for group in check["any"]):
         return f"none of {check['any']}"
+    if missing := [p for p in check.get("all_re", []) if not re.search(p, a.text, re.M)]:
+        return f"missing {missing}"
+    if (c := check.get("count")) and len(re.findall(c["pattern"], a.text, re.M)) < c["min"]:
+        return f"fewer than {c['min']} of {c['pattern']!r}"
     return ""
 
 
@@ -58,7 +62,8 @@ async def main(path: Path, ids: list[str] | None, out: Path) -> None:
     s = get_settings()
     qs = [q for q in json.loads(path.read_text(encoding="utf-8"))["questions"] if not ids or q["id"] in ids]
     rows, report, stages, checked = [], [f"# Open-question run: {path.name}\n"], [], []
-    checks_file = path.parent / "mid_tier_checks.json"
+    checks_file = path.with_name(f"{path.stem}_checks.json")
+    checks_file = checks_file if checks_file.exists() else path.parent / "mid_tier_checks.json"
     checks = json.loads(checks_file.read_text(encoding="utf-8"))["checks"] if checks_file.exists() else {}
     with psycopg.connect(s.db_url()) as conn:
         for q in qs:
@@ -72,7 +77,8 @@ async def main(path: Path, ids: list[str] | None, out: Path) -> None:
                 print(f"{q['id']:>4} ERROR {type(e).__name__}")
                 continue
             dt = time.perf_counter() - t0
-            path_taken = (f"analysis:{a.analysis.tool}" if getattr(a, "analysis", None) is not None else
+            path_taken = (f"topic:{a.topic.topic}" if getattr(a, "topic", None) is not None else
+                          f"analysis:{a.analysis.tool}" if getattr(a, "analysis", None) is not None else
                           "category" if getattr(a, "category", None) is not None else
                           f"lines:{a.lines.operation}" if getattr(a, "lines", None) is not None else
                           f"query_budget:{a.budget.operation}" if a.budget is not None else

@@ -1,0 +1,21 @@
+{
+  "_about": "Checks for evals/complex/topics.json. all_re: every pattern must match the reply; count: at least `min` lines matching `pattern`; must_not: a pattern that must not appear. Figures confirmed on Oct 29: UNHCR Nigeria Forcibly Displaced Populations Dashboard (1 Oct 2026) and DTM Round 18 (reporting date 31 Oct 2025): Sokoto 181,526; SBS/JIPS/DRC durable solutions report (May 2026): over 181,500 statewide, Sokoto town only for its survey; NBS NLFS Annual Report 2023: Sokoto unemployment 1.2%.",
+  "checks": {
+    "t01": {"all_re": ["UNHCR", "(?i)DTM|Displacement Tracking", "(?i)Bureau of Statistics|JIPS", "(?i)why they differ",
+                       "181,5\\d\\d", "(?i)Sokoto town only"],
+            "count": {"pattern": "^• ", "min": 3},
+            "must_not": "(?i)📊[^\\n]*\\bMPI\\b",
+            "source": "≥3 dated sources incl. UNHCR and the newest DTM round, a 'why they differ' line; the MPI only as related."},
+    "t02": {"all_re": ["UNHCR", "(?i)DTM|Displacement Tracking", "(?i)dalilin bambanci"], "count": {"pattern": "^• ", "min": 3},
+            "source": "the Hausa form of t01."},
+    "t03": {"all_re": ["(?i)Round 1[89]|R1[89]\\b|October 2025|Oct 2025"], "must_not": "(?i)Round 17\\b",
+            "source": "the newest DTM round (18 or later), not Round 17."},
+    "t04": {"all_re": ["(?i)Labour Force Survey", "1\\.2\\s?%", "(?i)ILO 2013", "(?i)underemployment"],
+            "must_not": "(?i)📊[^\\n]*\\bMPI\\b",
+            "source": "NBS NLFS Annual Report 2023 Sokoto table with the definition note; the MPI only as related."},
+    "t05": {"all_re": ["(?i)Cadre Harmonis", "(?i)UNICEF|SMART|National Nutrition"], "must_not": "@|\\+234|\\b0[789]0\\d{8}\\b",
+            "source": "the registry's nutrition publishers; never a contact from the private hints."},
+    "t06": {"all_re": ["(?i)Sokoto town", "(?i)not the whole state|town only"],
+            "source": "SBS/JIPS/DRC durable solutions report, said to cover Sokoto town only."}
+  }
+}

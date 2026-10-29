@@ -131,3 +131,14 @@ def test_quoting_the_durable_solutions_report_says_it_covers_sokoto_town_only() 
     from app.agent.answer import Evidence, scope_notes
     cited = [Evidence(1, SBS_DOC[0], SBS_DOC[1], 2026, 12, "text", "")]
     assert "findings cover Sokoto town only, not the whole state" in scope_notes(FakeConn([SBS_DOC]), cited)
+
+
+@pytest.mark.parametrize("q, ids", [
+    ("How many IDPs in Sokoto according to IOM?", ["iom_dtm"]),
+    ("what do unhcr figures say about displaced people", ["unhcr_dashboard"]),
+    ("Did aid reach the displaced people in Sokoto?", []),
+    ("What does the REACH assessment say?", ["reach_impact"]),
+    ("current state of IDPs in Sokoto", []),
+])
+def test_a_question_naming_a_publisher_is_answered_from_it(q: str, ids: list) -> None:
+    assert [p.id for p in tp.named_publishers(registry().topics["displacement_humanitarian"], q)] == ids

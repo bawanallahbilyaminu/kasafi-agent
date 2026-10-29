@@ -193,3 +193,11 @@ def test_global_excludes_drop_search_results(title: str, url: str, out: bool) ->
 def test_the_confirm_step_names_the_registrys_exclusions() -> None:
     from app.acquisition.library import CONFIRM_SYSTEM
     assert "BudgIT State of States" in CONFIRM_SYSTEM
+
+
+def test_a_dtm_report_page_links_its_document_through_a_download_tracker() -> None:
+    from app.acquisition.fetch import document_link
+    page = ('<a href="/form/dtm-product-download-survey">survey</a>'
+            '<a href="/dtm_download_track/91831?file=1&amp;amp;type=node&amp;amp;id=61076">Download</a>')
+    assert document_link(page, "https://dtm.iom.int/reports/round-18") == \
+        "https://dtm.iom.int/dtm_download_track/91831?file=1&type=node&id=61076"

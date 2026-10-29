@@ -1,0 +1,11 @@
+{
+  "_about": "Multi-source topic questions (data/source_registry.yaml answer_pattern multi_source). Phone tests on Oct 29: the IDP question was answered from the MPI only, 'according to IOM' fetched DTM Round 17 though Round 18 exists, and employment used the MPI only though the NBS NLFS Annual Report 2023 has a Sokoto table. Run: uv run python evals/complex/run_open.py --file evals/complex/topics.json",
+  "questions": [
+    {"id": "t01", "lang": "en", "text": "What is the current state of IDPs in Sokoto?"},
+    {"id": "t02", "lang": "ha", "text": "Yaya halin 'yan gudun hijira yake a Jihar Sokoto a yanzu?"},
+    {"id": "t03", "lang": "en", "text": "How many IDPs are in Sokoto according to IOM?"},
+    {"id": "t04", "lang": "en", "text": "What are the employment statistics for Sokoto State?"},
+    {"id": "t05", "lang": "en", "text": "Which partners publish nutrition data for Sokoto?"},
+    {"id": "t06", "lang": "en", "text": "What does the JIPS/DRC durable solutions survey say about Sokoto?"}
+  ]
+}

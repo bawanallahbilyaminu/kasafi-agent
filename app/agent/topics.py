@@ -116,6 +116,30 @@ def choose_publishers(topic: Topic, n: int = MAX_SOURCES) -> tuple[list[Publishe
     return primary[:n], [p for p in topic.publishers if p.tier == 3]
 
 
+_GENERIC_LABELS = {"data", "www", "api", "docs", "response", "repository", "microdata", "documents1", "nigeria",
+                   "openknowledge", "fts", "afro"}
+
+
+def publisher_names(p: Publisher) -> set[str]:
+    """Short names a user may call a publisher by: the acronyms in its name (IOM, DTM, UNHCR, JIPS, DRC) and its
+    domains' own labels (sbs.sk.gov.ng -> sbs)."""
+    names = {a.lower() for a in _ACRONYM.findall(p.name)}
+    names |= {d.split(".")[0].lower() for d in p.domains if d.split(".")[0].lower() not in _GENERIC_LABELS}
+    return {n for n in names if len(n) >= 3}
+
+
+def named_publishers(topic: Topic, text: str) -> list[Publisher]:
+    """The topic's publishers the question names ("according to IOM", "the JIPS/DRC survey"): those alone answer."""
+    words = set(re.findall(r"[a-z]{3,}", text.lower()))
+    capitals = {w.lower() for w in re.findall(r"\b[A-Z]{3,}\b", text)}
+    # names that are also everyday words ("did aid reach them?") count only when written in capitals
+    return [p for p in topic.publishers if p.tier < 3
+            and {n for n in publisher_names(p) if n not in _EVERYDAY or n in capitals} & (words | capitals)]
+
+
+_EVERYDAY = {"reach", "impact", "hac", "idp", "sema"}
+
+
 # --- 2. the newest document ------------------------------------------------------------------------------------
 
 _YEAR = re.compile(r"\b(20\d\d)\b")
@@ -134,17 +158,29 @@ def expected_edition(p: Publisher, today: date) -> str:
     return f"newest edition, {p.latest_known or 'latest available'} or later"
 
 
+_TITLE_STOP = {"nigeria", "nigerian", "sokoto", "state", "report", "reports", "national", "bureau", "statistics",
+               "the", "and", "for", "with", "annual", "monthly", "quarterly", "data", "including", "covering"}
+
+
+def _title_words(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z]{4,}", text.lower()) if w not in _TITLE_STOP}
+
+
 def local_documents(conn: psycopg.Connection, p: Publisher) -> list[tuple]:
     """Our documents from this publisher, newest first: by its registry URLs and domains, else by the acronyms
     in its name (MPI, NLFS, DTM, NDHS ...) in the document's title."""
     rows = conn.execute("SELECT id, title, year, source_url, final_url, fetched_at, edition FROM documents "
                         "ORDER BY year DESC NULLS LAST, fetched_at DESC NULLS LAST").fetchall()
     out = []
+    # one domain carries many series (nigerianstat.gov.ng: CPI and the labour force survey): the title must
+    # also share a word with the publisher's name or document types
+    own = _title_words(f"{p.name} {' '.join(p.doc_types)}")
     for r in rows:
         url = r[4] or r[3] or ""
         host = re.sub(r"^https?://", "", url).split("/")[0].lower()
-        if (url and (url in p.urls or r[3] in p.urls)) or (host and any(host == d or host.endswith("." + d)
-                                                                        for d in p.domains)):
+        if url and (url in p.urls or r[3] in p.urls):
+            out.append(r)
+        elif host and any(host == d or host.endswith("." + d) for d in p.domains) and own & _title_words(r[1]):
             out.append(r)
         elif not p.domains and any(a in r[1] for a in _ACRONYM.findall(p.name) if a not in ("NBS", "FCT")):
             out.append(r)
@@ -511,7 +547,9 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
             text = await publishers_answer(conn, topic, lang, settings, http)
             return TopicResult(topic_id, text, True, False, [], [], [], {"topic": time.perf_counter() - t0})
         primary, context = choose_publishers(topic)
-        if notify:
+        if named := named_publishers(topic, f"{question} {english}"):     # "according to IOM": that one only
+            primary, context = named[:2], []
+        if notify and len(primary) > 1:
             await notify(PROGRESS.get(lang, PROGRESS["en"]).format(
                 n=len(primary), names=", ".join(short_pub(p) for p in primary)))
         robots = Robots(http)
