@@ -104,6 +104,18 @@ def test_reply_leads_in_plain_words_counts_have_no_naira_and_one_sources_line(co
     assert len([x for x in a.text.splitlines() if x.startswith("• ")]) <= 5
 
 
+def test_how_much_for_a_sector_is_not_a_profile(monkeypatch) -> None:
+    """Main-suite cases 01/11/19: 'how much for education / health' is the sector line on normal search (L24)."""
+    from tests.test_answer import run
+    plan = {"english_question": "How much was allocated to education?", "search_queries": ["education"],
+            "doc_ids": ["budget-2026-approved"], "analysis": {"tool": "function_profile", "function": "Education"}}
+    called = []
+    monkeypatch.setattr(ans, "run_analysis", lambda conn, spec: called.append(spec))
+    a, _ = run(monkeypatch, [plan, {"summary": "An ware 128,495,868,362.13 [1].", "found": "full", "cited": [1]}])
+    assert called == [] and "₦128.50 biliyan" in a.text
+    assert ans.PROFILE_CUE.search("Give me a breakdown of the Ministry of Health's budget")
+
+
 def test_planned_analysis_answers_without_a_compose_call(monkeypatch) -> None:
     plan = {"english_question": "Which projects are in Tambuwal?", "search_queries": ["Tambuwal projects"],
             "doc_ids": ["budget-2026-approved"], "analysis": {"tool": "lga_projects", "lga": "Tambuwal"}}

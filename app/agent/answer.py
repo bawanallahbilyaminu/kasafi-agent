@@ -124,12 +124,14 @@ PLAN_SYSTEM = (
     "\"ranking\", \"of\": \"project\"|\"lga\"|\"agency\", \"by\": \"approved\"|\"revised\"|\"spent\", \"order\": "
     "\"highest\"|\"lowest\", \"top\": N, \"year\": YYYY, \"mda\": \"<optional>\", \"terms\": [<optional topic>]}; "
     "ministries and functions are ranked with budget_query instead. "
-    "(d) mda_profile: an overview of one ministry's or agency's budget and spending (not one line inside it), e.g. "
-    "'how much did the Ministry of Health get and spend': {\"tool\": \"mda_profile\", \"mda\": \"<name in English "
-    "as budgets print it>\", \"year\": YYYY}. "
-    "(e) function_profile: an overview of one function of government across all ministries (health, secondary "
-    "education, agriculture, water supply, ...): {\"tool\": \"function_profile\", \"function\": \"<as budgets print "
-    "it, e.g. 'Health', 'Secondary Education'>\", \"year\": YYYY}. "
+    "(d) mda_profile: a BREAKDOWN or overview of one ministry's or agency's budget (salaries, running costs, "
+    "capital, its projects, spending), e.g. 'give me a breakdown of the Ministry of Health's budget': {\"tool\": "
+    "\"mda_profile\", \"mda\": \"<name in English as budgets print it>\", \"year\": YYYY}. "
+    "(e) function_profile: a BREAKDOWN or overview of one function of government across all ministries (health, "
+    "secondary education, agriculture, water supply, ...): {\"tool\": \"function_profile\", \"function\": \"<as "
+    "budgets print it, e.g. 'Health', 'Secondary Education'>\", \"year\": YYYY}. "
+    "'How much was allocated to <a sector or ministry> (and how much was spent)' is NOT a profile: normal search "
+    "answers it from the sector or ministry line and the report's own % performance. "
     "(f) revenue: how much revenue, IGR, FAAC, grants or loans the state expects or has received: {\"tool\": "
     "\"revenue\", \"focus\": \"all\"|\"igr\"|\"faac\"|\"grants\"|\"capital_receipts\", \"year\": YYYY}. "
     "Profiles (d, e) are overviews of one year: NOT for comparing a figure across years or documents (e.g. '2026 "
@@ -900,8 +902,11 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             if not acq.doc_id and plan.current:
                 # "how many IDPs are there now?": other documents are not the current situation; say so plainly
                 return _not_found(conn, plan, lang, acq, t)
+        # a profile is a breakdown: not a comparison across years, and not "how much for <sector or ministry>",
+        # which normal search answers from the sector / ministry line (L24)
         profile_compare = (plan.analysis.get("tool") in ("mda_profile", "function_profile")
-                           and len(set(question_years(question, plan.english_question))) >= 2)
+                           and (len(set(question_years(question, plan.english_question))) >= 2
+                                or not PROFILE_CUE.search(f"{plan.english_question} {question}")))
         if plan.analysis and not plan.budget_query and not profile_compare:   # counts and sums in SQL
             t0 = time.perf_counter()
             res = run_analysis(conn, plan.analysis)
@@ -1192,6 +1197,9 @@ CATEGORY_WORDS = {
 }
 
 
+PROFILE_CUE = re.compile(r"(?i)\b(?:breakdown|break down|broken down|overview|profile|made up of|consists? of|"
+                         r"split between|salar(?:y|ies)\b.*\b(?:capital|running)|rabe|rabewa|cikakken bayani|"
+                         r"yadda aka raba)")
 SPENT_ASKED = re.compile(r"(?i)\b(?:spent|spend|spending|expended|disbursed|released|utili[sz]ed)\b")
 
 
