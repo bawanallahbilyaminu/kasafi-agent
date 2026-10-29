@@ -9,7 +9,7 @@
     "m17": {"any": [["2.69"]], "source": "2026 budget: capital 553,343,592,103.46 / recurrent 205,356,934,434.43 = 2.69 : 1."},
     "m19": {"any": [["4,201,809,645.00", "3,712,790,422.00"], ["9,681,659,645.00", "11,441,290,422.00"]], "source": "Government House overhead (Other Non-Debt Recurrent by Administrative Classification): 011100100100 2025 4,201,809,645.00 (2025 budget p14), 2026 3,712,790,422.00 (2026 budget p21); with its agencies 011100000000 9,681,659,645.00 / 11,441,290,422.00."},
     "m22": {"any": [["10.6"]], "source": "Q2 2026 report: Ministry of Health 12.36 bn of a revised 116.91 bn = 10.6%."},
-    "m35": {"any": [["014800000000", "460,48"], ["014800100100", "460,48"]], "source": "2026 budget p16: Sokoto State Independent Electoral Commission 014800000000 / 014800100100, 460,48x,xxx (total)."},
+    "m35": {"any": [["014800000000", "460,476,176.92"], ["014800100100", "460,476,176.92"]], "source": "2026 budget p16: Sokoto State Independent Electoral Commission 014800000000 / 014800100100, total 460,476,176.92."},
     "m37": {"any": [["3,301,437,040.18"]], "source": "evals/complex/answers.json m37."},
     "m39": {"any": [["48.6"], ["59.8"]], "source": "Q2 2026 report p28, capital: Ministry of Environment with its agencies 7,856,567,607.23 of 16,173,870,000.00 = 48.6%; headquarters 59.8%."}
   }
