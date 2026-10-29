@@ -917,12 +917,22 @@ def missing_terms(missing: str) -> list[str]:
     return list(dict.fromkeys(phrases[:4] + words))[:10]
 
 
+COMMON_WORD_SHARE = 0.003      # a word in more line names than this narrows nothing ("local", "government")
+
+
+def common_word(conn: psycopg.Connection, word: str) -> bool:
+    n, hit = conn.execute("SELECT count(*), count(*) FILTER (WHERE name ILIKE %s) FROM budget_lines",
+                          (f"%{word}%",)).fetchone()
+    return hit > COMMON_WORD_SHARE * n
+
+
 async def _search_missing(conn, plan: Plan, question: str, lang: str, res: LineResult, hits: list, client,
                           settings, second=None) -> tuple[LineResult, list]:
     """A "not found" must not be a search miss or an overlooked line: search the missing words once more; lines
     that carry those words in their own name go first, and the model reads again. The first answer stands
     unless the second one uses one of those lines (and doesn't fall back to a broader total)."""
-    terms = list(dict.fromkeys(res.missing_terms + missing_terms(res.missing)))
+    terms = list(dict.fromkeys(res.missing_terms + [t for t in missing_terms(res.missing)
+                                                    if " " in t or not common_word(conn, t)]))
     found = search_lines(conn, terms, years=plan.line_search["years"], spend=plan.line_search.get("spend", "any"),
                          limit=MISSING_LINES)
     named = [x for x in found if any(len(t) >= 4 and t.lower() in x.name.lower() for t in terms)]

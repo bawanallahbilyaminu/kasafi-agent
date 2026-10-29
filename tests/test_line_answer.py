@@ -321,6 +321,13 @@ def test_missing_terms_split_on_and_or_and_hausa_da() -> None:
     assert ans.missing_terms("special schools – none shown")[:1] == ["special schools"]
 
 
+def test_a_word_in_many_line_names_is_too_common_to_search_for_alone() -> None:
+    class Conn:
+        def execute(self, sql, params):
+            return type("R", (), {"fetchone": lambda _: (30000, {"%government%": 649, "%maternal%": 7}[params[0]])})()
+    assert ans.common_word(Conn(), "government") and not ans.common_word(Conn(), "maternal")
+
+
 def test_the_same_figure_from_another_document_counts_as_the_same_pick() -> None:
     from app.agent.line_answer import reconcile
     bud = _c(1, "INDEPENDENT REVENUE", 1, "2025 Approved Budget", "47444195829.40", doc="budget-2025-approved")
