@@ -17,7 +17,8 @@ RUN uv sync --frozen --no-dev --no-install-project
 # The budget-line embedding model (app/retrieval/line_meaning.py) is baked in, so the server never downloads it;
 # HF_HUB_OFFLINE keeps it from trying at run time.
 ENV FASTEMBED_CACHE_PATH=/opt/fastembed
-RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')"
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')" \
+    && chmod -R a+rX /opt/fastembed
 ENV HF_HUB_OFFLINE=1
 
 COPY app ./app
