@@ -32,6 +32,15 @@ app.include_router(legal_router)
 app.include_router(admin_router)
 
 
+@app.on_event("startup")
+async def _warm_line_model() -> None:
+    # Load the budget-line embedding model now, not on the first user's question (a few seconds).
+    import asyncio
+
+    from app.retrieval.line_meaning import embed_queries
+    asyncio.get_running_loop().run_in_executor(None, embed_queries, ["warm up"])
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}

@@ -60,12 +60,19 @@ ORDER BY score DESC
 LIMIT %(cap)s
 """
 
+# HNSW index (migration 0008) with iterative scans: the index keeps scanning until `k` lines pass the filters
+# (a plain HNSW scan filters after the fact and lost lines). relaxed_order is re-sorted by distance here.
+_ITERATIVE = ("SELECT set_config('hnsw.iterative_scan', 'relaxed_order', false), "
+              "set_config('hnsw.ef_search', '400', false)")
 _MEANING_SQL = """
-SELECT """ + _COLS + """, 0.0
-FROM budget_lines l JOIN documents d ON d.id = l.doc_id
-WHERE l.embedding IS NOT NULL AND """ + _FILTERS + """
-ORDER BY l.embedding <=> %(v)s::vector
-LIMIT %(k)s
+WITH n AS MATERIALIZED (
+    SELECT """ + _COLS + """, 0.0, l.embedding <=> %(v)s::vector AS dist
+    FROM budget_lines l JOIN documents d ON d.id = l.doc_id
+    WHERE l.embedding IS NOT NULL AND """ + _FILTERS + """
+    ORDER BY l.embedding <=> %(v)s::vector
+    LIMIT %(k)s
+)
+SELECT * FROM n ORDER BY dist
 """
 
 
@@ -149,8 +156,9 @@ def nearest(conn: psycopg.Connection, texts: list[str], *, years: list[int] | No
     params = {"years": list(years or []), "docs": docs,
               "spend": spend if spend in ("expenditure", "revenue") else "any", "k": k}
     vectors = embed_queries(texts)
-    if len(vectors) != len([t for t in texts if t and t.strip()]):
+    if not vectors or len(vectors) != len([t for t in texts if t and t.strip()]):
         return [[] for _ in texts]
+    conn.execute(_ITERATIVE)
     return [[_line(r) for r in conn.execute(_MEANING_SQL, {**params, "v": v})] for v in vectors]
 
 
