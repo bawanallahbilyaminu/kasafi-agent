@@ -133,14 +133,16 @@ PLAN_SYSTEM = (
     "(f) revenue: how much revenue, IGR, FAAC, grants or loans the state expects or has received: {\"tool\": "
     "\"revenue\", \"focus\": \"all\"|\"igr\"|\"faac\"|\"grants\"|\"capital_receipts\", \"year\": YYYY}. "
     "Profiles (d, e) are overviews of one year: NOT for comparing a figure across years or documents (e.g. '2026 "
-    "capital for tertiary education compared to 2025'), which use line_search or budget_query. "
+    "capital for tertiary education compared to 2025'), and NOT for a share or percentage of the budget or a "
+    "benchmark (e.g. 'what % of the budget is health, does it meet 15%'): those use line_search or budget_query. "
     "Still give search_queries and doc_ids: they are the fallback. "
     "CURRENT SITUATION: add \"current_situation\": true when the question asks about the situation now (e.g. how "
     "many displaced people or IDPs there are, current conditions or needs), not a budget figure; else false. "
     "SPENDING CATEGORY: when the question asks how much goes to a KIND of spending or purchase, i.e. an economic "
     "item such as drugs, medical supplies, medical equipment, vehicles, fuel, training, travel, furniture or "
     "office equipment, statewide or within one ministry or agency (not a named project, programme, fund or an "
-    "agency's whole allocation), ALSO add \"category\": {\"terms\": [\"<2-6 English words for the item(s) as "
+    "agency's whole allocation, and not an agency's whole overhead / running costs, personnel or capital, which "
+    "are its own lines in the budget's tables), ALSO add \"category\": {\"terms\": [\"<2-6 English words for the item(s) as "
     "budgets print economic items, e.g. 'drugs', 'medical supplies', 'medical equipment'>\"], \"scope\": \"<the "
     "ministry or agency it is limited to, in English as budgets print it, e.g. 'Ministry of Health'; empty for "
     "statewide>\", \"year\": YYYY, \"measure\": \"approved\"|\"revised\"}; still give line_search. Otherwise "
@@ -1166,6 +1168,8 @@ CATEGORY_WORDS = {
            "unchecked": "⚠️ The agencies' rows add up to {sum}, not the printed {printed}, so I don't give a "
                         "breakdown or {scope}'s share.",
            "no_scope": "⚠️ I couldn't find {scope} among the budget's agencies; the statewide totals are above.",
+           "spent": " By the end of {month} {year}, {spent} of it had been spent statewide ({pct}%, {report}).",
+           "no_spent": "⚠️ The implementation reports I have don't show spending on these items for {year}.",
            "clarify": "Which one do you mean?"},
     "ha": {"measure": {"approved": "da aka amince", "revised": "da aka sabunta"}, "calc": "lissafin Kasafi",
            "lead": "A kasafin {year} {measure}, a duk jihar: {parts}{together}.", "together": ", jimilla {total}",
@@ -1178,8 +1182,14 @@ CATEGORY_WORDS = {
            "unchecked": "⚠️ Layukan hukumomi sun kai {sum}, ba {printed} da aka buga ba, don haka ban bayar da "
                         "rabo ko kason {scope} ba.",
            "no_scope": "⚠️ Ban sami {scope} cikin hukumomin kasafin ba; jimillar jihar tana sama.",
+           "spent": " Zuwa ƙarshen {month} {year}, an kashe {spent} daga ciki a duk jihar ({pct}%, {report}).",
+           "no_spent": "⚠️ Rahotannin aiwatar da kasafi da nake da su ba su nuna kuɗin da aka kashe kan waɗannan "
+                       "abubuwa a {year} ba.",
            "clarify": "Wanne kake nufi?"},
 }
+
+
+SPENT_ASKED = re.compile(r"(?i)\b(?:spent|spend|spending|expended|disbursed|released|utili[sz]ed)\b")
 
 
 def category_answer(conn, plan: Plan, res: CategoryResult, lang: str, t: dict, acq) -> Answer:
@@ -1209,6 +1219,18 @@ def category_answer(conn, plan: Plan, res: CategoryResult, lang: str, t: dict, a
     if in_scope:
         lead += " " + w["scope"].format(scope=scope, total=fmt(res.scope_total),
                                         pct=pct(res.scope_total, res.statewide)) + calc + "."
+    spent_note = ""
+    if res.spent is not None and res.report:          # what was spent so far, statewide, from the latest report
+        rdoc, rtitle, quarter = res.report
+        for c in res.codes:
+            key = (rdoc, c.spent_page)
+            if key not in nmap:
+                nmap[key] = len(evidence) + 1
+                evidence.append(Evidence(nmap[key], rdoc, rtitle, res.year, c.spent_page, "text", ""))
+        lead += w["spent"].format(month=QUARTER_END.get(lang, QUARTER_END["en"])[quarter], year=res.year,
+                                  spent=fmt(res.spent), pct=pct(res.spent, res.statewide), report=rtitle)
+    elif SPENT_ASKED.search(plan.english_question):
+        spent_note = w["no_spent"].format(year=res.year)
     working = [w["head"]]
     for c in res.codes:
         working.append(w["item"].format(name=c.name, code=c.code, amount=fmt(c.printed.amount), n=cite(c.printed)))
@@ -1251,6 +1273,11 @@ def category_answer(conn, plan: Plan, res: CategoryResult, lang: str, t: dict, a
             body += readable_amounts(ANALYSIS_WORDS.get(lang, ANALYSIS_WORDS["en"])["largest"] + "\n" + "\n".join(
                 f"• {res.unit_names.get(k, k)}: {fmt(v)}" for k, v in top), lang) + "\n\n"
     body += working[-1] if partial or not res.checked else w["checked"]
+    if spent_note:                   # spending was asked and no report shows it: say so, and it's partial
+        body += "\n\n" + spent_note
+        working.append(spent_note)
+        working_text = "\n".join(working)
+        partial = True
     sources = cited_sources(conn, evidence) if conn is not None else []
     log.info("category answer: %d codes, checked=%s, scope=%s", len(res.codes), res.checked, scope or "-")
     return Answer(f"{body}\n\n{sources_line(evidence, lang)}\n{_offer(lang)}", True, True, evidence, plan, t,

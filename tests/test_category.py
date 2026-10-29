@@ -94,6 +94,27 @@ def test_m05_statewide_totals_and_the_ministry_of_health_share(conn) -> None:
     assert ("budget-2026-approved", 28) in {(e.doc_id, e.page) for e in a.cited}
 
 
+def test_spending_so_far_comes_from_the_latest_report_and_is_said_apart(conn) -> None:
+    spec = {"terms": ["drugs", "medical equipment"], "scope": "Ministry of Health", "year": 2026, "measure": "approved"}
+    res = asyncio.run(cat.run_category(conn, spec, "q", ["budget-2026-approved"], None, make_settings(), Pick()))
+    assert res.report and res.report[0].startswith("bir-2026") and res.spent is not None
+    a = ans.category_answer(conn, ans.Plan("how much was allocated and spent", [], [], category=spec), res, "en",
+                            {}, None)
+    assert "had been spent statewide" in a.text and any(e.doc_id == res.report[0] for e in a.cited)
+
+
+class PickSport:
+    async def __call__(self, client, messages, **kw):
+        return {"codes": ["22021009"]}          # SPORTING ACTIVITIES, near "office running costs" in meaning only
+
+
+def test_codes_that_name_none_of_the_terms_are_not_a_category(conn) -> None:
+    """m19: "office running costs" mapped to SPORTING ACTIVITIES; that is not added up."""
+    spec = {"terms": ["office running costs", "overhead"], "scope": "", "year": 2026, "measure": "approved"}
+    assert asyncio.run(cat.run_category(conn, spec, "q", ["budget-2026-approved"], None, make_settings(),
+                                        PickSport())) is None
+
+
 def test_unchecked_sums_give_the_printed_totals_only(conn) -> None:
     pick = Pick()
     spec = {"terms": ["drugs", "medical equipment"], "scope": "Ministry of Health", "year": 2026, "measure": "approved"}

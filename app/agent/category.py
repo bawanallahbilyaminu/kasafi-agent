@@ -69,6 +69,8 @@ class CodeTotal:
     units: dict[str, Decimal] = field(default_factory=dict)          # admin code -> amount
     unit_rows: dict[str, Row] = field(default_factory=dict)          # admin code -> its printed row
     unit_sum: Decimal = Decimal(0)
+    spent: Decimal | None = None                                     # statewide, latest implementation report
+    spent_page: int | None = None
 
     @property
     def checked(self) -> bool:
@@ -87,6 +89,14 @@ class CategoryResult:
     scope_units: list[str] = field(default_factory=list)            # admin codes in scope
     clarify: list[dict] = field(default_factory=list)                # [{"title", "code"}] when units of
                                                                      # different ministries fit the scope
+    report: tuple[str, str, int] | None = None                       # (doc_id, title, quarter) of the spending
+
+    @property
+    def spent(self) -> Decimal | None:
+        """Spent so far on all the codes, statewide; None unless the report shows every one of them."""
+        if not self.codes or any(c.spent is None for c in self.codes):
+            return None
+        return sum((c.spent for c in self.codes), Decimal(0))
 
     @property
     def checked(self) -> bool:
@@ -224,6 +234,22 @@ async def map_codes(client, settings, question: str, cands: list[Row], chat_json
     return [c for c in dict.fromkeys(str(x) for x in d.get("codes") or []) if c in allowed]
 
 
+def spending(conn: psycopg.Connection, year: int, codes: list[CodeTotal]) -> tuple[str, str, int] | None:
+    """Statewide spending so far on each code, from the latest implementation report of that year: its first row of
+    the code (the statewide economic table), used only when its original budget is the budget's printed figure."""
+    rep = conn.execute("SELECT p.doc_id, d.title, max(p.quarter) FROM perf_items p JOIN documents d ON d.id = p.doc_id "
+                       "WHERE p.year = %s GROUP BY 1, 2 ORDER BY 3 DESC, 1 DESC LIMIT 1", (year,)).fetchone()
+    if not rep:
+        return None
+    found = False
+    for c in codes:
+        r = conn.execute("SELECT original, ytd_spent, page FROM perf_items WHERE doc_id = %s AND code = %s AND "
+                         "classification = 'economic' ORDER BY seq LIMIT 1", (rep[0], c.code)).fetchone()
+        if r and r[1] is not None and r[0] is not None and abs(r[0] - c.printed.amount) <= TOLERANCE:
+            c.spent, c.spent_page, found = r[1], r[2], True
+    return (rep[0], rep[1], rep[2]) if found else None
+
+
 async def run_category(conn: psycopg.Connection, spec: dict, question: str, doc_ids: list[str], client, settings,
                        chat_json) -> CategoryResult | None:
     """None when no budget document has a statewide economic classification the category maps onto."""
@@ -239,10 +265,15 @@ async def run_category(conn: psycopg.Connection, spec: dict, question: str, doc_
         if not codes:
             log.info("category: no economic code fits (%d candidates)", len(cands))
             return None
+        if not any(matches(t, items[c].name) for c in codes for t in spec["terms"]):
+            # only near in meaning ("office running costs" ~ SPORTING ACTIVITIES): too loose to add up
+            log.info("category: picked codes %s name none of the terms; not a category question", codes)
+            return None
         totals = {c: CodeTotal(c, items[c].name, items[c]) for c in codes}
         names = by_unit(conn, doc_id, year, measure, totals)
         name, group, units, clarify = resolve_scope(spec.get("scope", ""), names)
         res = CategoryResult(doc_id, year, measure, list(totals.values()), names, name, group, units, clarify)
+        res.report = spending(conn, year, res.codes)
         log.info("category: codes=%s checked=%s scope=%s (%d units)", codes, res.checked, name or "-", len(units))
         return res
     return None
