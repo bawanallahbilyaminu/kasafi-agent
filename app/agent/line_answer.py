@@ -107,6 +107,7 @@ class LineResult:
     clarify: list[dict] = field(default_factory=list)
     clarify_question: str = ""
     uncertain: list[str] = field(default_factory=list)   # lines only one of the two readings chose: not counted
+    disputed: bool = False      # the readings disagreed on which rows a total takes: no arithmetic was done
 
     def computed(self) -> dict[str, Decimal]:
         return {k: v for k, v in (("TOTAL", self.total), ("DIFFERENCE", self.difference),
@@ -355,9 +356,14 @@ def reconcile(r1: LineResult, d1: dict, r2: LineResult, lines: list[Line], extra
     kept = {**d1, "selected": [{"line": f"L{index[s.line.id]}", "column": s.cell.column, "part": s.part}
                                for s in r1.selections if _sig(s) in common]}
     res, _ = verify(kept, lines)
+    if res.operation in ("sum", "share", "ratio"):
+        # a total over the agreed rows only would read as the whole answer: no arithmetic, and say why
+        res.total = res.share_pct = res.ratio = None
+        res.not_summed, res.disputed = True, True
+    res.missing = ""                     # one reading's "not found" may be a row the other one chose
     res.summary = fill(str(d1.get("summary") or ""), res)
-    if _number_ok(res.summary, allowed_numbers(res, extra_numbers)):
-        res.summary = ""                 # it spoke of rows only one reading chose
+    if res.disputed or _number_ok(res.summary, allowed_numbers(res, extra_numbers)):
+        res.summary = ""                 # it spoke of rows only one reading chose, or of a dropped total
     res.found = "partial"
     res.uncertain = list(dict.fromkeys(f"{short_name(s.line)} ({s.cell.column})" for s in r1.selections + r2.selections
                                        if _sig(s) not in common))

@@ -252,10 +252,12 @@ def test_rows_only_one_reading_chose_are_named_but_not_counted() -> None:
     r1, _ = verify(d1, LINES)
     r2, _ = verify(_pick("L1", "L4", op="sum"), LINES)
     res = reconcile(r1, d1, r2, LINES, [], "q", "en")
-    assert [s.line.id for s in res.selections] == [BHC.id] and res.total == Decimal("70000000.00")
+    assert [s.line.id for s in res.selections] == [BHC.id]
+    assert res.total is None and res.disputed           # a total of the agreed rows alone would mislead
     assert res.found == "partial" and len(res.uncertain) == 2 and any("SOCHEMA" in u for u in res.uncertain)
     a = ans.line_answer(None, ans.Plan("q", [], []), res, LINES, "en", {}, None)
-    assert "not counted" in a.text and a.partial
+    assert "not counted" in a.text and "Not added up: on a second reading" in a.text and "Total:" not in a.text
+    assert a.partial
 
 
 def test_two_readings_with_nothing_in_common_ask_which_one() -> None:

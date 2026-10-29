@@ -859,7 +859,9 @@ LINE_WORDS = {
                        "separately.",
            "uncertain": "Possibly relevant too, not counted (I wasn't sure on a second reading)",
            "no_sum": "Not added up: these lines are printed in different tables of one budget, which can show the "
-                     "same money twice."},
+                     "same money twice.",
+           "no_sum_disputed": "Not added up: on a second reading I wasn't sure which lines belong in the total, "
+                              "so a total of these alone could mislead."},
     "ha": {"head": "🧮 *Yadda aka lissafa* (layukan da aka yi amfani da su):", "total": "Jimilla",
            "difference": "Bambanci", "share": "Kaso", "ratio": "Rabo", "spent": "Abin da aka kashe, a kason kasafin", "calc": "lissafin Kasafi",
            "missing": "Ba a samu ba",
@@ -870,7 +872,9 @@ LINE_WORDS = {
                        "daban.",
            "uncertain": "Watakila suna da alaƙa, ba a ƙidaya su ba (ban tabbata ba a karatu na biyu)",
            "no_sum": "Ba a haɗa su ba: an buga waɗannan layuka a teburori daban-daban na kasafi ɗaya, wanda zai iya "
-                     "nuna kuɗi ɗaya sau biyu."},
+                     "nuna kuɗi ɗaya sau biyu.",
+           "no_sum_disputed": "Ba a haɗa su ba: a karatu na biyu ban tabbata waɗanne layuka ne ke cikin jimillar ba, "
+                              "don haka jimillar waɗannan kaɗai za ta iya ɓatarwa."},
 }
 
 
@@ -946,7 +950,7 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
     if res.total is not None:
         working.append(f"• {w['total']}: {fmt(res.total)} ({w['calc']})")
     elif res.not_summed:
-        working.append(f"• {w['no_sum']}")
+        working.append(f"• {w['no_sum_disputed' if res.disputed else 'no_sum']}")
     if res.difference is not None:
         pct = f" ({'+' if res.change_pct and res.change_pct > 0 else ''}{res.change_pct}%)" if res.change_pct is not None else ""
         sign = "+" if res.difference > 0 else "-" if res.difference < 0 else ""
