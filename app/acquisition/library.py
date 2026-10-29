@@ -28,6 +28,7 @@ from app.acquisition.fetch import FetchError, download_pdf
 from app.acquisition.find import find_local, pick_candidate, search_candidates
 from app.acquisition.policy import USER_AGENT, Robots
 from app.acquisition.editions import SERIES, valid_edition
+from app.acquisition.registry import registry
 from app.acquisition.fetch import MAX_BYTES
 from app.acquisition.sandbox import ParseError, extract_pages_sandboxed, render_pages_sandboxed, unzip_pdf_sandboxed
 from app.config import Settings
@@ -83,7 +84,8 @@ CONFIRM_SYSTEM = (
     "2. excluded: true if the document is mainly about armed conflict, security operations or banditry, or is "
     "election or party campaign material. Kasafi doesn't index those. An incident or flash report about an attack "
     "is excluded even when it also counts the people it displaced; displacement statistics (e.g. a DTM baseline or "
-    "mobility-tracking assessment of IDPs by LGA, or a needs overview) are not excluded.\n"
+    "mobility-tracking assessment of IDPs by LGA, or a needs overview) are not excluded. Also excluded: "
+    + "; ".join(registry().global_exclude or ("news articles",)) + ".\n"
     "3. Its catalog details, taken from the document itself.\n"
     'Reply with JSON only: {"match": true|false, "excluded": true|false, "why": "<short>", '
     '"title": "<the document\'s own title, e.g. \'Sokoto State Budget Implementation Report Q3 2025\'>", '

@@ -9,6 +9,7 @@ accepted too and unpacked later, inside the sandbox. The file's SHA-256 is recor
 from __future__ import annotations
 
 import hashlib
+import re
 import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -46,18 +47,50 @@ async def check_url(url: str, robots: Robots) -> None:
         raise FetchError(f"{why}: {url}")
 
 
+LANDING_BYTES = 2 * 1024 * 1024
+_HREF = re.compile(r"""href\s*=\s*["']([^"'#]+)["']""", re.I)
+_DOC_LINK = re.compile(r"(?i)\.pdf(?:$|\?)|/download(?:/|$|\?)|/documents?/download/")
+
+
+def document_link(html: str, page_url: str) -> str | None:
+    """The first link on a landing page to a document on the same site: a .pdf, or a download address
+    (NBS /download/<id>, UNHCR /documents/download/<id>, /api/documents/<slug>/download) without one."""
+    host = urllib.parse.urlsplit(page_url).hostname
+    for href in _HREF.findall(html):
+        link = urllib.parse.urljoin(page_url, href.strip())
+        if urllib.parse.urlsplit(link).hostname == host and _DOC_LINK.search(link) and link != page_url:
+            return link
+    return None
+
+
 async def download_pdf(url: str, dest: Path, http: httpx.AsyncClient, robots: Robots,
                        max_bytes: int = MAX_BYTES) -> Downloaded:
-    current = url
-    for _ in range(MAX_REDIRECTS + 1):
+    """The file is accepted by what it is (PDF or ZIP bytes; the address often has no .pdf). A landing page (HTML)
+    is followed one hop to the same site's document link; every hop passes the allowlist and robots.txt."""
+    current, hopped = url, False
+    for _ in range(MAX_REDIRECTS + 2):
         await check_url(current, robots)
-        async with http.stream("GET", current, headers={"User-Agent": USER_AGENT, "Accept": "application/pdf"},
+        async with http.stream("GET", current, headers={"User-Agent": USER_AGENT,
+                                                        "Accept": "application/pdf, application/zip, */*;q=0.5"},
                                follow_redirects=False, timeout=TIMEOUT) as resp:
             if resp.is_redirect:
                 current = urllib.parse.urljoin(current, resp.headers.get("location", ""))
                 continue
             if resp.status_code != 200:
                 raise FetchError(f"HTTP {resp.status_code}")
+            if "html" in resp.headers.get("content-type", "").lower():
+                if hopped:
+                    raise FetchError("a landing page, not a document")
+                html = b""
+                async for chunk in resp.aiter_bytes(64 * 1024):
+                    html += chunk
+                    if len(html) > LANDING_BYTES:
+                        break
+                link = document_link(html.decode("utf-8", "replace"), current)
+                if not link:
+                    raise FetchError("a landing page with no document link on its own site")
+                current, hopped = link, True
+                continue
             return await _save(resp, url, current, dest, max_bytes)
     raise FetchError("too many redirects")
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from dataclasses import asdict, dataclass
 
 import httpx
@@ -90,6 +91,19 @@ async def search_web(http: httpx.AsyncClient, query: str, api_key: str) -> list[
             for o in r.json().get("organic", []) if o.get("link")]
 
 
+# data/source_registry.yaml global_exclude, as patterns on a result's title and snippet (the confirm step reads
+# the same list in words): attack / incident flash reports, BudgIT State of States, news as a source of figures
+EXCLUDED = re.compile(r"(?i)\bflash (?:report|update|alert)\b|\bincident report\b|\battacks?\b.*\bdisplace|"
+                      r"\bacled\b|\bstate of states\b|\bbudgit\b")
+NEWS_HOSTS = re.compile(r"(?i)(?:^|\.)(?:punchng|premiumtimesng|vanguardngr|thisdaylive|guardian|channelstv|"
+                        r"dailytrust|thecable|leadership|tribuneonlineng|sunnewsonline|bbc|aljazeera|reuters)\.")
+
+
+def excluded(c: Candidate) -> bool:
+    host = httpx.URL(c.url).host if c.url.startswith("http") else ""
+    return bool(EXCLUDED.search(f"{c.title} {c.snippet}") or NEWS_HOSTS.search(host or ""))
+
+
 async def search_candidates(http: httpx.AsyncClient, description: str, settings: Settings) -> list[Candidate]:
     jobs = [search_world_bank(http, description)]
     if settings.reliefweb_appname:
@@ -104,7 +118,7 @@ async def search_candidates(http: httpx.AsyncClient, description: str, settings:
             log.warning("document search failed: %s", type(res).__name__)
             continue
         for c in res:
-            if host_allowed(c.url) and c.url not in seen:
+            if host_allowed(c.url) and c.url not in seen and not excluded(c):
                 seen.add(c.url)
                 out.append(c)
     return out[:MAX_CANDIDATES]
