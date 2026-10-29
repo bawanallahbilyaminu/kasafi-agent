@@ -79,7 +79,17 @@ The implementation reports (Q4 2024 to Q2 2026) reconcile 100% on functions and 
 - **`function_profile`:** one function of government across all ministries.
 - **`revenue`:** where the money comes from.
 
-Search plus model reading stays the fallback for everything else.
+Search plus model reading stays the fallback for everything else. Profiles are only for a breakdown or overview: "how much for <a sector or ministry>" stays on normal search, from the sector or ministry line.
+
+**Measured on Oct 29, after this step:**
+
+| Run | Result |
+|---|---|
+| Complex suite, including the 3 new cases (s01 project status, s02 Tambuwal, s03 IDPs now) | 8/8 |
+| Main suite | 9/10: the parked debt case 06 passes in 2 of 4 runs |
+| 39 mid-tier questions ([`mid_tier_report_step16.md`](evals/complex/mid_tier_report_step16.md)) | 18 answered / 17 partial / 4 not found, median 17.1 s |
+
+After that 39-question run, four questions were re-routed and re-run, and all four were answered. The analysis tools answer in about 3–5 s.
 
 **Replies.**
 - 2–5 short, everyday sentences: the total first, then what was spent, saying plainly which figures are allocated and which are spent.
