@@ -47,6 +47,8 @@ def outcome(a) -> str:
 
 
 def path(a) -> str:
+    if getattr(a, "category", None) is not None:
+        return "category"
     if a.lines is not None:
         return f"lines:{a.lines.operation}"
     if a.budget is not None:
@@ -93,6 +95,13 @@ def record(a) -> dict:
                       "uncertain": r.uncertain, "disputed": r.disputed, "operation": r.operation,
                       "computed": {k: str(v) for k, v in r.computed().items()}, "missing": r.missing,
                       "found": r.found}
+    if getattr(a, "category", None) is not None:
+        c = a.category
+        t["category"] = {"doc": c.doc_id, "year": c.year, "measure": c.measure, "checked": c.checked,
+                         "scope": c.scope_name, "scope_group": c.scope_group, "scope_units": c.scope_units,
+                         "codes": [{"code": x.code, "name": x.name, "printed": str(x.printed.amount),
+                                    "page": x.printed.page, "unit_sum": str(x.unit_sum), "units": len(x.units)}
+                                   for x in c.codes]}
     if a.budget is not None:
         t["budget"] = {"operation": a.budget.operation,
                        "total": str(a.budget.total) if a.budget.total is not None else None}

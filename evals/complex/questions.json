@@ -20,6 +20,18 @@
       "lang": "en",
       "text": "How much did the 2026 budget allocate in total to the Ministry for Higher Education and the state's universities and polytechnics?",
       "expected": "Ministry for Higher Education total (its code 0569... already contains the university and polytechnic, which are reported as included, not added twice)."
+    },
+    {
+      "id": "m05",
+      "lang": "ha",
+      "text": "Nawa aka ware wa sayen magunguna da kayan aiki na asibitoci a karkashin Ma'aikatar Lafiya a kasafin 2026?",
+      "expected": "Statewide printed totals of economic codes 22020307 (drugs, p28) and 23010122 (medical equipment, p29), then the Ministry of Health and its agencies' share computed by code from the per-agency rows, checked against the printed totals."
+    },
+    {
+      "id": "m37",
+      "lang": "ha",
+      "text": "Ina son ganin jimillar kudin da aka ware wa bangaren fasahar sadarwa (ICT and Innovation) a 2025 da 2026, tare da shafin da bayanin ya fito.",
+      "expected": "The ICT sector (programme 11) for both years: 2025 approved from the 2025 budget p24, 2026 approved from the 2026 budget p41."
     }
   ]
 }

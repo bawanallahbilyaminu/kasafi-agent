@@ -30,6 +30,24 @@
       "numbers": ["33,986,201,399.04"],
       "working": true,
       "source": "2026 budget p18, Total Expenditure by Administrative Classification, 056900000000 Ministry for Higher Education, 2026 Approved Budget 33,986,201,399.04. Sokoto State University (0569004...) and Umaru Ali Shinkafi Polytechnic (0569018...) are inside that code."
+    },
+    {
+      "id": "m05",
+      "lang": "ha",
+      "docs": ["budget-2026-approved"],
+      "pages": [28, 29],
+      "numbers": ["2,713,572,400.00", "31,556,212,445.00", "32,746,446,845.00"],
+      "working": true,
+      "partial": false,
+      "source": "Checked by Bilyaminu (Oct 29): 2026 budget statewide economic classification, 2026 Approved Budget column: 22020307 DRUGS/LABORATORY/MEDICAL SUPPLIES 2,713,572,400.00 (p28), 23010122 PURCHASE OF HEALTH / MEDICAL EQUIPMENT 31,556,212,445.00 (p29). Ministry of Health and its agencies (administrative codes 0521...), from the per-agency economic tables (pp. 161-170), which add up exactly to both statewide totals: drugs 1,503,734,400.00 + equipment 31,242,712,445.00 = 32,746,446,845.00, 95.6% of the statewide 34,269,784,845.00."
+    },
+    {
+      "id": "m37",
+      "lang": "ha",
+      "docs": ["budget-2025-approved", "budget-2026-approved"],
+      "pages": [24, 41],
+      "numbers_any": [["3,301,437,040.18"], ["3.30 biliyan"]],
+      "source": "Sector 11 Information Communication and Technology, Total Expenditure by Programme: 2025 Approved Budget 3,301,437,040.18 (2025 budget p24); 2026 Approved Budget 7.15 bn (2026 budget p41). The 2025 approved figure must not be called missing."
     }
   ]
 }

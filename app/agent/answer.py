@@ -30,6 +30,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from functools import partial
 from urllib.parse import urlsplit
 
@@ -40,6 +41,7 @@ from app.acquisition.editions import (SERIES, Latest, Series, doc_edition, editi
 from app.acquisition.library import Acquired, fetch_and_index, find_and_fetch, log_gap
 from app.agent.budget_query import QueryResult, context_text, lga_in, render_working, run_budget_query
 from app.agent import trace
+from app.agent.category import TOP_UNITS, CategoryResult, pct, run_category
 from app.agent.calculate import MIXED, CalcError, Calculation, MixedBases, offer_text, validate
 from app.agent.line_answer import LineResult, fmt, is_location, item_of, read_lines, short_name
 from app.retrieval.line_search import MAX_LINES, name_key, nearest, search_lines
@@ -106,6 +108,14 @@ PLAN_SYSTEM = (
     "allocated to education / to the Ministry of Health, and how much was spent'): normal search answers those "
     "and quotes the report's own % performance. A local government area (LGA) is not an institution located in "
     "it: a state hospital or school in an LGA is not that LGA's allocation. "
+    "SPENDING CATEGORY: when the question asks how much goes to a KIND of spending or purchase, i.e. an economic "
+    "item such as drugs, medical supplies, medical equipment, vehicles, fuel, training, travel, furniture or "
+    "office equipment, statewide or within one ministry or agency (not a named project, programme, fund or an "
+    "agency's whole allocation), ALSO add \"category\": {\"terms\": [\"<2-6 English words for the item(s) as "
+    "budgets print economic items, e.g. 'drugs', 'medical supplies', 'medical equipment'>\"], \"scope\": \"<the "
+    "ministry or agency it is limited to, in English as budgets print it, e.g. 'Ministry of Health'; empty for "
+    "statewide>\", \"year\": YYYY, \"measure\": \"approved\"|\"revised\"}; still give line_search. Otherwise "
+    "category is null. "
     "RANKING: only to rank whole ministries or functions, by amount (e.g. 'which five ministries got the most "
     "capital') or by rate of spending against the budget (release, absorption, execution or performance rate), "
     "highest or lowest first, add "
@@ -148,7 +158,10 @@ ANSWER_SYSTEM = (
     "Programme' table the sector is the line with the shortest code (2 digits, e.g. '04 Health'); 4- and "
     "6-digit codes are objectives and programmes inside it. For a sector, give the sector line, even when a "
     "programme's name shares a word with the question; the sector's printed name may be the full form of an "
-    "abbreviation in the question.\n"
+    "abbreviation in the question. A row may carry a label after its table title, e.g. [sector total] or "
+    "[programme inside a sector]: for a sector (Hausa 'bangare', 'fanni') use the [sector total] row, and for "
+    "each year asked take that year's column from whichever document prints it (an older budget prints the "
+    "earlier year's approved figure).\n"
     "3d. Before saying a figure wasn't found, check every excerpt and table row for it, and never call missing a "
     "year or item that you give a figure for.\n"
     "4. Neutral facts only (for security agencies or lines, the cited figures alone, with no commentary): no opinions, no praise or blame, no judgement of performance. Never name "
@@ -277,6 +290,7 @@ class Plan:
     clarify: dict = field(default_factory=dict)        # {"question", "options"} when two readings differ
     line_search: dict = field(default_factory=dict)    # {"terms": [...], "years": [...]} for budget-line questions
     key_terms: list[str] = field(default_factory=list)  # short line names: budget rows join the page evidence
+    category: dict = field(default_factory=dict)        # {"terms", "scope", "year", "measure"} (app/agent/category.py)
 
     def assumption_for(self, lang: str) -> str:
         if not self.assumption:
@@ -315,6 +329,7 @@ class Answer:
     clarify: list[dict] = field(default_factory=list)   # options when Kasafi asks which reading was meant
     budget: QueryResult | None = None          # the query_budget result behind a computed answer
     lines: LineResult | None = None            # the verified budget lines behind a line answer
+    category: CategoryResult | None = None     # the economic codes and unit sums behind a category answer
 
 
 def load_catalog(conn: psycopg.Connection) -> list[dict]:
@@ -366,7 +381,18 @@ async def plan_question(question: str, catalog: list[dict], client: ChatClient, 
         else {},
         clarify=_clarify_field(d.get("clarify")),
         line_search=_line_search_field(d.get("line_search")),
+        category=_category_field(d.get("category")),
     )
+
+
+def _category_field(v) -> dict:
+    if not isinstance(v, dict):
+        return {}
+    terms = [str(t)[:60] for t in v.get("terms") or [] if str(t).strip()][:6]
+    year = int(v["year"]) if str(v.get("year") or "").isdigit() and 1990 < int(v["year"]) < 2100 else None
+    measure = v.get("measure") if v.get("measure") in ("approved", "revised") else "approved"
+    return {"terms": terms, "scope": str(v.get("scope") or "")[:120], "year": year, "measure": measure} \
+        if terms and year else {}
 
 
 def _line_search_field(v) -> dict:
@@ -442,7 +468,7 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
     return evidence + line_evidence(conn, plan, evidence)
 
 
-LINE_EVIDENCE_PAGES = 6       # each is a few printed rows, not a whole page
+LINE_EVIDENCE_PAGES = 8       # each is a few printed rows, not a whole page (a sector and a ministry per document)
 LINE_EVIDENCE_NEAR = 5       # a key term's nearest names in meaning that count as named by it
 
 
@@ -473,15 +499,17 @@ def line_evidence(conn: psycopg.Connection, plan: Plan, have: list[Evidence]) ->
     def fit(x, term) -> tuple:
         title = x.table_title.lower()
         return (x.doc_id not in planned, -sum(t.lower() in title for t in terms if t != term and len(t) > 6),
-                planned.get(x.doc_id, 99), -x.score)
+                level(x) != "sector total", planned.get(x.doc_id, 99), -x.score)
     queues = []
     for term in terms:
         named = sorted((x for x in hits if term.lower() in x.name.lower() or name_key(x) in near[term]),
                        key=lambda x: fit(x, term))
-        best, docs = [], set()
+        # one per document and table kind: a sector ('by Programme') and a ministry ('by Administrative') of a
+        # similar name both reach the composer, which gives the one asked for (ANSWER_SYSTEM 3b)
+        best, kinds = [], set()
         for x in named:
-            if x.doc_id not in docs:
-                docs.add(x.doc_id)
+            if (x.doc_id, x.classification) not in kinds:
+                kinds.add((x.doc_id, x.classification))
                 best.append(x)
         queues.append(best)
     pages: dict[tuple[str, int], list] = {}
@@ -493,8 +521,19 @@ def line_evidence(conn: psycopg.Connection, plan: Plan, have: list[Evidence]) ->
                     pages.setdefault((x.doc_id, x.page), []).append(x)
     n = len(have)
     return [Evidence(n + i, d, ls[0].title, None, p, "text",
-                     "\n".join(dict.fromkeys(f"[Table: {x.table_title}]\n{x.row_text}" for x in ls[:4]))[:EVIDENCE_CHARS])
+                     "\n".join(dict.fromkeys(f"[Table: {x.table_title}]" + (f" [{level(x)}]" if level(x) else "")
+                                             + f"\n{x.row_text}" for x in ls[:4]))[:EVIDENCE_CHARS])
             for i, ((d, p), ls) in enumerate(pages.items(), start=1)]
+
+
+def level(x) -> str:
+    """What a programme or administrative row is, from its code (the composer reads it as a label)."""
+    code = x.code or ""
+    if x.classification == "programme" and code.isdigit():
+        return {2: "sector total", 4: "objective inside a sector", 6: "programme inside a sector"}.get(len(code), "")
+    if x.classification == "administrative" and len(code) == 12 and code.endswith("00000000"):
+        return "ministry total including its agencies"
+    return ""
 
 
 def _join_chunks(chunks: list[str]) -> str:
@@ -792,6 +831,15 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             t0 = time.perf_counter()
             acq = await acquire_missing(conn, plan, lang, client, settings, notify, acquire_fn)
             t["acquire"] = time.perf_counter() - t0
+        if plan.category and not plan.budget_query:          # a kind of spending: code adds up its economic codes
+            t0 = time.perf_counter()
+            year = plan.category["year"]
+            docs = list(dict.fromkeys([d for d in plan.doc_ids if d.startswith("budget-")]
+                                      + [f"budget-{year}-approved"]))
+            cat = await run_category(conn, plan.category, plan.english_question, docs, client, settings, chat_json)
+            t["answer"] = time.perf_counter() - t0
+            if cat is not None:
+                return category_answer(conn, plan, cat, lang, t, acq)
         if plan.line_search and not plan.budget_query:      # wide search, model reads, code verifies
             t0 = time.perf_counter()
             hits = search_lines(conn, plan.line_search["terms"], years=plan.line_search["years"],
@@ -1016,6 +1064,99 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
              res.aggregate_only, partial)
     return Answer(f"{body}\n\n{format_citations(evidence, lang)}", True, True, evidence, plan, t, partial=partial,
                   exact=f"{summary}\n{working_text}", acquired=acq, sources=sources, lines=res)
+
+
+CATEGORY_WORDS = {
+    "en": {"measure": {"approved": "approved", "revised": "revised"}, "calc": "Kasafi's calculation",
+           "lead": "Statewide, the {year} {measure} budget has {parts}{together}.", "together": ", {total} together",
+           "group": "{name} and its agencies", "scope": "{scope}: {total}, {pct}% of the statewide total",
+           "head": "🧮 *Working* (the budget's own economic codes; code adds up every agency's row):",
+           "item": "• {name} (code {code}), statewide: {amount} [{n}]",
+           "in_scope": "   – {scope}: {amount} ({pct}%)", "largest": "   – largest: {units}",
+           "total": "• Together, statewide: {total}", "scope_total": "• {scope}, together: {total} ({pct}%)",
+           "checked": "✓ The agencies' rows add up exactly to the printed statewide totals.",
+           "unchecked": "⚠️ The agencies' rows add up to {sum}, not the printed {printed}, so I don't give a "
+                        "breakdown or {scope}'s share.",
+           "no_scope": "⚠️ I couldn't find {scope} among the budget's agencies; the statewide totals are above.",
+           "clarify": "Which one do you mean?"},
+    "ha": {"measure": {"approved": "da aka amince", "revised": "da aka sabunta"}, "calc": "lissafin Kasafi",
+           "lead": "A kasafin {year} {measure}, a duk jihar: {parts}{together}.", "together": ", jimilla {total}",
+           "group": "{name} da hukumominta", "scope": "{scope}: {total}, {pct}% na jimillar jihar",
+           "head": "🧮 *Yadda aka lissafa* (lambobin tattalin arziki na kasafin; an haɗa layin kowace hukuma):",
+           "item": "• {name} (lamba {code}), a duk jihar: {amount} [{n}]",
+           "in_scope": "   – {scope}: {amount} ({pct}%)", "largest": "   – mafi yawa: {units}",
+           "total": "• Jimilla a duk jihar: {total}", "scope_total": "• {scope}, jimilla: {total} ({pct}%)",
+           "checked": "✓ Layukan hukumomi sun yi daidai da jimillar jihar da aka buga.",
+           "unchecked": "⚠️ Layukan hukumomi sun kai {sum}, ba {printed} da aka buga ba, don haka ban bayar da "
+                        "rabo ko kason {scope} ba.",
+           "no_scope": "⚠️ Ban sami {scope} cikin hukumomin kasafin ba; jimillar jihar tana sama.",
+           "clarify": "Wanne kake nufi?"},
+}
+
+
+def category_answer(conn, plan: Plan, res: CategoryResult, lang: str, t: dict, acq) -> Answer:
+    """Statewide printed totals of the category's economic codes, then the scope's share, then its largest units;
+    every sum and percentage is code's, and the agencies' rows are checked against the printed totals."""
+    w = CATEGORY_WORDS.get(lang, CATEGORY_WORDS["en"])
+    if res.clarify:
+        opts = [{"title": o["title"], "question": f"{plan.english_question} ({o['title']})"} for o in res.clarify]
+        return Answer(w["clarify"], False, True, plan=plan, timings=t, clarify=opts, category=res)
+    calc = f" ({w['calc']})"
+    evidence: list[Evidence] = []
+    nmap: dict[tuple[str, int], int] = {}
+
+    def cite(row) -> int:
+        key = (row.doc_id, row.page)
+        if key not in nmap:
+            nmap[key] = len(evidence) + 1
+            evidence.append(Evidence(nmap[key], row.doc_id, row.title, res.year, row.page, "text",
+                                     f"[Table: {row.table_title}]\n{row.row_text}"))
+        return nmap[key]
+
+    scope = (w["group"].format(name=res.scope_name) if res.scope_group else res.scope_name) if res.scope_name else ""
+    in_scope = bool(res.scope_units) and res.checked
+    parts = "; ".join(f"{c.name} ({c.code}) {fmt(c.printed.amount)} [{cite(c.printed)}]" for c in res.codes)
+    together = w["together"].format(total=fmt(res.statewide)) + calc if len(res.codes) > 1 else ""
+    lead = w["lead"].format(year=res.year, measure=w["measure"][res.measure], parts=parts, together=together)
+    if in_scope:
+        lead += " " + w["scope"].format(scope=scope, total=fmt(res.scope_total),
+                                        pct=pct(res.scope_total, res.statewide)) + calc + "."
+    working = [w["head"]]
+    for c in res.codes:
+        working.append(w["item"].format(name=c.name, code=c.code, amount=fmt(c.printed.amount), n=cite(c.printed)))
+        if not res.checked:
+            continue
+        pool = {k: v for k, v in c.units.items() if not in_scope or k in res.scope_units}
+        if in_scope:
+            working.append(w["in_scope"].format(scope=scope, amount=fmt(res.scoped(c)),
+                                                pct=pct(res.scoped(c), c.printed.amount)))
+        top = sorted(((v, k) for k, v in pool.items() if v), reverse=True)[:TOP_UNITS]
+        if top:
+            working.append(w["largest"].format(units="; ".join(
+                f"{res.unit_names.get(k, k)} {fmt(v)} [{cite(c.unit_rows[k])}]" for v, k in top)))
+    if len(res.codes) > 1:
+        working.append(w["total"].format(total=fmt(res.statewide)) + calc)
+        if in_scope:
+            working.append(w["scope_total"].format(scope=scope, total=fmt(res.scope_total),
+                                                   pct=pct(res.scope_total, res.statewide)) + calc)
+    partial = False
+    if not res.checked:
+        unit_sum = sum((c.unit_sum for c in res.codes), Decimal(0))
+        working.append(w["unchecked"].format(sum=fmt(unit_sum), printed=fmt(res.statewide), scope=scope or "-"))
+        partial = bool(plan.category.get("scope"))
+    else:
+        working.append(w["checked"])
+        if plan.category.get("scope") and not res.scope_units:
+            working.append(w["no_scope"].format(scope=plan.category["scope"]))
+            partial = True
+    working_text = "\n".join(working)
+    note = plan.assumption_for(lang)
+    body = (f"_{note}_\n\n" if note else "") + render_answer({"summary": lead, "items": []}, lang) + "\n\n"
+    body += readable_amounts(working_text, lang)
+    sources = cited_sources(conn, evidence) if conn is not None else []
+    log.info("category answer: %d codes, checked=%s, scope=%s", len(res.codes), res.checked, scope or "-")
+    return Answer(f"{body}\n\n{format_citations(evidence, lang)}", True, True, evidence, plan, t, partial=partial,
+                  exact=f"{lead}\n{working_text}", acquired=acq, sources=sources, category=res)
 
 
 def budget_evidence(q: QueryResult) -> tuple[list[Evidence], dict]:
