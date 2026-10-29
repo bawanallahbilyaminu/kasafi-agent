@@ -22,7 +22,7 @@ from pathlib import Path
 import psycopg
 import pypdfium2 as pdfium
 
-from app.retrieval import line_meaning, quality, tables
+from app.retrieval import entities, line_meaning, quality, tables
 
 log = logging.getLogger(__name__)
 
@@ -520,6 +520,12 @@ def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bo
             line_meaning.enrich(conn, doc["id"], embed=False)
     quality.run(conn, doc["id"], doc.get("category"),
                 [(i, text, src) for i, (text, src) in enumerate(zip(labelled, sources), start=1)])
+    if rows:
+        try:                    # the structured core the analysis tools query, with its reconciliation checks
+            entities.build(conn, doc["id"], path)
+        except Exception as e:  # never lose the index over it: search and model reading still work
+            conn.rollback()
+            log.warning("%s: entity build failed: %s", doc["id"], e)
     return IndexResult(doc["id"], "indexed", len(pages), empty, n_chunks)
 
 

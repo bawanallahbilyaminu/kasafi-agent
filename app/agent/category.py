@@ -29,12 +29,13 @@ from difflib import SequenceMatcher
 
 import psycopg
 
+from app.retrieval.entities import sections, unit_at
+
 log = logging.getLogger(__name__)
 
 MAX_CANDIDATES = 25
 TOP_UNITS = 4
 TOLERANCE = Decimal("1")            # naira: printed totals are exact to the kobo, allow rounding of one row
-SECTION = re.compile(r"(\d{12})\s+(.{3,120}?)\s+Code\s+Description\s+\d{4}")
 STATEWIDE_TITLE = "- expenditure by economic classification"
 MINISTRY_HQ = "00100100"            # digits 5-12 of a ministry's own (headquarters) administrative code
 
@@ -146,25 +147,13 @@ def candidates(conn: psycopg.Connection, items: dict[str, Row], terms: list[str]
     return list({r.code: r for r in found}.values())[:MAX_CANDIDATES]
 
 
-def sections(conn: psycopg.Connection, doc_id: str) -> tuple[dict[int, list[tuple[int, str, str]]], dict[int, str]]:
-    """Per-agency section headers by page ([(offset, admin code, name)]) and each page's flattened text."""
-    heads: dict[int, list[tuple[int, str, str]]] = {}
-    texts: dict[int, str] = {}
-    for page, text in conn.execute("SELECT page, text FROM pages WHERE doc_id = %s ORDER BY page", (doc_id,)):
-        texts[page] = " ".join((text or "").split())
-        hs = [(m.start(), m.group(1), m.group(2).strip()) for m in SECTION.finditer(texts[page])]
-        if hs:
-            heads[page] = hs
-    return heads, texts
-
-
 def by_unit(conn: psycopg.Connection, doc_id: str, year: int, measure: str,
             totals: dict[str, CodeTotal]) -> dict[str, str]:
     """Fill each code's per-unit amounts from the per-agency tables; returns admin code -> unit name."""
     heads, texts = sections(conn, doc_id)
     if not heads:
         return {}
-    first, pages_with = min(heads), sorted(heads)
+    first = min(heads)
     names = {code: name for hs in heads.values() for _, code, name in hs}
     seen: dict[tuple[int, str], int] = defaultdict(int)
     for r in _rows(conn, doc_id, year, measure, list(totals)):
@@ -175,15 +164,10 @@ def by_unit(conn: psycopg.Connection, doc_id: str, year: int, measure: str,
         at = [m.start() for m in re.finditer(rf"(?<!\d){r.code}(?!\d)", texts.get(r.page, ""))]
         n = seen[(r.page, r.code)]
         seen[(r.page, r.code)] += 1
-        pos = at[n] if n < len(at) else len(texts.get(r.page, ""))
-        before = [h for h in heads.get(r.page, []) if h[0] < pos]
-        if before:
-            unit = before[-1][1]
-        else:
-            prev = [p for p in pages_with if p < r.page]
-            if not prev:
-                continue
-            unit = heads[prev[-1]][-1][1]
+        found = unit_at(heads, r.page, at[n] if n < len(at) else len(texts.get(r.page, "")))
+        if found is None:
+            continue
+        unit = found[0]
         t.units[unit] = t.units.get(unit, Decimal(0)) + r.amount
         t.unit_rows.setdefault(unit, r)
         t.unit_sum += r.amount

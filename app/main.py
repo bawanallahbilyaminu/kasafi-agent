@@ -39,6 +39,24 @@ async def _warm_line_model() -> None:
 
     from app.retrieval.line_meaning import embed_queries
     asyncio.get_running_loop().run_in_executor(None, embed_queries, ["warm up"])
+    asyncio.get_running_loop().run_in_executor(None, _build_missing_entities)
+
+
+def _build_missing_entities() -> None:
+    """Budgets and reports indexed before the structured core existed get their entities (once, a few seconds)."""
+    import psycopg
+
+    from app.config import get_settings
+    from app.retrieval.entities import build_missing
+    s = get_settings()
+    if not s.has_database:
+        return
+    try:
+        with psycopg.connect(s.db_url(), connect_timeout=5) as conn:
+            for b in build_missing(conn):
+                logging.getLogger(__name__).info("entities built at startup: %s", b.summary()[:300])
+    except Exception as e:      # the analysis tools then say they have no data; search still answers
+        logging.getLogger(__name__).warning("entity build at startup failed: %s", type(e).__name__)
 
 
 @app.get("/health")
