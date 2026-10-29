@@ -28,6 +28,7 @@ from difflib import SequenceMatcher
 
 import psycopg
 
+from app.agent.budget_query import SOKOTO_LGAS
 from app.agent.category import matches, resolve_scope
 from app.retrieval.entities import AMOUNTS
 
@@ -240,6 +241,17 @@ def project_status(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
 
 # --- lga_projects ------------------------------------------------------------------------------
 
+def other_lga(name: str, here: str, lgas: set[str]) -> str:
+    """The LGA a project's name places it in, when that isn't where the budget files it ("Completion of Premier
+    Hospital at Binji LGA", location TAMBUWAL); empty when the name names this LGA or none."""
+    def named(lga: str) -> bool:
+        return re.search(rf"(?<![a-z]){re.escape(lga.lower())}(?![a-z])", name.lower()) is not None
+    if named(here):
+        return ""
+    return next((x.title() for x in sorted(lgas, key=len, reverse=True)
+                 if _norm(x) != _norm(here) and len(x) > 2 and named(x)), "")
+
+
 def lga_projects(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
     res = AnalysisResult("lga_projects", False)
     picked = budget_doc(conn, spec.get("year"), need_projects=True)
@@ -272,10 +284,13 @@ def lga_projects(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
                                 f"%s AND COALESCE({cur}, 0) > 0" + extra, [doc, STATEWIDE] + a).fetchone()
     res.count("statewide_n", sw_n, doc, None)
     res.money("statewide_cur", sw_cur or 0, doc, None)
+    lgas = {n for (n,) in conn.execute("SELECT DISTINCT location_name FROM projects WHERE doc_id = %s AND "
+                                       "location_code <> %s", (doc, STATEWIDE))} | set(SOKOTO_LGAS)
     for name, a_cur, a_rev, a_spent, pg, mda in conn.execute(
             f"SELECT name, {cur}, {rev}, {spent}, page, mda_name FROM projects p WHERE doc_id = %s AND "
             f"location_code = %s AND COALESCE({cur}, 0) > 0{extra} ORDER BY {cur} DESC, seq LIMIT {TOP}", args):
-        res.rows.append(Row(name, a_cur, doc, pg, {"mda": mda, "budget_prev": a_rev or 0, "spent": a_spent or 0}))
+        res.rows.append(Row(name, a_cur, doc, pg, {"mda": mda, "budget_prev": a_rev or 0, "spent": a_spent or 0,
+                                                    "other_lga": other_lga(name, loc[1], lgas)}))
     res.found = n > 0 or n_prev > 0
     res.reason = "" if res.found else "none_tagged"
     res.working = [f"Source: the {year} budget's capital project list ({doc}); only lines whose location is "

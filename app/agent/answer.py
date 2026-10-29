@@ -1279,7 +1279,18 @@ ANALYSIS_WORDS = {
         "all": "The {year} budget has {n_all} capital projects, with {all_cur} allocated. {n_continuing} continue "
                "from {prev} ({n_started} had money spent in {prev}, {n_idle} had none), {n_new} are new, and "
                "{n_dropped} projects from {prev} are not in it.",
-        "status_note": "Spending is January–September {prev}, as printed in the {year} budget.",
+        "status_note": {
+            "started": "“Started” here means money was spent on the project in January–September {prev} (the "
+                       "latest spending the {year} budget prints); “continuing” means it also has a {year} allocation.",
+            "continuing": "“Continuing” here means the project has both a {prev} budget and a {year} allocation, "
+                          "whether or not money was spent on it; spending is January–September {prev}.",
+            "idle": "“Nothing spent” means no spending in January–September {prev}, the latest the {year} budget "
+                    "prints.",
+            "new": "“New” means the project had no {prev} budget and no {prev} spending.",
+            "dropped": "“Dropped” means the project had a {prev} budget but no {year} allocation.",
+            "all": "Spending is January–September {prev}, as printed in the {year} budget.",
+        },
+        "lga_filed": " (the budget files it under {subject})",
         "lga": "The {year} budget has {n} projects located in {subject}, with {cur} allocated.",
         "lga_prev": " In {prev}, {n_prev} projects there were allocated {prev_amt}, and {spent} was spent by "
                     "September.",
@@ -1339,7 +1350,19 @@ ANALYSIS_WORDS = {
         "all": "Kasafin {year} yana da manyan ayyuka {n_all}, an ware musu {all_cur}. {n_continuing} suna ci gaba "
                "daga {prev} ({n_started} an kashe musu kuɗi a {prev}, {n_idle} ba a kashe ba), {n_new} sababbi ne, "
                "kuma ayyuka {n_dropped} na {prev} ba su ciki.",
-        "status_note": "Kuɗin da aka kashe na Janairu–Satumba {prev} ne, kamar yadda kasafin {year} ya buga.",
+        "status_note": {
+            "started": "“An fara” a nan yana nufin an kashe kuɗi a kan aikin a Janairu–Satumba {prev} (abin da "
+                       "kasafin {year} ya buga na baya-bayan nan); “ana ci gaba” yana nufin yana da kuɗi a kasafin "
+                       "{year} ma.",
+            "continuing": "“Ana ci gaba” a nan yana nufin aikin yana da kasafi a {prev} kuma yana da kuɗi a {year}, "
+                          "ko an kashe masa kuɗi ko ba a kashe ba; kuɗin da aka kashe na Janairu–Satumba {prev} ne.",
+            "idle": "“Ba a kashe ba” yana nufin babu kuɗin da aka kashe a Janairu–Satumba {prev}, abin da kasafin "
+                    "{year} ya buga na baya-bayan nan.",
+            "new": "“Sabo” yana nufin aikin ba shi da kasafi ko kuɗin da aka kashe a {prev}.",
+            "dropped": "“An daina” yana nufin aikin yana da kasafi a {prev} amma ba shi da kuɗi a {year}.",
+            "all": "Kuɗin da aka kashe na Janairu–Satumba {prev} ne, kamar yadda kasafin {year} ya buga.",
+        },
+        "lga_filed": " (kasafin ya sanya shi a ƙarƙashin {subject})",
         "lga": "Kasafin {year} yana da ayyuka {n} da ke {subject}, an ware musu {cur}.",
         "lga_prev": " A {prev}, ayyuka {n_prev} a can an ware musu {prev_amt}, kuma an kashe {spent} zuwa Satumba.",
         "lga_note": "Wannan kuɗin jiha ne na ayyukan da ke {subject}, ba kason ƙaramar hukumar ba. Ayyuka "
@@ -1429,7 +1452,7 @@ def analysis_answer(conn, plan: Plan, res: AnalysisResult, lang: str, t: dict, a
     lead, rows_head, note = "", w["largest"], ""
     if res.tool == "project_status":
         lead = (w["scope"].format(subject=subject) if subject else "") + w[res.focus].format(**v)
-        note = w["status_note"].format(**common)
+        note = w["status_note"][res.focus].format(**common)       # the definition used, in one plain line
     elif res.tool == "lga_projects":
         if res.facts["n"].value:
             lead = w["lga"].format(**v)
@@ -1484,6 +1507,8 @@ def analysis_answer(conn, plan: Plan, res: AnalysisResult, lang: str, t: dict, a
         place = r.detail.get("place")
         where = f", {place.title()}" if place and res.tool in ("project_status", "ranking", "mda_profile") \
             and res.focus != "lga" else ""
+        if r.detail.get("other_lga"):          # its name says another LGA: include it, and say where it's filed
+            extra += w["lga_filed"].format(subject=subject)
         bullets.append(f"• {r.name[:110]}{where}: {_money(r.amount)}{extra}")
     # every figure cites its page: the facts' pages and the rows' pages
     cited_pages: dict[tuple[str, int], None] = {}

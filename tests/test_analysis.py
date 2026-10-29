@@ -20,6 +20,14 @@ def test_planner_analysis_field_keeps_only_known_tools_and_fields() -> None:
     assert ans._analysis_field(None) == {}
 
 
+def test_a_project_named_after_another_lga_is_noted_not_dropped() -> None:
+    lgas = {"TAMBUWAL", "BINJI", "SOKOTO SOUTH", "SOKOTO NORTH", "KEBBE"}
+    assert an.other_lga("Completion of Premier Hospital at Binji LGA", "TAMBUWAL", lgas) == "Binji"
+    assert an.other_lga("Completion of Premier Hospital at Tambuwal LGA", "TAMBUWAL", lgas) == ""
+    assert an.other_lga("Construction of New Abdullahi Bara'u Secondary School D/Daji", "TAMBUWAL", lgas) == ""
+    assert an.other_lga("Renovation of Sultan Abubakar College, Sokoto South", "TAMBUWAL", lgas) == "Sokoto South"
+
+
 @pytest.fixture(scope="module")
 def conn():
     psycopg = pytest.importorskip("psycopg")
@@ -62,6 +70,10 @@ def test_lga_projects_are_only_lines_located_in_that_lga(conn) -> None:
                             "AND location_code = '33331800' AND approved_2026 > 0").fetchone()
     assert r.facts["n"].value == n and r.facts["cur"].value == total
     assert r.facts["statewide_n"].value > 500                                  # not split by LGA, so not counted
+    binji = [x for x in r.rows if "Binji" in x.name]
+    assert binji and binji[0].detail["other_lga"] == "Binji"                   # filed under Tambuwal by the budget
+    a = ans.analysis_answer(conn, Plan("q", [], [], analysis={"tool": "lga_projects"}), r, "en", {}, None)
+    assert "Completion of Premier Hospital at Binji LGA: ₦2.00 billion (the budget files it under Tambuwal)" in a.text
 
 
 def test_an_unknown_lga_or_ministry_finds_nothing_rather_than_something_else(conn) -> None:
@@ -85,6 +97,8 @@ def test_reply_leads_in_plain_words_counts_have_no_naira_and_one_sources_line(co
     n = r.facts["n_started"].value
     assert a.text.startswith(f"Ayyuka {n} ne aka kashe musu kuɗi a 2025") and f"₦{n}" not in a.text
     assert "an ware musu ₦" in a.text and "an kashe ₦" in a.text             # allocated and spent, said apart
+    assert "“An fara” a nan yana nufin an kashe kuɗi a kan aikin a Janairu–Satumba 2025" in a.text  # the definition
+    assert f"ayyuka {r.facts['n_continuing'].value} na kasafin 2025 suna ci gaba" in a.text   # the wider count too
     assert a.text.count("Madogara") == 1 and "nuna lissafi" in a.text
     assert "🧮" not in a.text and "started: jan_sep_2025 > 0" in a.working     # the working only on request
     assert len([x for x in a.text.splitlines() if x.startswith("• ")]) <= 5
