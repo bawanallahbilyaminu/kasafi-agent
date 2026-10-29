@@ -201,3 +201,16 @@ def test_a_dtm_report_page_links_its_document_through_a_download_tracker() -> No
             '<a href="/dtm_download_track/91831?file=1&amp;amp;type=node&amp;amp;id=61076">Download</a>')
     assert document_link(page, "https://dtm.iom.int/reports/round-18") == \
         "https://dtm.iom.int/dtm_download_track/91831?file=1&type=node&id=61076"
+
+
+def test_a_server_that_stops_sending_is_a_failed_fetch(tmp_path: Path) -> None:
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.url.path == "/robots.txt":
+            return httpx.Response(200, text=SOKOTO_ROBOTS)
+        raise httpx.ReadTimeout("slow", request=req)
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+            return await download_pdf(URL, tmp_path / "doc.pdf", http, Robots(http))
+    with pytest.raises(FetchError, match="ReadTimeout"):
+        asyncio.run(go())

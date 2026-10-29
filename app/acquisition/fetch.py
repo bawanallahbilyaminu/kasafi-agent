@@ -70,6 +70,14 @@ async def download_pdf(url: str, dest: Path, http: httpx.AsyncClient, robots: Ro
                        max_bytes: int = MAX_BYTES, timeout: httpx.Timeout = TIMEOUT) -> Downloaded:
     """The file is accepted by what it is (PDF or ZIP bytes; the address often has no .pdf). A landing page (HTML)
     is followed one hop to the same site's document link; every hop passes the allowlist and robots.txt."""
+    try:
+        return await _download(url, dest, http, robots, max_bytes, timeout)
+    except httpx.HTTPError as e:          # a slow or broken server is a failed fetch, not a crash
+        raise FetchError(f"{type(e).__name__} from the server") from e
+
+
+async def _download(url: str, dest: Path, http: httpx.AsyncClient, robots: Robots, max_bytes: int,
+                    timeout: httpx.Timeout) -> Downloaded:
     current, hopped = url, False
     for _ in range(MAX_REDIRECTS + 2):
         await check_url(current, robots)
