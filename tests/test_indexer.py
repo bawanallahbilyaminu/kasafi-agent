@@ -25,6 +25,27 @@ def test_one_huge_line_is_hard_split() -> None:
     assert all(len(c) <= CHUNK_CHARS for c in chunks) and sum(map(len, chunks)) >= CHUNK_CHARS * 2
 
 
+BROKEN = ("On 19 January 2026 an incident  affected a total of 1,074 individual  from 179 hou ehold , the e included "
+          "419 children, 497 women, and 158 men. Key informant  reported that all individual  were di placed to the "
+          "neighbouring  tate, where they are currently re iding in a camp  etting. Food,  helter, water, hygiene "
+          "and non-food item  were the mo t prevalent need  identified by the field  taff conducting rapid a e ment "
+          "to inform humanitarian actor , government authoritie , and partner . ")
+SOUND = ("Sokoto State Government 2026 Approved Budget - Total Expenditure by Administrative Classification. "
+         "023400100100 Ministry of Works & Transport 365,711,972.96 Sokoto Road Maintenance Agency 41,000,000.00 "
+         "Ministry of Health, Primary Health Care Development Agency, Ministry for Basic Education, State Universal "
+         "Basic Education Board, Ministry of Water Resources, Rural Water Supply and Sanitation Agency, Ministry of "
+         "Agriculture and Natural Resources, Ministry of Environment, Office of the Head of Service. ")
+
+
+def test_a_text_layer_with_a_letter_missing_goes_to_ocr() -> None:
+    """IOM DTM flash report: the font map dropped every 's' ("di placed", "hou ehold")."""
+    from app.retrieval.indexer import broken_text_layer, needs_ocr
+    assert broken_text_layer(BROKEN * 2) and needs_ocr(1, BROKEN * 2, set())
+    assert not broken_text_layer(SOUND * 2) and not needs_ocr(1, SOUND * 2, set())
+    assert not broken_text_layer("short page")                    # too few letters to judge: no text-layer check
+    assert needs_ocr(3, "x" * 100, {3}) and needs_ocr(1, "", set())
+
+
 def test_clean_text() -> None:
     assert clean_text("a\r\n\r\n\r\n\r\nb\t\t c\x00") == "a\n\nb c"
 

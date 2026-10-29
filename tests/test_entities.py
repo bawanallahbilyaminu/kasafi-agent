@@ -107,6 +107,17 @@ def test_a_table_starting_at_its_total_row_takes_the_classification_of_its_title
     assert (cont.classification, loc.classification) == ("administrative", "location")
 
 
+def test_mda_rows_under_the_next_tables_title_continue_the_mda_table() -> None:
+    """2025 budget p15: the overhead table runs on under the title of the next table ('... by Fund Source')."""
+    before = item("023800000000", "Ministry of Budget", kind="overhead",
+                  title="Other Non-Debt Recurrent Expenditure (table starting at its Total row)")
+    after = item("023800400100", "State Bureau of Statistics", kind="overhead", cls="other",
+                 title="Sokoto State Government 2025 Approved Budget - Other Non-Debt Recurrent Expenditure by Fund Source")
+    fund = item("02101", "STATE GOVERNMENT FUND", kind="overhead", cls="other", title=after.table_title)
+    ent.classify([before, after, fund])
+    assert (after.classification, fund.classification) == ("administrative", "other")
+
+
 @pytest.fixture(scope="module")
 def conn():
     psycopg = pytest.importorskip("psycopg")

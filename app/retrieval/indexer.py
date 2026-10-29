@@ -29,6 +29,24 @@ log = logging.getLogger(__name__)
 CHUNK_CHARS = 1500
 CHUNK_OVERLAP = 200
 MIN_PAGE_CHARS = 40   # less than this is treated as "no text layer"
+# A text layer whose font map drops a letter (IOM DTM flash report: "di placed", "hou ehold", no "s" at all) reads
+# as text but can't be searched. On a page with enough English letters, each of these common ones is several per
+# cent of them; one that is nearly absent means the layer is broken, and the page is OCR'd instead.
+COMMON_LETTERS = "etaoinsr"          # not "h": budget line names barely use it (67 sound pages flagged)
+MIN_LETTERS_CHECKED = 400
+MISSING_LETTER_SHARE = 0.004
+
+
+def broken_text_layer(text: str) -> bool:
+    letters = [c for c in text.lower() if "a" <= c <= "z"]
+    if len(letters) < MIN_LETTERS_CHECKED:
+        return False
+    return any(letters.count(c) < MISSING_LETTER_SHARE * len(letters) for c in COMMON_LETTERS)
+
+
+def needs_ocr(page_no: int, text: str, image_pages: set[int]) -> bool:
+    """No text layer, a picture of a table, or a text layer with letters missing."""
+    return len(text) < MIN_PAGE_CHARS or page_no in image_pages or broken_text_layer(text)
 
 
 @dataclass
@@ -467,12 +485,12 @@ def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bo
     ocr = dict(conn.execute("SELECT page, text FROM pages WHERE doc_id = %s AND source = 'ocr'", (doc["id"],)).fetchall())
     sources = []
     for i, text in enumerate(pages):
-        needs_ocr = len(text) < MIN_PAGE_CHARS or (i + 1) in image_pages
-        if needs_ocr and (i + 1) in ocr:
+        ocr_it = needs_ocr(i + 1, text, image_pages)
+        if ocr_it and (i + 1) in ocr:
             pages[i] = ocr[i + 1]
             sources.append("ocr")
         else:
-            sources.append("none" if needs_ocr else "text")   # "none" keeps its title text until OCR'd
+            sources.append("none" if ocr_it else "text")   # "none" keeps its title text until OCR'd
     empty = sources.count("none")
     pages = [accounting_negatives(p) for p in pages]
     labelled: list[str] = []

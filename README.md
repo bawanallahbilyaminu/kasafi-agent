@@ -61,12 +61,11 @@ At indexing, the extracted tables become three entity tables, with one column pe
 |---|---|---|
 | Projects | 1,709 add up to ₦553.14 bn of the printed ₦553.34 bn | 1,693 add up to ₦347.40 bn of ₦347.48 bn |
 | Projects = each MDA's capital | 633 / 636 | 614 / 624 |
-| Agencies → ministry → sector → total | 1,740 / 1,752 | 1,386 / 1,428 |
-| Personnel + overhead + debt + capital = total, per MDA | 1,038 / 1,038 | 599 / 954 |
+| Agencies → ministry → sector → total | 1,740 / 1,752 | 1,500 / 1,530 |
+| Personnel + overhead + debt + capital = total, per MDA | 1,038 / 1,038 | 1,020 / 1,020 |
 | Functional total = administrative total | 18 / 18 | 18 / 18 |
 
 - **Known gaps.** On the location pages, table titles are carried over and rows from different tables are interleaved, so the location checks fail. That's why LGA answers use the project list, not the location table.
-- **2025 overhead table.** It continues under a "by Fund Source" title, so the 2025 kinds check isn't complete.
 - **One unplaced row.** One 2026 project row (₦200 m) can't be placed.
 
 The implementation reports (Q4 2024 to Q2 2026) reconcile 100% on functions and programmes, and 97–99% on the administrative hierarchy.

@@ -224,6 +224,14 @@ def classify(items: list[Item]) -> None:
                 it.classification = nxt.classification
             if it.classification == "other" and it.code and len(it.code) == 12:
                 it.classification = "administrative"      # its rows are MDAs (2025 budget p14: overhead)
+    # A 12-digit MDA row printed under another table's title (the 2025 budget's overhead table runs on into p15,
+    # where the next table's title "... by Fund Source" is printed first) still continues the MDA table before it.
+    last: dict[str, str] = {}
+    for it in items:
+        if (it.classification == "other" and it.code and len(it.code) == 12 and not LOCATION_CODE.match(it.code)
+                and last.get(it.spend_kind) == "administrative"):
+            it.classification = "administrative"
+        last[it.spend_kind] = it.classification
     for it in items:
         if it.code and LOCATION_CODE.fullmatch(it.code) and it.classification != "administrative":
             it.classification = "location"

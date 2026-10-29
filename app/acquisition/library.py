@@ -34,7 +34,7 @@ from app.config import Settings
 from app.providers.chat import ChatClient, ProviderError
 from app.providers.meta import MetaClient
 from app.providers.stt import parse_json_reply
-from app.retrieval.indexer import MIN_PAGE_CHARS, accounting_negatives, index_document, ocr_page_chunks, sha256_file
+from app.retrieval.indexer import accounting_negatives, index_document, needs_ocr, ocr_page_chunks, sha256_file
 from app.retrieval.ocr import ocr_image
 
 log = logging.getLogger(__name__)
@@ -172,7 +172,7 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
         t["index"] = time.perf_counter() - t0
         log.info("fetched and indexed %s (%s %s): %d pages, %d chunks, %d need OCR, sha=%s", doc_id, doc["series"],
                  doc["edition"], res.pages, res.chunks, res.empty_pages, sha[:12])
-        scanned = [i for i, p in enumerate(pages, 1) if len(p) < MIN_PAGE_CHARS or i in image_pages]
+        scanned = [i for i, p in enumerate(pages, 1) if needs_ocr(i, p, image_pages)]
         if scanned:
             schedule_ocr(doc_id, path, scanned[:BACKGROUND_OCR_PAGES], settings)
         return Acquired("indexed", doc_id, doc["title"], url, timings=t)
