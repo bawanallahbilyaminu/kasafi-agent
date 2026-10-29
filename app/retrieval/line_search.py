@@ -15,6 +15,7 @@ for the model to read and the code to verify.
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -30,10 +31,12 @@ PER_DOC_NAME = 4        # copies of one line per document (total, personnel, ove
 MEANING_K = 200         # nearest lines per query vector (many are copies of one name)
 MEANING_ONLY = 6        # names found by meaning alone that the model reads
 PER_TERM = 2            # each term's best distinct names, read before anything else
+PER_TERM_PROJECTS = 4   # and the best projects with the term in their own name
 RRF_K = 60              # reciprocal-rank fusion constant
 
 _COLS = """l.id, d.title, l.doc_id, l.page, COALESCE(l.table_title, ''), l.name, l.row_text, l.classification,
-       COALESCE(d.series, ''), COALESCE(d.edition, ''), COALESCE(l.code, ''), l.context"""
+       COALESCE(d.series, ''), COALESCE(d.edition, ''), COALESCE(l.code, ''), l.context,
+       COALESCE(l.spend_kind, '')"""
 _FILTERS = """(cardinality(%(years)s::int[]) = 0
        OR EXISTS (SELECT 1 FROM budget_rows b WHERE b.line_id = l.id AND b.year = ANY(%(years)s)))
   AND (%(docs)s::text[] IS NULL OR l.doc_id = ANY(%(docs)s))
@@ -53,12 +56,15 @@ cand AS (
 SELECT """ + _COLS + """,
        -- the best single match counts: in the line's own name most, elsewhere in the row (codes, function and
        -- location columns of a project) less; more matched terms add only a little
-       (SELECT COALESCE(max(w), 0) FROM t WHERE l.name ILIKE '%%' || t.term || '%%') * 4
+       (SELECT COALESCE(max(w), 0) FROM t WHERE o.own ILIKE '%%' || t.term || '%%') * 4
        + (SELECT COALESCE(max(w), 0) FROM t WHERE l.row_text ILIKE '%%' || t.term || '%%') * 2
        + (SELECT COALESCE(max(w), 0) FROM t WHERE l.tsv @@ plainto_tsquery('english', t.term))
-       + (SELECT COALESCE(max(similarity(l.name, t.term) * w), 0) FROM t) * 2
+       + (SELECT COALESCE(max(similarity(o.own, t.term) * w), 0) FROM t) * 2
        + (SELECT count(*) FROM t WHERE l.row_text ILIKE '%%' || t.term || '%%') * 0.3 AS score
 FROM cand JOIN budget_lines l ON l.id = cand.id JOIN documents d ON d.id = l.doc_id
+-- a project line's name carries its agency, item and function after the codes ("Server Upgrade 025300100100 -
+-- Min of Lands and Housing ..."): only the words before the codes are its own name, as in short_name()
+CROSS JOIN LATERAL (SELECT regexp_replace(l.name, '\\s\\d{8,}\\s*-.*$', '') AS own) o
 WHERE """ + _FILTERS + """
 ORDER BY score DESC, l.id
 LIMIT %(cap)s
@@ -105,14 +111,42 @@ class Line:
     cells: list[Cell] = field(default_factory=list)
     code: str = ""             # the administrative / economic code printed on the line, if any
     context: str = ""          # its codes' standard descriptions (app/retrieval/line_meaning.py)
+    spend_kind: str = ""       # total / personnel / overhead / capital / revenue ...: the kind its table shows
 
     def cell(self, column: str) -> Cell | None:
         return next((c for c in self.cells if c.column == column), None)
 
 
 def _line(r) -> Line:
-    return Line(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], score=float(r[12]), code=r[10],
-                context=r[11])
+    return Line(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], score=float(r[13]), code=r[10],
+                context=r[11], spend_kind=r[12])
+
+
+# a kind of spending the question names; its table title often doesn't ("Other Non-Debt Recurrent
+# Expenditure" is the overhead table)
+_KINDS = (("overhead", r"overhead|running cost|non-debt recurrent|other recurrent"),
+          ("personnel", r"personnel|salar(?:y|ies)|wages|emolument"),
+          ("capital", r"capital (?:expenditure|budget|spending|allocation)|\bcapex\b"))
+
+
+def asked_kind(text: str) -> str:
+    """The one kind of spending a question names (overhead, personnel, capital), or '' for none or several."""
+    kinds = [k for k, pat in _KINDS if re.search(pat, text, re.I)]
+    return kinds[0] if len(kinds) == 1 else ""
+
+
+def lift_kind(lines: list[Line], kind: str) -> list[Line]:
+    """Each line of the asked kind moves up to where its name first ranks: one agency is printed in the total,
+    personnel, overhead and capital tables with one name, and only a few copies per document are kept, so the
+    asked table's copy must not be the one dropped (m19: Government House's overhead row)."""
+    if not kind:
+        return lines
+    first: dict[str, int] = {}
+    for i, x in enumerate(lines):
+        first.setdefault(name_key(x), i)
+    return [x for _, _, x in sorted(((first[name_key(x)] if x.spend_kind == kind else i,
+                                      0 if x.spend_kind == kind else 1, x) for i, x in enumerate(lines)),
+                                    key=lambda r: r[:2])]
 
 
 def _clean(term: str) -> str:
@@ -166,21 +200,49 @@ def nearest(conn: psycopg.Connection, texts: list[str], *, years: list[int] | No
     return [[_line(r) for r in conn.execute(_MEANING_SQL, {**params, "v": v})] for v in vectors]
 
 
-def cover(lines: list[Line], terms: list[str], per_term: int = PER_TERM) -> list[Line]:
-    """Every term's best `per_term` distinct names first (by name, row or code descriptions), then the lines found
-    by meaning alone (keyword score 0), then the rest in order: one broad term printed in many tables can't keep
-    another term's lines out of what the model reads."""
+_CODES = re.compile(r"\s\d{8,}\s*-")
+
+
+def own_name(x: Line) -> str:
+    """A line's own words: a project's name is followed by its codes and their descriptions ("Server Upgrade
+    025300100100 - Min of Lands and Housing ..."), which aren't what it is."""
+    return _CODES.split(x.name, maxsplit=1)[0]
+
+
+def named_project(x: Line) -> bool:
+    """A project with its own name before its codes: not a heading in capitals ("HOUSING 33312100 - WAMAKKO"),
+    a row whose name is only its agency's (the project's words were lost on the page), or the programme table's
+    copy, whose name starts with the programme's code and title ("06100126001300 - Housing and Urban Development
+    - General Server Upgrade")."""
+    own = " ".join(own_name(x).split())
+    return (bool(_CODES.search(x.name)) and not own.isupper() and not own[:1].isdigit()
+            and own.lower() != " ".join(ministry_of(x).split()).lower())
+
+
+def cover(lines: list[Line], terms: list[str], per_term: int = PER_TERM,
+          per_term_projects: int = PER_TERM_PROJECTS) -> list[Line]:
+    """Every term's best `per_term` distinct names first (by name, row or code descriptions), and its best
+    `per_term_projects` projects named by it, then the lines found by meaning alone (keyword score 0), then the
+    rest in order: one broad term printed in many tables can't keep another term's lines out of what the model
+    reads, and its summary rows (sector, ministry and item totals, printed in every table and report) can't keep
+    out the projects it names ("housing": HOUSING, Ministry of Lands and Housing, ... and "Construction of 500
+    Housing Estate at Wajekke")."""
     first: list[Line] = []
     ids: set[str] = set()
-    for t in (t.lower() for t in terms):
+
+    def take(t: str, match, most: int) -> None:
         names: set[str] = set()
         for x in lines:
-            if len(names) >= per_term:
+            if len(names) >= most:
                 break
-            if x.id not in ids and name_key(x) not in names and t in f"{x.name} {x.row_text} {x.context}".lower():
+            if x.id not in ids and name_key(x) not in names and match(x, t):
                 first.append(x)
                 ids.add(x.id)
                 names.add(name_key(x))
+
+    for t in (t.lower() for t in terms):
+        take(t, lambda x, t: t in f"{x.name} {x.row_text} {x.context}".lower(), per_term)
+        take(t, lambda x, t: named_project(x) and t in own_name(x).lower(), per_term_projects)
     first += [x for x in lines if x.score == 0 and x.id not in ids]
     ids |= {x.id for x in first}
     return first + [x for x in lines if x.id not in ids]
@@ -207,6 +269,7 @@ def search_lines(conn: psycopg.Connection, terms: list[str], *, year: int | None
     lines.sort(key=lambda x: (-x.score, *_newest_first(x)))
     if question:
         lines = fuse(lines, nearest(conn, [question, *terms], years=years, docs=docs, spend=spend))
+    lines = lift_kind(lines, asked_kind(" ".join([question or "", *terms])))
     kept, copies = [], Counter()
     for x in lines:
         # the whole name: fragment-named project lines differ only in their location at the end

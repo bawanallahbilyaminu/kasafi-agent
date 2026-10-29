@@ -7,6 +7,7 @@ import pytest
 
 from app.agent import answer as ans
 from app.agent import category as cat
+from app.agent.line_answer import listing
 from app.retrieval.line_search import Line
 from tests.helpers import make_settings
 
@@ -45,7 +46,11 @@ def test_rows_are_labelled_by_their_level_for_the_composer() -> None:
     assert ans.level(ln("11", "programme")) == "sector total"
     assert ans.level(ln("050601", "programme")) == "programme inside a sector"
     assert ans.level(ln("027900000000", "administrative")) == "ministry total including its agencies"
-    assert ans.level(ln("027900100100", "administrative")) == ""
+    assert ans.level(ln("027900100100", "administrative")) == "one agency or unit"
+    gh = Line("x", "t", "d", 1, "T", "Government House", "n", "administrative", "", "", 1.0, code="011100100100",
+              spend_kind="overhead")
+    assert ans.kind_of(gh) == "overhead (running costs)"
+    assert "level: one agency or unit | spending: overhead (running costs)" in listing([gh])
 
 
 @pytest.fixture(scope="module")

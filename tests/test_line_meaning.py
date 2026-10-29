@@ -1,7 +1,7 @@
 """Code descriptions and meaning search for budget lines (app/retrieval/line_meaning.py, line_search.fuse)."""
 
 from app.retrieval import line_meaning as lm
-from app.retrieval.line_search import Line, cover, fuse
+from app.retrieval.line_search import Line, asked_kind, cover, fuse, lift_kind, own_name
 
 ECON = "Sokoto State Government 2026 Approved Budget - Total Expenditure by Economic Classification"
 FUNC = "Sokoto State Government 2026 Approved Budget - Total Expenditure by Functional Classification"
@@ -70,6 +70,34 @@ def test_cover_reads_every_terms_best_names_first_then_meaning_only_lines() -> N
     meaning_only.score = 0.0
     out = cover([*broad, meaning_only, trycle], ["welfare", "disability"], per_term=2)
     assert [x.id for x in out][:4] == ["w0", "w1", "t", "m"]    # matched by its code description
+
+
+def test_cover_reads_the_projects_a_broad_term_names_not_only_its_summary_rows() -> None:
+    """m14: "housing" matched ~150 sector / ministry total rows before "Construction of 500 Housing Estate at
+    Wajekke"; a project line whose name only carries the term in its agency's name isn't named by it."""
+    codes = " 025300100100 - Min of Lands and Housing 23020104 - CONSTRUCTION / PROVISION OF HOUSING"
+    summary = [_l(f"s{i}", n) for i, n in enumerate(["HOUSING", "Ministry of Lands and Housing", "HOUSING",
+                                                      "HOUSING DEVELOPMENT"] * 3)]
+    server = _l("srv", "Server Upgrade" + codes)
+    heading = _l("hd", "HOUSING 33312100 - WAMAKKO 33312100 - x")
+    programme = _l("pg", "06100126001300 - Housing and Urban Development - General Server Upgrade" + codes)
+    estate = _l("est", "Construction of 500 Housing Estate at Wajekke, Wamakko" + codes)
+    for x in (server, heading, programme, estate):
+        x.row_text = x.name
+    out = [x.id for x in cover([*summary, server, heading, programme, estate], ["housing"], per_term=2)]
+    assert out[:3] == ["s0", "s1", "est"]
+    assert own_name(estate) == "Construction of 500 Housing Estate at Wajekke, Wamakko"
+
+
+def test_the_asked_kinds_copy_of_a_name_moves_up_so_the_copy_cap_keeps_it() -> None:
+    """m19: Government House is printed in the total, personnel and overhead tables under one name."""
+    gh = [_l(f"g{i}", "Government House") for i in range(3)]
+    for x, k in zip(gh, ("total", "personnel", "overhead")):
+        x.spend_kind = k
+    other = _l("o", "OVERHEAD COST")
+    assert asked_kind("office running costs and overhead for the Governor") == "overhead"
+    assert asked_kind("salaries and capital expenditure") == ""            # two kinds: none lifted
+    assert [x.id for x in lift_kind([gh[0], other, gh[1], gh[2]], "overhead")] == ["g2", "g0", "o", "g1"]
 
 
 def test_fuse_without_meaning_keeps_the_keyword_order() -> None:

@@ -44,7 +44,8 @@ from app.agent.budget_query import QueryResult, context_text, lga_in, render_wor
 from app.agent import trace
 from app.agent.category import TOP_UNITS, CategoryResult, pct, run_category
 from app.agent.calculate import MIXED, CalcError, Calculation, MixedBases, offer_text, validate
-from app.agent.line_answer import LineResult, fmt, is_location, item_of, read_lines, short_name
+from app.agent.line_answer import (LineResult, fmt, is_location, item_of, kind_of, level, read_lines,
+                                   short_name)
 from app.retrieval.line_search import MAX_LINES, name_key, nearest, search_lines
 from app.config import Settings, get_settings
 from app.providers.baseten import BasetenClient
@@ -600,16 +601,6 @@ def line_evidence(conn: psycopg.Connection, plan: Plan, have: list[Evidence]) ->
             for i, ((d, p), ls) in enumerate(pages.items(), start=1)]
 
 
-def level(x) -> str:
-    """What a programme or administrative row is, from its code (the composer reads it as a label)."""
-    code = x.code or ""
-    if x.classification == "programme" and code.isdigit():
-        return {2: "sector total", 4: "objective inside a sector", 6: "programme inside a sector"}.get(len(code), "")
-    if x.classification == "administrative" and len(code) == 12 and code.endswith("00000000"):
-        return "ministry total including its agencies"
-    return ""
-
-
 def _join_chunks(chunks: list[str]) -> str:
     """Join neighbouring chunks, keeping the first [Table: ...] line and dropping repeated ones."""
     out: list[str] = []
@@ -1100,6 +1091,13 @@ async def _search_missing(conn, plan: Plan, question: str, lang: str, res: LineR
 MISSING_LINES = 12
 
 
+LEVEL_HA = {"sector total": "jimillar ɓangare", "objective inside a sector": "manufa cikin ɓangare",
+            "programme inside a sector": "shiri cikin ɓangare",
+            "ministry total including its agencies": "ma'aikata tare da hukumominta", "one agency or unit": "hukuma ɗaya",
+            "all spending (total)": "duk kashe kuɗi (jimilla)", "personnel (salaries)": "albashi",
+            "overhead (running costs)": "kuɗin gudanarwa", "capital": "manyan ayyuka"}
+
+
 def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dict, acq) -> Answer:
     """The verified rows as an answer: summary, the rows used with citations, and the arithmetic."""
     w = LINE_WORDS.get(lang, LINE_WORDS["en"])
@@ -1119,8 +1117,10 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
     side = {"top": " ↑", "bottom": " ↓", "both": " ↑↓"} if res.operation in ("share", "ratio") else {}
     names = Counter((s.line.doc_id, short_name(s.line)) for s in res.selections)
 
-    def label(x) -> str:     # its code; and the same name from two tables (personnel, overhead): which table
-        name = short_name(x) + (f" (code {x.code})" if x.code else "")
+    def label(x) -> str:     # its level and code; and the same name from two tables (personnel, overhead): which
+        tags = [LEVEL_HA.get(v, v) if lang == "ha" else v for v in (level(x), kind_of(x)) if v]
+        name = short_name(x) + (f" ({', '.join(tags + ([f'code {x.code}'] if x.code else []))})"
+                                if tags or x.code else "")
         if (item := item_of(x)) and len(short_name(x).split()) <= 6:     # a short name may be only a place
             name += f" – {item.lower()}"
         if names[(x.doc_id, short_name(x))] > 1 and " - " in x.table_title:

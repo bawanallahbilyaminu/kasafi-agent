@@ -40,6 +40,13 @@ SELECT_SYSTEM = (
     "true: the app then says the item isn't shown separately. If the question asks whether a line exists and no "
     "line is that thing, say no such line is shown, select nothing and set found \"none\"; never offer a "
     "broader line just because its amount or name is close.\n"
+    "1a. Pick the LEVEL the question names (each line shows its 'level' and 'spending'). A sector is the "
+    "'sector total' line, not a programme inside it, and a programme is not its sector; a unit inside a ministry "
+    "(e.g. Government House, a department or board) is its own 'one agency or unit' line, not the 'ministry total "
+    "including its agencies'; a kind of spending (overhead / running costs, personnel / salaries, capital) is the "
+    "line from that kind's table, never the 'all spending (total)' line of the same agency. If only the broader "
+    "line exists, pick it and set aggregate_only true. Say in the summary which level you used (e.g. 'the ICT "
+    "sector total', 'Government House's overhead').\n"
     "2. Choose the column for the year and measure asked. An allocation for year Y is 'Y Approved Budget' (in "
     "implementation reports 'Y Original Budget' or 'Y Final Budget'); spending is a 'Performance' column for the "
     "period; never use out-year estimates or projections unless asked. You may pick approved and revised of the "
@@ -155,11 +162,37 @@ def item_of(line: Line) -> str:
     return " ".join(m.group(1).split()) if m else ""
 
 
+def level(x: Line) -> str:
+    """What a programme or administrative row is, from its code: the reader picks the level asked, and the
+    answer says which level it used."""
+    code = x.code or ""
+    if x.classification == "programme" and code.isdigit():
+        return {2: "sector total", 4: "objective inside a sector", 6: "programme inside a sector"}.get(len(code), "")
+    # a table that starts at its Total row is indexed as "other" (its title follows it): the code still says
+    if x.classification in ("administrative", "other") and len(code) == 12 and code.isdigit():
+        return "ministry total including its agencies" if code.endswith("00000000") else "one agency or unit"
+    return ""
+
+
+KIND_LABEL = {"total": "all spending (total)", "personnel": "personnel (salaries)",
+              "overhead": "overhead (running costs)", "capital": "capital"}
+
+
+def kind_of(x: Line) -> str:
+    """The kind of spending a ministry / sector / function row's table shows ('Other Non-Debt Recurrent
+    Expenditure' is overhead), or ''."""
+    if x.classification in ("administrative", "programme", "function", "function_by_mda") or level(x):
+        return KIND_LABEL.get(x.spend_kind, "")
+    return ""
+
+
 def listing(lines: list[Line]) -> str:
     out = []
     for i, x in enumerate(lines, 1):
         cols = " | ".join(f"{c.column}: {fmt(c.amount)}" for c in x.cells)
         code = f" | code {x.code}" if x.code else ""
+        code += f" | level: {level(x)}" if level(x) else ""
+        code += f" | spending: {kind_of(x)}" if kind_of(x) else ""
         code += f" | item: {item_of(x)}" if item_of(x) else ""
         code += " | by location: state spending in this place, not an allocation to the LGA" if is_location(x) else ""
         out.append(f"L{i} | {x.title}, page {x.page} | table: {x.table_title[:110]} | {short_name(x)[:140]}{code} "
