@@ -26,6 +26,8 @@ ALLOWLIST = (
     "budgetoffice.gov.ng", "nigerianstat.gov.ng",
     "worldbank.org", "documents1.worldbank.org", "reliefweb.int",
     "unicef.org", "unfpa.org", "undp.org", "dhsprogram.com",
+    # humanitarian partners: displacement tracking (IOM DTM), refugees (UNHCR), humanitarian coordination (OCHA)
+    "iom.int", "dtm.iom.int", "unhcr.org", "unocha.org",
 )
 
 

@@ -33,5 +33,5 @@
     "Revised Sokoto State Social Protection Policy (not yet officially published)",
     "Any draft, internal or unpublished document"
   ],
-  "allowlist_domains": ["sokotostate.gov.ng", "sk.gov.ng", "mbep.sk.gov.ng", "mof.sk.gov.ng", "budgetoffice.gov.ng", "nigerianstat.gov.ng", "worldbank.org", "documents1.worldbank.org", "reliefweb.int", "unicef.org", "unfpa.org", "undp.org", "dhsprogram.com"]
+  "allowlist_domains": ["sokotostate.gov.ng", "sk.gov.ng", "mbep.sk.gov.ng", "mof.sk.gov.ng", "budgetoffice.gov.ng", "nigerianstat.gov.ng", "worldbank.org", "documents1.worldbank.org", "reliefweb.int", "unicef.org", "unfpa.org", "undp.org", "dhsprogram.com", "iom.int", "dtm.iom.int", "unhcr.org", "unocha.org"]
 }
