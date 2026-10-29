@@ -54,7 +54,8 @@ def check(case: dict, a) -> list[str]:
         note = a.plan.assumption_for(case["lang"]) if a.plan else ""
         if not note or note not in a.text:
             fails.append("assumption not stated")
-    if case.get("working") and "🧮" not in a.text:          # complex questions must show the rows and arithmetic
+    # complex questions must offer the rows and arithmetic (sent on "nuna lissafi"), or show them when there's no lead
+    if case.get("working") and "🧮" not in (getattr(a, "working", "") or a.text):
         fails.append("working not shown")
     if case.get("partial") is not None and bool(a.partial) != case["partial"]:
         fails.append(f"partial should be {case['partial']}")

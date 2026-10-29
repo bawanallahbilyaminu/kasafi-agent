@@ -68,11 +68,13 @@ def test_compare_answer_shows_working_with_every_row_cited(monkeypatch) -> None:
     a, fake = run(monkeypatch, compare_result(),
                   "2026 tertiary capital is 20,666,975,000.00 [1], up 12,842,635,249.11 (Kasafi's calculation) on 2025 [2].")
     assert a.found and a.verified and not a.partial
-    assert "🧮 *Working* (the rows used):" in a.text
-    assert "• 2026 capital, tertiary education: TERTIARY EDUCATION (7094), 2026 Approved Budget: ₦20.67 billion [1]" in a.text
-    assert "(also TERTIARY EDUCATION (7094), 2025 Revised Budget: ₦6.71 billion [1])" in a.text
-    assert "• Difference: +₦12.84 billion (+164.1%) (Kasafi's calculation)" in a.text
-    assert "[1] Sokoto State FY 2026 Budget, page 38" in a.text and "[2] Sokoto State Government 2025 Approved Budget, page 22" in a.text
+    # the rows and arithmetic are the working, sent on "show working"; the reply names the sources in one line
+    assert "🧮 *Working* (the rows used):" in a.working and "🧮" not in a.text
+    assert "• 2026 capital, tertiary education: TERTIARY EDUCATION (7094), 2026 Approved Budget: ₦20.67 billion [1]" in a.working
+    assert "(also TERTIARY EDUCATION (7094), 2025 Revised Budget: ₦6.71 billion [1])" in a.working
+    assert "• Difference: +₦12.84 billion (+164.1%) (Kasafi's calculation)" in a.working
+    assert "📄 *Sources:* Sokoto State FY 2026 Budget, p. 38; Sokoto State Government 2025 Approved Budget, p. 22" in a.text
+    assert a.text.startswith("2026 tertiary capital is ₦20.67 billion, up ₦12.84 billion") and "[1]" not in a.text
     composer = fake.calls[1][1]["content"]
     assert "BUDGET QUERY RESULTS" in composer and "12,842,635,249.11" in composer
     assert "20,666,975,000.00" in a.exact                       # for the eval and the evidence crops
@@ -81,7 +83,7 @@ def test_compare_answer_shows_working_with_every_row_cited(monkeypatch) -> None:
 def test_missing_item_makes_a_partial_answer(monkeypatch) -> None:
     q = QueryResult("compare", [ItemResult(Item("2026 capital"), [A26]), ItemResult(Item("2019 capital"), [])])
     a, _ = run(monkeypatch, q, "2026 is 20,666,975,000.00 [1]; 2019 was not found.", lang="ha")
-    assert a.partial and "• 2019 capital: ba a samu a teburorin kasafi ba" in a.text
+    assert a.partial and "• 2019 capital: ba a samu a teburorin kasafi ba" in a.working and "not found" in a.text
 
 
 def test_no_rows_falls_back_to_document_search(monkeypatch) -> None:

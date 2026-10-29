@@ -194,11 +194,12 @@ ANSWER_SYSTEM = (
     "4. Neutral facts only (for security agencies or lines, the cited figures alone, with no commentary): no opinions, no praise or blame, no judgement of performance. Never name "
     "politicians or officials; refer to institutions (e.g. 'the State Government').\n"
     "5. Don't restate the ASSUMPTION MADE; it's shown to the user separately.\n"
-    "6. Format for a phone: 'summary' is ONE short line that answers the question. 'items' has one entry per "
-    "year or item (at most 6), each a short sentence with its figure and source, e.g. '2025 (approved budget): "
-    "52,179,252,082.91 [2]'. Don't repeat in the summary what the items say; the items give the breakdown. Use "
-    "no items when one line is enough. Write figures exactly as in the evidence; the app turns them into "
-    "readable units.\n"
+    "6. Format for a phone, for someone who doesn't read budgets: 'summary' is 2 to 5 short, everyday sentences "
+    "that answer the question: the total or main figure first, then what was spent if the evidence shows "
+    "spending, and say plainly which figures are allocated (budgeted) and which are spent. 'items' is at most 5 "
+    "short entries with the key figures, e.g. '2025 (approved budget): 52,179,252,082.91 [2]'; don't re-list in "
+    "the items what the summary already says, and use no items when the summary is enough. Write figures exactly "
+    "as in the evidence; the app turns them into readable units.\n"
     "6a. Say what kind of figure each one is, from its [Table: ...] title, in ONE word: total, personnel, "
     "overhead or capital (Hausa: jimilla, albashi, kuɗin gudanarwa, manyan ayyuka), e.g. '2025 approved budget "
     "(total): ...'. Don't copy the table title into each item; the citation shows the source.\n"
@@ -978,19 +979,23 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         return Answer(f"{added}{UNVERIFIED.get(lang, UNVERIFIED['en'])}\n\n{format_citations(cited, lang)}",
                       True, False, cited, plan, t, acquired=acq, latest=latest, sources=sources)
     note = plan.assumption_for(lang)
-    body = added + (f"_{note}_\n\n" if note else "") + render_answer(d, lang)
+    shown = {**d, "items": (d.get("items") or [])[:TOP_ROWS]}
+    body = added + (f"_{note}_\n\n" if note else "") + plain(render_answer(shown, lang))
     exact = answer_text(d)
+    working = ""
     if budget is not None:
-        working = render_working(budget, nmap, lang)
-        body = (body + "\n\n" if body.strip() else "") + readable_amounts(working, lang)
-        exact += "\n" + working
+        working = readable_amounts(render_working(budget, nmap, lang), lang)
+        exact += "\n" + render_working(budget, nmap, lang)
+        if not answer_text(d).strip():           # no summary: the rows themselves are the answer
+            body, working = (body + "\n\n" if body.strip() else "") + working, ""
         offer, calc_line = None, ""
     else:
         offer, calc_line = calculation_offer(d.get("calculation"), evidence, lang)
     body += f"\n\n{calc_line}" if calc_line else ""
-    return Answer(f"{body}\n\n{format_citations(cited, lang)}", True, True, cited, plan, t,
+    tail = sources_line(cited, lang) + ("\n" + _offer(lang) if working else "")
+    return Answer(f"{body}\n\n{tail}", True, True, cited, plan, t,
                   partial=found == "partial", exact=exact, acquired=acq, latest=latest, sources=sources,
-                  offer=offer, budget=budget)
+                  offer=offer, budget=budget, working=working)
 
 
 LINE_WORDS = {
@@ -1093,15 +1098,19 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
         if names[(x.doc_id, short_name(x))] > 1 and " - " in x.table_title:
             name += f" [{x.table_title.rsplit(' - ', 1)[-1]}]"
         return name
-    working += [f"• {label(s.line)}, {s.cell.column}: {fmt(s.cell.amount)} [{nmap[(s.line.doc_id, s.line.page)]}]"
-                + side.get(s.part, "") for s in res.selections]
+    rows = [f"• {label(s.line)}, {s.cell.column}: {fmt(s.cell.amount)} [{nmap[(s.line.doc_id, s.line.page)]}]"
+            + side.get(s.part, "") for s in res.selections]
+    working += rows
+    notes = []                       # caveats stay in the reply, not only in the working
     if res.aggregate_only:
-        working.append(w["aggregate"])
+        notes.append(w["aggregate"])
     if located := [s.line for s in res.selections if is_location(s.line)]:
         # spending by location is easily misread as an LGA's allocation: the code says what it is, not the model
         summary = ""
         places = ", ".join(dict.fromkeys(short_name(x).title() for x in located))
-        working.append(w["location"].format(place=places))
+        notes.append(w["location"].format(place=places))
+    working += notes
+    calc_from = len(working)
     if res.total is not None:
         working.append(f"• {w['total']}: {fmt(res.total)} ({w['calc']})")
     elif res.not_summed:
@@ -1117,21 +1126,28 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
         working.append(f"• {w['share']} (↑ ÷ ↓): {res.share_pct}% ({w['calc']})")
     if res.ratio is not None:
         working.append(f"• {w['ratio']} (↑ ÷ ↓): {res.ratio} : 1 ({w['calc']})")
+    calc = working[calc_from:]
     if res.missing:
         working.append(f"• {w['missing']}: {res.missing}")
+        notes.append(working[-1])
     if res.uncertain:
         working.append(f"• {w['uncertain']}: {'; '.join(res.uncertain[:6])}")
+        notes.append(working[-1])
     working_text = "\n".join(working)
     note = plan.assumption_for(lang)
-    body = (f"_{note}_\n\n" if note else "") + (render_answer({"summary": summary, "items": []}, lang) + "\n\n"
-                                                 if summary.strip() else "")
-    body += readable_amounts(working_text, lang)
+    # the reply: plain sentences (or, without them, the computed figures), the top rows, the caveats
+    lead = render_answer({"summary": summary, "items": []}, lang) if summary.strip() else \
+        readable_amounts("\n".join(calc), lang)
+    shown = rows[:TOP_ROWS] + ([f"• … +{len(rows) - TOP_ROWS}"] if len(rows) > TOP_ROWS else [])
+    body = (f"_{note}_\n\n" if note else "") + (plain(lead) + "\n\n" if lead.strip() else "")
+    body += plain(readable_amounts("\n".join(shown + notes), lang))
     partial = res.found == "partial" or res.aggregate_only or bool(res.missing) or bool(res.uncertain)
     sources = cited_sources(conn, evidence) if conn is not None else []
     log.info("line answer: %d rows, op=%s, aggregate_only=%s, partial=%s", len(res.selections), res.operation,
              res.aggregate_only, partial)
-    return Answer(f"{body}\n\n{format_citations(evidence, lang)}", True, True, evidence, plan, t, partial=partial,
-                  exact=f"{summary}\n{working_text}", acquired=acq, sources=sources, lines=res)
+    return Answer(f"{body}\n\n{sources_line(evidence, lang)}\n{_offer(lang)}", True, True, evidence, plan, t,
+                  partial=partial, exact=f"{summary}\n{working_text}", acquired=acq, sources=sources, lines=res,
+                  working=readable_amounts(working_text, lang))
 
 
 CATEGORY_WORDS = {
@@ -1219,12 +1235,23 @@ def category_answer(conn, plan: Plan, res: CategoryResult, lang: str, t: dict, a
             partial = True
     working_text = "\n".join(working)
     note = plan.assumption_for(lang)
-    body = (f"_{note}_\n\n" if note else "") + render_answer({"summary": lead, "items": []}, lang) + "\n\n"
-    body += readable_amounts(working_text, lang)
+    body = (f"_{note}_\n\n" if note else "") + plain(render_answer({"summary": lead, "items": []}, lang)) + "\n\n"
+    if res.checked:                  # the largest agencies (in scope), all the category's codes together
+        pool: dict[str, Decimal] = {}
+        for c in res.codes:
+            for k, v in c.units.items():
+                if v and (not in_scope or k in res.scope_units):
+                    pool[k] = pool.get(k, Decimal(0)) + v
+        top = sorted(pool.items(), key=lambda kv: -kv[1])[:TOP_ROWS]
+        if top:
+            body += readable_amounts(ANALYSIS_WORDS.get(lang, ANALYSIS_WORDS["en"])["largest"] + "\n" + "\n".join(
+                f"• {res.unit_names.get(k, k)}: {fmt(v)}" for k, v in top), lang) + "\n\n"
+    body += working[-1] if partial or not res.checked else w["checked"]
     sources = cited_sources(conn, evidence) if conn is not None else []
     log.info("category answer: %d codes, checked=%s, scope=%s", len(res.codes), res.checked, scope or "-")
-    return Answer(f"{body}\n\n{format_citations(evidence, lang)}", True, True, evidence, plan, t, partial=partial,
-                  exact=f"{lead}\n{working_text}", acquired=acq, sources=sources, category=res)
+    return Answer(f"{body}\n\n{sources_line(evidence, lang)}\n{_offer(lang)}", True, True, evidence, plan, t,
+                  partial=partial, exact=f"{lead}\n{working_text}", acquired=acq, sources=sources, category=res,
+                  working=readable_amounts(working_text, lang))
 
 
 QUARTER_END = {"en": {1: "March", 2: "June", 3: "September", 4: "December"},
@@ -1354,6 +1381,18 @@ ANALYSIS_WORDS = {
 
 def _money(x) -> str:
     return f"₦{Decimal(x):,.2f}"
+
+
+_REFS = re.compile(r"\s*(?:\[L?\d+\])+")
+
+
+def plain(text: str) -> str:
+    """Without [1] / [L3] markers: one sources line under the answer says where everything is from."""
+    return _REFS.sub("", text)
+
+
+def _offer(lang: str) -> str:
+    return ANALYSIS_WORDS.get(lang, ANALYSIS_WORDS["en"])["offer"]
 
 
 def sources_line(cited: list[Evidence], lang: str) -> str:

@@ -145,10 +145,12 @@ def test_line_answer_shows_rows_with_citations(monkeypatch) -> None:
                      "found": "full"}, LINES)
     res.summary = fill(res.summary, res)
     a = ans.line_answer(None, ans.Plan("q", [], []), res, LINES, "en", {}, None)
-    assert "BHCPF counterpart lines total ₦115.00 million (Kasafi's calculation) [1][2]." in a.text
+    # the reply: plain sentence, the top rows (no [n] markers), one sources line; the working on request
+    assert a.text.startswith("BHCPF counterpart lines total ₦115.00 million (Kasafi's calculation).")
     assert "• Counterpart Funds for Basic Health Care Provision Funds (BHCBF)- EMT (Ministry of Health), 2026 Approved " \
-           "Budget: ₦70.00 million [1]" in a.text
-    assert "[1] Sokoto State FY 2026 Budget, page 67" in a.text and "[2] Sokoto State FY 2026 Budget, page 70" in a.text
+           "Budget: ₦70.00 million\n" in a.text
+    assert "📄 *Sources:* Sokoto State FY 2026 Budget, p. 67, 70" in a.text and "show working" in a.text
+    assert "Budget: ₦70.00 million [1]" in a.working and "• Total: ₦115.00 million (Kasafi's calculation)" in a.working
     assert "70,000,000.00" in a.exact and a.found and not a.partial
 
 
@@ -208,7 +210,7 @@ def test_the_code_of_a_line_is_shown_to_the_model_and_the_reader() -> None:
     assert "code 014800000000" in listing([siec])
     res, _ = verify({"selected": [{"line": "L1", "column": "2026 Approved Budget"}], "found": "full"}, [siec])
     a = ans.line_answer(None, ans.Plan("q", [], []), res, [siec], "en", {}, None)
-    assert "(code 014800000000)" in a.text and "page 16" in a.text
+    assert "(code 014800000000)" in a.text and "p. 16" in a.text
 
 
 def _c(i, name, page, col, amount, doc="budget-2026-approved", measure=None):

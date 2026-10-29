@@ -75,7 +75,7 @@ def test_grounded_answer_with_assumption_and_citation(monkeypatch) -> None:
     assert a.found and a.verified and not a.partial
     assert a.text.startswith("_Na yi amfani da kasafin 2026 mafi sabo._")
     assert "₦128.50 biliyan" in a.text and "128,495,868,362.13" in a.exact      # readable for users, exact for checks
-    assert "[1] Sokoto State FY 2026 Budget, shafi 40" in a.text
+    assert a.text.endswith("📄 *Madogara:* Sokoto State FY 2026 Budget, shafi 40") and "[1]" not in a.text
     evidence_msg = fake.calls[1][1]["content"]
     assert "EVIDENCE:" in evidence_msg and "Reply in Hausa" in evidence_msg
 
