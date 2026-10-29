@@ -1,7 +1,7 @@
 """Code descriptions and meaning search for budget lines (app/retrieval/line_meaning.py, line_search.fuse)."""
 
 from app.retrieval import line_meaning as lm
-from app.retrieval.line_search import Line, fuse
+from app.retrieval.line_search import Line, cover, fuse
 
 ECON = "Sokoto State Government 2026 Approved Budget - Total Expenditure by Economic Classification"
 FUNC = "Sokoto State Government 2026 Approved Budget - Total Expenditure by Functional Classification"
@@ -60,6 +60,16 @@ def test_fuse_lifts_keyword_hits_near_in_meaning_and_adds_a_few_meaning_only_nam
     kw = [_l("a", "alpha"), _l("b", "beta"), _l("c", "gamma")]
     out = fuse(kw, [[_l("c2", "gamma"), _l("z", "zeta")]], window=3, meaning_only=1)
     assert [x.id for x in out] == ["c", "a", "z", "b"]    # gamma lifted; zeta inside the window of 3
+
+
+def test_cover_reads_every_terms_best_names_first_then_meaning_only_lines() -> None:
+    broad = [_l(f"w{i}", f"welfare {i}") for i in range(5)]
+    trycle = _l("t", "Purchase of 300 Trycle bicycle")
+    trycle.context = "SICKNESS AND DISABILITY"
+    meaning_only = _l("m", "THERAPEUTIC APPLIANCES")
+    meaning_only.score = 0.0
+    out = cover([*broad, meaning_only, trycle], ["welfare", "disability"], per_term=2)
+    assert [x.id for x in out][:4] == ["w0", "w1", "t", "m"]    # matched by its code description
 
 
 def test_fuse_without_meaning_keeps_the_keyword_order() -> None:

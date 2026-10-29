@@ -29,10 +29,11 @@ CANDIDATES = 400        # read from the database before scoring
 PER_DOC_NAME = 4        # copies of one line per document (total, personnel, overhead, capital tables)
 MEANING_K = 200         # nearest lines per query vector (many are copies of one name)
 MEANING_ONLY = 6        # names found by meaning alone that the model reads
+PER_TERM = 2            # each term's best distinct names, read before anything else
 RRF_K = 60              # reciprocal-rank fusion constant
 
 _COLS = """l.id, d.title, l.doc_id, l.page, COALESCE(l.table_title, ''), l.name, l.row_text, l.classification,
-       COALESCE(d.series, ''), COALESCE(d.edition, ''), COALESCE(l.code, '')"""
+       COALESCE(d.series, ''), COALESCE(d.edition, ''), COALESCE(l.code, ''), l.context"""
 _FILTERS = """(cardinality(%(years)s::int[]) = 0
        OR EXISTS (SELECT 1 FROM budget_rows b WHERE b.line_id = l.id AND b.year = ANY(%(years)s)))
   AND (%(docs)s::text[] IS NULL OR l.doc_id = ANY(%(docs)s))
@@ -92,13 +93,15 @@ class Line:
     score: float
     cells: list[Cell] = field(default_factory=list)
     code: str = ""             # the administrative / economic code printed on the line, if any
+    context: str = ""          # its codes' standard descriptions (app/retrieval/line_meaning.py)
 
     def cell(self, column: str) -> Cell | None:
         return next((c for c in self.cells if c.column == column), None)
 
 
 def _line(r) -> Line:
-    return Line(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], score=float(r[11]), code=r[10])
+    return Line(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], score=float(r[12]), code=r[10],
+                context=r[11])
 
 
 def _clean(term: str) -> str:
@@ -151,6 +154,26 @@ def nearest(conn: psycopg.Connection, texts: list[str], *, years: list[int] | No
     return [[_line(r) for r in conn.execute(_MEANING_SQL, {**params, "v": v})] for v in vectors]
 
 
+def cover(lines: list[Line], terms: list[str], per_term: int = PER_TERM) -> list[Line]:
+    """Every term's best `per_term` distinct names first (by name, row or code descriptions), then the lines found
+    by meaning alone (keyword score 0), then the rest in order: one broad term printed in many tables can't keep
+    another term's lines out of what the model reads."""
+    first: list[Line] = []
+    ids: set[str] = set()
+    for t in (t.lower() for t in terms):
+        names: set[str] = set()
+        for x in lines:
+            if len(names) >= per_term:
+                break
+            if x.id not in ids and name_key(x) not in names and t in f"{x.name} {x.row_text} {x.context}".lower():
+                first.append(x)
+                ids.add(x.id)
+                names.add(name_key(x))
+    first += [x for x in lines if x.score == 0 and x.id not in ids]
+    ids |= {x.id for x in first}
+    return first + [x for x in lines if x.id not in ids]
+
+
 def search_lines(conn: psycopg.Connection, terms: list[str], *, year: int | None = None, years: list[int] | None = None,
                  docs: list[str] | None = None, spend: str = "any", limit: int = CANDIDATES,
                  per_doc_name: int = PER_DOC_NAME, question: str | None = None) -> list[Line]:
@@ -179,7 +202,7 @@ def search_lines(conn: psycopg.Connection, terms: list[str], *, year: int | None
         if copies[key] < per_doc_name:
             copies[key] += 1
             kept.append(x)
-    lines = kept[:limit]
+    lines = (cover(kept, terms) if question else kept)[:limit]
     if lines:
         by_id = {x.id: x for x in lines}
         for lid, col, yr, measure, period, amount in conn.execute(
