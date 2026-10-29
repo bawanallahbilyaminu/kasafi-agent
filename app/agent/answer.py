@@ -132,6 +132,8 @@ PLAN_SYSTEM = (
     "it, e.g. 'Health', 'Secondary Education'>\", \"year\": YYYY}. "
     "(f) revenue: how much revenue, IGR, FAAC, grants or loans the state expects or has received: {\"tool\": "
     "\"revenue\", \"focus\": \"all\"|\"igr\"|\"faac\"|\"grants\"|\"capital_receipts\", \"year\": YYYY}. "
+    "Profiles (d, e) are overviews of one year: NOT for comparing a figure across years or documents (e.g. '2026 "
+    "capital for tertiary education compared to 2025'), which use line_search or budget_query. "
     "Still give search_queries and doc_ids: they are the fallback. "
     "CURRENT SITUATION: add \"current_situation\": true when the question asks about the situation now (e.g. how "
     "many displaced people or IDPs there are, current conditions or needs), not a budget figure; else false. "
@@ -893,7 +895,9 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             if not acq.doc_id and plan.current:
                 # "how many IDPs are there now?": other documents are not the current situation; say so plainly
                 return _not_found(conn, plan, lang, acq, t)
-        if plan.analysis and not plan.budget_query:          # counts and sums in SQL on the structured core
+        profile_compare = (plan.analysis.get("tool") in ("mda_profile", "function_profile")
+                           and len(set(question_years(question, plan.english_question))) >= 2)
+        if plan.analysis and not plan.budget_query and not profile_compare:   # counts and sums in SQL
             t0 = time.perf_counter()
             res = run_analysis(conn, plan.analysis)
             t["answer"] = time.perf_counter() - t0

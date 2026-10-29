@@ -28,6 +28,10 @@ from app.config import get_settings  # noqa: E402
 
 def check(case: dict, a) -> list[str]:
     fails = []
+    if case.get("expect_not_found"):    # e.g. "how many IDPs now?" without a current report: say so, give no figure
+        if a.found:
+            return ["answered from other documents instead of saying the document wasn't found"]
+        return ["a naira figure in a not-found reply"] if "₦" in a.text else []
     if not a.found:
         return ["not found"]
     if not a.verified:

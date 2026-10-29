@@ -32,6 +32,27 @@
       "lang": "ha",
       "text": "Ina son ganin jimillar kudin da aka ware wa bangaren fasahar sadarwa (ICT and Innovation) a 2025 da 2026, tare da shafin da bayanin ya fito.",
       "expected": "The ICT sector (programme 11) for both years: 2025 approved from the 2025 budget p24, 2026 approved from the 2026 budget p41."
+    },
+    {
+      "id": "s01",
+      "lang": "ha",
+      "text": "Ayyuka nawa aka fara a 2025 kuma suke ci gaba a 2026?",
+      "english": "How many projects were started in 2025 and are continuing in 2026?",
+      "expected": "project_status from the 2026 budget's project list: lines with January-September 2025 spending and a 2026 allocation, counted and added in SQL."
+    },
+    {
+      "id": "s02",
+      "lang": "ha",
+      "text": "Wadanne ayyuka ne za a yi a Tambuwal?",
+      "english": "Which projects will be carried out in Tambuwal?",
+      "expected": "lga_projects: only the 2026 project lines whose location is 33331800 TAMBUWAL; statewide projects counted apart, not as Tambuwal's."
+    },
+    {
+      "id": "s03",
+      "lang": "ha",
+      "text": "Mutane nawa ne 'yan gudun hijira (IDPs) a jihar Sokoto a yanzu?",
+      "english": "How many internally displaced people (IDPs) are there in Sokoto State now?",
+      "expected": "A current-situation question: if no current displacement report can be got, say so plainly; never answer from unrelated documents, and never put a naira sign on a count of people."
     }
   ]
 }

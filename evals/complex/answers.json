@@ -48,6 +48,34 @@
       "pages": [24, 41],
       "numbers_any": [["3,301,437,040.18"], ["3.30 biliyan"]],
       "source": "Sector 11 Information Communication and Technology, Total Expenditure by Programme: 2025 Approved Budget 3,301,437,040.18 (2025 budget p24); 2026 Approved Budget 7.15 bn (2026 budget p41). The 2025 approved figure must not be called missing."
+    },
+    {
+      "id": "s01",
+      "lang": "ha",
+      "docs": ["budget-2026-approved"],
+      "pages": [49],
+      "numbers": ["Ayyuka 175", "170,138,351,258.67", "103,511,113,123.48"],
+      "working": true,
+      "partial": false,
+      "source": "Computed in SQL from the 2026 budget's capital project list (pp. 49-75, 1,709 lines, adding up to 553.14 of the printed 553.34 bn): 175 lines with 2025 January-September spending > 0 and a 2026 allocation > 0; their 2026 allocation 170,138,351,258.67, their 2025 spending 103,511,113,123.48. 811 lines continue from 2025; 636 of them had nothing spent."
+    },
+    {
+      "id": "s02",
+      "lang": "ha",
+      "docs": ["budget-2026-approved"],
+      "pages": [61, 64, 65, 67],
+      "numbers": ["ayyuka 9", "7,502,000,000.00"],
+      "working": true,
+      "partial": false,
+      "source": "Computed in SQL: the 2026 project lines whose location is 33331800 TAMBUWAL (9 lines, 7,502,000,000.00). The budget itself prints 'Completion of Premier Hospital at Binji LGA' with location Tambuwal. 1,008 statewide lines are not split by LGA."
+    },
+    {
+      "id": "s03",
+      "lang": "ha",
+      "docs": [],
+      "expect_not_found": true,
+      "may_fetch": true,
+      "source": "No current displacement statistics for Sokoto are in the library; IOM DTM flash reports are incident reports about attacks and are not indexed (CLAUDE.md rule 5)."
     }
   ]
 }
