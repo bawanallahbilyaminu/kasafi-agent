@@ -173,7 +173,7 @@ sync-index)
   say "loading index ($(du -h "$INCOMING" | cut -f1) compressed)"
   if { echo "TRUNCATE documents CASCADE;"; gunzip -c "$INCOMING"; }        | dc exec -T db psql -q -1 -v ON_ERROR_STOP=1 -U kasafi -d kasafi >/dev/null; then
     rm -f "$INCOMING"
-    counts=$(dc exec -T db psql -At -U kasafi -d kasafi -c       "SELECT (SELECT count(*) FROM documents)||' documents, '||(SELECT count(*) FROM pages)||' pages, '||(SELECT count(*) FROM chunks)||' chunks, '||(SELECT count(*) FROM budget_rows)||' budget rows'")
+    counts=$(dc exec -T db psql -At -U kasafi -d kasafi -c       "SELECT (SELECT count(*) FROM documents)||' documents, '||(SELECT count(*) FROM pages)||' pages, '||(SELECT count(*) FROM chunks)||' chunks, '||(SELECT count(*) FROM budget_lines)||' budget lines, '||(SELECT count(*) FROM budget_rows)||' budget rows'")
     say "index loaded: $counts"
     log "sync-index ok: $counts"
     echo "RESULT=ok COMMIT=$(git rev-parse HEAD)"
