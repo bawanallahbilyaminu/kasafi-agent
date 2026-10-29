@@ -37,3 +37,8 @@ def test_listed_documents_are_matched_by_words_newest_first_on_ties() -> None:
 def test_dates_in_the_listings_formats() -> None:
     assert ch.iso_date("Tue Sep 24 2024") == "2024-09-24" and ch.iso_date("1 October 2026") == "2026-10-01"
     assert ch.iso_date("2026-09-25T15:21:01.917Z") == "2026-09-25" and ch.iso_date("soon") == ""
+
+
+def test_the_state_statistics_bureau_is_a_crawled_library() -> None:
+    from app.acquisition.crawl import crawled_sites
+    assert crawled_sites() == ["sbs.sk.gov.ng"] and "sbs.sk.gov.ng" in ch.LISTINGS

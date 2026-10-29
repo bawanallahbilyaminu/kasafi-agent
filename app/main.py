@@ -42,6 +42,22 @@ async def _warm_line_model() -> None:
     asyncio.get_running_loop().run_in_executor(None, _build_missing_entities)
 
 
+_crawler: set = set()
+
+
+@app.on_event("startup")
+async def _crawl_libraries() -> None:
+    # The registry's crawled libraries (Sokoto State Bureau of Statistics): new documents indexed weekly.
+    import asyncio
+
+    from app.acquisition.crawl import crawl_weekly
+    from app.config import get_settings
+    s = get_settings()
+    if s.has_database and os.environ.get("KASAFI_CRAWL", "true").lower() != "false":
+        task = asyncio.get_running_loop().create_task(crawl_weekly(s))
+        _crawler.add(task)               # keep a reference while it runs
+
+
 def _build_missing_entities() -> None:
     """Budgets and reports indexed before the structured core existed get their entities (once, a few seconds)."""
     import psycopg

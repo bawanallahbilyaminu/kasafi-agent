@@ -105,7 +105,10 @@ def excluded(c: Candidate) -> bool:
 
 
 async def search_candidates(http: httpx.AsyncClient, description: str, settings: Settings) -> list[Candidate]:
-    jobs = [search_world_bank(http, description)]
+    """The publishers' own document listings first (a search miss isn't proof a document doesn't exist: state
+    and partner sites are poorly indexed), then partner APIs and web search."""
+    from app.acquisition.channels import catalog_candidates      # channels builds on this module's Candidate
+    jobs = [catalog_candidates(http, description, top=3), search_world_bank(http, description)]
     if settings.reliefweb_appname:
         jobs.append(search_reliefweb(http, description, settings.reliefweb_appname))
     if settings.serper_api_key:

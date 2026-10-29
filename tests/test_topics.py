@@ -96,3 +96,38 @@ def test_partner_hints_only_give_websites_to_search(tmp_path, monkeypatch) -> No
     assert tp.hint_sites("nutrition_food_security") == ["a.org"] and tp.hint_sites("health") == []
     monkeypatch.setattr(tp, "HINTS_PATH", tmp_path / "missing.json")
     assert tp.hint_sites("nutrition_food_security") == []                     # works without the file
+
+
+class FakeConn:
+    """documents rows: (id, title, year, source_url, final_url, fetched_at, edition)."""
+
+    def __init__(self, docs):
+        self.docs = docs
+
+    def execute(self, sql, params=()):
+        rows = self.docs
+        if "source_url, final_url FROM documents WHERE id" in sql:
+            rows = [(d[3], d[4]) for d in self.docs if d[0] in params[0]]
+        return type("R", (), {"fetchall": lambda _s: rows, "fetchone": lambda _s: rows[0] if rows else None})()
+
+
+MPI_DOC = ("mpi-2025-sokoto", "Sokoto State Multi-dimensional Poverty Index (MPI) Report 2025", 2025,
+           "https://mof.sk.gov.ng/MPI.pdf", None, None, None)
+SBS_DOC = ("durable-solutions-2026-sokoto", "Durable Solutions ... Sokoto Town", 2026,
+           "https://sbs.sk.gov.ng/api/documents/durable-solutions-report-jips-drc-sbs/download", None, None, None)
+
+
+def test_an_idp_count_from_the_mpi_is_said_not_to_be_a_primary_source() -> None:
+    from app.agent.answer import Evidence, off_topic_note
+    plan = Plan("How many IDPs are in Sokoto now?", ["IDPs"], [], current=True)
+    cited = [Evidence(1, MPI_DOC[0], MPI_DOC[1], 2025, 40, "text", "")]
+    note = off_topic_note(FakeConn([MPI_DOC]), plan, plan.english_question, cited, "en")
+    assert note.startswith("⚠️ Sokoto State Multi-dimensional Poverty Index (MPI) Report 2025 isn't a primary source")
+    cited = [Evidence(1, SBS_DOC[0], SBS_DOC[1], 2026, 12, "text", "")]
+    assert off_topic_note(FakeConn([MPI_DOC, SBS_DOC]), plan, plan.english_question, cited, "en") == ""
+
+
+def test_quoting_the_durable_solutions_report_says_it_covers_sokoto_town_only() -> None:
+    from app.agent.answer import Evidence, scope_notes
+    cited = [Evidence(1, SBS_DOC[0], SBS_DOC[1], 2026, 12, "text", "")]
+    assert "findings cover Sokoto town only, not the whole state" in scope_notes(FakeConn([SBS_DOC]), cited)

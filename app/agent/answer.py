@@ -42,6 +42,9 @@ from app.acquisition.library import Acquired, fetch_and_index, find_and_fetch, l
 from app.acquisition.registry import detect_topic, registry
 from app.agent.analysis import TOOLS, AnalysisResult, run_analysis
 from app.agent.topics import TopicResult, topic_answer
+from app.agent.topics import note_of as topic_note
+from app.agent.topics import local_documents as topics_local
+from app.agent.topics import short_pub
 from app.agent.budget_query import QueryResult, context_text, lga_in, render_working, run_budget_query
 from app.agent import trace
 from app.agent.category import TOP_UNITS, CategoryResult, pct, run_category
@@ -1026,9 +1029,50 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         offer, calc_line = calculation_offer(d.get("calculation"), evidence, lang)
     body += f"\n\n{calc_line}" if calc_line else ""
     tail = sources_line(cited, lang) + ("\n" + _offer(lang) if working else "")
+    if scope := scope_notes(conn, cited):            # e.g. "covers Sokoto town only": said whenever it's quoted
+        body += "\n\n" + scope
+    if off := off_topic_note(conn, plan, question, cited, lang):
+        body = f"{off}\n\n{body}"
     return Answer(f"{body}\n\n{tail}", True, True, cited, plan, t,
                   partial=found == "partial", exact=exact, acquired=acq, latest=latest, sources=sources,
                   offer=offer, budget=budget, working=working)
+
+
+def scope_notes(conn, cited: list[Evidence]) -> str:
+    """The registry's scope note of each cited document's publisher ('findings cover Sokoto town only')."""
+    if conn is None or not cited:
+        return ""
+    notes = []
+    for url, final in conn.execute("SELECT source_url, final_url FROM documents WHERE id = ANY(%s)",
+                                   (list({e.doc_id for e in cited}),)).fetchall():
+        p = registry().publisher_for(final or "") or registry().publisher_for(url or "")
+        if p and p.scope_note:
+            notes.append(f"ℹ️ {short_pub(p)}: {topic_note(p)}.")
+    return "\n".join(dict.fromkeys(notes))
+
+
+OFF_TOPIC = {
+    "en": "⚠️ {docs} isn't a primary source for this figure (those are {primary}); treat it as related context.",
+    "ha": "⚠️ {docs} ba babbar majiyar wannan adadi ba ce (manyan majiyoyin su ne {primary}); ɗauke shi a matsayin "
+          "bayani mai alaƙa.",
+}
+
+
+def off_topic_note(conn, plan: Plan, question: str, cited: list[Evidence], lang: str) -> str:
+    """A statistics answer from documents none of whose publishers is a primary source for the topic (the MPI for
+    an IDP count): said before the answer, never left to look like the figure."""
+    if conn is None or not cited or not (plan.statistics or plan.current):
+        return ""
+    topic = registry().topics.get(detect_topic(f"{question} {plan.english_question}") or plan.topic)
+    if not topic or topic.answer_pattern != "multi_source":
+        return ""
+    primary = [p for p in topic.publishers if p.tier < 3]
+    docs = {e.doc_id: e.title for e in cited}
+    for p in primary:
+        if any(r[0] in docs for r in topics_local(conn, p)):
+            return ""
+    return OFF_TOPIC.get(lang, OFF_TOPIC["en"]).format(
+        docs="; ".join(dict.fromkeys(docs.values())), primary=", ".join(short_pub(p) for p in primary[:4]))
 
 
 def topic_route(question: str, plan: Plan) -> str:
