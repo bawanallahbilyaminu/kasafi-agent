@@ -375,3 +375,53 @@ def test_a_budget_question_sent_to_page_search_tries_the_budget_lines_before_not
     assert ans.fallback_line_search(Plan("IDPs now?", ["IDPs"], ["dtm-r17"], key_terms=["IDPs"]), "IDPs now?") == {}
     p.line_search = ls
     assert ans.fallback_line_search(p, p.english_question) == {}            # tried once
+
+
+def _ans(found=True, partial=False, clarify=None, text="x"):
+    return ans.Answer(text, found, True, partial=partial, clarify=clarify or [])
+
+
+def test_lines_and_pages_side_by_side_the_complete_answer_wins() -> None:
+    full_l, part_l, full_p, part_p = _ans(text="L"), _ans(partial=True, text="l"), _ans(text="P"), _ans(partial=True, text="p")
+    assert ans.better_answer(full_l, part_p, prefer_lines=False) is full_l           # m19: the overhead row
+    assert ans.better_answer(part_l, full_p, prefer_lines=True) is full_p
+    assert ans.better_answer(full_l, full_p, prefer_lines=True) is full_l             # the planner's path
+    assert ans.better_answer(full_l, full_p, prefer_lines=False) is full_p            # a sector: its own % performance
+    assert ans.better_answer(None, part_p, prefer_lines=True) is part_p
+    ask = _ans(found=False, clarify=[{"title": "a"}])
+    assert ans.better_answer(ask, full_p, prefer_lines=True) is full_p and ans.better_answer(ask, part_p, prefer_lines=True) is ask
+    assert ans.better_answer(_ans(found=False), part_p, prefer_lines=True) is part_p
+
+
+def test_a_budget_question_runs_line_search_and_page_search_together(monkeypatch) -> None:
+    """The planner left line_search out: both paths still run, at once, and the complete line answer is kept."""
+    started = []
+
+    async def lines(conn, plan, *a, **k):
+        started.append("lines")
+        await asyncio.sleep(0.05)
+        assert "pages" in started                         # the page path started before the lines finished
+        return _ans(text="Government House overhead: ₦3.71 billion")
+
+    async def pages(conn, plan, question, lang, client, settings, t, **k):
+        started.append("pages")
+        await asyncio.sleep(0.05)
+        return _ans(partial=True, text="only 2025")
+    plan = Plan("Overhead of Government House 2025 vs 2026?", ["Government House overhead"],
+                ["budget-2026-approved"], key_terms=["Government House", "Overhead"])
+
+    async def fake_plan(*a, **k):
+        return plan
+    monkeypatch.setattr(ans, "plan_question", fake_plan)
+    monkeypatch.setattr(ans, "load_catalog", lambda conn: [])
+    monkeypatch.setattr(ans, "_line_path", lines)
+    monkeypatch.setattr(ans, "_page_path", pages)
+
+    class Client:
+        def __init__(self, s): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *e): return False
+    a = asyncio.run(ans._answer_question(plan.english_question, "en", None, settings=make_settings(open_reader=False),
+                                         client_factory=Client))
+    assert a.text.startswith("Government House overhead") and set(started) == {"lines", "pages"}
+    assert plan.line_search["terms"][:2] == ["Government House", "Overhead"]

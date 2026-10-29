@@ -21,6 +21,7 @@ evidence, and the prompts tell the model to ignore instructions inside it.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -945,57 +946,81 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             t["answer"] = time.perf_counter() - t0
             if cat is not None:
                 return category_answer(conn, plan, cat, lang, t, acq)
-        if plan.line_search and not plan.budget_query:      # wide search, model reads, code verifies
-            if (a := await _line_path(conn, plan, question, lang, client, second, settings, t, acq)) is not None:
-                return a
-            log.info("line search gave no verified rows; falling back to page search")
-        t0 = time.perf_counter()
-        budget, nmap = None, {}
-        if plan.budget_query:                 # compare / total / share / rank: computed from the table rows
-            budget = run_budget_query(conn, plan.budget_query)
-            log.info("query_budget: %s, %d items, found=%s complete=%s", budget.operation, len(budget.items),
-                     budget.found, budget.complete)
-        if budget is not None and budget.found:
-            evidence, nmap = budget_evidence(budget)
-        else:
-            budget = None
-            evidence = gather_evidence(conn, plan)
-        t["search"] = t["page_search"] = time.perf_counter() - t0
-        if not evidence:
-            if (ls := fallback_line_search(plan, question)) and budget is None:
-                plan.line_search = ls
-                if (a := await _line_path(conn, plan, question, lang, client, second, settings, t, acq)):
-                    return a
-            return _not_found(conn, plan, lang, acq, t)
+        page = partial(_page_path, conn, plan, question, lang, client, settings, acq=acq, latest=latest, prev=prev,
+                       context=context, recheck_note=recheck_note)
+        lines = {} if plan.budget_query else (plan.line_search or fallback_line_search(plan, question))
+        if not lines:
+            return await page(t)
+        # Every budget question: the budget lines and the pages are searched side by side, not one after the other
+        # (the planner leaves line_search out now and then: m19, m37). The more complete answer is kept.
+        planned = bool(plan.line_search)
+        plan.line_search = lines
+        tl, tp = dict(t), dict(t)
+        la, pa = await asyncio.gather(_line_path(conn, plan, question, lang, client, second, settings, tl, acq),
+                                      page(tp, gap=False))
+        a = better_answer(la, pa, prefer_lines=planned)
+        a.timings = {**tp, **tl, "both": 1.0} if a is la else {**tl, **tp, "both": 1.0}
+        if not a.found and not a.clarify:
+            return _not_found(conn, plan, lang, acq, a.timings)        # logs the gap once
+        log.info("lines and pages side by side: kept the %s answer", "line" if a is la else "page")
+        return a
 
-        t0 = time.perf_counter()
-        context = " ".join(c for c in (context, edition_context(latest)) if c)
-        if budget is not None:
-            context = (context + "\n" if context else "") + context_text(budget, nmap)
-        if prev and plan.followup != "none":
-            context += f"\nPREVIOUS QUESTION: {prev.get('question', '')[:300]}\nPREVIOUS ANSWER: {prev.get('answer', '')[:1200]}"
-        d = await compose(question, lang, plan, evidence, client, settings, context=context)
-        t["compose"] = time.perf_counter() - t0
-        by_n = {e.n: e for e in evidence}
-        # The working (labels with the asked years, and computed figures) is written by code: its numbers count too
-        extra = budget.computed_numbers() + [render_working(budget, nmap, "en")] if budget is not None else []
-        extra = extra + question_years(question, plan.english_question)
+
+def better_answer(la: "Answer | None", pa: "Answer", *, prefer_lines: bool) -> "Answer":
+    """The line answer or the page answer: a complete one over a partial one; when both are complete (or both
+    partial), the planner's path (line search if it planned it, else the pages, which quote a report's own %
+    performance for a whole sector or ministry). A clarifying question only if the pages can't answer."""
+    def complete(a) -> bool:
+        return a is not None and a.found and a.verified and not a.partial and not a.clarify
+    if la is None:
+        return pa
+    if la.clarify:
+        return pa if complete(pa) else la
+    if complete(la) != complete(pa):
+        return la if complete(la) else pa
+    if la.found and pa.found:
+        return la if prefer_lines else pa
+    return la if la.found else pa
+
+
+async def _page_path(conn, plan: Plan, question: str, lang: str, client, settings: Settings, t: dict, *, acq,
+                     latest, prev, context: str, recheck_note: str, gap: bool = True) -> Answer:
+    """Page search (or the rows of a planned budget query), the model composes, code checks every figure."""
+    t0 = time.perf_counter()
+    budget, nmap = None, {}
+    if plan.budget_query:                 # compare / total / share / rank: computed from the table rows
+        budget = run_budget_query(conn, plan.budget_query)
+        log.info("query_budget: %s, %d items, found=%s complete=%s", budget.operation, len(budget.items),
+                 budget.found, budget.complete)
+    if budget is not None and budget.found:
+        evidence, nmap = budget_evidence(budget)
+    else:
+        budget = None
+        evidence = gather_evidence(conn, plan)
+    t["search"] = t["page_search"] = time.perf_counter() - t0
+    if not evidence:
+        return _not_found(conn, plan, lang, acq, t, gap=gap)
+
+    t0 = time.perf_counter()
+    context = " ".join(c for c in (context, edition_context(latest)) if c)
+    if budget is not None:
+        context = (context + "\n" if context else "") + context_text(budget, nmap)
+    if prev and plan.followup != "none":
+        context += f"\nPREVIOUS QUESTION: {prev.get('question', '')[:300]}\nPREVIOUS ANSWER: {prev.get('answer', '')[:1200]}"
+    d = await compose(question, lang, plan, evidence, client, settings, context=context)
+    t["compose"] = time.perf_counter() - t0
+    by_n = {e.n: e for e in evidence}
+    # The working (labels with the asked years, and computed figures) is written by code: its numbers count too
+    extra = budget.computed_numbers() + [render_working(budget, nmap, "en")] if budget is not None else []
+    extra = extra + question_years(question, plan.english_question)
+    bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)
+    if bad and _found(d) != "none":
+        t["compose_retry"] = 1.0
+        d = await compose(question, lang, plan, evidence, client, settings, context=context,
+                          feedback=f"These figures are not in the cited evidence: {', '.join(bad)}. "
+                                   "Use only figures copied exactly from the evidence, and cite them.")
         bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)
-        if bad and _found(d) != "none":
-            t["compose_retry"] = 1.0
-            d = await compose(question, lang, plan, evidence, client, settings, context=context,
-                              feedback=f"These figures are not in the cited evidence: {', '.join(bad)}. "
-                                       "Use only figures copied exactly from the evidence, and cite them.")
-            bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)
-        t["answer"] = time.perf_counter() - t0
-        if budget is None and (_found(d) in ("none", "partial") or not d.get("cited")) and \
-                (ls := fallback_line_search(plan, question)):
-            # nothing or only part found: the budget lines are searched once; a complete line answer replaces it
-            log.info("page search found %s; searching the budget lines too", _found(d))
-            plan.line_search = ls
-            a = await _line_path(conn, plan, question, lang, client, second, settings, t, acq)
-            if a is not None and (not a.partial or _found(d) == "none" or not d.get("cited")):
-                return a
+    t["answer"] = time.perf_counter() - t0
 
     cited = sorted({by_n[n].n: by_n[n] for n in d.get("cited") or [] if n in by_n}.values(), key=lambda e: e.n)
     found = _found(d)
@@ -1004,7 +1029,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         if not answer_text(d).strip():
             d = {"summary": "", "items": []}
     elif found == "none" or not cited or not answer_text(d).strip():
-        return _not_found(conn, plan, lang, acq, t)
+        return _not_found(conn, plan, lang, acq, t, gap=gap)
     added = (f"{recheck_note}\n\n" if recheck_note else "") + _added_note(acq, lang, plan.missing_document)
     ed = edition_note(latest, lang)
     added += f"{ed}\n\n" if ed else ""
@@ -1772,13 +1797,16 @@ def _added_note(acq: Acquired | None, lang: str, missing: str = "") -> str:
     return ADDED.get(lang, ADDED["en"]).format(title=acq.title, host=host) + "\n\n"
 
 
-def _not_found(conn: psycopg.Connection, plan: Plan, lang: str, acq: Acquired | None, t: dict) -> Answer:
-    """Nothing to answer from. If a missing document wasn't found, say so (its gap is already logged)."""
+def _not_found(conn: psycopg.Connection, plan: Plan, lang: str, acq: Acquired | None, t: dict, *,
+               gap: bool = True) -> Answer:
+    """Nothing to answer from. If a missing document wasn't found, say so (its gap is already logged). gap=False:
+    the line search running alongside may still answer, so the caller logs the gap if neither does."""
     if acq and not acq.doc_id:
         text = DOC_NOT_FOUND.get(lang, DOC_NOT_FOUND["en"]).format(doc=plan.missing_document)
     else:
-        log_gap(conn, plan.english_question, plan.missing_document, "no_answer",
-                {"docs": plan.doc_ids, "acquired": acq.doc_id if acq else None})
+        if gap:
+            log_gap(conn, plan.english_question, plan.missing_document, "no_answer",
+                    {"docs": plan.doc_ids, "acquired": acq.doc_id if acq else None})
         text = NOT_FOUND.get(lang, NOT_FOUND["en"])
         if lga := lga_in(plan.english_question):         # an LGA question: say why the state budget can't answer it
             text = LGA_NOT_FOUND.get(lang, LGA_NOT_FOUND["en"]).format(lga=lga)
