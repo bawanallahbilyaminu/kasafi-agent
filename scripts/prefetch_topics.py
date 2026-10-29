@@ -43,8 +43,8 @@ async def main(topic_ids: list[str]) -> None:
             for t in topics:
                 primary, _ = choose_publishers(t)
                 for p in primary:
-                    if not p.domains:
-                        continue
+                    if not p.domains or ("dtm_api" in p.discovery and s.dtmapi_subscription_key):
+                        continue          # nothing to fetch, or its figures come from its API (DTM)
                     res = await get_document(conn, p, t, date.today(), http=http, robots=robots, client=client,
                                              settings=s, download_timeout=SLOW)
                     print(f"{t.id:28} {p.id:32} {res.status:10} {res.doc_id or '-':36} "
