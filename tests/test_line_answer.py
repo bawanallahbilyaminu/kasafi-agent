@@ -5,7 +5,7 @@ import json
 from decimal import Decimal
 
 from app.agent import answer as ans
-from app.agent.line_answer import _number_ok, allowed_numbers, fill, read_lines, short_name, verify
+from app.agent.line_answer import LineResult, _number_ok, allowed_numbers, fill, read_lines, short_name, verify
 from app.providers.chat import ChatResult
 from app.retrieval.line_search import Cell, Line
 from tests.helpers import make_settings
@@ -90,6 +90,13 @@ def test_a_wrong_figure_in_the_summary_is_retried_then_dropped() -> None:
     res = asyncio.run(read_lines("q", "q", "en", LINES, fake, make_settings(), [], ans.chat_json))
     assert len(fake.calls) == 4 and "CORRECT" not in res.summary and res.summary == ""
     assert res.selections[0].cell.amount == Decimal("70000000.00")      # the verified row still answers
+
+
+def test_bare_zero_figures_are_left_out_of_the_summary_list() -> None:
+    s = ("Medical equipment: 0.00 [L4], 150,000,000.00 [L1], 0.00 [L2], 2,500,000,000.00 [L3], 0.00 [L5] [L6], "
+         "jimillarsu. Another: 40,000,000.00 [L7], 0.00 [L8] and 5.00 [L9]; Line X: 0.00 [L2].")
+    assert fill(s, LineResult()) == ("Medical equipment: 150,000,000.00 [L1], 2,500,000,000.00 [L3], jimillarsu. "
+                                     "Another: 40,000,000.00 [L7] and 5.00 [L9]; Line X: 0.00 [L2].")
 
 
 GOOD = {"selected": [{"line": "L1", "column": "2026 Approved Budget"}], "summary": "It is 70,000,000.00 [L1].",

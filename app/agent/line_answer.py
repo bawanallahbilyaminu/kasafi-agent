@@ -68,7 +68,8 @@ SELECT_SYSTEM = (
     "6. summary: one or two sentences in the reply language that answer the question, copying amounts exactly "
     "as printed and citing [L#] after each. Never calculate: write {TOTAL}, {DIFFERENCE}, {CHANGE_PCT}, "
     "{SHARE_PCT}, {SPENT_PCT} or {RATIO} where a calculated figure belongs, followed by (Kasafi's calculation) / (lissafin "
-    "Kasafi). "
+    "Kasafi). Leave chosen lines whose figure is 0.00 out of the summary unless the question asks about them; "
+    "the list under the summary still shows them. "
     "Neutral facts only; for security agencies or lines, the figures alone with no commentary.\n"
     "7. found: \"full\", \"partial\" (some of it, or only a broader total) or \"none\" (no line answers it; "
     "select nothing).\n"
@@ -286,8 +287,13 @@ def _match_sides(res: LineResult) -> list[str]:
     return [f"both sides must cover the same items across years; left out {gone}"]
 
 
+# a bare zero in a run of figures: ", 0.00 [L3]" (the line list under the summary still shows the row)
+_BARE_ZERO = re.compile(r",\s*(?:₦\s*)?0\.00(?:\s*\[L?\d+\])+(?=\s*[,;.]|\s+(?:and|da|jimilla\w*|total\w*)\b)")
+_FIRST_ZERO = re.compile(r"(?<=:)\s*(?:₦\s*)?0\.00(?:\s*\[L?\d+\])+,(?=\s*(?:₦\s*)?\d)")
+
+
 def fill(summary: str, res: LineResult) -> str:
-    out = summary
+    out = _FIRST_ZERO.sub("", _BARE_ZERO.sub("", summary))
     for k, v in res.computed().items():
         out = out.replace("{" + k + "}", f"{v}%" if k.endswith("PCT") else f"{v} : 1" if k == "RATIO" else fmt(v))
     if re.search(r"\{[A-Z_]+\}", out):     # a calculation the code didn't make: the sentence can't stand
