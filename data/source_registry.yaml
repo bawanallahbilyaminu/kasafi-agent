@@ -1,0 +1,629 @@
+# Kasafi source registry
+# One file that says, for each topic, WHO publishes trustworthy figures for Sokoto,
+# WHERE (domains), WHAT document types, HOW to find them (API or search), and HOW OFTEN
+# they publish (so "latest" questions can work out the newest edition).
+#
+# Rules for using this file
+# - The fetch allowlist is generated from every `domains` entry below (single source of truth).
+# - `verified: 2026-10-29` = checked on the web on that date (exists, publishes on Sokoto/Nigeria).
+#   `verified: no` = well-known publisher added from knowledge; confirm the domain resolves
+#   and publishes PDFs before relying on it (keep it on the allowlist only after that check).
+# - `level` = finest geography the publisher usually reports: lga | state | zone | national.
+#   State- or LGA-level publishers rank first for Sokoto questions. National-only sources are
+#   context, never "the Sokoto figure".
+# - `tier`: 1 = official statistics / UN agency primary data; 2 = UN or partner analysis that
+#   cites primary data; 3 = context (plans, appeals, budgets used as related information).
+# - Anything under `exclude` is never fetched or quoted.
+# - A web-search miss is NOT proof a document doesn't exist. State and partner sites are often
+#   poorly indexed (e.g. sbs.sk.gov.ng). Before saying "not found", check the publisher's own
+#   document listing (`catalog_crawl` channels) as well as search.
+#
+# Hausa synonyms are for the planner's topic detection; documents are searched in English.
+
+version: 1
+updated: 2026-10-29  # rev 2: added Sokoto SBS and the SBS/JIPS/DRC durable solutions report
+
+# ---------------------------------------------------------------------------
+# Machine-readable discovery channels (prefer these over web search)
+# ---------------------------------------------------------------------------
+discovery_channels:
+  - id: sokoto_sbs_documents
+    what: Sokoto State Bureau of Statistics document library (state surveys, MPI, partner co-publications)
+    site: https://sbs.sk.gov.ng
+    download_pattern: https://sbs.sk.gov.ng/api/documents/<slug>/download   # no .pdf: accept by Content-Type
+    type: catalog_crawl   # poorly indexed by search engines; list the site's documents directly and refresh weekly
+    auth: none
+    use_for: [displacement_humanitarian, labour_employment, poverty_welfare, nutrition_food_security, health, education, wash]
+    example: durable-solutions-report-jips-drc-sbs (SBS/JIPS/DRC, May 2026)
+    verified: 2026-10-29
+
+  - id: reliefweb_api
+    what: UN OCHA's library of humanitarian and development reports (UN agencies, NGOs, govt)
+    endpoint: https://api.reliefweb.int/v2/reports
+    auth: appname (requested 28 Oct as halalnumeriq-kasafi-r7k2; pending)
+    use_for: [displacement_humanitarian, nutrition_food_security, health, education, wash]
+    tip: filter country=Nigeria and query "Sokoto"; sort by date desc for "latest"
+    verified: 2026-10-29
+
+  - id: hdx_ckan
+    what: Humanitarian Data Exchange datasets (DTM location assessments, Cadre Harmonise, 3W, admin boundaries)
+    endpoint: https://data.humdata.org/api/3/action/package_search
+    auth: none
+    use_for: [displacement_humanitarian, nutrition_food_security, aid_flows_partners]
+    tip: datasets are spreadsheets with LGA rows; read the latest resource, cite dataset + date
+    example_dataset: nigeria-displacement-data-north-central-west-location-assessment-iom-dtm
+    verified: 2026-10-29
+
+  - id: dtm_api
+    what: IOM DTM displacement figures at country, state (admin1) and LGA (admin2) level
+    docs: https://dtmapi.readthedocs.io/en/latest/
+    auth: free subscription key from dtm-apim-portal.iom.int (API-V3) -> DTMAPI_SUBSCRIPTION_KEY
+    use_for: [displacement_humanitarian]
+    tip: gives IDP counts by LGA, sex, origin and reason; check round/reporting date on every pull
+    verified: 2026-10-29
+
+  - id: unhcr_odp
+    what: UNHCR Operational Data Portal documents (monthly Nigeria Forcibly Displaced Populations dashboard, protection monitoring)
+    endpoint: https://data.unhcr.org/en/documents (document ids; download at /documents/download/<id>)
+    auth: none
+    use_for: [displacement_humanitarian]
+    tip: dashboard is published on the 1st of each month; newest seen 1 Oct 2026 (doc 124425)
+    verified: 2026-10-29
+
+  - id: worldbank_wds
+    what: World Bank Documents & Reports
+    endpoint: https://search.worldbank.org/api/v3/wds
+    auth: none
+    use_for: [poverty_welfare, labour_employment, fiscal_governance, education, health]
+    verified: already in use
+
+  - id: worldbank_microdata
+    what: World Bank Microdata Library (survey reports and documentation, e.g. GHS-Panel, NLSS)
+    endpoint: https://microdata.worldbank.org/index.php/api/catalog/search
+    auth: none
+    use_for: [poverty_welfare, labour_employment]
+    verified: "no"
+
+  - id: nbs_elibrary
+    what: National Bureau of Statistics reports
+    site: https://nigerianstat.gov.ng/elibrary
+    download_pattern: https://nigerianstat.gov.ng/download/<id>   # NO .pdf extension: accept by Content-Type
+    catalog: https://microdata.nigerianstat.gov.ng/index.php/catalog (NADA; survey metadata and reports)
+    auth: none
+    use_for: [labour_employment, poverty_welfare, prices_economy, fiscal_governance, gender_social]
+    verified: 2026-10-29
+
+  - id: dhs_api
+    what: DHS Program indicator API with subnational (state) breakdowns for Nigeria (NDHS 2024, 2018, 2013)
+    endpoint: https://api.dhsprogram.com/rest/dhs/data
+    auth: none for basic use
+    use_for: [health, nutrition_food_security, education, wash]
+    tip: countryIds=NG&breakdown=subnational; filter CharacteristicLabel contains "Sokoto"
+    verified: "no"
+
+  - id: iati_datastore
+    what: IATI aid activity data (who funds what, where), filterable by location
+    endpoint: https://api.iatistandard.org/datastore
+    browse: https://d-portal.org
+    auth: free subscription key
+    use_for: [aid_flows_partners]
+    verified: "no"
+
+  - id: ilostat_sdmx
+    what: ILO statistics (Nigeria national only; no state breakdown)
+    endpoint: https://sdmx.ilo.org/rest/
+    auth: none
+    use_for: [labour_employment]
+    note: context only, never presented as a Sokoto figure
+    verified: "no"
+
+  - id: serper
+    what: "Google search fallback with site: and filetype:pdf operators over the allowlist"
+    auth: SERPER_API_KEY
+    use_for: all
+    verified: already in use
+
+# ---------------------------------------------------------------------------
+# Topics
+# ---------------------------------------------------------------------------
+topics:
+
+  displacement_humanitarian:
+    synonyms_en: [IDP, IDPs, internally displaced, displacement, displaced persons, returnees, camps, host communities, refugees, humanitarian situation]
+    synonyms_ha: ["'yan gudun hijira", "masu gudun hijira", "sansanin 'yan gudun hijira", "wadanda suka rasa matsugunansu"]
+    answer_pattern: multi_source   # 3-5 sources side by side, newest edition of each
+    publishers:
+      - id: sbs_jips_drc_durable_solutions
+        name: "Durable Solutions for Displacement-Affected Communities in Sokoto Town (Sokoto State Bureau of Statistics, JIPS, DRC; endorsed by NBS)"
+        domains: [sbs.sk.gov.ng, jips.org, drc.ngo]
+        urls:
+          - https://sbs.sk.gov.ng/api/documents/durable-solutions-report-jips-drc-sbs/download
+          - https://www.jips.org/uploads/2026/09/2026-JIPS-Durable-Solutions-Report.pdf
+        doc_types: [durable solutions profiling report (IDPs vs non-displaced host community)]
+        level: town (Sokoto North and Sokoto South; introduction also names Wamakko)
+        tier: 1
+        latest_known: May 2026 (household survey Nov 2025; 294 IDP and 371 host households)
+        key_figures: "over 181,500 displaced across Sokoto State; ~2,076 IDP households (10,786 people) in Sokoto town, Mar 2026; IDP employment 64% vs host 76%, unemployment 14% vs 5%; severe food insecurity 88% vs 73%; 67% of IDPs without electricity vs 17%"
+        scope_note: findings cover Sokoto town only, not the whole state; say so in answers
+        verified: 2026-10-29
+      - id: iom_dtm
+        name: IOM Displacement Tracking Matrix (DTM)
+        domains: [dtm.iom.int, iom.int]
+        doc_types: [North-Central & North-West mobility tracking round report, IDP and Returnee Atlas, needs monitoring report, location assessment dataset]
+        level: lga
+        tier: 1
+        cadence: NC/NW rounds roughly every 4-6 months (Round 17 Jul 2025, Round 18 Dec 2025)
+        latest_known: IDP and Returnee Atlas NC/NW Round 18, December 2025
+        discovery: [dtm_api, hdx_ckan, reliefweb_api, serper]
+        exclude: [flash reports (attack/incident narratives)]
+        verified: 2026-10-29
+      - id: unhcr_dashboard
+        name: UNHCR Nigeria Forcibly Displaced Populations Dashboard
+        domains: [data.unhcr.org, unhcr.org]
+        doc_types: [monthly displacement dashboard, protection monitoring report]
+        level: state
+        tier: 2
+        cadence: monthly (1st of month)
+        latest_known: 1 October 2026
+        note: compiles government (NCFRMI/SEMA) and DTM figures; may differ from the latest DTM round. Reported Sokoto 181,526 IDPs for March 2026 vs 88,562 the month before (per press; confirm in the PDF)
+        discovery: [unhcr_odp, reliefweb_api]
+        verified: 2026-10-29
+      - id: ocha_nigeria
+        name: UN OCHA Nigeria (North-West Operational Response Plan, Humanitarian Needs and Response Plan)
+        domains: [unocha.org, reliefweb.int, response.reliefweb.int, humanitarianaction.info, fts.unocha.org]
+        doc_types: [North-West Operational Response Plan (Aug 2025-Jul 2026), HNRP 2026, situation reports]
+        level: state
+        tier: 2
+        cadence: plans yearly; sitreps irregular
+        latest_known: North-West Nigeria Second Operational Response Plan, Aug 2025 - Jul 2026 (Sokoto a priority state)
+        discovery: [reliefweb_api, serper]
+        verified: 2026-10-29
+      - id: reach_impact
+        name: REACH / IMPACT Initiatives (Multi-Sector Needs Assessment, North-West)
+        domains: [repository.impact-initiatives.org, impact-initiatives.org, reach-initiative.org]
+        doc_types: [MSNA North-West findings, factsheets, area-based assessments]
+        level: lga
+        tier: 1
+        cadence: roughly yearly when funded
+        discovery: [reliefweb_api, serper]
+        verified: 2026-10-29
+      - id: unicef_humanitarian
+        name: UNICEF Nigeria Humanitarian Situation Reports and HAC appeal
+        domains: [unicef.org]
+        doc_types: [humanitarian situation report (mid-year, annual), Humanitarian Action for Children]
+        level: zone
+        tier: 2
+        latest_known: Humanitarian Situation Report No.1 (Mid-Year), 30 June 2026
+        discovery: [reliefweb_api, serper]
+        verified: 2026-10-29
+      - id: ncfrmi_sema
+        name: Government - NCFRMI, NEMA, Sokoto SEMA
+        domains: [ncfrmi.gov.ng, nema.gov.ng]
+        doc_types: [IDP registration figures, flood displacement reports]
+        level: state
+        tier: 1
+        verified: "no"
+      - id: protection_ngos
+        name: Protection and durable-solutions partners
+        domains: [drc.ngo, nrc.no, jips.org, globalprotectioncluster.org]
+        doc_types: [protection monitoring, durable solutions studies, profiling exercises]
+        level: state
+        tier: 2
+        note: JIPS and DRC co-published the Sokoto town durable solutions report (May 2026, listed above); check jips.org/uploads and drc.ngo for later editions
+        verified: 2026-10-29
+      - id: sokoto_budget_context
+        name: Sokoto State budget lines for IDP/humanitarian departments
+        tier: 3
+        note: related context only (what the state budgets), never the IDP count
+      - id: mpi_context
+        name: Sokoto State MPI 2025 (mentions IDP estimates)
+        tier: 3
+        note: related context only; say it is not a displacement count source
+
+  labour_employment:
+    synonyms_en: [employment, unemployment, jobs, labour force, underemployment, informal sector, NEET, youth unemployment, working-age]
+    synonyms_ha: ["aikin yi", "rashin aikin yi", "ayyukan yi", "matasa marasa aiki", "sana'o'i"]
+    answer_pattern: multi_source
+    publishers:
+      - id: nbs_nlfs
+        name: NBS Nigeria Labour Force Survey (NLFS)
+        domains: [nigerianstat.gov.ng, microdata.nigerianstat.gov.ng]
+        doc_types: [NLFS Annual Report 2023 (state tables incl. Sokoto), NLFS quarterly reports (national)]
+        level: state (annual report); national (quarterly)
+        tier: 1
+        latest_known: "NLFS Annual Report 2023 at nigerianstat.gov.ng/download/1241561 - Sokoto: unemployment 1.2%, LU2 2.4%, informal employment 2,401,683, NEET (15-24) 12.3%, employment-to-population 82.1%"
+        definition_note: since 2023 NBS uses the ILO 2013 standard (1 hour of work in the reference week counts as employed), so unemployment is low by design; show underemployment (LU2-LU4), informality and NEET alongside it
+        discovery: [nbs_elibrary, serper]
+        verified: 2026-10-29
+      - id: sbs_durable_solutions_labour
+        name: "SBS/JIPS/DRC Durable Solutions report, Sokoto town (May 2026) - employment of IDPs vs host community"
+        domains: [sbs.sk.gov.ng, jips.org]
+        level: town
+        tier: 1
+        key_figures: "employment 64% IDPs vs 76% host; unemployment 14% vs 5%; informal work ~92% vs 87% (ILO standards)"
+        scope_note: Sokoto town only; complements, not replaces, the NBS state figure
+        verified: 2026-10-29
+      - id: nbs_smedan_msme
+        name: NBS / SMEDAN MSME Survey
+        domains: [nigerianstat.gov.ng, smedan.gov.ng]
+        doc_types: [MSME national survey report with state tables (enterprises, employment)]
+        level: state
+        tier: 1
+        verified: "no"
+      - id: nbs_nlss_ghs
+        name: NBS Nigeria Living Standards Survey 2018/19 and General Household Survey-Panel
+        domains: [nigerianstat.gov.ng, microdata.worldbank.org]
+        doc_types: [survey reports with state tables (work, income sources)]
+        level: state
+        tier: 1
+        verified: "no"
+      - id: worldbank_labour
+        name: World Bank (Nigeria Poverty Assessment, jobs and labour market reports)
+        domains: [worldbank.org, documents1.worldbank.org, openknowledge.worldbank.org]
+        level: zone
+        tier: 2
+        discovery: [worldbank_wds]
+        verified: "no"
+      - id: ilo
+        name: International Labour Organization
+        domains: [ilo.org, ilostat.ilo.org]
+        level: national
+        tier: 2
+        note: national context only
+        discovery: [ilostat_sdmx, serper]
+        verified: "no"
+      - id: mpi_context
+        name: Sokoto State MPI 2025 (employment deprivation by LGA)
+        tier: 3
+        note: a deprivation indicator, not an unemployment rate; label it as such
+
+  poverty_welfare:
+    synonyms_en: [poverty, poor, multidimensional poverty, MPI, deprivation, social register, cash transfer, social protection]
+    synonyms_ha: ["talauci", "matalauta", "tallafin kudi", "kariyar zamantakewa"]
+    answer_pattern: multi_source
+    publishers:
+      - id: sokoto_mpi
+        name: Sokoto State MPI Report 2025
+        level: lga
+        tier: 1
+        note: already indexed
+      - id: sokoto_sbs
+        name: Sokoto State Bureau of Statistics (state surveys and co-published reports)
+        domains: [sbs.sk.gov.ng]
+        level: lga
+        tier: 1
+        discovery: [sokoto_sbs_documents]
+        verified: 2026-10-29
+      - id: nbs_mpi
+        name: NBS Nigeria Multidimensional Poverty Index 2022
+        domains: [nigerianstat.gov.ng]
+        level: state
+        tier: 1
+        verified: "no"
+      - id: nbs_nlss_poverty
+        name: NBS Poverty and Inequality in Nigeria (NLSS 2018/19)
+        domains: [nigerianstat.gov.ng]
+        level: state
+        tier: 1
+        verified: "no"
+      - id: worldbank_poverty
+        name: World Bank Nigeria Poverty Assessment / Poverty and Equity Briefs
+        domains: [worldbank.org, documents1.worldbank.org]
+        level: zone
+        tier: 2
+        verified: "no"
+      - id: nassp_nasco
+        name: National Social Safety Nets / NASSCO (National Social Register by state)
+        domains: [nassp.gov.ng, nasscp.gov.ng]
+        level: state
+        tier: 1
+        verified: "no"
+      - id: ophi
+        name: OPHI (global MPI subnational tables)
+        domains: [ophi.org.uk]
+        level: state
+        tier: 2
+        verified: "no"
+
+  health:
+    synonyms_en: [health, immunization, vaccination, maternal, child mortality, malaria, HIV, cholera, outbreak, health facilities, PHC, noma]
+    synonyms_ha: ["lafiya", "rigakafi", "asibiti", "cibiyar lafiya", "zazzabin cizon sauro", "kwalara", "mace mai ciki", "haihuwa"]
+    answer_pattern: multi_source
+    exclude: [any request for medical advice]
+    publishers:
+      - id: ndhs
+        name: Nigeria Demographic and Health Survey 2024 (NPC / DHS Program)
+        domains: [dhsprogram.com, api.dhsprogram.com]
+        level: state
+        tier: 1
+        discovery: [dhs_api]
+        verified: already in library
+      - id: mics
+        name: MICS 2021 (NBS / UNICEF)
+        domains: [mics.unicef.org, nigerianstat.gov.ng, unicef.org]
+        level: state
+        tier: 1
+        verified: already in library
+      - id: ncdc
+        name: Nigeria Centre for Disease Control situation reports (cholera, Lassa, meningitis, diphtheria, mpox)
+        domains: [ncdc.gov.ng]
+        level: state
+        tier: 1
+        cadence: weekly/monthly sitreps
+        verified: "no"
+      - id: nmep_mis
+        name: National Malaria Elimination Programme / Malaria Indicator Survey 2021
+        domains: [nmcp.gov.ng, dhsprogram.com]
+        level: state
+        tier: 1
+        verified: "no"
+      - id: who_afro
+        name: WHO Nigeria / WHO AFRO
+        domains: [who.int, afro.who.int]
+        level: state
+        tier: 2
+        verified: "no"
+      - id: unfpa
+        name: UNFPA Nigeria (EmONC assessment and improvement plan)
+        domains: [unfpa.org, nigeria.unfpa.org]
+        level: state
+        tier: 2
+        verified: already in library (EmONC)
+      - id: nphcda_naca
+        name: NPHCDA, NACA (HIV), NAFDAC
+        domains: [nphcda.gov.ng, naca.gov.ng]
+        level: state
+        tier: 1
+        verified: "no"
+      - id: msf
+        name: Medecins Sans Frontieres (Sokoto noma and nutrition reports)
+        domains: [msf.org]
+        level: state
+        tier: 2
+        verified: "no"
+      - id: sokoto_moh
+        name: Sokoto State Ministry of Health plans (Health AOP 2025)
+        tier: 3
+        note: already indexed
+
+  nutrition_food_security:
+    synonyms_en: [nutrition, malnutrition, stunting, wasting, food insecurity, hunger, food prices, Cadre Harmonise, RUTF, SAM, MAM]
+    synonyms_ha: ["abinci mai gina jiki", "tamowa", "yunwa", "wadatar abinci", "rashin abinci"]
+    answer_pattern: multi_source
+    publishers:
+      - id: cadre_harmonise
+        name: Cadre Harmonise analysis (Govt of Nigeria with FAO/CILSS/WFP)
+        domains: [fao.org, data.humdata.org, reliefweb.int]
+        level: lga
+        tier: 1
+        cadence: twice a year (March and October/November analyses)
+        discovery: [hdx_ckan, reliefweb_api]
+        verified: 2026-10-29 (covered in press; dataset location to confirm)
+      - id: fews_net
+        name: FEWS NET Nigeria outlooks
+        domains: [fews.net]
+        level: zone
+        tier: 2
+        cadence: monthly key messages; outlooks every 4 months
+        verified: "no"
+      - id: wfp
+        name: WFP Nigeria (country briefs, market monitors)
+        domains: [wfp.org, docs.wfp.org]
+        level: state
+        tier: 2
+        verified: "no"
+      - id: smart_nnhs
+        name: SMART nutrition surveys / National Nutrition and Health Survey / NFCMS 2021
+        domains: [nigerianstat.gov.ng, unicef.org, reliefweb.int]
+        level: state
+        tier: 1
+        verified: "no"
+      - id: unicef_nutrition
+        name: UNICEF Nigeria nutrition reports
+        domains: [unicef.org]
+        level: state
+        tier: 2
+        verified: "no"
+      - id: nbs_food_prices
+        name: NBS Selected Food Prices Watch (state prices)
+        domains: [nigerianstat.gov.ng]
+        level: state
+        tier: 1
+        cadence: monthly
+        verified: "no"
+
+  education:
+    synonyms_en: [education, schools, enrolment, out-of-school children, teachers, literacy, girl-child education, almajiri, basic education]
+    synonyms_ha: ["ilimi", "makaranta", "yaran da ba sa zuwa makaranta", "malamai", "ilimin 'ya'ya mata", "almajiri"]
+    answer_pattern: multi_source
+    publishers:
+      - id: asc
+        name: Sokoto State Annual School Census (ASC) report
+        level: lga
+        tier: 1
+        note: state report via SUBEB / Ministry of Education; provided by Bilyaminu if not online
+        verified: "no"
+      - id: ubec
+        name: Universal Basic Education Commission (national personnel audit, UBE statistics)
+        domains: [ubec.gov.ng]
+        level: state
+        tier: 1
+        verified: "no"
+      - id: fme_nemis
+        name: Federal Ministry of Education - Nigeria Education Indicators / NEMIS
+        domains: [education.gov.ng, nemis.gov.ng]
+        level: state
+        tier: 1
+        verified: "no"
+      - id: unicef_education
+        name: UNICEF Nigeria education (out-of-school children)
+        domains: [unicef.org]
+        level: state
+        tier: 2
+        verified: "no"
+      - id: ndhs_mics_education
+        name: NDHS 2024 / MICS 2021 education indicators
+        level: state
+        tier: 1
+        discovery: [dhs_api]
+
+  wash:
+    synonyms_en: [water, sanitation, hygiene, boreholes, open defecation, toilets, WASH]
+    synonyms_ha: ["ruwan sha", "rijiyar burtsatse", "tsafta", "bandaki", "bayan gida a fili"]
+    answer_pattern: multi_source
+    publishers:
+      - id: washnorm
+        name: WASHNORM (Federal Ministry of Water Resources / NBS / UNICEF)
+        domains: [nigerianstat.gov.ng, unicef.org, waterresources.gov.ng]
+        level: state
+        tier: 1
+        verified: "no"
+      - id: mics_ndhs_wash
+        name: MICS 2021 / NDHS 2024 water and sanitation indicators
+        level: state
+        tier: 1
+
+  fiscal_governance:
+    synonyms_en: [budget, revenue, IGR, FAAC, debt, borrowing, audit, transparency, expenditure]
+    synonyms_ha: ["kasafi", "kasafin kudi", "kudin shiga", "bashi", "kashe kudi"]
+    answer_pattern: structured_core_first   # SQL tools on the state budget; these add context
+    publishers:
+      - id: sokoto_transparency
+        name: Sokoto State Transparency page (budgets, implementation reports, audited statements)
+        domains: [sokotostate.gov.ng, mbep.sk.gov.ng, mof.sk.gov.ng]
+        level: state
+        tier: 1
+        verified: already in library
+      - id: dmo_subnational
+        name: Debt Management Office - States and FCT domestic and external debt stock (quarterly)
+        domains: [dmo.gov.ng]
+        level: state
+        tier: 1
+        cadence: quarterly (latest seen as at 31 Mar 2026; Q2 2026 reported in press Sep 2026)
+        verified: 2026-10-29
+      - id: nbs_faac_igr
+        name: NBS FAAC disbursement and state IGR reports
+        domains: [nigerianstat.gov.ng]
+        level: state
+        tier: 1
+        verified: "no"
+      - id: ngf
+        name: Nigeria Governors' Forum repository (state fiscal data, SFTAS)
+        domains: [ngf.org.ng, ngfrepository.org.ng]
+        level: state
+        tier: 2
+        verified: already in library (MICS copy)
+      - id: neiti
+        name: NEITI fiscal allocation and statutory disbursement reports
+        domains: [neiti.gov.ng]
+        level: state
+        tier: 1
+        verified: "no"
+      - id: worldbank_sftas
+        name: World Bank SFTAS and state PFM reports
+        domains: [documents1.worldbank.org]
+        level: state
+        tier: 2
+        verified: already in library
+    exclude: [BudgIT State of States report (public dispute with the state)]
+
+  agriculture_climate:
+    synonyms_en: [agriculture, farming, crops, livestock, irrigation, floods, drought, climate, fertilizer]
+    synonyms_ha: ["noma", "manoma", "kiwo", "ambaliyar ruwa", "fari", "taki", "yanayi"]
+    answer_pattern: multi_source
+    publishers:
+      - id: naerls
+        name: NAERLS Agricultural Performance Survey (wet season, state level)
+        domains: [naerls.gov.ng]
+        level: state
+        tier: 1
+        verified: "no"
+      - id: nihsa_nimet
+        name: NIHSA Annual Flood Outlook / NiMet Seasonal Climate Prediction
+        domains: [nihsa.gov.ng, nimet.gov.ng]
+        level: lga
+        tier: 1
+        cadence: yearly (early in the year)
+        verified: "no"
+      - id: nema_floods
+        name: NEMA flood impact reports
+        domains: [nema.gov.ng]
+        level: state
+        tier: 1
+        verified: "no"
+      - id: fao
+        name: FAO Nigeria
+        domains: [fao.org]
+        level: state
+        tier: 2
+        verified: "no"
+      - id: wb_ag_projects
+        name: World Bank / IFAD project documents (ACReSAL, L-PRES, VCDP)
+        domains: [documents1.worldbank.org, ifad.org]
+        level: state
+        tier: 3
+        verified: "no"
+
+  prices_economy:
+    synonyms_en: [inflation, CPI, prices, cost of living, food inflation]
+    synonyms_ha: ["hauhawar farashi", "farashin kaya", "tsadar rayuwa"]
+    answer_pattern: latest_edition
+    publishers:
+      - id: nbs_cpi
+        name: NBS Consumer Price Index (state tables)
+        domains: [nigerianstat.gov.ng]
+        level: state
+        tier: 1
+        cadence: monthly, mid-month for the previous month
+        verified: already in library
+
+  population_geography:
+    synonyms_en: [population, households, settlements, LGA population]
+    synonyms_ha: ["yawan jama'a", "gidaje", "kauyuka"]
+    answer_pattern: multi_source
+    publishers:
+      - id: npc
+        name: National Population Commission (projections)
+        domains: [nationalpopulation.gov.ng]
+        level: state
+        tier: 1
+        verified: "no"
+      - id: grid3
+        name: GRID3 Nigeria (settlements, health facilities, schools)
+        domains: [grid3.org, data.grid3.org]
+        level: lga
+        tier: 2
+        verified: "no"
+
+  aid_flows_partners:
+    synonyms_en: [partners, NGOs, donors, who works on, development partners, projects in LGA]
+    synonyms_ha: ["abokan hulda", "kungiyoyi", "masu tallafi", "ayyukan kungiyoyi"]
+    answer_pattern: multi_source
+    publishers:
+      - id: iati
+        name: IATI aid activity data
+        domains: [d-portal.org, iatistandard.org]
+        level: state
+        tier: 1
+        discovery: [iati_datastore]
+        verified: "no"
+      - id: ocha_3w_fts
+        name: OCHA 3W/4W (who does what where) and Financial Tracking Service
+        domains: [data.humdata.org, fts.unocha.org]
+        level: lga
+        tier: 1
+        discovery: [hdx_ckan]
+        verified: "no"
+      - id: state_partner_registry
+        name: Sokoto State Partners and Projects Registry (MBEP, internal)
+        tier: 3
+        note: discovery hints only (partner names, themes, LGAs) until the ministry agrees it can be published; never expose contact persons; project rows 3-53 have misaligned fields, so no project amounts or titles
+
+# ---------------------------------------------------------------------------
+# Never fetch or quote
+# ---------------------------------------------------------------------------
+global_exclude:
+  - attack, incident and casualty reports (IOM flash reports, ACLED, conflict trackers)
+  - drafts, unpublished or internal documents
+  - opinion pieces and news articles as sources of figures (use them only to discover the primary report)
+  - BudgIT State of States

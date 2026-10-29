@@ -6,7 +6,8 @@ import httpx
 import pytest
 
 from app.acquisition.fetch import FetchError, download_pdf
-from app.acquisition.policy import ALLOWLIST, Robots, content_signals, host_allowed, https_url
+from app.acquisition.policy import ALLOWLIST, BASE_ALLOWLIST, Robots, content_signals, host_allowed, https_url
+from app.acquisition.registry import registry
 from app.acquisition.sandbox import ParseError, child_env, extract_pages_sandboxed
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,7 +32,17 @@ def test_allowlist(url: str, ok: bool) -> None:
 
 def test_allowlist_matches_manifest() -> None:
     manifest = json.loads((ROOT / "data" / "manifest.json").read_text(encoding="utf-8"))
-    assert set(manifest["allowlist_domains"]) == set(ALLOWLIST)
+    assert set(manifest["allowlist_domains"]) == set(BASE_ALLOWLIST)
+
+
+def test_allowlist_adds_the_registrys_verified_domains_only() -> None:
+    reg = registry()
+    assert reg.version >= 1 and "displacement_humanitarian" in reg.topics
+    assert set(BASE_ALLOWLIST) <= set(ALLOWLIST)
+    assert {"sbs.sk.gov.ng", "data.unhcr.org", "data.humdata.org"} <= set(ALLOWLIST)
+    assert not set(reg.unverified_domains()) & (set(ALLOWLIST) - set(BASE_ALLOWLIST))
+    assert host_allowed("https://sbs.sk.gov.ng/api/documents/x/download")
+    assert not host_allowed("https://ncfrmi.gov.ng/a.pdf")          # verified: "no"
 
 
 def test_http_links_are_upgraded() -> None:

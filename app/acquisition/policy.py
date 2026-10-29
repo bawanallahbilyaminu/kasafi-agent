@@ -14,14 +14,16 @@ import urllib.robotparser
 
 import httpx
 
+from app.acquisition.registry import registry
+
 log = logging.getLogger(__name__)
 
 # Honest identification: robots.txt rules are matched on the "KasafiBot" token, and the URL explains who we are.
 USER_AGENT = "KasafiBot/1.0 (+https://halalnumeriq.com.ng/kasafi)"
 
-# Keep in sync with data/manifest.json "allowlist_domains" (tests check). sk.gov.ng covers the
-# Sokoto State ministries' own sites (mof.sk.gov.ng, mbep.sk.gov.ng, ...).
-ALLOWLIST = (
+# The fixed base list; keep in sync with data/manifest.json "allowlist_domains" (tests check). sk.gov.ng covers
+# the Sokoto State ministries' own sites (mof.sk.gov.ng, mbep.sk.gov.ng, ...).
+BASE_ALLOWLIST = (
     "sokotostate.gov.ng", "sk.gov.ng", "mbep.sk.gov.ng", "mof.sk.gov.ng",
     "budgetoffice.gov.ng", "nigerianstat.gov.ng",
     "worldbank.org", "documents1.worldbank.org", "reliefweb.int",
@@ -29,6 +31,9 @@ ALLOWLIST = (
     # humanitarian partners: displacement tracking (IOM DTM), refugees (UNHCR), humanitarian coordination (OCHA)
     "iom.int", "dtm.iom.int", "unhcr.org", "unocha.org",
 )
+# ... plus every verified publisher domain in data/source_registry.yaml, loaded at startup (unverified ones stay
+# off until a probe and a person confirm them: scripts/probe_registry.py)
+ALLOWLIST = tuple(dict.fromkeys(BASE_ALLOWLIST + tuple(registry().domains())))
 
 
 def host_allowed(url: str, allowlist: tuple[str, ...] = ALLOWLIST) -> bool:

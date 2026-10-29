@@ -3,10 +3,13 @@
 .env.*
 !.env.example
 
-# Data (only the manifest is committed)
+# Data (only the manifest, provenance and source registry are committed)
 data/*
 !data/manifest.json
 !data/provenance.json
+!data/source_registry.yaml
+# internal hints (partner registry): never committed, never quoted, never sent to a model
+data/private/
 
 # Python
 __pycache__/

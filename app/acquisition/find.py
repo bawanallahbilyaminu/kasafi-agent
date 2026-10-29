@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass
 import httpx
 import psycopg
 
-from app.acquisition.policy import ALLOWLIST, host_allowed, https_url
+from app.acquisition.policy import BASE_ALLOWLIST, host_allowed, https_url
 from app.config import Settings
 from app.providers.chat import ChatClient
 from app.providers.stt import parse_json_reply
@@ -75,7 +75,8 @@ async def search_reliefweb(http: httpx.AsyncClient, query: str, appname: str) ->
 
 
 def serper_queries(description: str) -> list[str]:
-    sites = " OR ".join(f"site:{d}" for d in ALLOWLIST if d.count(".") <= 2)
+    # the base list: Google drops results from long site: lists (topic searches name their publishers' domains)
+    sites = " OR ".join(f"site:{d}" for d in BASE_ALLOWLIST if d.count(".") <= 2)
     # Both forms: Google drops results from long site: lists, and the plain form found the Q3 2025
     # report on mof.sk.gov.ng when the site-limited one didn't. The allowlist filter applies to both.
     return [f"{description} ({sites}) filetype:pdf", f"{description} filetype:pdf"]
