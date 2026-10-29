@@ -39,7 +39,9 @@ import psycopg
 from app.acquisition.editions import (SERIES, Latest, Series, doc_edition, editions_back, find_latest,
                                      generic_series, label, month_label, release_date, series_doc_ids)
 from app.acquisition.library import Acquired, fetch_and_index, find_and_fetch, log_gap
+from app.acquisition.registry import detect_topic, registry
 from app.agent.analysis import TOOLS, AnalysisResult, run_analysis
+from app.agent.topics import TopicResult, topic_answer
 from app.agent.budget_query import QueryResult, context_text, lga_in, render_working, run_budget_query
 from app.agent import trace
 from app.agent.category import TOP_UNITS, CategoryResult, pct, run_category
@@ -144,6 +146,10 @@ PLAN_SYSTEM = (
     "Still give search_queries and doc_ids: they are the fallback. "
     "CURRENT SITUATION: add \"current_situation\": true when the question asks about the situation now (e.g. how "
     "many displaced people or IDPs there are, current conditions or needs), not a budget figure; else false. "
+    "STATISTICS: add \"statistics\": true when the question asks for statistics or the situation on a topic "
+    "(numbers or rates of people, households or conditions, e.g. IDPs, unemployment, malnutrition, poverty, or "
+    "which organisations publish such data), not government budget money; else false. And \"topic\": the closest "
+    "of " + ", ".join(registry().topics) + ", or null. "
     "SPENDING CATEGORY: when the question asks how much goes to a KIND of spending or purchase, i.e. an economic "
     "item such as drugs, medical supplies, medical equipment, vehicles, fuel, training, travel, furniture or "
     "office equipment, statewide or within one ministry or agency (not a named project, programme, fund or an "
@@ -342,6 +348,8 @@ class Plan:
     category: dict = field(default_factory=dict)        # {"terms", "scope", "year", "measure"} (app/agent/category.py)
     analysis: dict = field(default_factory=dict)        # {"tool", ...} (app/agent/analysis.py)
     current: bool = False                               # asks about the present situation (people, conditions now)
+    statistics: bool = False                            # asks for statistics on a topic, not budget money
+    topic: str = ""                                     # the planner's registry topic (synonyms are tried first)
 
     def assumption_for(self, lang: str) -> str:
         if not self.assumption:
@@ -383,6 +391,7 @@ class Answer:
     category: CategoryResult | None = None     # the economic codes and unit sums behind a category answer
     analysis: AnalysisResult | None = None     # the structured-core tool result behind an analysis answer
     working: str = ""                          # rows and arithmetic, sent on "nuna lissafi" / "show working"
+    topic: TopicResult | None = None           # the sources behind a multi-source topic answer
 
 
 def load_catalog(conn: psycopg.Connection) -> list[dict]:
@@ -437,6 +446,8 @@ async def plan_question(question: str, catalog: list[dict], client: ChatClient, 
         category=_category_field(d.get("category")),
         analysis=_analysis_field(d.get("analysis")),
         current=d.get("current_situation") is True,
+        statistics=d.get("statistics") is True,
+        topic=d.get("topic") if d.get("topic") in registry().topics else "",
     )
 
 
@@ -877,6 +888,16 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             return Answer(plan.clarify["question"], False, True, plan=plan, timings=t,
                           clarify=plan.clarify["options"])
         prev = history[-1] if history else None
+        if (tid := topic_route(question, plan)) and plan.followup == "none":
+            t0 = time.perf_counter()
+            tr = await topic_answer(conn, tid, question, plan.english_question, lang, client=client,
+                                    settings=settings, notify=notify, today=today)
+            t["topic"] = time.perf_counter() - t0
+            if tr.found:
+                return Answer(tr.text, True, True, [Evidence(i, d, title, None, p, "text", "")
+                                                    for i, (d, title, p) in enumerate(tr.cited, 1)],
+                              plan, t, partial=tr.partial, exact=tr.text, topic=tr)
+            log.info("topic sources gave no figure; falling back")
         if plan.followup == "recheck" and prev:
             t0 = time.perf_counter()
             latest, recheck_note, context = await recheck(conn, plan, prev, lang, client, settings, notify, today,
@@ -1008,6 +1029,17 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
     return Answer(f"{body}\n\n{tail}", True, True, cited, plan, t,
                   partial=found == "partial", exact=exact, acquired=acq, latest=latest, sources=sources,
                   offer=offer, budget=budget, working=working)
+
+
+def topic_route(question: str, plan: Plan) -> str:
+    """A statistics question on a multi-source topic (registry): its topic id, from the synonyms first and the
+    planner's topic as the fallback; '' when the question is about budget money or no topic fits."""
+    if not (plan.statistics or plan.current) or plan.line_search or plan.budget_query or plan.analysis \
+            or plan.category:
+        return ""
+    tid = detect_topic(f"{question} {plan.english_question}") or plan.topic
+    topic = registry().topics.get(tid)
+    return tid if topic and topic.answer_pattern == "multi_source" else ""
 
 
 async def _line_path(conn, plan: Plan, question: str, lang: str, client, second, settings: Settings, t: dict,

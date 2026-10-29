@@ -64,7 +64,7 @@ def document_link(html: str, page_url: str) -> str | None:
 
 
 async def download_pdf(url: str, dest: Path, http: httpx.AsyncClient, robots: Robots,
-                       max_bytes: int = MAX_BYTES) -> Downloaded:
+                       max_bytes: int = MAX_BYTES, timeout: httpx.Timeout = TIMEOUT) -> Downloaded:
     """The file is accepted by what it is (PDF or ZIP bytes; the address often has no .pdf). A landing page (HTML)
     is followed one hop to the same site's document link; every hop passes the allowlist and robots.txt."""
     current, hopped = url, False
@@ -72,7 +72,7 @@ async def download_pdf(url: str, dest: Path, http: httpx.AsyncClient, robots: Ro
         await check_url(current, robots)
         async with http.stream("GET", current, headers={"User-Agent": USER_AGENT,
                                                         "Accept": "application/pdf, application/zip, */*;q=0.5"},
-                               follow_redirects=False, timeout=TIMEOUT) as resp:
+                               follow_redirects=False, timeout=timeout) as resp:
             if resp.is_redirect:
                 current = urllib.parse.urljoin(current, resp.headers.get("location", ""))
                 continue

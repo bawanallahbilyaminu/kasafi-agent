@@ -126,7 +126,8 @@ def _known(conn: psycopg.Connection, *, url: str = "", sha: str = "") -> str | N
 
 async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, *, settings: Settings,
                           client: ChatClient, http: httpx.AsyncClient, robots: Robots | None = None,
-                          series: str | None = None, edition: str | None = None) -> Acquired:
+                          series: str | None = None, edition: str | None = None,
+                          download_timeout: httpx.Timeout | None = None) -> Acquired:
     """`series`/`edition`: the edition we were looking for (find_latest); the document must match it."""
     t: dict[str, float] = {}
     if known := _known(conn, url=url):
@@ -136,7 +137,8 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
     incoming, unzipped = fetch_dir / f"incoming-{tag}.download", fetch_dir / f"incoming-{tag}.pdf"
     try:
         t0 = time.perf_counter()
-        dl = await download_pdf(url, incoming, http, robots or Robots(http))
+        dl = await download_pdf(url, incoming, http, robots or Robots(http),
+                                **({"timeout": download_timeout} if download_timeout else {}))
         t["download"] = time.perf_counter() - t0
         pdf, sha = dl.path, dl.sha256
         if dl.kind == "zip":
