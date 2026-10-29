@@ -92,6 +92,45 @@ def test_a_wrong_figure_in_the_summary_is_retried_then_dropped() -> None:
     assert res.selections[0].cell.amount == Decimal("70000000.00")      # the verified row still answers
 
 
+GOOD = {"selected": [{"line": "L1", "column": "2026 Approved Budget"}], "summary": "It is 70,000,000.00 [L1].",
+        "found": "full"}
+
+
+class Slow(Fake):
+    async def chat(self, messages, **kw):
+        await asyncio.sleep(5)
+
+
+class Down(Fake):
+    async def chat(self, messages, **kw):
+        raise RuntimeError("Baseten API 503")
+
+
+def test_the_second_reading_runs_on_muse_spark_open() -> None:
+    meta, spark_open = Fake([GOOD]), Fake([GOOD])
+    s = make_settings()
+    res = asyncio.run(read_lines("q", "q", "en", LINES, meta, s, [], ans.chat_json, spark_open))
+    assert len(meta.calls) == 1 and len(spark_open.calls) == 1
+    assert res.readers == [s.meta_model, "meta-models/muse-spark-open-1026"] and res.selections
+
+
+def test_a_slow_or_failing_muse_spark_open_falls_back_to_muse_spark(caplog) -> None:
+    s = make_settings(kasafi_open_read_timeout_s=0.05)
+    for second in (Slow([]), Down([])):
+        meta = Fake([GOOD, GOOD])
+        res = asyncio.run(read_lines("q", "q", "en", LINES, meta, s, [], ans.chat_json, second))
+        assert len(meta.calls) == 2 and res.readers == [s.meta_model, f"{s.meta_model} (fallback)"]
+        assert res.selections[0].cell.amount == Decimal("70000000.00")
+    assert caplog.text.count("Muse Spark Open reading fell back to Muse Spark") == 2
+
+
+def test_no_baseten_key_means_no_open_reader() -> None:
+    async def get():
+        async with ans.open_reader(make_settings()) as c:
+            return c
+    assert asyncio.run(get()) is None
+
+
 def test_line_answer_shows_rows_with_citations(monkeypatch) -> None:
     res, _ = verify({"selected": [{"line": "L1", "column": "2026 Approved Budget"},
                                   {"line": "L3", "column": "2026 Approved Budget"}], "operation": "sum",

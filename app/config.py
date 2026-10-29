@@ -67,6 +67,10 @@ class Settings(BaseSettings):
     baseten_base_url: str = "https://inference.baseten.co/v1"
     # The hackathon key only works with this exact ID (not the docs' "meta-models/muse-spark-open").
     baseten_model: str = "meta-models/muse-spark-open-1026"
+    # The second of the two independent row readings runs on Muse Spark Open (app/agent/line_answer.py); slower
+    # than this, or failing, and Muse Spark reads instead
+    kasafi_open_reader: bool = True
+    kasafi_open_read_timeout_s: float = 20.0
 
     # Web search
     serper_api_key: SecretStr | None = None

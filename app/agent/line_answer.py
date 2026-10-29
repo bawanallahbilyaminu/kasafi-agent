@@ -16,6 +16,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -108,6 +109,7 @@ class LineResult:
     clarify_question: str = ""
     uncertain: list[str] = field(default_factory=list)   # lines only one of the two readings chose: not counted
     disputed: bool = False      # the readings disagreed on which rows a total takes: no arithmetic was done
+    readers: list[str] = field(default_factory=list)     # the model behind each reading
 
     def computed(self) -> dict[str, Decimal]:
         return {k: v for k, v in (("TOTAL", self.total), ("DIFFERENCE", self.difference),
@@ -306,17 +308,42 @@ def allowed_numbers(res: LineResult, extra: list[str]) -> set[str]:
 
 
 async def read_lines(question: str, english: str, lang: str, lines: list[Line], client: ChatClient,
-                     settings: Settings, extra_numbers: list[str], chat_json) -> LineResult:
+                     settings: Settings, extra_numbers: list[str], chat_json,
+                     second: ChatClient | None = None) -> LineResult:
     """The model picks rows twice, independently (in parallel); code compares the two picks. Rows both chose
     are answered; rows only one chose are named as possibly relevant and not counted; two readings with nothing
-    in common become one clarifying question."""
+    in common become one clarifying question.
+
+    The first reading is Muse Spark (`client`); the second is Muse Spark Open on Baseten (`second`), so the two
+    come from different models. If Open errors or is slower than `kasafi_open_read_timeout_s`, the second
+    reading is done by Muse Spark instead (logged), so Baseten never blocks an answer."""
     lines = lines[:MAX_LINES]
     reply_lang = {"ha": "Hausa", "en": "English"}.get(lang, "English")
     user = (f"Reply language: {reply_lang}\nQUESTION: {question}\n(English: {english})\n\nLINES:\n{listing(lines)}")
     messages = [{"role": "system", "content": SELECT_SYSTEM}, {"role": "user", "content": user}]
-    (r1, d1), (r2, _) = await asyncio.gather(_read_once(messages, lines, client, settings, extra_numbers, chat_json),
-                                             _read_once(messages, lines, client, settings, extra_numbers, chat_json))
-    return reconcile(r1, d1, r2, lines, extra_numbers, question, lang)
+    (r1, d1), (r2, _, reader2) = await asyncio.gather(
+        _read_once(messages, lines, client, settings.meta_model, extra_numbers, chat_json),
+        _second_reading(messages, lines, client, second, settings, extra_numbers, chat_json))
+    res = reconcile(r1, d1, r2, lines, extra_numbers, question, lang)
+    res.readers = [settings.meta_model, reader2]
+    return res
+
+
+async def _second_reading(messages: list[dict], lines: list[Line], client: ChatClient, second: ChatClient | None,
+                          settings: Settings, extra_numbers: list[str], chat_json) -> tuple[LineResult, dict, str]:
+    if second is not None:
+        t0 = time.perf_counter()
+        try:
+            r, d = await asyncio.wait_for(
+                _read_once(messages, lines, second, settings.baseten_model, extra_numbers, chat_json),
+                timeout=settings.kasafi_open_read_timeout_s)
+            log.info("second reading by %s in %.1fs", settings.baseten_model, time.perf_counter() - t0)
+            return r, d, settings.baseten_model
+        except Exception as e:     # timeout, provider error, unusable reply: Muse Spark reads instead
+            log.warning("Muse Spark Open reading fell back to Muse Spark after %.1fs: %s",
+                        time.perf_counter() - t0, type(e).__name__ if isinstance(e, TimeoutError) else str(e)[:200])
+    r, d = await _read_once(messages, lines, client, settings.meta_model, extra_numbers, chat_json)
+    return r, d, settings.meta_model + (" (fallback)" if second is not None else "")
 
 
 def _sig(s: Selection) -> tuple:
@@ -371,12 +398,14 @@ def reconcile(r1: LineResult, d1: dict, r2: LineResult, lines: list[Line], extra
     return res
 
 
-async def _read_once(messages: list[dict], lines: list[Line], client: ChatClient, settings: Settings,
+async def _read_once(messages: list[dict], lines: list[Line], client: ChatClient, model: str,
                      extra_numbers: list[str], chat_json) -> tuple[LineResult, dict]:
-    """One reading: a model call to pick rows (one retry if its ids, columns or numbers don't check out)."""
+    """One reading: a model call to pick rows (one retry if its ids, columns or numbers don't check out).
+    Muse Spark Open always reasons and its max_tokens counts reasoning too (Baseten docs), hence the headroom;
+    its reasoning comes back apart from the reply (ChatClient.chat), so only the JSON answer is parsed."""
     res, d = LineResult(), {}
     for attempt in range(2):
-        d = await chat_json(client, messages, model=settings.meta_model, reasoning_effort="low", max_tokens=4000)
+        d = await chat_json(client, messages, model=model, reasoning_effort="low", max_tokens=8000)
         res, problems = verify(d, lines)
         res.summary = fill(res.summary, res)
         bad = _number_ok(res.summary, allowed_numbers(res, extra_numbers))

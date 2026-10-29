@@ -26,7 +26,8 @@ import logging
 import re
 import time
 from collections import Counter
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from functools import partial
@@ -42,6 +43,7 @@ from app.agent.calculate import MIXED, CalcError, Calculation, MixedBases, offer
 from app.agent.line_answer import LineResult, fmt, is_location, item_of, read_lines, short_name
 from app.retrieval.line_search import MAX_LINES, name_key, nearest, search_lines
 from app.config import Settings, get_settings
+from app.providers.baseten import BasetenClient
 from app.providers.chat import ChatClient
 from app.providers.meta import MetaClient
 from app.providers.stt import parse_json_reply
@@ -560,6 +562,16 @@ async def compose(question: str, lang: str, plan: Plan, evidence: list[Evidence]
                            model=settings.meta_model, reasoning_effort="low", max_tokens=4000)
 
 
+@asynccontextmanager
+async def open_reader(settings: Settings) -> AsyncIterator[ChatClient | None]:
+    """Muse Spark Open on Baseten for the second row reading, or None when it's off or has no key."""
+    if not (settings.kasafi_open_reader and settings.baseten_api_key):
+        yield None
+        return
+    async with BasetenClient(settings, timeout=settings.kasafi_open_read_timeout_s, max_retries=1) as c:
+        yield c
+
+
 class ReplyError(RuntimeError):
     """The model didn't return a usable JSON object, even after one retry."""
 
@@ -752,7 +764,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
     acq: Acquired | None = None
     latest: Latest | None = None
     recheck_note, context = "", ""
-    async with client_factory(settings) as client:
+    async with client_factory(settings) as client, open_reader(settings) as second:
         t0 = time.perf_counter()
         plan = await plan_question(question, load_catalog(conn), client, settings, today, history, lang)
         t["plan"] = time.perf_counter() - t0
@@ -788,9 +800,10 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             if hits:
                 t0 = time.perf_counter()
                 res = await read_lines(question, plan.english_question, lang, hits, client, settings,
-                                       question_years(question, plan.english_question), chat_json)
+                                       question_years(question, plan.english_question), chat_json, second)
                 if res.missing:                  # before saying "not found", search for exactly what's missing
-                    res, hits = await _search_missing(conn, plan, question, lang, res, hits, client, settings)
+                    res, hits = await _search_missing(conn, plan, question, lang, res, hits, client, settings,
+                                                      second)
                 t["answer"] = time.perf_counter() - t0
                 if res.clarify:                  # the lines show several different things: ask which one
                     return Answer(res.clarify_question, False, True, plan=plan, timings=t, clarify=res.clarify)
@@ -905,7 +918,7 @@ def missing_terms(missing: str) -> list[str]:
 
 
 async def _search_missing(conn, plan: Plan, question: str, lang: str, res: LineResult, hits: list, client,
-                          settings) -> tuple[LineResult, list]:
+                          settings, second=None) -> tuple[LineResult, list]:
     """A "not found" must not be a search miss or an overlooked line: search the missing words once more; lines
     that carry those words in their own name go first, and the model reads again. The first answer stands
     unless the second one uses one of those lines (and doesn't fall back to a broader total)."""
@@ -919,7 +932,7 @@ async def _search_missing(conn, plan: Plan, question: str, lang: str, res: LineR
     log.info("searching again for what was missing: %d lines named by it", len(named))
     wider = named + [h for h in hits[:MAX_LINES] if h.id not in ids][:MAX_LINES - len(named)]
     again = await read_lines(question, plan.english_question, lang, wider, client, settings,
-                             question_years(question, plan.english_question), chat_json)
+                             question_years(question, plan.english_question), chat_json, second)
     better = any(x.line.id in ids for x in again.selections) and (res.aggregate_only or not again.aggregate_only)
     return (again, wider) if better else (res, hits)
 
