@@ -55,7 +55,8 @@ _BORDERLINE = re.compile("|".join([
     r"\bsiyasa", r"\bza[ɓb]en?\b", r"\bjam'?iyy", r"\btsaro\b", r"\b'?\s?yan\s+sanda\b", r"\bsoj",
     r"\bmagani\b", r"\blikita\b", r"\bcuta\b", r"\babinci\b",
     r"\bgovernor\b", r"\bpolitic", r"\belection", r"\bpart(?:y|ies)\b", r"\bsecurity\b", r"\bpolice\b",
-    r"\barmy\b", r"\bmilitary\b", r"\bmedicine\b", r"\bdrugs?\b", r"\btreatment\b", r"\bnutrition\b", r"\bdiet\b",
+    r"\barmy\b", r"\bmilitary\b", r"\bguards?\b", r"\bvigilante", r"\bhisbah\b", r"\bdeploy", r"\bpatrol",
+    r"\bcheckpoint", r"\bmasu\s+gadi\b", r"\b'?\s?yan\s+sa\s+kai\b", r"\bmedicine\b", r"\bdrugs?\b", r"\btreatment\b", r"\bnutrition\b", r"\bdiet\b",
 ]), re.IGNORECASE)
 
 
@@ -86,7 +87,9 @@ def needs_model(texts: list[str]) -> bool:
 
 
 def classifier_prompt(allow_security_budget: bool) -> str:
-    security_ok = ("budget lines and spending for security agencies are ok" if allow_security_budget
+    security_ok = ("budget figures for security agencies and lines (e.g. the Community Guard Corps, security votes) "
+                   "are ok; questions about operations, deployments, conflict, incidents or attacks are security"
+                   if allow_security_budget
                    else "this includes questions about security budgets or spending")
     return (
         "Classify a message sent to Kasafi, a WhatsApp assistant that gives neutral, cited facts from public "

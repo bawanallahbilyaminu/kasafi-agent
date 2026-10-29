@@ -67,7 +67,7 @@ SELECT_SYSTEM = (
     "as printed and citing [L#] after each. Never calculate: write {TOTAL}, {DIFFERENCE}, {CHANGE_PCT}, "
     "{SHARE_PCT}, {SPENT_PCT} or {RATIO} where a calculated figure belongs, followed by (Kasafi's calculation) / (lissafin "
     "Kasafi). "
-    "Neutral facts only.\n"
+    "Neutral facts only; for security agencies or lines, the figures alone with no commentary.\n"
     "7. found: \"full\", \"partial\" (some of it, or only a broader total) or \"none\" (no line answers it; "
     "select nothing).\n"
     "8. Only if the lines show several clearly different things the question could mean and you can't tell which, "

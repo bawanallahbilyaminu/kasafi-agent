@@ -125,7 +125,7 @@ class FakeChat:
         return ChatResult(content=self.content, model="m", finish_reason="stop")
 
 
-@pytest.mark.parametrize("allow, phrase", [(True, "budget lines and spending for security agencies are ok"),
+@pytest.mark.parametrize("allow, phrase", [(True, "budget figures for security agencies and lines"),
                                            (False, "this includes questions about security budgets")])
 def test_classifier_prompt_follows_security_budget_setting(allow: bool, phrase: str) -> None:
     assert phrase in scope.classifier_prompt(allow)
@@ -150,3 +150,9 @@ def test_check_skips_model_when_not_needed_and_fails_open() -> None:
     v = asyncio.run(scope.check(["Nawa aka ware wa ofishin gwamna?"], settings=s, client_factory=Boom))
     assert (v.category, v.tier) == ("ok", "none")                   # model down: allowed, warning logged
     assert asyncio.run(scope.check(["Ina 'yan bindiga?"], settings=s, client_factory=Boom)).category == "security"
+
+
+def test_security_agencies_and_operations_always_reach_the_classifier() -> None:
+    assert scope.needs_model(["Where are the Community Guard Corps deployed in Isa LGA?"])
+    assert scope.needs_model(["Nawa aka ware wa 'yan sa kai a 2026?"])
+    assert scope.keyword_check(["Where are the Community Guard Corps deployed?"]) is None   # the model decides

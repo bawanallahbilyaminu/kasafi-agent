@@ -140,7 +140,7 @@ ANSWER_SYSTEM = (
     "3c. The same name can appear under several codes. Budget codes are hierarchical: the code ending in more "
     "zeros (e.g. 052100000000 Ministry of Health) is the total including its agencies, and 052100100100 is only "
     "its headquarters. Use the higher-level code unless the question asks for the headquarters.\n"
-    "4. Neutral facts only: no opinions, no praise or blame, no judgement of performance. Never name "
+    "4. Neutral facts only (for security agencies or lines, the cited figures alone, with no commentary): no opinions, no praise or blame, no judgement of performance. Never name "
     "politicians or officials; refer to institutions (e.g. 'the State Government').\n"
     "5. Don't restate the ASSUMPTION MADE; it's shown to the user separately.\n"
     "6. Format for a phone: 'summary' is ONE short line that answers the question. 'items' has one entry per "
