@@ -163,3 +163,42 @@ def test_the_code_of_a_line_is_shown_to_the_model_and_the_reader() -> None:
     res, _ = verify({"selected": [{"line": "L1", "column": "2026 Approved Budget"}], "found": "full"}, [siec])
     a = ans.line_answer(None, ans.Plan("q", [], []), res, [siec], "en", {}, None)
     assert "(code 014800000000)" in a.text and "page 16" in a.text
+
+
+def _c(i, name, page, col, amount, doc="budget-2026-approved", measure=None):
+    x = L(i, name, page, [(col, amount)], doc=doc, table="Capital Expenditure by Administrative Classification")
+    if measure:
+        x.cells[0].measure = measure
+    return x
+
+
+def test_budget_against_spending_of_the_same_year_is_the_share_spent() -> None:
+    lines = [_c(1, "SEMA", 27, "2026 Approved Budget", "1200000000"),
+             _c(2, "SEMA", 27, "2026 Performance Year to Date (Q1-Q2)", "543570000", doc="bir-2026-q2", measure="actual")]
+    res, _ = verify({"operation": "compare", "found": "full", "selected": [
+        {"line": "L1", "column": "2026 Approved Budget"},
+        {"line": "L2", "column": "2026 Performance Year to Date (Q1-Q2)"}]}, lines)
+    assert res.spent_pct == Decimal("45.3") and res.change_pct is None and res.difference == Decimal("-656430000")
+
+
+def test_a_share_of_a_combined_total_counts_the_part_in_the_whole() -> None:
+    lines = [_c(1, "Agency for Almajiri Matters", 27, "2026 Approved Budget", "370000000"),
+             _c(2, "Arabic and Islamic Education Board", 27, "2026 Approved Budget", "840000000")]
+    res, _ = verify({"operation": "share", "found": "full", "selected": [
+        {"line": "L1", "column": "2026 Approved Budget", "part": "both"},
+        {"line": "L2", "column": "2026 Approved Budget", "part": "bottom"}]}, lines)
+    assert res.share_pct == Decimal("30.6")                     # 370 / (370 + 840), not 370 / 840
+
+
+def test_a_ratio_across_years_drops_items_only_one_side_has() -> None:
+    lines = [_c(1, "Ministry of Commerce", 27, "2026 Performance Year to Date (Q1-Q2)", "112820000", measure="actual"),
+             _c(2, "Ministry for Skills Acquisition", 27, "2026 Performance Year to Date (Q1-Q2)", "115780000",
+                measure="actual"),
+             _c(3, "Ministry of Commerce", 30, "2025 Performance Year to Date (Q1-Q4)", "1420000000",
+                doc="bir-2025-q4", measure="actual")]
+    res, problems = verify({"operation": "ratio", "found": "full", "selected": [
+        {"line": "L1", "column": "2026 Performance Year to Date (Q1-Q2)", "part": "top"},
+        {"line": "L2", "column": "2026 Performance Year to Date (Q1-Q2)", "part": "top"},
+        {"line": "L3", "column": "2025 Performance Year to Date (Q1-Q4)", "part": "bottom"}]}, lines)
+    assert [s.line.name for s in res.selections] == ["Ministry of Commerce", "Ministry of Commerce"]
+    assert res.ratio == Decimal("0.08") and "Ministry for Skills Acquisition" in res.missing and problems

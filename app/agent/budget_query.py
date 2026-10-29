@@ -469,6 +469,11 @@ def context_text(q: QueryResult, nmap: dict) -> str:
     lines = ["BUDGET QUERY RESULTS (computed by the app from the evidence rows; the app shows these rows and the "
              "arithmetic under your answer):"]
     lines += render_working(q, nmap, "en").splitlines()[1:]
+    if q.operation == "rank" and len(q.ranking) >= 2 and q.ranking[-1].rate is not None and \
+            sum(p.rate == q.ranking[-1].rate for p in q.ranking) > 1:
+        tied = sum(p.rate == q.ranking[-1].rate for p in q.ranking)
+        lines.append(f"{tied} lines are tied at {q.ranking[-1].rate}%: say that {tied} are tied and name them, or "
+                     "give their number; never present only some of them as the answer.")
     lines.append("Write 'summary' as one or two sentences that answer the question with these exact figures and "
                  "their [n]; leave 'items' empty. After a computed figure (difference, total, share) add "
                  "\"(Kasafi's calculation)\" (Hausa: \"(lissafin Kasafi)\"). If anything is 'not found', say "

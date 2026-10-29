@@ -52,13 +52,16 @@ SELECT_SYSTEM = (
     "5. operation: \"list\" (show each figure), \"sum\" (add all selections), \"compare\" (two selections; "
     "the app works out the change from the earlier year to the later), \"share\" or \"ratio\" (selections "
     "marked \"part\": \"top\" summed, divided by those marked \"bottom\" summed; share is shown as a %, ratio "
-    "as x to 1). For a total the document prints itself (Total Expenditure, Recurrent Expenditure, Capital "
+    "as x to 1). For a share of a combined total that isn't printed, mark the part \"both\" (it is in the top "
+    "and in the whole) and the other parts \"bottom\". Across years, both sides must cover the same agencies or "
+    "items: leave out any that only one side has and list them in 'missing'. Comparing a budget with spending "
+    "of the same year gives {SPENT_PCT}, the share spent, never a % change. For a total the document prints itself (Total Expenditure, Recurrent Expenditure, Capital "
     "Expenditure, Total Revenue, Debt Service), use its own total line rather than adding parts. The share of "
     "'the budget' uses Total Expenditure as the bottom, never revenue. Within one document, add up only lines "
     "from the same table: a programme or function line and a project line can be the same money.\n"
     "6. summary: one or two sentences in the reply language that answer the question, copying amounts exactly "
     "as printed and citing [L#] after each. Never calculate: write {TOTAL}, {DIFFERENCE}, {CHANGE_PCT}, "
-    "{SHARE_PCT} or {RATIO} where a calculated figure belongs, followed by (Kasafi's calculation) / (lissafin "
+    "{SHARE_PCT}, {SPENT_PCT} or {RATIO} where a calculated figure belongs, followed by (Kasafi's calculation) / (lissafin "
     "Kasafi). "
     "Neutral facts only.\n"
     "7. found: \"full\", \"partial\" (some of it, or only a broader total) or \"none\" (no line answers it; "
@@ -67,7 +70,7 @@ SELECT_SYSTEM = (
     "select nothing and set clarify: a short question in the reply language and 2-3 options, each a title of at "
     "most 20 characters and the full question for that reading. Otherwise clarify is null.\n"
     'Reply with JSON only: {"selected": [{"line": "L1", "column": "<column label exactly as shown>", '
-    '"part": "top|bottom (share and ratio only)"}], "operation": "list|sum|compare|share|ratio", '
+    '"part": "top|bottom|both (share and ratio only)"}], "operation": "list|sum|compare|share|ratio", '
     '"aggregate_only": false, "summary": "...", "missing": "", "found": "full|partial|none", "clarify": null}'
 )
 
@@ -76,7 +79,7 @@ SELECT_SYSTEM = (
 class Selection:
     line: Line
     cell: Cell
-    part: str = ""         # "top" / "bottom" for shares and ratios
+    part: str = ""         # "top" / "bottom" / "both" (in the top and in the whole) for shares and ratios
 
 
 @dataclass
@@ -92,6 +95,7 @@ class LineResult:
     change_pct: Decimal | None = None
     share_pct: Decimal | None = None
     ratio: Decimal | None = None
+    spent_pct: Decimal | None = None     # a budget compared with spending of the same year: spent / budget
     compared: str = ""          # "2026 Approved Budget vs 2025 Approved Budget"
     not_summed: bool = False    # a sum over different tables of one document, refused
     clarify: list[dict] = field(default_factory=list)
@@ -99,7 +103,7 @@ class LineResult:
 
     def computed(self) -> dict[str, Decimal]:
         return {k: v for k, v in (("TOTAL", self.total), ("DIFFERENCE", self.difference),
-                                  ("CHANGE_PCT", self.change_pct), ("SHARE_PCT", self.share_pct),
+                                  ("CHANGE_PCT", self.change_pct), ("SHARE_PCT", self.share_pct), ("SPENT_PCT", self.spent_pct),
                                   ("RATIO", self.ratio)) if v is not None}
 
 
@@ -185,8 +189,10 @@ def verify(d: dict, lines: list[Line]) -> tuple[LineResult, list[str]]:
         if key in seen:
             continue
         seen.add(key)
-        part = s.get("part") if s.get("part") in ("top", "bottom") else ""
+        part = s.get("part") if s.get("part") in ("top", "bottom", "both") else ""
         res.selections.append(Selection(line, cell, part))
+    if res.operation in ("share", "ratio"):
+        problems += _match_sides(res)
     amounts = [s.cell.amount for s in res.selections]
     if res.operation == "sum" and amounts:
         # one document's tables overlap (a programme line holds its projects): add only within one table
@@ -199,17 +205,28 @@ def verify(d: dict, lines: list[Line]) -> tuple[LineResult, list[str]]:
             res.not_summed = True
     elif res.operation == "compare" and len(amounts) >= 2:
         new, old = res.selections[0].cell, res.selections[1].cell
-        if new.year and old.year and new.year < old.year:       # always the change from the earlier year
-            new, old = old, new
-        res.difference = new.amount - old.amount
-        res.compared = f"{new.column} vs {old.column}"
-        if old.amount:
-            res.change_pct = (res.difference / old.amount * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        if (old.measure == "actual") != (new.measure == "actual") and old.year == new.year:
+            # budget vs spending of one year: how much of the budget was spent, not a growth rate
+            if old.measure == "actual":
+                new, old = old, new
+            res.difference = new.amount - old.amount
+            res.compared = f"{new.column} vs {old.column}"
+            if old.amount:
+                res.spent_pct = (new.amount / old.amount * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        else:
+            if new.year and old.year and new.year < old.year:   # always the change from the earlier year
+                new, old = old, new
+            res.difference = new.amount - old.amount
+            res.compared = f"{new.column} vs {old.column}"
+            if old.amount:
+                res.change_pct = (res.difference / old.amount * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
     elif res.operation in ("share", "ratio") and len(amounts) >= 2:
         # top / bottom, each side summed; without parts: first / second
         marked = any(x.part for x in res.selections)
-        top = sum((x.cell.amount for x in res.selections if x.part == "top"), Decimal(0)) if marked else amounts[0]
-        bottom = sum((x.cell.amount for x in res.selections if x.part == "bottom"), Decimal(0)) if marked else amounts[1]
+        top = (sum((x.cell.amount for x in res.selections if x.part in ("top", "both")), Decimal(0))
+               if marked else amounts[0])
+        bottom = (sum((x.cell.amount for x in res.selections if x.part in ("bottom", "both")), Decimal(0))
+                  if marked else amounts[1])
         if bottom:
             if res.operation == "share":
                 res.share_pct = (top / bottom * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
@@ -227,6 +244,25 @@ def verify(d: dict, lines: list[Line]) -> tuple[LineResult, list[str]]:
         if len(opts) >= 2:
             res.clarify, res.clarify_question = opts, str(c["question"])[:900]
     return res, problems
+
+
+def _match_sides(res: LineResult) -> list[str]:
+    """A ratio or share across years compares like with like: the same agencies or items on both sides.
+    Lines only one side has are dropped (and named in 'missing'), never silently compared."""
+    top = [s for s in res.selections if s.part in ("top", "both")]
+    bottom = [s for s in res.selections if s.part in ("bottom", "both")]
+    if not top or not bottom or {s.cell.year for s in top} == {s.cell.year for s in bottom}:
+        return []
+    names = {"top": {short_name(s.line).lower() for s in top}, "bottom": {short_name(s.line).lower() for s in bottom}}
+    odd = [s for s in res.selections if s.part in ("top", "bottom")
+           and short_name(s.line).lower() not in names["bottom" if s.part == "top" else "top"]]
+    if not odd:
+        return []
+    res.selections = [s for s in res.selections if s not in odd]
+    gone = "; ".join(f"{short_name(s.line)} ({s.cell.column})" for s in odd)
+    res.missing = "; ".join(x for x in (res.missing, f"the same line for the other year: {gone}") if x)
+    res.found = "partial"
+    return [f"both sides must cover the same items across years; left out {gone}"]
 
 
 def fill(summary: str, res: LineResult) -> str:

@@ -796,14 +796,14 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
 
 LINE_WORDS = {
     "en": {"head": "🧮 *Working* (the rows used):", "total": "Total", "difference": "Difference", "share": "Share",
-           "ratio": "Ratio",
+           "ratio": "Ratio", "spent": "Spent, as a share of the budget",
            "calc": "Kasafi's calculation", "missing": "Not found",
            "aggregate": "⚠️ The budget doesn't show this item separately. The line above is a broader total; the "
                         "documents don't say how much of it, if any, is for this item.",
            "no_sum": "Not added up: these lines are printed in different tables of one budget, which can show the "
                      "same money twice."},
     "ha": {"head": "🧮 *Yadda aka lissafa* (layukan da aka yi amfani da su):", "total": "Jimilla",
-           "difference": "Bambanci", "share": "Kaso", "ratio": "Rabo", "calc": "lissafin Kasafi",
+           "difference": "Bambanci", "share": "Kaso", "ratio": "Rabo", "spent": "Abin da aka kashe, a kason kasafin", "calc": "lissafin Kasafi",
            "missing": "Ba a samu ba",
            "aggregate": "⚠️ Kasafin bai nuna wannan abu daban ba. Layin da ke sama jimilla ce mai faɗi; takardun "
                         "ba su faɗi nawa daga cikinta ne, idan akwai, na wannan abu ba.",
@@ -828,7 +828,7 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
     summary = re.sub(r"\[L(\d+)\]", lambda m: f"[{lnum[int(m.group(1))]}]" if lnum.get(int(m.group(1))) else "",
                      res.summary)
     working = [w["head"]]
-    side = {"top": " ↑", "bottom": " ↓"} if res.operation in ("share", "ratio") else {}
+    side = {"top": " ↑", "bottom": " ↓", "both": " ↑↓"} if res.operation in ("share", "ratio") else {}
     names = Counter((s.line.doc_id, short_name(s.line)) for s in res.selections)
 
     def label(x) -> str:     # its code; and the same name from two tables (personnel, overhead): which table
@@ -851,10 +851,12 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
         sign = "+" if res.difference > 0 else "-" if res.difference < 0 else ""
         between = f" ({res.compared})" if res.compared else ""
         working.append(f"• {w['difference']}{between}: {sign}{fmt(abs(res.difference))}{pct} ({w['calc']})")
+    if res.spent_pct is not None:
+        working.append(f"• {w['spent']}: {res.spent_pct}% ({w['calc']})")
     if res.share_pct is not None:
-        working.append(f"• {w['share']}: {res.share_pct}% ({w['calc']})")
+        working.append(f"• {w['share']} (↑ ÷ ↓): {res.share_pct}% ({w['calc']})")
     if res.ratio is not None:
-        working.append(f"• {w['ratio']}: {res.ratio} : 1 ({w['calc']})")
+        working.append(f"• {w['ratio']} (↑ ÷ ↓): {res.ratio} : 1 ({w['calc']})")
     if res.missing:
         working.append(f"• {w['missing']}: {res.missing}")
     working_text = "\n".join(working)
