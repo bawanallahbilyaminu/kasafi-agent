@@ -921,27 +921,8 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             if cat is not None:
                 return category_answer(conn, plan, cat, lang, t, acq)
         if plan.line_search and not plan.budget_query:      # wide search, model reads, code verifies
-            t0 = time.perf_counter()
-            hits = search_lines(conn, plan.line_search["terms"], years=plan.line_search["years"],
-                                spend=plan.line_search.get("spend", "any"), question=plan.english_question)
-            t["search"] = t["line_search"] = time.perf_counter() - t0
-            log.info("line search: %d terms, %d hits", len(plan.line_search["terms"]), len(hits))
-            if hits:
-                t0 = time.perf_counter()
-                res = await read_lines(question, plan.english_question, lang, hits, client, settings,
-                                       question_years(question, plan.english_question), chat_json, second)
-                t["read"] = time.perf_counter() - t0
-                t.update({k: v for k, v in res.timings.items()})
-                if res.missing:                  # before saying "not found", search for exactly what's missing
-                    t1 = time.perf_counter()
-                    res, hits = await _search_missing(conn, plan, question, lang, res, hits, client, settings,
-                                                      second)
-                    t["reread"] = time.perf_counter() - t1
-                t["answer"] = time.perf_counter() - t0
-                if res.clarify:                  # the lines show several different things: ask which one
-                    return Answer(res.clarify_question, False, True, plan=plan, timings=t, clarify=res.clarify)
-                if res.selections:
-                    return line_answer(conn, plan, res, hits, lang, t, acq)
+            if (a := await _line_path(conn, plan, question, lang, client, second, settings, t, acq)) is not None:
+                return a
             log.info("line search gave no verified rows; falling back to page search")
         t0 = time.perf_counter()
         budget, nmap = None, {}
@@ -956,6 +937,10 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             evidence = gather_evidence(conn, plan)
         t["search"] = t["page_search"] = time.perf_counter() - t0
         if not evidence:
+            if (ls := fallback_line_search(plan, question)) and budget is None:
+                plan.line_search = ls
+                if (a := await _line_path(conn, plan, question, lang, client, second, settings, t, acq)):
+                    return a
             return _not_found(conn, plan, lang, acq, t)
 
         t0 = time.perf_counter()
@@ -978,6 +963,14 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
                                        "Use only figures copied exactly from the evidence, and cite them.")
             bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)
         t["answer"] = time.perf_counter() - t0
+        if budget is None and (_found(d) in ("none", "partial") or not d.get("cited")) and \
+                (ls := fallback_line_search(plan, question)):
+            # nothing or only part found: the budget lines are searched once; a complete line answer replaces it
+            log.info("page search found %s; searching the budget lines too", _found(d))
+            plan.line_search = ls
+            a = await _line_path(conn, plan, question, lang, client, second, settings, t, acq)
+            if a is not None and (not a.partial or _found(d) == "none" or not d.get("cited")):
+                return a
 
     cited = sorted({by_n[n].n: by_n[n] for n in d.get("cited") or [] if n in by_n}.values(), key=lambda e: e.n)
     found = _found(d)
@@ -1015,6 +1008,44 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
     return Answer(f"{body}\n\n{tail}", True, True, cited, plan, t,
                   partial=found == "partial", exact=exact, acquired=acq, latest=latest, sources=sources,
                   offer=offer, budget=budget, working=working)
+
+
+async def _line_path(conn, plan: Plan, question: str, lang: str, client, second, settings: Settings, t: dict,
+                     acq) -> Answer | None:
+    """Wide search over the budget lines, two readings, code verifies; None when no verified row answers."""
+    t0 = time.perf_counter()
+    hits = search_lines(conn, plan.line_search["terms"], years=plan.line_search["years"],
+                        spend=plan.line_search.get("spend", "any"), question=plan.english_question)
+    t["search"] = t["line_search"] = time.perf_counter() - t0
+    log.info("line search: %d terms, %d hits", len(plan.line_search["terms"]), len(hits))
+    if not hits:
+        return None
+    t0 = time.perf_counter()
+    res = await read_lines(question, plan.english_question, lang, hits, client, settings,
+                           question_years(question, plan.english_question), chat_json, second)
+    t["read"] = time.perf_counter() - t0
+    t.update({k: v for k, v in res.timings.items()})
+    if res.missing:                  # before saying "not found", search for exactly what's missing
+        t1 = time.perf_counter()
+        res, hits = await _search_missing(conn, plan, question, lang, res, hits, client, settings, second)
+        t["reread"] = time.perf_counter() - t1
+    t["answer"] = time.perf_counter() - t0
+    if res.clarify:                  # the lines show several different things: ask which one
+        return Answer(res.clarify_question, False, True, plan=plan, timings=t, clarify=res.clarify)
+    if res.selections:
+        return line_answer(conn, plan, res, hits, lang, t, acq)
+    return None
+
+
+def fallback_line_search(plan: Plan, question: str) -> dict:
+    """A budget-amount question the planner sent to page search only: before saying "not found", the budget lines
+    are searched once with its key terms and queries (the planner leaves line_search out now and then)."""
+    if plan.line_search or plan.budget_query or plan.current or not plan.key_terms or not any(
+            d.startswith(("budget-", "bir-", "bpr-")) for d in plan.doc_ids):
+        return {}
+    terms = list(dict.fromkeys(plan.key_terms + plan.search_queries))[:8]
+    years = sorted({int(y) for y in question_years(question, plan.english_question)})
+    return {"terms": terms, "years": years, "spend": "any"}
 
 
 LINE_WORDS = {

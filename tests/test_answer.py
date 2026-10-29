@@ -364,3 +364,14 @@ def test_invalid_json_is_retried_then_the_user_is_asked_to_rephrase(monkeypatch)
     g = Garbled(["{not json", json.dumps(PLAN)])                    # the retry works: carry on
     a = asyncio.run(ans.answer_question("q", "en", conn=None, settings=make_settings(), client_factory=lambda s: g))
     assert a.text == ans.NOT_FOUND["en"] and g.calls == 2
+
+
+def test_a_budget_question_sent_to_page_search_tries_the_budget_lines_before_not_found() -> None:
+    """m19: the planner left line_search out once; Government House's overhead row was never searched."""
+    p = Plan("Overhead for the Office of the Executive Governor in 2025 versus 2026?", ["Government House overhead"],
+             ["budget-2026-approved", "budget-2025-approved"], key_terms=["Government House", "Overhead"])
+    ls = ans.fallback_line_search(p, p.english_question)
+    assert ls["terms"][:2] == ["Government House", "Overhead"] and ls["years"] == [2025, 2026]
+    assert ans.fallback_line_search(Plan("IDPs now?", ["IDPs"], ["dtm-r17"], key_terms=["IDPs"]), "IDPs now?") == {}
+    p.line_search = ls
+    assert ans.fallback_line_search(p, p.english_question) == {}            # tried once
