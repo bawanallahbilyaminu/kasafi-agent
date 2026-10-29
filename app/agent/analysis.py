@@ -434,7 +434,9 @@ def mda_profile(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
         res.reason, res.subject = "no_mda", spec["mda"]
         return res
     code = units[0][:4] + "0" * 8 if group else units[0]
-    res.subject = name + (" (+)" if group else "")
+    if group and len(units) == 1:            # a commission with no agencies: its own line, not "and its agencies"
+        group = False
+    res.subject = f"{name} (code {code})" + (" (+)" if group else "")
     if not _profile_facts(conn, res, doc, "administrative", code):
         res.reason = "no_mda"
         return res
