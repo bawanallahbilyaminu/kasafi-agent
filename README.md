@@ -98,6 +98,34 @@ After that 39-question run, four questions were re-routed and re-run, and all fo
 - For the analysis tools, code writes every figure in the reply.
 - Elsewhere the number check still runs on the model's exact wording.
 
+## Topic questions from several sources
+
+Some questions have no single document that answers them, such as "the current state of IDPs in Sokoto" or "employment statistics". These answers come from several sources side by side ([`app/agent/topics.py`](app/agent/topics.py)).
+
+**Source registry.** [`data/source_registry.yaml`](data/source_registry.yaml) records, for each topic:
+- who publishes figures for Sokoto, on which domains, and at what level and tier;
+- how often each publisher publishes, and its newest known edition;
+- how to find their documents.
+
+The registry drives three things:
+- **The fetch allowlist.** Verified publisher domains are added to the base list. Unverified domains stay off until a probe (`scripts/probe_registry.py`) and a person confirm them.
+- **Topic detection.** English and Hausa synonyms first, with the planner as the fallback.
+- **The global excludes.** Attack and incident flash reports, news articles as a source of figures, and BudgIT State of States are never used.
+
+**How an answer is built.**
+1. Kasafi picks 3–5 publishers: state and LGA level and tier 1 first.
+2. For each, it finds the newest document. It uses the library copy only if that copy is new enough. Otherwise it tries the registry's own links, then the publisher's own listing (Sokoto State Bureau of Statistics API, NBS e-library, UNHCR's Nigeria page), then web search limited to that publisher's domains.
+3. These are fetched in parallel within about 90 s, with progress messages.
+4. The model copies the figures as fact cards (value, unit, definition, date, area, page). Code keeps a card only if its value is printed on that page.
+5. Code, not the model, writes the reply:
+   - the newest figure first, then one dated line per source;
+   - a "why they differ" line when sources disagree, for example the same count repeated under a later date, or different areas or definitions;
+   - scope and definition notes ("covers Sokoto town only"; NBS labour definitions);
+   - related context last, labelled as related;
+   - the sources it couldn't get.
+
+A question that names a publisher ("according to IOM") is answered from that publisher alone. A short dashboard whose text layer doesn't name Sokoto is read with OCR, because UNHCR prints its state figures only in a map. The Sokoto State Bureau of Statistics is a crawled library: its listing is read weekly.
+
 ## Status
 
 Work in progress. See [`docs/architecture.md`](docs/architecture.md) for the design and build plan.
