@@ -47,6 +47,8 @@ def outcome(a) -> str:
 
 
 def path(a) -> str:
+    if getattr(a, "analysis", None) is not None:
+        return f"analysis:{a.analysis.tool}"
     if getattr(a, "category", None) is not None:
         return "category"
     if a.lines is not None:
@@ -102,6 +104,12 @@ def record(a) -> dict:
                          "codes": [{"code": x.code, "name": x.name, "printed": str(x.printed.amount),
                                     "page": x.printed.page, "unit_sum": str(x.unit_sum), "units": len(x.units)}
                                    for x in c.codes]}
+    if getattr(a, "analysis", None) is not None:
+        r = a.analysis
+        t["analysis"] = {"tool": r.tool, "subject": r.subject, "focus": r.focus, "year": r.year,
+                         "facts": {k: str(v.value) for k, v in r.facts.items()}, "rows": len(r.rows)}
+    if getattr(a, "working", ""):
+        t["working"] = a.working[:4000]                      # shown to the user only on "nuna lissafi"
     if a.budget is not None:
         t["budget"] = {"operation": a.budget.operation,
                        "total": str(a.budget.total) if a.budget.total is not None else None}

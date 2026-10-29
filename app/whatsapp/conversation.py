@@ -51,6 +51,10 @@ IMAGE_COMMANDS = {"images off": False, "/images off": False, "no images": False,
                   "images on": True, "/images on": True, "kunna hotuna": True, "hotuna a kunna": True,
                   "/hotuna kunna": True}
 CONSENT_TEXTS = {"ok", "okay", "na yarda", "na amince", "i agree", "agree", "ok na yarda"}
+# the rows and arithmetic behind the last answer, kept with the turn: sent from the store, no model call
+SHOW_WORKING = {"nuna lissafi", "nuna min lissafi", "nuna lissafin", "yadda aka lissafa", "lissafi",
+                "show working", "show the working", "show me the working", "show calculation", "working", "/lissafi",
+                "/working"}
 
 
 @dataclass
@@ -140,6 +144,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     if (images := IMAGE_COMMANDS.get(_norm(text))) is not None:     # "images off" / "kashe hotuna": no model needed
         store.set_images(key, images)
         return [Out(t("images_on" if images else "images_off", lang))]
+    if text and _norm(text) in SHOW_WORKING:                        # "nuna lissafi": the stored working, no model
+        turns = store.recent_turns(key)
+        working = turns[-1].get("working", "") if turns else ""
+        return [Out(working or t("no_working", lang))]
     exempt = "".join(ch for ch in sender if ch.isdigit()) in settings.exempt_numbers
     voice_used, questions_used = store.usage(key)
     pending = store.get_pending(key, settings.kasafi_pending_ttl_minutes)
@@ -167,7 +175,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             result = await answer(question, lang, settings=settings, notify=send_now, history=store.recent_turns(key))
             body = result if isinstance(result, str) else result.text
             # Keep the turn for follow-ups ("check again", "what about 2024?"): 5 turns, 90 days, no number.
-            store.add_turn(key, lang, question, body, getattr(result, "sources", []))
+            store.add_turn(key, lang, question, body, getattr(result, "sources", []), getattr(result, "working", ""))
         except Exception as e:  # DB or model down: tell the user rather than go silent
             log.exception("answer failed: %s", type(e).__name__)
             body, result = t("answer_failed", lang), None

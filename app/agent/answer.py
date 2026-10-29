@@ -39,6 +39,7 @@ import psycopg
 from app.acquisition.editions import (SERIES, Latest, Series, doc_edition, editions_back, find_latest,
                                      generic_series, label, month_label, release_date, series_doc_ids)
 from app.acquisition.library import Acquired, fetch_and_index, find_and_fetch, log_gap
+from app.agent.analysis import TOOLS, AnalysisResult, run_analysis
 from app.agent.budget_query import QueryResult, context_text, lga_in, render_working, run_budget_query
 from app.agent import trace
 from app.agent.category import TOP_UNITS, CategoryResult, pct, run_category
@@ -108,6 +109,32 @@ PLAN_SYSTEM = (
     "allocated to education / to the Ministry of Health, and how much was spent'): normal search answers those "
     "and quotes the report's own % performance. A local government area (LGA) is not an institution located in "
     "it: a state hospital or school in an LGA is not that LGA's allocation. "
+    "ANALYSIS (the app counts and adds these up from the budgets' structured tables): when the question is one of "
+    "the following, ALSO add \"analysis\", else null. "
+    "(a) project_status: how many or which capital projects continue, were started, were budgeted but had nothing "
+    "spent, are new, or were dropped between two budget years (Hausa 'ayyuka nawa aka fara', 'suke ci gaba', 'ba a "
+    "kashe ba', 'sababbin ayyuka'): {\"tool\": \"project_status\", \"status\": \"started\"|\"continuing\"|\"idle\"|"
+    "\"new\"|\"dropped\"|\"all\", \"year\": <the later budget year>, \"mda\": \"<ministry or agency, in English, or "
+    "empty>\", \"lga\": \"<LGA or empty>\", \"terms\": [<project topic words such as 'school', 'hospital', or none>]}"
+    "; started = money spent on it in the earlier year and budgeted again, continuing = budgeted in both years, "
+    "idle = budgeted in the earlier year with nothing spent and budgeted again. "
+    "(b) lga_projects: which projects are in, or will be done in, one LGA (Hausa 'wadanne ayyuka ne za a yi a "
+    "<LGA>'): {\"tool\": \"lga_projects\", \"lga\": \"<LGA name>\", \"year\": YYYY, \"terms\": [<optional topic>]}. "
+    "(c) ranking of capital projects, of LGAs by the projects located in them, or of agencies: {\"tool\": "
+    "\"ranking\", \"of\": \"project\"|\"lga\"|\"agency\", \"by\": \"approved\"|\"revised\"|\"spent\", \"order\": "
+    "\"highest\"|\"lowest\", \"top\": N, \"year\": YYYY, \"mda\": \"<optional>\", \"terms\": [<optional topic>]}; "
+    "ministries and functions are ranked with budget_query instead. "
+    "(d) mda_profile: an overview of one ministry's or agency's budget and spending (not one line inside it), e.g. "
+    "'how much did the Ministry of Health get and spend': {\"tool\": \"mda_profile\", \"mda\": \"<name in English "
+    "as budgets print it>\", \"year\": YYYY}. "
+    "(e) function_profile: an overview of one function of government across all ministries (health, secondary "
+    "education, agriculture, water supply, ...): {\"tool\": \"function_profile\", \"function\": \"<as budgets print "
+    "it, e.g. 'Health', 'Secondary Education'>\", \"year\": YYYY}. "
+    "(f) revenue: how much revenue, IGR, FAAC, grants or loans the state expects or has received: {\"tool\": "
+    "\"revenue\", \"focus\": \"all\"|\"igr\"|\"faac\"|\"grants\"|\"capital_receipts\", \"year\": YYYY}. "
+    "Still give search_queries and doc_ids: they are the fallback. "
+    "CURRENT SITUATION: add \"current_situation\": true when the question asks about the situation now (e.g. how "
+    "many displaced people or IDPs there are, current conditions or needs), not a budget figure; else false. "
     "SPENDING CATEGORY: when the question asks how much goes to a KIND of spending or purchase, i.e. an economic "
     "item such as drugs, medical supplies, medical equipment, vehicles, fuel, training, travel, furniture or "
     "office equipment, statewide or within one ministry or agency (not a named project, programme, fund or an "
@@ -218,6 +245,11 @@ _UNITS = {"ha": ("tiriliyan", "biliyan", "miliyan"), "en": ("trillion", "billion
 # The sign is "₦", "NGN" or a capital "N" that isn't the end of a word: "kasafin 52,179,..." has no sign.
 _AMOUNT = re.compile(r"(?:(₦|NGN\s?|(?<![^\W\d_])N)\s?)?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d{2})(?!\d)"
                      r"((?i:\s*(?:million|billion|trillion|miliyan|biliyan|tiriliyan|m|bn))\b)?")
+# A number followed by these counts people or things: it never gets a naira sign.
+_COUNT_AFTER = re.compile(r"(?i)\s*(?:people|persons|individuals|households|families|idps?\b|displaced|refugees|"
+                          r"returnees|children|women|men|girls|boys|students|pupils|patients|beneficiaries|"
+                          r"projects|schools|mutane|'?yan\b|gidaje|iyalai|yara|mata\b|maza\b|[dɗ]alibai|ayyuka|"
+                          r"makarantu)")
 # Hausa words the model sometimes over-hooks. Hooks belong where they belong, and nowhere else.
 _HAUSA_FIXES = [(re.compile(r"\bƙasaf"), "kasaf"), (re.compile(r"\bƘasaf"), "Kasaf"),
                 (re.compile(r"\bƙash(e|ew)"), r"kash\1"), (re.compile(r"\bƘash(e|ew)"), r"Kash\1")]
@@ -237,6 +269,10 @@ def readable_amounts(text: str, lang: str) -> str:
 
     def sub(m: re.Match) -> str:
         sign, num, unit = m.group(1), m.group(2), m.group(3)
+        if _COUNT_AFTER.match(m.string, m.end()):         # "2,345,000 IDPs", "₦1,200 mutane": people, never naira
+            return num + (unit or "")
+        if not sign and "." not in num:                   # "1,234,567" with no ₦ and no kobo: a count, not money
+            return m.group(0)
         if unit:                                          # already in units: just normalise the sign
             return f"₦{num}{unit}" if sign else m.group(0)
         if "," not in num and not sign:                   # e.g. 87.76 (a ratio): leave it
@@ -291,6 +327,8 @@ class Plan:
     line_search: dict = field(default_factory=dict)    # {"terms": [...], "years": [...]} for budget-line questions
     key_terms: list[str] = field(default_factory=list)  # short line names: budget rows join the page evidence
     category: dict = field(default_factory=dict)        # {"terms", "scope", "year", "measure"} (app/agent/category.py)
+    analysis: dict = field(default_factory=dict)        # {"tool", ...} (app/agent/analysis.py)
+    current: bool = False                               # asks about the present situation (people, conditions now)
 
     def assumption_for(self, lang: str) -> str:
         if not self.assumption:
@@ -330,6 +368,8 @@ class Answer:
     budget: QueryResult | None = None          # the query_budget result behind a computed answer
     lines: LineResult | None = None            # the verified budget lines behind a line answer
     category: CategoryResult | None = None     # the economic codes and unit sums behind a category answer
+    analysis: AnalysisResult | None = None     # the structured-core tool result behind an analysis answer
+    working: str = ""                          # rows and arithmetic, sent on "nuna lissafi" / "show working"
 
 
 def load_catalog(conn: psycopg.Connection) -> list[dict]:
@@ -382,7 +422,25 @@ async def plan_question(question: str, catalog: list[dict], client: ChatClient, 
         clarify=_clarify_field(d.get("clarify")),
         line_search=_line_search_field(d.get("line_search")),
         category=_category_field(d.get("category")),
+        analysis=_analysis_field(d.get("analysis")),
+        current=d.get("current_situation") is True,
     )
+
+
+def _analysis_field(v) -> dict:
+    if not isinstance(v, dict) or v.get("tool") not in TOOLS:
+        return {}
+    out = {"tool": v["tool"]}
+    for k in ("mda", "lga", "function", "status", "of", "by", "order", "kind", "focus"):
+        if isinstance(v.get(k), str) and v[k].strip():
+            out[k] = v[k].strip()[:120]
+    if str(v.get("year") or "").isdigit() and 1990 < int(v["year"]) < 2100:
+        out["year"] = int(v["year"])
+    if str(v.get("top") or "").isdigit():
+        out["top"] = int(v["top"])
+    out["terms"] = [str(x)[:60] for x in v.get("terms") or [] if str(x).strip()][:6] \
+        if isinstance(v.get("terms"), list) else []
+    return out
 
 
 def _category_field(v) -> dict:
@@ -831,6 +889,16 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             t0 = time.perf_counter()
             acq = await acquire_missing(conn, plan, lang, client, settings, notify, acquire_fn)
             t["acquire"] = time.perf_counter() - t0
+            if not acq.doc_id and plan.current:
+                # "how many IDPs are there now?": other documents are not the current situation; say so plainly
+                return _not_found(conn, plan, lang, acq, t)
+        if plan.analysis and not plan.budget_query:          # counts and sums in SQL on the structured core
+            t0 = time.perf_counter()
+            res = run_analysis(conn, plan.analysis)
+            t["answer"] = time.perf_counter() - t0
+            if res is not None and (a := analysis_answer(conn, plan, res, lang, t, acq)) is not None:
+                return a
+            log.info("analysis gave no answer; falling back")
         if plan.category and not plan.budget_query:          # a kind of spending: code adds up its economic codes
             t0 = time.perf_counter()
             year = plan.category["year"]
@@ -901,7 +969,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             d = {"summary": "", "items": []}
     elif found == "none" or not cited or not answer_text(d).strip():
         return _not_found(conn, plan, lang, acq, t)
-    added = (f"{recheck_note}\n\n" if recheck_note else "") + _added_note(acq, lang)
+    added = (f"{recheck_note}\n\n" if recheck_note else "") + _added_note(acq, lang, plan.missing_document)
     ed = edition_note(latest, lang)
     added += f"{ed}\n\n" if ed else ""
     sources = cited_sources(conn, cited)
@@ -1159,6 +1227,248 @@ def category_answer(conn, plan: Plan, res: CategoryResult, lang: str, t: dict, a
                   exact=f"{lead}\n{working_text}", acquired=acq, sources=sources, category=res)
 
 
+QUARTER_END = {"en": {1: "March", 2: "June", 3: "September", 4: "December"},
+               "ha": {1: "Maris", 2: "Yuni", 3: "Satumba", 4: "Disamba"}}
+ANALYSIS_WORDS = {
+    "en": {
+        "scope": "{subject}: ", "group": "{name} and its agencies",
+        "started": "{n_started} projects had money spent on them in {prev} (January–September) and are budgeted "
+                   "again in {year}. In {prev} they were allocated {started_prev}, and {started_spent} was spent by "
+                   "September; in {year} they are allocated {started_cur}. In all, {n_continuing} projects from the "
+                   "{prev} budget continue in {year}; {n_idle} of them had nothing spent in {prev}.",
+        "continuing": "{n_continuing} projects budgeted in {prev} are budgeted again in {year}, with {continuing_cur} "
+                      "allocated for {year}. In {prev} they were allocated {continuing_prev}, and {continuing_spent} "
+                      "was spent by September. {n_started} of them had money spent in {prev}; {n_idle} had none.",
+        "idle": "{n_idle} projects were allocated {idle_prev} in {prev} but had nothing spent by September, and are "
+                "budgeted again in {year} ({idle_cur}).",
+        "new": "{n_new} projects in the {year} budget are new (not in the {prev} budget), with {new_cur} allocated.",
+        "dropped": "{n_dropped} projects allocated {dropped_prev} in {prev} have no allocation in {year}; the budget "
+                   "doesn't say whether they were finished or dropped. {dropped_spent} was spent on them by "
+                   "September {prev}.",
+        "all": "The {year} budget has {n_all} capital projects, with {all_cur} allocated. {n_continuing} continue "
+               "from {prev} ({n_started} had money spent in {prev}, {n_idle} had none), {n_new} are new, and "
+               "{n_dropped} projects from {prev} are not in it.",
+        "status_note": "Spending is January–September {prev}, as printed in the {year} budget.",
+        "lga": "The {year} budget has {n} projects located in {subject}, with {cur} allocated.",
+        "lga_prev": " In {prev}, {n_prev} projects there were allocated {prev_amt}, and {spent} was spent by "
+                    "September.",
+        "lga_note": "This is state money for projects in {subject}, not the local government's own allocation. "
+                    "{statewide_n} statewide projects ({statewide_cur}) aren't split by LGA, so they aren't counted.",
+        "lga_none": "No project in the {year} budget is located in {subject}. {statewide_n} statewide projects "
+                    "({statewide_cur}) aren't split by LGA.",
+        "rank_project": "The {k} capital projects with the largest {by} in the {year} budget{scope}, {total} together:",
+        "rank_lga": "The {k} LGAs with the most capital projects located in them, by {by}, in the {year} budget "
+                    "({total} together; statewide projects aren't split by LGA):",
+        "rank_agency": "The {k} agencies with the largest {by} in the {year} budget, {total} together:",
+        "rank_low": {"project": "The {k} capital projects with the smallest {by} in the {year} budget{scope}:",
+                     "lga": "The {k} LGAs with the least in capital projects located in them, by {by}, in the "
+                            "{year} budget:",
+                     "agency": "The {k} agencies with the smallest {by} in the {year} budget:"},
+        "by": {"approved": "allocation", "revised": "{prev} revised budget", "spent": "spending in {prev} "
+               "(January–September)"},
+        "profile": "In {year}, {subject} is allocated {total}: {personnel} for salaries, {overhead} for running "
+                   "costs and {capital} for capital projects{debt}.",
+        "profile_debt": ", and {debt} for debt service",
+        "profile_prev_full": " In {prev} it was allocated {prev_budget} (final budget) and spent {prev_spent} over "
+                             "the year ({prev_rate}%).",
+        "profile_prev": " In {prev} it was allocated {prev_revised} (revised budget) and spent {prev_spent_jan_sep} by "
+                        "September.",
+        "profile_cur": " By the end of {month} {year} it had spent {cur_spent} ({cur_rate}% of its budget).",
+        "profile_projects": " It has {n_projects} capital projects; the largest are below.",
+        "function": "In {year}, all ministries and agencies together are allocated {total} for {subject}: "
+                    "{personnel} for salaries, {overhead} for running costs and {capital} for capital projects.",
+        "revenue": "The {year} budget expects {cur} from {source}.",
+        "revenue_all": "all its main sources (FAAC, independent revenue, aid and grants, and capital receipts "
+                       "including loans)",
+        "revenue_cur": " By the end of {month} {year}, {cur_got} had been received ({cur_rate}%).",
+        "revenue_prev": " In {prev}, {prev_amt} was budgeted (revised) and {prev_got} received by September.",
+        "largest": "Largest:", "parts": "Main parts:", "sources": "Sources", "page": "p.",
+        "spent_word": "spent", "prev_word": "{prev}",
+        "offer": "_Reply *show working* to see the rows and arithmetic._",
+        "head": "🧮 *Working* (what was counted and added, by code):",
+        "no_mda": "I couldn't find {subject} among the budget's ministries and agencies.",
+        "no_lga": "I couldn't find {subject} among the budget's project locations.",
+        "clarify": "Which one do you mean?",
+    },
+    "ha": {
+        "scope": "{subject}: ", "group": "{name} da hukumominta",
+        "started": "Ayyuka {n_started} ne aka kashe musu kuɗi a {prev} (Janairu–Satumba) kuma aka sake ware musu "
+                   "kuɗi a kasafin {year}. A {prev} an ware musu {started_prev}, kuma an kashe {started_spent} zuwa "
+                   "Satumba; a {year} an ware musu {started_cur}. Gaba ɗaya, ayyuka {n_continuing} na kasafin {prev} "
+                   "suna ci gaba a {year}; {n_idle} daga cikinsu ba a kashe musu ko sisi ba a {prev}.",
+        "continuing": "Ayyuka {n_continuing} da ke cikin kasafin {prev} an sake ware musu kuɗi a {year}: "
+                      "{continuing_cur} na {year}. A {prev} an ware musu {continuing_prev}, kuma an kashe "
+                      "{continuing_spent} zuwa Satumba. {n_started} daga cikinsu an kashe musu kuɗi a {prev}; "
+                      "{n_idle} ba a kashe musu komai ba.",
+        "idle": "Ayyuka {n_idle} an ware musu {idle_prev} a {prev} amma ba a kashe musu ko sisi ba zuwa Satumba, "
+                "kuma an sake sanya su a kasafin {year} ({idle_cur}).",
+        "new": "Ayyuka {n_new} a kasafin {year} sababbi ne (ba su cikin kasafin {prev}), an ware musu {new_cur}.",
+        "dropped": "Ayyuka {n_dropped} da aka ware musu {dropped_prev} a {prev} ba su da kuɗi a kasafin {year}; "
+                   "kasafin bai faɗi ko an kammala su ko an daina ba. An kashe musu {dropped_spent} zuwa Satumba {prev}.",
+        "all": "Kasafin {year} yana da manyan ayyuka {n_all}, an ware musu {all_cur}. {n_continuing} suna ci gaba "
+               "daga {prev} ({n_started} an kashe musu kuɗi a {prev}, {n_idle} ba a kashe ba), {n_new} sababbi ne, "
+               "kuma ayyuka {n_dropped} na {prev} ba su ciki.",
+        "status_note": "Kuɗin da aka kashe na Janairu–Satumba {prev} ne, kamar yadda kasafin {year} ya buga.",
+        "lga": "Kasafin {year} yana da ayyuka {n} da ke {subject}, an ware musu {cur}.",
+        "lga_prev": " A {prev}, ayyuka {n_prev} a can an ware musu {prev_amt}, kuma an kashe {spent} zuwa Satumba.",
+        "lga_note": "Wannan kuɗin jiha ne na ayyukan da ke {subject}, ba kason ƙaramar hukumar ba. Ayyuka "
+                    "{statewide_n} na duk jihar ({statewide_cur}) ba a raba su bisa ƙaramar hukuma ba, don haka ba "
+                    "a ƙidaya su a nan ba.",
+        "lga_none": "Babu wani aiki a kasafin {year} da aka sanya a {subject}. Ayyuka {statewide_n} na duk jihar "
+                    "({statewide_cur}) ba a raba su bisa ƙaramar hukuma ba.",
+        "rank_project": "Manyan ayyuka {k} mafi yawan {by} a kasafin {year}{scope}, jimilla {total}:",
+        "rank_lga": "Ƙananan hukumomi {k} da ayyukan da ke cikinsu suka fi yawan {by} a kasafin {year} (jimilla "
+                    "{total}; ba a raba ayyukan duk jihar bisa ƙaramar hukuma ba):",
+        "rank_agency": "Hukumomi {k} mafi yawan {by} a kasafin {year}, jimilla {total}:",
+        "rank_low": {"project": "Manyan ayyuka {k} mafi ƙarancin {by} a kasafin {year}{scope}:",
+                     "lga": "Ƙananan hukumomi {k} da ayyukan da ke cikinsu suka fi ƙarancin {by} a kasafin {year}:",
+                     "agency": "Hukumomi {k} mafi ƙarancin {by} a kasafin {year}:"},
+        "by": {"approved": "kuɗin da aka ware", "revised": "kasafin {prev} da aka sabunta",
+               "spent": "kuɗin da aka kashe a {prev} (Janairu–Satumba)"},
+        "profile": "A {year}, an ware wa {subject} {total}: {personnel} na albashi, {overhead} na kuɗin gudanarwa, "
+                   "da {capital} na manyan ayyuka{debt}.",
+        "profile_debt": ", da {debt} na biyan bashi",
+        "profile_prev_full": " A {prev} an ware masa {prev_budget} (kasafin ƙarshe), kuma an kashe {prev_spent} a "
+                             "duk shekarar ({prev_rate}%).",
+        "profile_prev": " A {prev} an ware masa {prev_revised} (kasafin da aka sabunta), kuma an kashe "
+                        "{prev_spent_jan_sep} zuwa Satumba.",
+        "profile_cur": " Zuwa ƙarshen {month} {year}, an kashe {cur_spent} ({cur_rate}% na kasafinsa).",
+        "profile_projects": " Yana da manyan ayyuka {n_projects}; ga mafi girma a ƙasa.",
+        "function": "A {year}, an ware wa {subject} {total} a duk ma'aikatu da hukumomi: {personnel} na albashi, "
+                    "{overhead} na kuɗin gudanarwa, da {capital} na manyan ayyuka.",
+        "revenue": "Kasafin {year} yana sa ran samun {cur} daga {source}.",
+        "revenue_all": "manyan hanyoyin kuɗinsa (FAAC, kuɗin shiga na cikin gida, tallafi, da kuɗin manyan ayyuka "
+                       "har da bashi)",
+        "revenue_cur": " Zuwa ƙarshen {month} {year}, an samu {cur_got} ({cur_rate}%).",
+        "revenue_prev": " A {prev}, an yi kasafin {prev_amt} (wanda aka sabunta), kuma an samu {prev_got} zuwa Satumba.",
+        "largest": "Mafi girma:", "parts": "Manyan sassa:", "sources": "Madogara", "page": "shafi",
+        "spent_word": "an kashe", "prev_word": "{prev}",
+        "offer": "_Rubuta *nuna lissafi* don ganin layukan da lissafin._",
+        "head": "🧮 *Yadda aka lissafa* (abin da aka ƙidaya da aka haɗa, ta code):",
+        "no_mda": "Ban sami {subject} cikin ma'aikatu da hukumomin kasafin ba.",
+        "no_lga": "Ban sami {subject} cikin wuraren ayyukan kasafin ba.",
+        "clarify": "Wanne kake nufi?",
+    },
+}
+
+
+def _money(x) -> str:
+    return f"₦{Decimal(x):,.2f}"
+
+
+def sources_line(cited: list[Evidence], lang: str) -> str:
+    """One line: 'Madogara: <document>, shafi 49, 61; <document>, shafi 12'."""
+    w = ANALYSIS_WORDS.get(lang, ANALYSIS_WORDS["en"])
+    pages: dict[str, list[int]] = {}
+    for e in cited:
+        pages.setdefault(e.title, [])
+        if e.page not in pages[e.title]:
+            pages[e.title].append(e.page)
+    return f"📄 *{w['sources']}:* " + "; ".join(f"{t}, {w['page']} {', '.join(str(p) for p in sorted(ps))}"
+                                               for t, ps in pages.items())
+
+
+def analysis_answer(conn, plan: Plan, res: AnalysisResult, lang: str, t: dict, acq) -> Answer | None:
+    """Lead sentences, the top rows and one sources line, all from the tool's facts; the working on request.
+    None when the tool found nothing it can say (the caller falls back to search and model reading)."""
+    w = ANALYSIS_WORDS.get(lang, ANALYSIS_WORDS["en"])
+    if res.clarify:
+        opts = [{"title": o["title"], "question": f"{plan.english_question} ({o['title']})"} for o in res.clarify]
+        return Answer(w["clarify"], False, True, plan=plan, timings=t, clarify=opts, analysis=res)
+    if not res.found and res.reason not in ("none_tagged",):
+        return None
+    f = {k: (_money(v.value) if v.kind == "money" else f"{v.value}") for k, v in res.facts.items()}
+    subject = res.subject.replace(" (+)", "")
+    if res.subject.endswith(" (+)"):
+        subject = w["group"].format(name=subject)
+    common = dict(year=res.year, prev=res.prev, subject=subject)
+    v = {**f, **common, "prev_amt": f.get("prev", "")}     # "prev" is the year in sentences; the amount is prev_amt
+    lead, rows_head, note = "", w["largest"], ""
+    if res.tool == "project_status":
+        lead = (w["scope"].format(subject=subject) if subject else "") + w[res.focus].format(**v)
+        note = w["status_note"].format(**common)
+    elif res.tool == "lga_projects":
+        if res.facts["n"].value:
+            lead = w["lga"].format(**v)
+            if res.facts["n_prev"].value:
+                lead += w["lga_prev"].format(**v)
+            note = w["lga_note"].format(**v)
+        else:
+            lead = w["lga_none"].format(**v)
+    elif res.tool == "ranking":
+        by = w["by"][res.subject.split(":")[0] if ":" in res.subject else res.subject].format(prev=res.prev)
+        scope = f" ({subject.split(': ', 1)[1]})" if ": " in subject else ""
+        k = len(res.rows)
+        low = plan.analysis.get("order") == "lowest"
+        key = res.focus
+        tmpl = w["rank_low"][key] if low else w[f"rank_{key}"]
+        lead = tmpl.format(k=k, by=by, year=res.year, scope=scope, total=f.get("top_total", ""))
+        rows_head = ""
+    elif res.tool in ("mda_profile", "function_profile"):
+        debt = w["profile_debt"].format(debt=f["debt"]) if res.facts.get("debt") and res.facts["debt"].value else ""
+        base = w["profile"] if res.tool == "mda_profile" else w["function"]
+        lead = base.format(debt=debt, **{k: f.get(k, _money(0)) for k in ("total", "personnel", "overhead",
+                                                                          "capital")}, **common)
+        if "prev_spent" in f and res.facts["prev_quarter"].value == 4:     # the full year, from the Q4 report
+            lead += w["profile_prev_full"].format(prev_budget=f["prev_budget"], prev_spent=f["prev_spent"],
+                                                  prev_rate=f.get("prev_rate", "-"), **common)
+        elif "prev_spent_jan_sep" in f and "prev_revised" in f:          # as printed in this budget
+            lead += w["profile_prev"].format(prev_revised=f["prev_revised"], prev_spent_jan_sep=f["prev_spent_jan_sep"],
+                                             **common)
+        if "cur_spent" in f:
+            month = QUARTER_END[lang if lang in QUARTER_END else "en"][res.facts["cur_quarter"].value]
+            lead += w["profile_cur"].format(month=month, cur_spent=f["cur_spent"], cur_rate=f.get("cur_rate", "-"),
+                                            **common)
+        if res.tool == "mda_profile" and res.rows:
+            lead += w["profile_projects"].format(n_projects=f.get("n_projects", "0"))
+        else:
+            rows_head = w["parts"]
+    elif res.tool == "revenue":
+        source = subject if res.focus != "all" else w["revenue_all"]
+        lead = w["revenue"].format(cur=f["cur"], source=source, **{k: v for k, v in common.items()
+                                                                     if k != "subject"})
+        if "cur_got" in f:
+            month = QUARTER_END[lang if lang in QUARTER_END else "en"][res.facts["cur_quarter"].value]
+            lead += w["revenue_cur"].format(month=month, cur_got=f["cur_got"], cur_rate=f.get("cur_rate", "-"),
+                                            year=res.year)
+        lead += w["revenue_prev"].format(prev=res.prev, prev_amt=f["prev"], prev_got=f["prev_got_jan_sep"])
+        rows_head = w["parts"]
+    bullets = []
+    for r in res.rows[:TOP_ROWS]:
+        extra = ""
+        if res.tool == "project_status" and r.detail.get("spent"):
+            extra = f" ({w['spent_word']} {_money(r.detail['spent'])}, {res.prev})"
+        place = r.detail.get("place")
+        where = f", {place.title()}" if place and res.tool in ("project_status", "ranking", "mda_profile") \
+            and res.focus != "lga" else ""
+        bullets.append(f"• {r.name[:110]}{where}: {_money(r.amount)}{extra}")
+    # every figure cites its page: the facts' pages and the rows' pages
+    cited_pages: dict[tuple[str, int], None] = {}
+    for fact in res.facts.values():
+        if fact.page:
+            cited_pages[(fact.doc_id, fact.page)] = None
+    for r in res.rows[:TOP_ROWS]:
+        cited_pages[(r.doc_id, r.page)] = None
+    evidence = [Evidence(i, d, res.titles.get(d, d), None, p, "text", "") for i, (d, p) in
+                enumerate(cited_pages, start=1)]
+    parts = [lead] + ([note] if note else [])
+    exact = "\n".join(parts + ([rows_head] if rows_head and bullets else []) + bullets)
+    body = "\n\n".join(readable_amounts(p, lang) for p in parts)
+    if bullets:
+        body += "\n\n" + ((rows_head + "\n") if rows_head else "") + readable_amounts("\n".join(bullets), lang)
+    working = w["head"] + "\n" + "\n".join(f"• {x}" for x in res.working)
+    note_a = plan.assumption_for(lang)
+    text = ((f"_{note_a}_\n\n" if note_a else "") + _added_note(acq, lang, plan.missing_document) + body + "\n\n"
+            + sources_line(evidence, lang) + "\n" + w["offer"])
+    log.info("analysis answer: %s, %d facts, %d rows", res.tool, len(res.facts), len(res.rows))
+    return Answer(text, True, True, evidence, plan, t, partial=res.reason == "none_tagged", exact=exact,
+                  acquired=acq, sources=cited_sources(conn, evidence) if conn is not None else [], analysis=res,
+                  working=working)
+
+
+TOP_ROWS = 5
+
+
 def budget_evidence(q: QueryResult) -> tuple[list[Evidence], dict]:
     """One evidence item per page the query used, holding the rows taken from it (with the table title)."""
     picked = [p for r in q.items for p in r.rows + ([r.alt] if r.alt else [])] + q.ranking
@@ -1198,7 +1508,18 @@ def cited_sources(conn: psycopg.Connection | None, cited: list[Evidence]) -> lis
              "edition": editions.get(e.doc_id, (None, None))[1]} for e in cited]
 
 
-def _added_note(acq: Acquired | None, lang: str) -> str:
+MISSING_NOTE = {
+    "ha": "⚠️ Ban samo takardar da ta fi dacewa ba ({doc}). Amsar da ke ƙasa daga wasu takardun da nake da su ce, "
+          "ba daga waccan ba.",
+    "en": "⚠️ I couldn't get the document that fits best ({doc}). The answer below is from other documents I have, "
+          "not from that one.",
+}
+
+
+def _added_note(acq: Acquired | None, lang: str, missing: str = "") -> str:
+    """'Found and added …' for a fetched document; for one that couldn't be got, that the answer is from others."""
+    if acq is not None and not getattr(acq, "doc_id", None) and missing:
+        return MISSING_NOTE.get(lang, MISSING_NOTE["en"]).format(doc=missing[:120]) + "\n\n"
     if not acq or getattr(acq, "status", "") != "indexed":
         return ""
     host = urlsplit(acq.url).hostname or ""

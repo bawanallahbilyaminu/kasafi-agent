@@ -169,6 +169,17 @@ def test_over_hooked_hausa_is_fixed_but_correct_hooks_stay() -> None:
     assert render_answer({"summary": "ƙasafi", "items": []}, "en") == "ƙasafi"     # only for Hausa replies
 
 
+@pytest.mark.parametrize("raw, out", [
+    ("2,345,000 IDPs", "2,345,000 IDPs"),                       # a count of people: no naira sign
+    ("₦1,234,567.00 displaced people", "1,234,567.00 displaced people"),
+    ("mutane 1,120,000 'yan gudun hijira", "mutane 1,120,000 'yan gudun hijira"),
+    ("1,250,000 individuals in 210,000 households", "1,250,000 individuals in 210,000 households"),
+    ("total of 45,012 [1]", "total of 45,012 [1]"),             # no ₦, no kobo: not assumed to be money
+])
+def test_counts_never_get_a_naira_sign(raw: str, out: str) -> None:
+    assert readable_amounts(raw, "en") == out and readable_amounts(raw, "ha") == out
+
+
 def test_naira_word_before_an_amount_is_replaced_by_the_sign() -> None:
     assert readable_amounts("An ware Naira 9,076,557,198.38 [1]", "ha") == "An ware ₦9.08 biliyan [1]"
     assert readable_amounts("naira ₦9,076,557,198.38", "ha") == "₦9.08 biliyan"

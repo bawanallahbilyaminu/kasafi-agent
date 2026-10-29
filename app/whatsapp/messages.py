@@ -192,6 +192,10 @@ TEXTS = {
         "ha": "To, ban lissafa ba.",
         "en": "OK, I won't calculate it.",
     },
+    "no_working": {
+        "ha": "Babu lissafin da zan nuna: amsar da ta gabata ba ta da layukan kasafi da aka haɗa.",
+        "en": "There's no working to show: the last answer didn't add up budget lines.",
+    },
     "cancelled": {
         "ha": "To, an soke wannan tambayar.\n\nKa aiko da sabuwar tambaya a duk lokacin da kake so.",
         "en": "OK, that question is cancelled.\n\nSend a new question whenever you like.",

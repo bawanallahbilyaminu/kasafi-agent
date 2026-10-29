@@ -35,6 +35,17 @@ def test_typed_question_gets_searching_ack_then_answer() -> None:
     assert outs[0].text == f"ANSWER[ha]: {Q}"
 
 
+@pytest.mark.parametrize("ask", ["Nuna lissafi", "nuna lissafi.", "Show working"])
+def test_show_working_sends_the_stored_working_without_a_model(ask: str) -> None:
+    store, calls = consented(), []
+    store.add_turn(user_key(A, make_settings()), "ha", Q, "Amsa", [], "🧮 *Yadda aka lissafa*\n• all: 1265 lines")
+    outs, _ = run_handle(text(ask), store=store, answer_calls=calls)
+    assert calls == [] and outs[0].text.startswith("🧮 *Yadda aka lissafa*")
+    store2 = consented()
+    outs, _ = run_handle(text(ask), store=store2, answer_calls=calls)
+    assert calls == [] and outs[0].text == t("no_working", "ha")
+
+
 def test_english_user_gets_english_answer() -> None:
     calls = []
     outs, _ = run_handle(text("How much for health in 2026?"), store=consented("en"), answer_calls=calls)
