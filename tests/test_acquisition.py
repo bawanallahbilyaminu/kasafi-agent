@@ -214,3 +214,13 @@ def test_a_server_that_stops_sending_is_a_failed_fetch(tmp_path: Path) -> None:
             return await download_pdf(URL, tmp_path / "doc.pdf", http, Robots(http))
     with pytest.raises(FetchError, match="ReadTimeout"):
         asyncio.run(go())
+
+
+def test_an_empty_robots_txt_disallows_nothing_and_blocked_domains_are_never_fetched() -> None:
+    async def go():
+        routes = {"https://data.humdata.org/robots.txt": httpx.Response(202, text="")}
+        async with httpx.AsyncClient(transport=transport(routes)) as http:
+            return await Robots(http).allowed("https://data.humdata.org/dataset/x/resource/y/download/a.pdf")
+    assert asyncio.run(go()) == (True, "")
+    assert host_allowed("https://www.ilo.org/a.pdf") and not host_allowed("https://ilostat.ilo.org/a.pdf")
+    assert host_allowed("https://www.who.int/a.pdf") and not host_allowed("https://ncfrmi.gov.ng/a.pdf")

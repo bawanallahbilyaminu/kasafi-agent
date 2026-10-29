@@ -620,6 +620,49 @@ topics:
         note: discovery hints only (partner names, themes, LGAs) until the ministry agrees it can be published; never expose contact persons; project rows 3-53 have misaligned fields, so no project amounts or titles
 
 # ---------------------------------------------------------------------------
+# Domain probe results (scripts/probe_registry.py; decided by Bilyaminu on Oct 30)
+# A dated entry is allowlisted even when its publisher above still says verified: "no".
+# "unreachable" = no answer over https when probed: kept here, not allowlisted, re-probed weekly.
+# "disallowed" = its robots.txt disallows KasafiBot: never fetched (national context only).
+# ---------------------------------------------------------------------------
+domain_checks:
+  nema.gov.ng: 2026-10-30
+  smedan.gov.ng: 2026-10-30
+  microdata.worldbank.org: 2026-10-30
+  worldbank.org: 2026-10-30
+  openknowledge.worldbank.org: 2026-10-30
+  ilo.org: 2026-10-30
+  nassp.gov.ng: 2026-10-30
+  ophi.org.uk: 2026-10-30
+  ncdc.gov.ng: 2026-10-30
+  who.int: 2026-10-30
+  afro.who.int: 2026-10-30
+  naca.gov.ng: 2026-10-30
+  msf.org: 2026-10-30
+  fews.net: 2026-10-30
+  wfp.org: 2026-10-30
+  docs.wfp.org: 2026-10-30
+  ubec.gov.ng: 2026-10-30        # answered HTTP 522 (origin down) on the probe; robots.txt allows us
+  naerls.gov.ng: 2026-10-30
+  nihsa.gov.ng: 2026-10-30
+  nimet.gov.ng: 2026-10-30       # answered HTTP 307; its robots.txt was unreadable, so fetches are refused until it reads
+  ifad.org: 2026-10-30
+  grid3.org: 2026-10-30
+  data.grid3.org: 2026-10-30
+  d-portal.org: 2026-10-30
+  iatistandard.org: 2026-10-30
+  ncfrmi.gov.ng: unreachable
+  nasscp.gov.ng: unreachable
+  nmcp.gov.ng: unreachable
+  nphcda.gov.ng: unreachable
+  education.gov.ng: unreachable
+  nemis.gov.ng: unreachable
+  waterresources.gov.ng: unreachable
+  neiti.gov.ng: unreachable
+  nationalpopulation.gov.ng: unreachable
+  ilostat.ilo.org: disallowed
+
+# ---------------------------------------------------------------------------
 # Never fetch or quote
 # ---------------------------------------------------------------------------
 global_exclude:

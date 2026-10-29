@@ -34,6 +34,7 @@ BASE_ALLOWLIST = (
 # ... plus every verified publisher domain in data/source_registry.yaml, loaded at startup (unverified ones stay
 # off until a probe and a person confirm them: scripts/probe_registry.py)
 ALLOWLIST = tuple(dict.fromkeys(BASE_ALLOWLIST + tuple(registry().domains())))
+BLOCKED = tuple(registry().blocked())          # probed unreachable or disallowed: never fetched
 
 
 def host_allowed(url: str, allowlist: tuple[str, ...] = ALLOWLIST) -> bool:
@@ -41,6 +42,8 @@ def host_allowed(url: str, allowlist: tuple[str, ...] = ALLOWLIST) -> bool:
     if parts.scheme != "https" or not parts.hostname or parts.username or parts.port not in (None, 443):
         return False
     host = parts.hostname.lower().rstrip(".")
+    if any(host == d or host.endswith("." + d) for d in BLOCKED):     # e.g. ilostat.ilo.org: robots.txt says no
+        return False
     return any(host == d or host.endswith("." + d) for d in allowlist)
 
 
@@ -108,6 +111,10 @@ class Robots:
             parser.disallow_all = True
             return parser, {}
         if 400 <= r.status_code < 500:
+            parser.allow_all = True
+            return parser, {}
+        if 200 <= r.status_code < 300 and not r.text.strip():
+            # an empty robots.txt has no rules, so it disallows nothing (HDX answers 202 with no body)
             parser.allow_all = True
             return parser, {}
         if r.status_code != 200:

@@ -78,16 +78,26 @@ class Registry:
     channels: dict[str, Channel]
     global_exclude: tuple[str, ...] = ()
     _all: tuple[Publisher, ...] = field(default=(), repr=False)
+    domain_checks: dict[str, str] = field(default_factory=dict)   # domain -> probe date | unreachable | disallowed
 
     def publishers(self) -> list[Publisher]:
         return list(self._all)
 
+    def blocked(self) -> list[str]:
+        """Domains probed as unreachable or disallowed by robots.txt: never fetched, even under an allowlisted
+        parent (ilostat.ilo.org under ilo.org)."""
+        return [d for d, v in self.domain_checks.items() if v in ("unreachable", "disallowed")]
+
     def domains(self, *, verified_only: bool = True) -> list[str]:
-        """Every publisher's and catalog channel's domains (verified ones only, by default)."""
-        out = [d for p in self._all if p.is_verified or not verified_only for d in p.domains]
+        """Every publisher's and catalog channel's domains (verified ones only, by default): a verified publisher's
+        or a dated domain check's; blocked domains never."""
+        checked = {d for d, v in self.domain_checks.items() if re.match(r"\d{4}-\d\d-\d\d", v)}
+        out = [d for p in self._all if p.is_verified or not verified_only or set(p.domains) & checked
+               for d in p.domains if not verified_only or p.is_verified or d in checked]
         out += [_host(c.site) for c in self.channels.values()
                 if c.site and (c.verified.lower() not in ("", "no") or not verified_only)]
-        return list(dict.fromkeys(d.lower() for d in out if d))
+        blocked = set(self.blocked()) if verified_only else set()
+        return list(dict.fromkeys(d.lower() for d in out if d and d.lower() not in blocked))
 
     def unverified_domains(self) -> list[str]:
         verified = set(self.domains())
@@ -140,8 +150,9 @@ def parse_registry(text: str) -> Registry:
                                       str(c.get("download_pattern") or ""), str(c.get("auth") or ""),
                                       _t(c.get("use_for")), str(c.get("verified") or ""))
                 for c in raw.get("discovery_channels") or []}
+    checks = {str(d).lower(): str(v) for d, v in (raw.get("domain_checks") or {}).items()}
     return Registry(int(raw.get("version") or 0), topics, channels, _t(raw.get("global_exclude")),
-                    tuple(every.values()))
+                    tuple(every.values()), checks)
 
 
 @lru_cache(maxsize=1)

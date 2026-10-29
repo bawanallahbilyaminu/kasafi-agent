@@ -56,6 +56,22 @@ async def crawl_once(conn: psycopg.Connection, settings: Settings, http: httpx.A
     return out
 
 
+async def reprobe_unreachable(http: httpx.AsyncClient) -> list[str]:
+    """The registry's unreachable domains, tried again: those that answer now are logged for a person to mark
+    verified in data/source_registry.yaml (nothing is allowlisted here)."""
+    back = []
+    for d in (d for d, v in registry().domain_checks.items() if v == "unreachable"):
+        try:
+            r = await http.head(f"https://{d}/", follow_redirects=True, timeout=20)
+            if r.status_code < 500:
+                back.append(f"{d} (HTTP {r.status_code})")
+        except httpx.HTTPError:
+            continue
+    if back:
+        log.warning("registry domains marked unreachable now answer; review them: %s", ", ".join(back))
+    return back
+
+
 async def crawl_weekly(settings: Settings) -> None:
     """Started with the app: the first crawl after a short delay, then once a week. Never crashes the app."""
     await asyncio.sleep(FIRST_DELAY_S)
@@ -66,6 +82,7 @@ async def crawl_weekly(settings: Settings) -> None:
                         httpx.AsyncClient(headers={"User-Agent": USER_AGENT}) as http:
                     await crawl_once(conn, settings, http, client)
                     conn.commit()
+                    await reprobe_unreachable(http)
         except Exception as e:
             log.warning("library crawl failed: %s", type(e).__name__)
         await asyncio.sleep(WEEK_S)
