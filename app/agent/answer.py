@@ -40,7 +40,7 @@ from app.acquisition.library import Acquired, fetch_and_index, find_and_fetch, l
 from app.agent.budget_query import QueryResult, context_text, lga_in, render_working, run_budget_query
 from app.agent.calculate import MIXED, CalcError, Calculation, MixedBases, offer_text, validate
 from app.agent.line_answer import LineResult, fmt, is_location, item_of, read_lines, short_name
-from app.retrieval.line_search import MAX_LINES, search_lines
+from app.retrieval.line_search import MAX_LINES, name_key, nearest, search_lines
 from app.config import Settings, get_settings
 from app.providers.chat import ChatClient
 from app.providers.meta import MetaClient
@@ -141,7 +141,13 @@ ANSWER_SYSTEM = (
     "component (e.g. capital expenditure), say it's only that component, not the total.\n"
     "3c. The same name can appear under several codes. Budget codes are hierarchical: the code ending in more "
     "zeros (e.g. 052100000000 Ministry of Health) is the total including its agencies, and 052100100100 is only "
-    "its headquarters. Use the higher-level code unless the question asks for the headquarters.\n"
+    "its headquarters. Use the higher-level code unless the question asks for the headquarters. In a 'by "
+    "Programme' table the sector is the line with the shortest code (2 digits, e.g. '04 Health'); 4- and "
+    "6-digit codes are objectives and programmes inside it. For a sector, give the sector line, even when a "
+    "programme's name shares a word with the question; the sector's printed name may be the full form of an "
+    "abbreviation in the question.\n"
+    "3d. Before saying a figure wasn't found, check every excerpt and table row for it, and never call missing a "
+    "year or item that you give a figure for.\n"
     "4. Neutral facts only (for security agencies or lines, the cited figures alone, with no commentary): no opinions, no praise or blame, no judgement of performance. Never name "
     "politicians or officials; refer to institutions (e.g. 'the State Government').\n"
     "5. Don't restate the ASSUMPTION MADE; it's shown to the user separately.\n"
@@ -434,6 +440,7 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
 
 
 LINE_EVIDENCE_PAGES = 6       # each is a few printed rows, not a whole page
+LINE_EVIDENCE_NEAR = 5       # a key term's nearest names in meaning that count as named by it
 
 
 def line_evidence(conn: psycopg.Connection, plan: Plan, have: list[Evidence]) -> list[Evidence]:
@@ -450,7 +457,14 @@ def line_evidence(conn: psycopg.Connection, plan: Plan, have: list[Evidence]) ->
     # revenue tables print every MDA too; they only help a question about revenue
     revenue = re.search(r"revenue|\bigr\b|receipt|grant|tax|levy|levies|kudin shiga|haraji",
                         " ".join([plan.english_question, *terms]), re.IGNORECASE)
-    hits = search_lines(conn, terms, years=years, limit=80, spend="any" if revenue else "expenditure")
+    spend = "any" if revenue else "expenditure"
+    hits = search_lines(conn, terms, years=years, limit=80, spend=spend)
+    # a term's printed name may be its full form ('ICT' is printed 'Information Communication and Technology'):
+    # its nearest names in meaning count as named by it too
+    meant = nearest(conn, terms, years=years, docs=plan.doc_ids or None, spend=spend)
+    near = {t: set(list(dict.fromkeys(name_key(x) for x in ls))[:LINE_EVIDENCE_NEAR])
+            for t, ls in zip(terms, meant)}
+    hits += [x for ls in meant for x in ls]
     planned = {d: i for i, d in enumerate(plan.doc_ids)}
 
     def fit(x, term) -> tuple:
@@ -459,7 +473,8 @@ def line_evidence(conn: psycopg.Connection, plan: Plan, have: list[Evidence]) ->
                 planned.get(x.doc_id, 99), -x.score)
     queues = []
     for term in terms:
-        named = sorted((x for x in hits if term.lower() in x.name.lower()), key=lambda x: fit(x, term))
+        named = sorted((x for x in hits if term.lower() in x.name.lower() or name_key(x) in near[term]),
+                       key=lambda x: fit(x, term))
         best, docs = [], set()
         for x in named:
             if x.doc_id not in docs:
@@ -767,7 +782,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         if plan.line_search and not plan.budget_query:      # wide search, model reads, code verifies
             t0 = time.perf_counter()
             hits = search_lines(conn, plan.line_search["terms"], years=plan.line_search["years"],
-                                spend=plan.line_search.get("spend", "any"))
+                                spend=plan.line_search.get("spend", "any"), question=plan.english_question)
             t["search"] = time.perf_counter() - t0
             log.info("line search: %d terms, %d hits", len(plan.line_search["terms"]), len(hits))
             if hits:

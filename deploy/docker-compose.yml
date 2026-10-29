@@ -47,7 +47,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512m
+          memory: 1g   # the budget-line embedding model takes ~200 MB, ~300 MB while indexing
     logging: *logging
     networks: [kasafi-agent]
 

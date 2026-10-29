@@ -22,7 +22,7 @@ from pathlib import Path
 import psycopg
 import pypdfium2 as pdfium
 
-from app.retrieval import quality, tables
+from app.retrieval import line_meaning, quality, tables
 
 log = logging.getLogger(__name__)
 
@@ -511,6 +511,13 @@ def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bo
                     cp.write_row((doc["id"], r.page, r.table_title, r.classification, r.spend_kind, r.code, r.name,
                                   r.column_label, r.year, r.measure, r.period, r.amount_naira, r.row_text,
                                   line_ids[(r.page, r.table_title, r.row_text)][0]))
+    if rows:
+        try:
+            line_meaning.enrich(conn, doc["id"])
+        except Exception as e:  # the embedding model can't load: keep the code descriptions, search by keyword
+            conn.rollback()
+            log.warning("%s: line vectors skipped: %s", doc["id"], e)
+            line_meaning.enrich(conn, doc["id"], embed=False)
     quality.run(conn, doc["id"], doc.get("category"),
                 [(i, text, src) for i, (text, src) in enumerate(zip(labelled, sources), start=1)])
     return IndexResult(doc["id"], "indexed", len(pages), empty, n_chunks)

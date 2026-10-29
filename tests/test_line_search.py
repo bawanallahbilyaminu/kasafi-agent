@@ -17,6 +17,26 @@ def test_one_id_per_printed_line_in_reading_order() -> None:
     assert [v[0] for v in ids.values()] == ["budget-2026-approved:67:1", "budget-2026-approved:67:2"]
 
 
+def test_fragment_named_lines_that_differ_only_in_their_place_are_all_kept(conn) -> None:
+    """Project rows printed without their title differ only in the LGA at the end of the name; the per-document
+    copy limit must not treat them as copies (m05: the Wamakko NGN 10 bn line was dropped)."""
+    hits = search_lines(conn, ["medical equipment", "Ministry of Health"], years=[2026], spend="expenditure")[:40]
+    places = {x.name.rsplit(" - ", 1)[-1] for x in hits
+              if x.doc_id == "budget-2026-approved" and x.name.startswith("Ministry of Health 23010122")}
+    assert {"WAMAKKO", "BINJI", "TAMBUWAL", "SABON BIRNI"} <= places
+
+
+def test_meaning_search_finds_a_line_by_what_it_is(conn) -> None:
+    from app.retrieval.line_search import nearest
+    if not conn.execute("SELECT 1 FROM budget_lines WHERE embedding IS NOT NULL LIMIT 1").fetchone():
+        pytest.skip("line vectors not built")
+    (near,) = nearest(conn, ["persons with disabilities"], years=[2026], docs=["budget-2026-approved"])
+    names = list(dict.fromkeys(x.name.lower() for x in near))[:5]
+    assert any("disabilit" in n for n in names)
+    (ict,) = nearest(conn, ["ICT"], years=[2026], docs=["budget-2026-approved"])
+    assert "information communication and technology" in [" ".join(x.name.lower().split()) for x in ict][:40]
+
+
 def test_ministry_of_a_project_line() -> None:
     line = Line("x", "t", "d", 67, TITLE, "Counterpart Funds", "Counterpart Funds for BHCBF- EMT 052100100100 - Ministry "
                 "of Health 23050103 - MONITORING | 2026 Approved Budget: 70,000,000.00", "project", "", "", 1.0)
