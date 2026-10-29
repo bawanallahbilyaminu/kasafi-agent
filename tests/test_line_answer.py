@@ -208,3 +208,9 @@ def test_missing_terms_split_phrases_into_searchable_words() -> None:
     terms = ans.missing_terms("domestic debt servicing; external debt deductions")
     assert terms[:2] == ["domestic debt servicing", "external debt deductions"]
     assert "domestic" in terms and "servicing" in terms and "the" not in terms
+
+
+def test_a_printed_figure_is_never_labelled_a_calculation() -> None:
+    res, _ = verify({"selected": [{"line": "L4", "column": "2026 Approved Budget"}], "found": "full"}, LINES)
+    assert fill("The ministry total is ₦104.64 biliyan [L4] (lissafin Kasafi).", res) == \
+        "The ministry total is ₦104.64 biliyan [L4]."

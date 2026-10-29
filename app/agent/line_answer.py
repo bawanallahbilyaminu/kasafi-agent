@@ -273,7 +273,10 @@ def fill(summary: str, res: LineResult) -> str:
     out = summary
     for k, v in res.computed().items():
         out = out.replace("{" + k + "}", f"{v}%" if k.endswith("PCT") else f"{v} : 1" if k == "RATIO" else fmt(v))
-    return re.sub(r"\{[A-Z_]+\}", "", out)
+    out = re.sub(r"\{[A-Z_]+\}", "", out)
+    if not res.computed():          # nothing was calculated: a printed figure is never "Kasafi's calculation"
+        out = re.sub(r"\s*\((?:Kasafi's calculation|lissafin Kasafi)\)", "", out)
+    return out
 
 
 def allowed_numbers(res: LineResult, extra: list[str]) -> set[str]:

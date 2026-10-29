@@ -827,21 +827,22 @@ def missing_terms(missing: str) -> list[str]:
 
 async def _search_missing(conn, plan: Plan, question: str, lang: str, res: LineResult, hits: list, client,
                           settings) -> tuple[LineResult, list]:
-    """A "not found" must not be a search miss: search the missing words once more and, if new lines turn
-    up, let the model read again with them. The first answer stands unless the new lines are used."""
-    seen = {h.id for h in hits[:MAX_LINES]}
+    """A "not found" must not be a search miss or an overlooked line: search the missing words once more; lines
+    that carry those words in their own name go first, and the model reads again. The first answer stands
+    unless the second one uses one of those lines (and doesn't fall back to a broader total)."""
     terms = list(dict.fromkeys(res.missing_terms + missing_terms(res.missing)))
-    more = [x for x in search_lines(conn, terms, years=plan.line_search["years"],
-                                    spend=plan.line_search.get("spend", "any"), limit=MISSING_LINES)
-            if x.id not in seen]
-    if not more:
+    found = search_lines(conn, terms, years=plan.line_search["years"], spend=plan.line_search.get("spend", "any"),
+                         limit=MISSING_LINES)
+    named = [x for x in found if any(len(t) >= 4 and t.lower() in x.name.lower() for t in terms)]
+    if not named:
         return res, hits
-    log.info("searching again for what was missing: %d new lines", len(more))
-    wider = hits[:MAX_LINES - len(more)] + more
+    ids = {x.id for x in named}
+    log.info("searching again for what was missing: %d lines named by it", len(named))
+    wider = named + [h for h in hits[:MAX_LINES] if h.id not in ids][:MAX_LINES - len(named)]
     again = await read_lines(question, plan.english_question, lang, wider, client, settings,
                              question_years(question, plan.english_question), chat_json)
-    new = {x.id for x in more}               # kept only if the second read uses a line it newly found
-    return (again, wider) if any(x.line.id in new for x in again.selections) else (res, hits)
+    better = any(x.line.id in ids for x in again.selections) and (res.aggregate_only or not again.aggregate_only)
+    return (again, wider) if better else (res, hits)
 
 
 MISSING_LINES = 12
