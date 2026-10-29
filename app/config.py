@@ -76,8 +76,10 @@ class Settings(BaseSettings):
     serper_api_key: SecretStr | None = None
     # ReliefWeb API v2 needs a pre-approved appname (apidoc.reliefweb.int); its search is skipped without one
     reliefweb_appname: str = ""
-    # IOM DTM API v3 subscription key; DTM API lookups are skipped without one
+    # IOM DTM API keys (dtm-apim-portal.iom.int): the Baseline (displacement, v3) and Humanitarian Needs
+    # Assessment (HNA, v1) products; each lookup is skipped while its key is empty
     dtmapi_subscription_key: SecretStr | None = None
+    dtmhna_subscription_key: SecretStr | None = None
     # Multi-source topic answers: the whole look-up-and-fetch budget, in seconds
     kasafi_topic_budget_s: float = 90.0
     # Self-growing library: live document fetches per day (all users), and where fetched PDFs are kept
