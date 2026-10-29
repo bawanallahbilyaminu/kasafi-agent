@@ -47,6 +47,48 @@ Code then compares the two picks (`reconcile`). Rows both models chose are answe
 
 Reports: [`mid_tier_report_step13_open.md`](evals/complex/mid_tier_report_step13_open.md) and [`mid_tier_report_step13_meta.md`](evals/complex/mid_tier_report_step13_meta.md). Single runs vary by a few questions either way. Muse Spark Open adds no noticeable time, because the two readings run at the same time.
 
+## Structured budget core and analysis tools
+
+At indexing, the extracted tables become three entity tables, with one column per year and measure as printed. Code builds them in [`app/retrieval/entities.py`](app/retrieval/entities.py) (migration 0009):
+
+- `budget_items`: one row per budget line. Each row has its classification, kind of spending, code and name, and the ministry or agency it belongs to. Lines in a per-agency table belong to the agency section they're printed under.
+- `projects`: one row per capital project in a budget's statewide project list. Each row has the MDA, economic, function and location codes and names, the amounts and the page. Rows are parsed from the page text by their code anchors. Where a row leaves empty cells blank, its numbers are placed by where they're printed in the PDF.
+- `perf_items`: one row per implementation-report line. Each row has the original, revised and final budget, the quarter's spending and the spending so far this year.
+
+**Reconciliation checks** run at every build. Their counts and failures are stored in `entity_builds`, and `scripts/build_entities.py --examples` prints them.
+
+| Check | 2026 budget | 2025 budget |
+|---|---|---|
+| Projects | 1,709 add up to ₦553.14 bn of the printed ₦553.34 bn | 1,693 add up to ₦347.40 bn of ₦347.48 bn |
+| Projects = each MDA's capital | 633 / 636 | 614 / 624 |
+| Agencies → ministry → sector → total | 1,740 / 1,752 | 1,386 / 1,428 |
+| Personnel + overhead + debt + capital = total, per MDA | 1,038 / 1,038 | 599 / 954 |
+| Functional total = administrative total | 18 / 18 | 18 / 18 |
+
+- **Known gaps.** On the location pages, table titles are carried over and rows from different tables are interleaved, so the location checks fail. That's why LGA answers use the project list, not the location table.
+- **2025 overhead table.** It continues under a "by Fund Source" title, so the 2025 kinds check isn't complete.
+- **One unplaced row.** One 2026 project row (₦200 m) can't be placed.
+
+The implementation reports (Q4 2024 to Q2 2026) reconcile 100% on functions and programmes, and 97–99% on the administrative hierarchy.
+
+**Analysis tools** ([`app/agent/analysis.py`](app/agent/analysis.py)). The planner chooses one, and every count and sum is a SQL query:
+
+- **`project_status`:** which projects are continuing, started, idle, new or dropped. It uses one budget's own previous-year columns. For example, the 2026 budget prints each project's 2025 revised budget and its January–September 2025 spending.
+- **`lga_projects`:** only lines whose location is that LGA. Statewide projects are counted separately, and the reply says so.
+- **`ranking`:** projects, LGAs or agencies.
+- **`mda_profile`:** one ministry or agency (with the latest report's spending).
+- **`function_profile`:** one function of government across all ministries.
+- **`revenue`:** where the money comes from.
+
+Search plus model reading stays the fallback for everything else.
+
+**Replies.**
+- 2–5 short, everyday sentences: the total first, then what was spent, saying plainly which figures are allocated and which are spent.
+- Then the top 3–5 rows (added by code), then one *Madogara / Sources* line.
+- The rows and arithmetic are sent when the user writes *nuna lissafi* / *show working*, with no model call, and are kept in the admin trace.
+- For the analysis tools, code writes every figure in the reply.
+- Elsewhere the number check still runs on the model's exact wording.
+
 ## Status
 
 Work in progress. See [`docs/architecture.md`](docs/architecture.md) for the design and build plan.
@@ -66,6 +108,15 @@ Assets created before the hackathon and reused here. No code is reused.
 - _Test questions (TBD)._
 
 An earlier, separate Kasafi prototype was built for a different competition. No code from it is used in this repository.
+
+**Design lessons from a previous project.** On Oct 30 we read that prototype's public technical notes for ideas only. Its code and its SQLite database are not used. These ideas were re-implemented here, on the hackathon's own extraction and Postgres:
+
+- Turn budget tables into entities, one column per year and measure, and reconcile them at extraction time.
+- Get a project's status from one budget's own previous-year columns.
+- Show only projects tagged to an LGA, and say that statewide ones aren't split.
+- Keep counts apart from money.
+- Label every figure as allocated or spent.
+- Keep the plain answer short and the working separate.
 
 ## Data sources and use
 

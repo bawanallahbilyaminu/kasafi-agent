@@ -39,6 +39,7 @@ WhatsApp webhook (FastAPI on VPS)
 | `find_document(description)` | Local index → ReliefWeb API / World Bank Documents API (partner reports) → Serper web search limited to allowlisted domains (`site:` + `filetype:pdf`, `gl=ng`). Returns candidates with URLs. |
 | `fetch_and_index(url)` | Allowlist check → download (size limit) → sandboxed parse → page text (vision OCR for scanned pages) → index with provenance. |
 | `query_table(doc_id, filters)` | Structured budget lines extracted from tables (sector, MDA, LGA, year, approved/revised/released/spent, unit). |
+| `analysis(tool, ...)` | On the structured core (`budget_items`, `projects`, `perf_items`, built and reconciled at indexing by `app/retrieval/entities.py`): `project_status`, `lga_projects`, `ranking`, `mda_profile`, `function_profile`, `revenue`. Counts and sums in SQL; the reply is written by code from the facts (`app/agent/analysis.py`). |
 | `calculate(expression, inputs)` | Exact arithmetic (percentages, changes). Never do maths "in the head". |
 | `crop_evidence(doc_id, page, target)` | SAM 3.1 crops the table/row as an image. |
 | `log_gap(question, missing_doc)` | Adds to the human review queue. |
