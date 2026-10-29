@@ -40,7 +40,7 @@ import psycopg
 
 from app.acquisition.channels import catalog_candidates, hdx_datasets
 from app.acquisition.find import Candidate, excluded, pick_candidate, search_web
-from app.acquisition.library import fetch_and_index, fetches_today
+from app.acquisition.library import fetch_and_index, fetches_today, ocr_pages
 from app.acquisition.policy import USER_AGENT, Robots, host_allowed
 from app.acquisition.registry import Publisher, Topic, registry
 from app.config import Settings
@@ -275,7 +275,28 @@ async def get_document(conn: psycopg.Connection, p: Publisher, topic: Topic, tod
         res.doc_id, res.title, res.status, res.older = local[0][0], local[0][1], "ok", True
     if res.doc_id and not res.title:
         res.title = conn.execute("SELECT title FROM documents WHERE id = %s", (res.doc_id,)).fetchone()[0]
+    if res.doc_id:
+        await read_map_labels(conn, res.doc_id, settings)
     return res
+
+
+DASHBOARD_PAGES = 4
+
+
+async def read_map_labels(conn: psycopg.Connection, doc_id: str, settings: Settings) -> int:
+    """A dashboard or factsheet (a few pages) whose text layer never names Sokoto prints its state figures in a
+    map or chart (UNHCR's dashboard: 'SOKOTO 176,099' is only in the graphic): its pages are OCR'd (Muse Spark
+    vision) so the figures can be read and checked. Returns the pages read."""
+    rows = conn.execute("SELECT page, text, source FROM pages WHERE doc_id = %s ORDER BY page", (doc_id,)).fetchall()
+    if not rows or len(rows) > DASHBOARD_PAGES or any("sokoto" in (t or "").lower() for _, t, _ in rows) \
+            or all(s == "ocr" for _, _, s in rows):
+        return 0
+    path = Path(settings.kasafi_fetch_dir) / f"{doc_id}.pdf"
+    if not path.exists():
+        return 0
+    n = await ocr_pages(doc_id, path, [p for p, _, _ in rows], settings)
+    log.info("read map labels of %s: %d pages", doc_id, n)
+    return n
 
 
 # --- 3. fact cards ---------------------------------------------------------------------------------------------
