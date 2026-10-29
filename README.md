@@ -15,9 +15,37 @@ Kasafi gives neutral, cited facts only. It does not give opinions on politics, d
 ## Meta models used
 
 - **Muse Spark** (Meta Model API): planning, tool use, answering, verification
-- **Muse Spark Open** (open weights, served via Baseten)
+- **Muse Spark Open** (open weights, served via Baseten): the second, independent reading of every budget-line answer (below)
 - **Muse Voice Transcribe**: Hausa voice notes to text
 - **SAM 3.1**: crops of the source tables used as evidence
+
+### Where Muse Spark Open runs
+
+For a budget-line question, line search finds the 40 most relevant printed budget rows. Two models then read them **independently and at the same time**, and each picks the rows that answer the question:
+
+| Reading | Model | Where in the code |
+|---|---|---|
+| 1 | Muse Spark (`muse-spark-1.3`, Meta Model API) | `read_lines` → `_read_once` in [`app/agent/line_answer.py`](app/agent/line_answer.py) |
+| 2 | **Muse Spark Open** (`meta-models/muse-spark-open-1026`, Baseten) | `read_lines` → `_second_reading` in [`app/agent/line_answer.py`](app/agent/line_answer.py); the client comes from `open_reader` in [`app/agent/answer.py`](app/agent/answer.py) |
+
+Code then compares the two picks (`reconcile`). Rows both models chose are answered and added up. Rows only one model chose are shown as "possibly relevant, not counted". If the two picks share nothing, Kasafi asks the user which reading they meant. A second opinion from a different model, with open weights, catches rows that one model misreads, and code does all the arithmetic either way.
+
+- **Reasoning:** Muse Spark Open always reasons, and `max_tokens` covers reasoning plus answer. Its reasoning comes back in `reasoning_content` and is kept apart from the answer ([`app/providers/chat.py`](app/providers/chat.py)). Only the JSON answer is parsed. Kasafi asks for `reasoning_effort="low"` and leaves 8,000 tokens of room.
+- **Fallback:** if Muse Spark Open errors, or takes longer than `KASAFI_OPEN_READ_TIMEOUT_S` (default 20 s), Muse Spark does the second reading instead. The log line is `Muse Spark Open reading fell back to Muse Spark`. Baseten slowness never blocks an answer.
+- **Trace:** each answer records which model did each reading (`LineResult.readers`). The admin trace page shows this.
+- **Switch:** `KASAFI_OPEN_READER=false` turns it off. Without `BASETEN_API_KEY` it's off too.
+
+**Measured on Oct 29.** Same code and questions, run one after the other: our 39 mid-tier test questions ([`evals/complex`](evals/complex)), then the 10-case main suite twice.
+
+| | Reading 2 on Muse Spark Open | Both readings on Muse Spark |
+|---|---|---|
+| 39 questions: answered / partial / not found / clarify | **18 / 13 / 6 / 2** | 16 / 17 / 6 / 0 |
+| Median time per question | 14.0 s | 13.8 s |
+| Muse Spark Open reading time (35 readings) | median 3.4 s, max 6.7 s | – |
+| Fallbacks to Muse Spark / provider retries | 0 / 0 | – / 0 |
+| Main suite | 20/20 passed, median 10.2 s | – |
+
+Reports: [`mid_tier_report_step13_open.md`](evals/complex/mid_tier_report_step13_open.md) and [`mid_tier_report_step13_meta.md`](evals/complex/mid_tier_report_step13_meta.md). Single runs vary by a few questions either way. Muse Spark Open adds no noticeable time, because the two readings run at the same time.
 
 ## Status
 
