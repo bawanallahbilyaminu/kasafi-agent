@@ -47,7 +47,8 @@ SELECT_SYSTEM = (
     "lines that are only related.\n"
     "3a. A project's printed name can be only a place or a fragment (long names wrap over printed rows); its "
     "'item' says what the money buys. Judge a line by its item, never by a place name in it.\n"
-    "4. For several things, pick a line for each; list what you couldn't find in 'missing'. Each line's page "
+    "4. For several things, pick a line for each; list what you couldn't find in 'missing' (reply language) and, in 'missing_terms', English search words "
+    "for it as budgets print them (synonyms too). Each line's page "
     "and code are shown to the reader, so never list a page or code as missing.\n"
     "5. operation: \"list\" (show each figure), \"sum\" (add all selections), \"compare\" (two selections; "
     "the app works out the change from the earlier year to the later), \"share\" or \"ratio\" (selections "
@@ -71,7 +72,7 @@ SELECT_SYSTEM = (
     "most 20 characters and the full question for that reading. Otherwise clarify is null.\n"
     'Reply with JSON only: {"selected": [{"line": "L1", "column": "<column label exactly as shown>", '
     '"part": "top|bottom|both (share and ratio only)"}], "operation": "list|sum|compare|share|ratio", '
-    '"aggregate_only": false, "summary": "...", "missing": "", "found": "full|partial|none", "clarify": null}'
+    '"aggregate_only": false, "summary": "...", "missing": "", "missing_terms": [], "found": "full|partial|none", "clarify": null}'
 )
 
 
@@ -89,6 +90,7 @@ class LineResult:
     aggregate_only: bool = False
     summary: str = ""
     missing: str = ""
+    missing_terms: list[str] = field(default_factory=list)   # English search words for what's missing
     found: str = "none"
     total: Decimal | None = None
     difference: Decimal | None = None
@@ -169,7 +171,9 @@ def verify(d: dict, lines: list[Line]) -> tuple[LineResult, list[str]]:
     """The model's choice, checked: every line id and column must exist; amounts come from the stored cells."""
     res = LineResult(operation=d.get("operation") if d.get("operation") in OPERATIONS else "list",
                      aggregate_only=d.get("aggregate_only") is True, summary=str(d.get("summary") or "").strip(),
-                     missing=str(d.get("missing") or "").strip(), found=str(d.get("found") or "none"))
+                     missing=str(d.get("missing") or "").strip(), found=str(d.get("found") or "none"),
+                     missing_terms=[str(x)[:80] for x in (d.get("missing_terms") or []) if str(x).strip()][:8]
+                     if isinstance(d.get("missing_terms"), list) else [])
     problems, seen = [], set()
     for s in d.get("selected") or []:
         if not isinstance(s, dict):

@@ -722,6 +722,8 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
                 t0 = time.perf_counter()
                 res = await read_lines(question, plan.english_question, lang, hits, client, settings,
                                        question_years(question, plan.english_question), chat_json)
+                if res.missing:                  # before saying "not found", search for exactly what's missing
+                    res, hits = await _search_missing(conn, plan, question, lang, res, hits, client, settings)
                 t["answer"] = time.perf_counter() - t0
                 if res.clarify:                  # the lines show several different things: ask which one
                     return Answer(res.clarify_question, False, True, plan=plan, timings=t, clarify=res.clarify)
@@ -810,6 +812,39 @@ LINE_WORDS = {
            "no_sum": "Ba a haɗa su ba: an buga waɗannan layuka a teburori daban-daban na kasafi ɗaya, wanda zai iya "
                      "nuna kuɗi ɗaya sau biyu."},
 }
+
+
+_STOP = {"the", "and", "for", "of", "in", "on", "to", "a", "an", "line", "lines", "separate", "specific", "budget",
+         "allocation", "allocations", "shown", "no", "not", "any", "da", "na", "ga", "ba", "a", "samu"}
+
+
+def missing_terms(missing: str) -> list[str]:
+    """Search terms for what the model couldn't find: each phrase, then its meaningful words."""
+    phrases = [p.strip(" .-") for p in re.split(r"[;,]|and|or|da|\s[-–]\s", missing) if p.strip(" .-")]
+    words = [w for p in phrases for w in re.findall(r"[A-Za-z']{4,}", p) if w.lower() not in _STOP]
+    return list(dict.fromkeys(phrases[:4] + words))[:10]
+
+
+async def _search_missing(conn, plan: Plan, question: str, lang: str, res: LineResult, hits: list, client,
+                          settings) -> tuple[LineResult, list]:
+    """A "not found" must not be a search miss: search the missing words once more and, if new lines turn
+    up, let the model read again with them. The first answer stands unless the new lines are used."""
+    seen = {h.id for h in hits[:MAX_LINES]}
+    terms = list(dict.fromkeys(res.missing_terms + missing_terms(res.missing)))
+    more = [x for x in search_lines(conn, terms, years=plan.line_search["years"],
+                                    spend=plan.line_search.get("spend", "any"), limit=MISSING_LINES)
+            if x.id not in seen]
+    if not more:
+        return res, hits
+    log.info("searching again for what was missing: %d new lines", len(more))
+    wider = hits[:MAX_LINES - len(more)] + more
+    again = await read_lines(question, plan.english_question, lang, wider, client, settings,
+                             question_years(question, plan.english_question), chat_json)
+    new = {x.id for x in more}               # kept only if the second read uses a line it newly found
+    return (again, wider) if any(x.line.id in new for x in again.selections) else (res, hits)
+
+
+MISSING_LINES = 12
 
 
 def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dict, acq) -> Answer:

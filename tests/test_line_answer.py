@@ -202,3 +202,9 @@ def test_a_ratio_across_years_drops_items_only_one_side_has() -> None:
         {"line": "L3", "column": "2025 Performance Year to Date (Q1-Q4)", "part": "bottom"}]}, lines)
     assert [s.line.name for s in res.selections] == ["Ministry of Commerce", "Ministry of Commerce"]
     assert res.ratio == Decimal("0.08") and "Ministry for Skills Acquisition" in res.missing and problems
+
+
+def test_missing_terms_split_phrases_into_searchable_words() -> None:
+    terms = ans.missing_terms("domestic debt servicing; external debt deductions")
+    assert terms[:2] == ["domestic debt servicing", "external debt deductions"]
+    assert "domestic" in terms and "servicing" in terms and "the" not in terms
