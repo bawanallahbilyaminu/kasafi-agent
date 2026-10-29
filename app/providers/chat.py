@@ -12,12 +12,15 @@ immediately. The API key never appears in exceptions or logs.
 from __future__ import annotations
 
 import asyncio
+import logging
 import random
 import re
 from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
+
+log = logging.getLogger(__name__)
 
 RETRYABLE_STATUS = {429, 500, 503}
 _THINK_BLOCK = re.compile(r"^\s*<think>.*?</think>\s*", re.DOTALL)
@@ -115,7 +118,9 @@ class ChatClient:
                 return resp
             if resp.status_code not in RETRYABLE_STATUS or attempt == self.max_retries:
                 raise self._error_from(resp)
-            await asyncio.sleep(_retry_delay(resp, attempt))
+            delay = _retry_delay(resp, attempt)
+            log.warning("%s API %d on %s; retry %d in %.1fs", self.provider, resp.status_code, path, attempt + 1, delay)
+            await asyncio.sleep(delay)
         raise AssertionError("unreachable")
 
     def _error_from(self, resp: httpx.Response) -> ProviderError:
