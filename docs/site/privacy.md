@@ -14,7 +14,10 @@ under the **Nigeria Data Protection Act 2023 (NDPA)**. Contact: [bilyaminu@halal
 
 - Your **WhatsApp phone number** (and the profile name WhatsApp sends with it)
 - The **messages and voice notes** you send Kasafi, and Kasafi's replies
-- Basic technical records: times, message types and errors. These do not include your message text or your full number.
+- Basic technical records: times, message types and errors. These don't include your message text or your full number.
+- **Answer traces** (kept 30 days) and **review-queue entries** (kept 90 days): the English wording of a question,
+  plus, for traces, Kasafi's reply. **No phone number or user ID is linked to them.** Before a trace is stored, phone
+  numbers, email addresses and long digit strings (such as account or NIN numbers) are removed from the wording.
 - A few **settings linked to a coded ID**: whether and when you agreed to the first-contact notice, your reply language
   (Hausa or English), and how many messages you sent each day (for the daily limits). The ID is made from your number
   with a secret key, so we don't store the number itself.

@@ -69,6 +69,28 @@ def test_the_trace_record_keeps_both_readings_and_flags_a_fallback() -> None:
     assert trace.path(_answer()) == "lines:list"
 
 
+def test_personal_numbers_and_emails_are_removed_from_the_stored_wording() -> None:
+    q = ("My number is +234 800 000 0000, or 0800-000-0000 and 08000000000; email test.user@example.com; "
+         "NIN 12345678901, account 0123456789. Budget 2025 and 2026 2027, 70,000,000.00 for item 23010104?")
+    out = trace.redact(q)
+    for gone in ("+234", "0800-000-0000", "08000000000", "example.com", "12345678901", "0123456789"):
+        assert gone not in out
+    assert out.count("[number removed]") == 5 and "[email removed]" in out
+    assert "2025 and 2026 2027, 70,000,000.00 for item 23010104?" in out      # years, amounts, short codes stay
+    reply = "Ministry of Health (code 052100100100): ₦70.00 million [1]. Call 0800 000 0000."
+    assert trace.scrub_reply(reply) == ("Ministry of Health (code 052100100100): ₦70.00 million [1]. "
+                                        "Call [number removed].")
+
+
+def test_the_trace_plan_is_redacted_too() -> None:
+    a = _answer()
+    a.plan.english_question = "Budget for 08000000000 in 2026?"
+    a.plan.search_queries = ["write to me at a@b.co"]
+    plan = trace.record(a)["plan"]
+    assert plan["english_question"] == "Budget for [number removed] in 2026?"
+    assert plan["search_queries"] == ["write to me at [email removed]"]
+
+
 @pytest.fixture()
 def db():
     psycopg = pytest.importorskip("psycopg")
