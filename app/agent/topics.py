@@ -239,6 +239,28 @@ async def get_document(conn: psycopg.Connection, p: Publisher, topic: Topic, tod
     res = SourceResult(p)
     fetch = {"settings": settings, "client": client, "http": http, "robots": robots,
              "download_timeout": download_timeout}
+    missed = _missed.get(p.id)
+    if missed and time.time() - missed[0] < MISS_TTL_S and download_timeout is None:
+        local = local_documents(conn, p)         # tried and failed lately: what we have, without a new search
+        if local:
+            res.doc_id, res.title, res.status, res.older = local[0][0], local[0][1], "ok", True
+        else:
+            res.status, res.detail = missed[1], f"{missed[2]} (tried within {MISS_TTL_S // 3600} h)"
+        return res
+    res = await _get_document(conn, p, topic, today, res, fetch, http, client, settings)
+    if not res.doc_id or res.older:
+        _missed[p.id] = (time.time(), res.status, res.detail)
+    else:
+        _missed.pop(p.id, None)
+    return res
+
+
+MISS_TTL_S = 12 * 3600
+_missed: dict[str, tuple[float, str, str]] = {}      # publisher -> (when, status, detail) of its last failed look-up
+
+
+async def _get_document(conn, p: Publisher, topic: Topic, today: date, res: SourceResult, fetch: dict,
+                        http: httpx.AsyncClient, client: ChatClient, settings: Settings) -> SourceResult:
     local = local_documents(conn, p)
     if local and fresh_enough(p, local[0], today):
         res.doc_id, res.title, res.status = local[0][0], local[0][1], "ok"
@@ -616,6 +638,7 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
             else:
                 if task in pending:
                     task.cancel()
+                    _missed[p.id] = (time.time(), "timeout", "time budget")
                 results[p.id] = SourceResult(p, status="timeout" if task in pending else "failed",
                                              detail=type(task.exception()).__name__ if task in done else "time budget")
                 if task in done:

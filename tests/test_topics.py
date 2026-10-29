@@ -149,3 +149,25 @@ def test_a_rate_keeps_its_percent_sign() -> None:
     c = tp.Card(nbs, "nlfs", "NLFS 2023", 258, "1.2", "%", "unemployment rate", "2023", "Sokoto State")
     text, _ = tp.compose(registry().topics["labour_employment"], [tp.SourceResult(nbs, "nlfs", cards=[c])], [], "en")
     assert "*1.2%*" in text
+
+
+def test_a_publisher_that_just_failed_isnt_searched_again_for_12_hours(monkeypatch) -> None:
+    import asyncio
+    import time as t
+    calls = []
+
+    async def fake(conn, p, topic, today, res, fetch, http, client, settings):
+        calls.append(p.id)
+        res.status, res.detail = "not_found", "7 candidates, none matched"
+        return res
+    monkeypatch.setattr(tp, "_get_document", fake)
+    monkeypatch.setattr(tp, "local_documents", lambda conn, p: [])
+    tp._missed.clear()
+    topic = registry().topics["displacement_humanitarian"]
+    go = lambda: asyncio.run(tp.get_document(None, DTM, topic, date(2026, 10, 30), http=None, robots=None,
+                                            client=None, settings=None))
+    assert go().status == "not_found" and go().detail.endswith("(tried within 12 h)") and calls == ["iom_dtm"]
+    tp._missed["iom_dtm"] = (t.time() - 13 * 3600, "not_found", "")
+    go()
+    assert calls == ["iom_dtm", "iom_dtm"]
+    tp._missed.clear()

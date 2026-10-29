@@ -72,10 +72,10 @@
     {
       "id": "s03",
       "lang": "ha",
-      "docs": [],
-      "expect_not_found": true,
+      "docs": ["unhcr-fdp-2026-10", "durable-solutions-2026-sokoto"],
       "may_fetch": true,
-      "source": "No current displacement statistics for Sokoto are in the library; IOM DTM flash reports are incident reports about attacks and are not indexed (CLAUDE.md rule 5)."
+      "terms_any": [["UNHCR"], ["Dalilin bambanci"], ["Sokoto town only"]],
+      "source": "Until Oct 29 no current displacement statistics were in the library and the right reply was 'not found'. The multi-source topic path now answers from the primary sources: UNHCR's dashboard (1 Oct 2026: Sokoto 176,099, from the map) and the SBS/JIPS/DRC report (over 181,500 statewide; Sokoto town only), with a 'why they differ' line; the MPI only as related. IOM DTM flash reports stay excluded (CLAUDE.md rule 5)."
     }
   ]
 }
