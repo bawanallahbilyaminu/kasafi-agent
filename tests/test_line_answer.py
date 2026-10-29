@@ -214,3 +214,20 @@ def test_a_printed_figure_is_never_labelled_a_calculation() -> None:
     res, _ = verify({"selected": [{"line": "L4", "column": "2026 Approved Budget"}], "found": "full"}, LINES)
     assert fill("The ministry total is ₦104.64 biliyan [L4] (lissafin Kasafi).", res) == \
         "The ministry total is ₦104.64 biliyan [L4]."
+
+
+def test_spending_by_location_is_never_called_an_lga_allocation() -> None:
+    loc = L(20, "WAMAKKO", 75, [("2026 Approved Budget", "82180000000")],
+            table="Sokoto State Government 2026 Approved Budget - Total Expenditure by Location")
+    loc.code, loc.classification = "33312100", "other"
+    res, _ = verify({"selected": [{"line": "L1", "column": "2026 Approved Budget"}], "found": "full",
+                     "summary": "₦82,180,000,000.00 was allocated directly to Wamakko LGA [L1]."}, [loc])
+    a = ans.line_answer(None, ans.Plan("q", [], []), res, [loc], "en", {}, None)
+    assert "allocated directly" not in a.text and "state spending located in Wamakko" in a.text
+    assert "not money allocated to Wamakko Local Government" in a.text
+
+
+def test_an_uncomputed_placeholder_drops_the_summary() -> None:
+    res, _ = verify({"selected": [{"line": "L1", "column": "2026 Approved Budget"}], "operation": "list",
+                     "found": "full"}, LINES)
+    assert fill("It is {SPENT_PCT} (Kasafi's calculation) spent [L1].", res) == ""

@@ -39,7 +39,7 @@ from app.acquisition.editions import (SERIES, Latest, Series, doc_edition, editi
 from app.acquisition.library import Acquired, fetch_and_index, find_and_fetch, log_gap
 from app.agent.budget_query import QueryResult, context_text, lga_in, render_working, run_budget_query
 from app.agent.calculate import MIXED, CalcError, Calculation, MixedBases, offer_text, validate
-from app.agent.line_answer import LineResult, fmt, item_of, read_lines, short_name
+from app.agent.line_answer import LineResult, fmt, is_location, item_of, read_lines, short_name
 from app.retrieval.line_search import MAX_LINES, search_lines
 from app.config import Settings, get_settings
 from app.providers.chat import ChatClient
@@ -802,6 +802,9 @@ LINE_WORDS = {
            "calc": "Kasafi's calculation", "missing": "Not found",
            "aggregate": "⚠️ The budget doesn't show this item separately. The line above is a broader total; the "
                         "documents don't say how much of it, if any, is for this item.",
+           "location": "⚠️ This is state spending located in {place} (the budget's table by location). It is not "
+                       "money allocated to {place} Local Government; LGAs get their statutory allocations "
+                       "separately.",
            "no_sum": "Not added up: these lines are printed in different tables of one budget, which can show the "
                      "same money twice."},
     "ha": {"head": "🧮 *Yadda aka lissafa* (layukan da aka yi amfani da su):", "total": "Jimilla",
@@ -809,6 +812,9 @@ LINE_WORDS = {
            "missing": "Ba a samu ba",
            "aggregate": "⚠️ Kasafin bai nuna wannan abu daban ba. Layin da ke sama jimilla ce mai faɗi; takardun "
                         "ba su faɗi nawa daga cikinta ne, idan akwai, na wannan abu ba.",
+           "location": "⚠️ Wannan kuɗin jiha ne da ake kashewa a {place} (teburin kasafi bisa wuri). Ba kuɗin "
+                       "da aka ware wa Ƙaramar Hukumar {place} ba ne; ƙananan hukumomi suna samun kasonsu na doka "
+                       "daban.",
            "no_sum": "Ba a haɗa su ba: an buga waɗannan layuka a teburori daban-daban na kasafi ɗaya, wanda zai iya "
                      "nuna kuɗi ɗaya sau biyu."},
 }
@@ -878,6 +884,11 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
                 + side.get(s.part, "") for s in res.selections]
     if res.aggregate_only:
         working.append(w["aggregate"])
+    if located := [s.line for s in res.selections if is_location(s.line)]:
+        # spending by location is easily misread as an LGA's allocation: the code says what it is, not the model
+        summary = ""
+        places = ", ".join(dict.fromkeys(short_name(x).title() for x in located))
+        working.append(w["location"].format(place=places))
     if res.total is not None:
         working.append(f"• {w['total']}: {fmt(res.total)} ({w['calc']})")
     elif res.not_summed:

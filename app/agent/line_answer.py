@@ -45,7 +45,9 @@ SELECT_SYSTEM = (
     "3. The same project can be printed in two tables of one budget: pick it once. When several lines ARE the "
     "item asked about, pick all of them. Prefer lines whose own words match the question's key words over "
     "lines that are only related.\n"
-    "3a. A project's printed name can be only a place or a fragment (long names wrap over printed rows); its "
+    "3a. A line marked 'by location' is state spending located in that LGA, not money allocated to the LGA "
+    "government.\n"
+    "3b. A project's printed name can be only a place or a fragment (long names wrap over printed rows); its "
     "'item' says what the money buys. Judge a line by its item, never by a place name in it.\n"
     "4. For several things, pick a line for each; list what you couldn't find in 'missing' (reply language) and, in 'missing_terms', English search words "
     "for it as budgets print them (synonyms too). Each line's page "
@@ -58,7 +60,8 @@ SELECT_SYSTEM = (
     "items: leave out any that only one side has and list them in 'missing'. Comparing a budget with spending "
     "of the same year gives {SPENT_PCT}, the share spent, never a % change. For a total the document prints itself (Total Expenditure, Recurrent Expenditure, Capital "
     "Expenditure, Total Revenue, Debt Service), use its own total line rather than adding parts. The share of "
-    "'the budget' uses Total Expenditure as the bottom, never revenue. Within one document, add up only lines "
+    "'the budget' uses Total Expenditure as the bottom, never revenue. The whole of a share must contain the "
+    "part (its own ministry's or sector's total, or Total Expenditure); never divide by a total the part isn't in. Within one document, add up only lines "
     "from the same table: a programme or function line and a project line can be the same money.\n"
     "6. summary: one or two sentences in the reply language that answer the question, copying amounts exactly "
     "as printed and citing [L#] after each. Never calculate: write {TOTAL}, {DIFFERENCE}, {CHANGE_PCT}, "
@@ -123,6 +126,14 @@ def short_name(line: Line) -> str:
 _ITEM = re.compile(r"\b\d{8}\s*-\s*([A-Z][A-Z0-9 /&,().'-]{3,90}?)\s*\d{5}")
 
 
+_LOCATION_CODE = re.compile(r"^333(\d{5})?$")
+
+
+def is_location(line: Line) -> bool:
+    """A line of a table by location (LGA codes 333xxxxx): state spending in a place, not the LGA's own money."""
+    return bool(_LOCATION_CODE.match(line.code or "")) or "by location" in line.table_title.lower()
+
+
 def item_of(line: Line) -> str:
     """What a project line buys, from its economic code: 'CONSTRUCTION / PROVISION OF PUBLIC SCHOOLS'."""
     m = _ITEM.search(line.row_text.split(" | ", 1)[0]) if line.classification == "project" else None
@@ -135,6 +146,7 @@ def listing(lines: list[Line]) -> str:
         cols = " | ".join(f"{c.column}: {fmt(c.amount)}" for c in x.cells)
         code = f" | code {x.code}" if x.code else ""
         code += f" | item: {item_of(x)}" if item_of(x) else ""
+        code += " | by location: state spending in this place, not an allocation to the LGA" if is_location(x) else ""
         out.append(f"L{i} | {x.title}, page {x.page} | table: {x.table_title[:110]} | {short_name(x)[:140]}{code} "
                    f"| {cols}")
     return "\n".join(out)
@@ -273,7 +285,8 @@ def fill(summary: str, res: LineResult) -> str:
     out = summary
     for k, v in res.computed().items():
         out = out.replace("{" + k + "}", f"{v}%" if k.endswith("PCT") else f"{v} : 1" if k == "RATIO" else fmt(v))
-    out = re.sub(r"\{[A-Z_]+\}", "", out)
+    if re.search(r"\{[A-Z_]+\}", out):     # a calculation the code didn't make: the sentence can't stand
+        return ""
     if not res.computed():          # nothing was calculated: a printed figure is never "Kasafi's calculation"
         out = re.sub(r"\s*\((?:Kasafi's calculation|lissafin Kasafi)\)", "", out)
     return out
