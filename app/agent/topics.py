@@ -28,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 import time
 from collections.abc import Awaitable, Callable
@@ -55,7 +56,9 @@ MAX_SOURCES = 5
 MIN_SOURCES = 3
 CARD_PAGES = 4                 # best pages of each document the model reads for its figures
 PAGE_CHARS = 3500
-HINTS_PATH = Path(__file__).resolve().parents[2] / "data" / "private" / "partners_hints.json"
+# not in git or the image: on the server it is copied outside the repo and mounted read-only (KASAFI_PARTNER_HINTS)
+HINTS_PATH = Path(os.environ.get("KASAFI_PARTNER_HINTS")
+                  or Path(__file__).resolve().parents[2] / "data" / "private" / "partners_hints.json")
 
 Notify = Callable[[str], Awaitable[None]]
 

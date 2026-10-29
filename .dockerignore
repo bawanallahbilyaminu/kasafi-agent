@@ -2,6 +2,8 @@
 .env
 .env.*
 data/
+# ... except the source registry (public; the fetch allowlist and topics come from it). data/private/ stays out.
+!data/source_registry.yaml
 .git/
 .venv/
 __pycache__/
@@ -12,4 +14,6 @@ evals/
 tests/
 docs/
 scripts/
+# ... except the topic prefetch, run on the server (docker compose exec api python scripts/prefetch_topics.py)
+!scripts/prefetch_topics.py
 *.log

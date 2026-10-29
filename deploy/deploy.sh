@@ -6,6 +6,8 @@
 #   deploy/deploy.sh --sync-index  copy the document index (documents/pages/chunks/budget_lines/budget_rows and the
 #                                  structured core: budget_items/projects/perf_items/entity_builds) from the dev DB
 #   deploy/deploy.sh --sync-pdfs   copy the source PDFs (public documents) to the server, for evidence crops
+#   deploy/deploy.sh --sync-hints  copy data/private/partners_hints.json (not in git) to deploy/private/ on the
+#                                  server, mounted read-only into the app; takes effect on the next deploy/restart
 #
 # SSH host alias: KASAFI_SSH_HOST (default "vps"; see deploy/README.md for the ~/.ssh/config entry).
 # The server's IP is never stored in this repo. Server-side steps live in deploy/remote.sh.
@@ -18,7 +20,7 @@ REMOTE_INDEX=/opt/kasafi-agent/deploy/index.incoming.sql.gz
 REMOTE_PDFS=/opt/kasafi-agent/deploy/pdfs.incoming.tar
 # Keys the server may receive. DATABASE_URL is left out until the production database exists
 # (the local one points at dev Postgres).
-ALLOWED_KEYS='ADMIN_USER|ADMIN_PASSWORD|KASAFI_OPEN_READER|KASAFI_OPEN_READ_TIMEOUT_S|KASAFI_OPEN_ACCESS|KASAFI_ALLOW_SECURITY_BUDGET|KASAFI_PILOT_NUMBERS|KASAFI_EXEMPT_NUMBERS|KASAFI_HASH_KEY|KASAFI_VOICE_PER_DAY|KASAFI_QUESTIONS_PER_DAY|KASAFI_DAILY_SPEND_CAP_USD|KASAFI_COST_PER_VOICE_USD|KASAFI_COST_PER_QUESTION_USD|KASAFI_FETCHES_PER_DAY|META_API_KEY|BASETEN_API_KEY|SERPER_API_KEY|RELIEFWEB_APPNAME|WHATSAPP_TOKEN|WHATSAPP_PHONE_NUMBER_ID|WHATSAPP_VERIFY_TOKEN|WHATSAPP_APP_SECRET|WHATSAPP_BUSINESS_ACCOUNT_ID|WHATSAPP_WABA_ID|WABA_ID'
+ALLOWED_KEYS='ADMIN_USER|ADMIN_PASSWORD|KASAFI_OPEN_READER|KASAFI_OPEN_READ_TIMEOUT_S|KASAFI_OPEN_ACCESS|KASAFI_ALLOW_SECURITY_BUDGET|KASAFI_PILOT_NUMBERS|KASAFI_EXEMPT_NUMBERS|KASAFI_HASH_KEY|KASAFI_VOICE_PER_DAY|KASAFI_QUESTIONS_PER_DAY|KASAFI_DAILY_SPEND_CAP_USD|KASAFI_COST_PER_VOICE_USD|KASAFI_COST_PER_QUESTION_USD|KASAFI_FETCHES_PER_DAY|META_API_KEY|BASETEN_API_KEY|SERPER_API_KEY|RELIEFWEB_APPNAME|DTMAPI_SUBSCRIPTION_KEY|DTMHNA_SUBSCRIPTION_KEY|KASAFI_TOPIC_BUDGET_S|WHATSAPP_TOKEN|WHATSAPP_PHONE_NUMBER_ID|WHATSAPP_VERIFY_TOKEN|WHATSAPP_APP_SECRET|WHATSAPP_BUSINESS_ACCOUNT_ID|WHATSAPP_WABA_ID|WABA_ID'
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$ROOT"
@@ -107,6 +109,16 @@ case "${1:-}" in
     "$SSH" "$HOST" "umask 077; cat > $REMOTE_INDEX" < "$tmp"; rm -f "$tmp"
     remote_and_report sync-index
     ;;
-  -h|--help) sed -n '2,9p' "$0" ;;
+  --sync-hints)
+    f=data/private/partners_hints.json
+    [ -f "$f" ] || die "no local $f"
+    echo "→ uploading $f ($(du -h "$f" | cut -f1)) to $HOST:/opt/kasafi-agent/deploy/private/ (read-only in the app)"
+    # world-readable inside its own folder so the app's non-root user can read the mount; nothing else reads it
+    "$SSH" "$HOST" "mkdir -p /opt/kasafi-agent/deploy/private && chmod 755 /opt/kasafi-agent/deploy/private && \
+      cat > /opt/kasafi-agent/deploy/private/partners_hints.json.part && \
+      mv /opt/kasafi-agent/deploy/private/partners_hints.json.part /opt/kasafi-agent/deploy/private/partners_hints.json && \
+      chmod 644 /opt/kasafi-agent/deploy/private/partners_hints.json && echo uploaded" < "$f"
+    ;;
+  -h|--help) sed -n '2,11p' "$0" ;;
   *) die "unknown option $1 (use --help)" ;;
 esac

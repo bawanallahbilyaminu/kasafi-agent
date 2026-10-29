@@ -34,5 +34,6 @@ node_modules/
 
 # VPS-only secrets and database backups (created on the server)
 deploy/db.env
+deploy/private/
 deploy/backups/
 deploy/index.incoming.sql.gz

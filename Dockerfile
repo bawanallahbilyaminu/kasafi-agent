@@ -22,6 +22,10 @@ RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-smal
 ENV HF_HUB_OFFLINE=1
 
 COPY app ./app
+# The source registry (fetch allowlist, topics, publishers) and the topic prefetch script. The private partner
+# hints are not baked in: they are mounted read-only from the server (deploy/docker-compose.yml).
+COPY data/source_registry.yaml ./data/source_registry.yaml
+COPY scripts/prefetch_topics.py ./scripts/prefetch_topics.py
 # Migrations run on deploy (deploy/remote.sh) once DATABASE_URL is set on the server.
 COPY alembic.ini ./
 COPY migrations ./migrations
