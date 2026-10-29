@@ -47,6 +47,7 @@ from app.config import Settings
 from app.providers.chat import ChatClient
 from app.providers.stt import parse_json_reply
 from app.retrieval.search import search
+from app.sources import dtm as dtm_api
 
 log = logging.getLogger(__name__)
 
@@ -75,6 +76,7 @@ class Card:
     ref_date: str = ""         # the date or period the figure refers to
     geography: str = ""        # Sokoto State, an LGA, Sokoto town ...
     edition: str = ""
+    based_on: str = ""         # whose count the page says this is ("IOM DTM Round 19"), if it says
 
     @property
     def number(self) -> float | None:
@@ -321,6 +323,53 @@ async def read_map_labels(conn: psycopg.Connection, doc_id: str, settings: Setti
     return n
 
 
+# --- 2b. a publisher's data API instead of its PDFs ------------------------------------------------------------
+
+API_TTL_S = 24 * 3600          # checked daily: a new DTM round is used the day it appears in the API
+TOP_LGAS = 5
+_api_cache: dict[str, tuple[float, list, list]] = {}
+
+
+async def dtm_api_source(p: Publisher, http: httpx.AsyncClient, settings: Settings,
+                         state: str = "Sokoto") -> SourceResult:
+    """IOM DTM's displacement figures from its Baseline API (state and LGA, by round and reporting date), not
+    from its PDFs, which its server is too slow to send while a user waits. Every figure is the API's own
+    number (summed over displacement reasons by code), so no number check is needed."""
+    res = SourceResult(p, title="IOM DTM API (Baseline)")
+    hit = _api_cache.get(state)
+    if hit and time.time() - hit[0] < API_TTL_S:
+        rounds, lgas = hit[1], hit[2]
+    else:
+        try:
+            rounds = await dtm_api.state_rounds(http, settings, state) or []
+            lgas = await dtm_api.lga_round(http, settings, state, rounds[0].round) if rounds else []
+        except (dtm_api.DtmError, httpx.HTTPError) as e:
+            res.status, res.detail = "failed", type(e).__name__
+            return res
+        if hit and rounds and hit[1] and rounds[0].round != hit[1][0].round:
+            log.info("DTM API: new round %s for %s (was %s)", rounds[0].round, state, hit[1][0].round)
+        _api_cache[state] = (time.time(), rounds, lgas or [])
+    if not rounds:
+        res.status, res.detail = "no_figure", "no rounds for the state"
+        return res
+    top = rounds[0]
+    when = f"Round {top.round}, reporting date {top.date}"
+    res.status = "ok"
+    res.cards = [Card(p, "", res.title, 0, f"{top.idps:,}", "IDPs", "internally displaced persons (DTM baseline, "
+                      "all displacement reasons)", when, f"{state} State", f"Round {top.round}")]
+    if lgas:
+        nxt = "; ".join(f"{f.place} {f.idps:,}" for f in lgas[1:TOP_LGAS])
+        res.cards.append(Card(p, "", res.title, 0, f"{lgas[0].idps:,}", "IDPs",
+                              f"in {lgas[0].place}, the most of its {len(lgas)} LGAs" + (f" (then {nxt})" if nxt else ""),
+                              when, "", f"Round {top.round}"))
+    if len(rounds) > 1:
+        prev = rounds[1]
+        res.cards.append(Card(p, "", res.title, 0, f"{prev.idps:,}", "IDPs", "the round before",
+                              f"Round {prev.round}, reporting date {prev.date}", f"{state} State",
+                              f"Round {prev.round}"))
+    return res
+
+
 # --- 3. fact cards ---------------------------------------------------------------------------------------------
 
 CARD_SYSTEM = (
@@ -333,8 +382,11 @@ CARD_SYSTEM = (
     "Where the page prints a rate for what is asked (e.g. the unemployment rate, the % of children stunted), "
     "give that headline rate first, then counts. Only figures printed on these pages; never compute, round or "
     "combine. {extra}"
+    "based_on: whose count the page itself says the figure is, if it says (e.g. a 'Source: IOM DTM R19' line, "
+    "'according to IOM DTM'), else ''. "
     'Reply with JSON only: {{"figures": [{{"value": "", "unit": "", "what": "", "ref_date": "", "geography": "", '
-    '"page": 0}}], "edition": "<the document\'s own edition or date, e.g. Round 18, December 2025>"}}'
+    '"page": 0, "based_on": ""}}], "edition": "<the document\'s own edition or date, e.g. Round 18, December '
+    '2025>"}}'
 )
 
 
@@ -349,6 +401,13 @@ def printed_on(value: str, page_text: str) -> bool:
         return False
     flat = re.sub(r"(?<=\d)[,\s](?=\d{3}\b)", "", page_text)
     return bool(re.search(rf"(?<![\d.]){re.escape(want)}(?![\d])", flat))
+
+
+def printed_words(phrase: str, text: str) -> bool:
+    """The phrase's names (its words of 3+ letters other than 'round', 'source', 'according') are on the pages."""
+    words = [w for w in re.findall(r"[A-Za-z]{3,}", phrase) if w.lower() not in ("round", "source", "according")]
+    low = text.lower()
+    return bool(words) and all(w.lower() in low for w in words)
 
 
 def topic_query(topic: Topic, question: str) -> str:
@@ -394,9 +453,12 @@ async def fact_cards(conn: psycopg.Connection, src: SourceResult, topic: Topic, 
         said = f.get("page") if isinstance(f.get("page"), int) else None
         page = next((n for n in sorted(pages, key=lambda n: n != said) if printed_on(value, pages[n])), None)
         if page is not None:
+            based = str(f.get("based_on") or "")[:60]
+            if based and not printed_words(based, " ".join(pages.values())):
+                based = ""                   # a source the pages don't name isn't claimed
             cards.append(Card(p, src.doc_id, src.title, page, value, str(f.get("unit") or "")[:40],
                               str(f.get("what") or "")[:160], str(f.get("ref_date") or "")[:60],
-                              str(f.get("geography") or "")[:60], str(d.get("edition") or "")[:60]))
+                              str(f.get("geography") or "")[:60], str(d.get("edition") or "")[:60], based))
         else:
             log.info("fact card dropped (not printed on the pages read): %s %s", p.id, value[:30])
     return cards[:most]
@@ -406,8 +468,13 @@ async def fact_cards(conn: psycopg.Connection, src: SourceResult, topic: Topic, 
 
 W = {
     "en": {"newest": "📊 Newest figure: *{value}{unit}* – {what}{geo} ({pub}, {date}).",
-           "head": "By source:", "line": "• {pub}: {value}{unit} – {what}{geo}; {date} ({title}, p. {page})",
+           "head": "By source:", "line": "• {pub}: {value}{unit} – {what}{geo}; {date} ({cite})",
            "differ": "↔️ Why they differ: {why}. These are separate counts; Kasafi doesn't average them or pick one.",
+           "differ_based": "↔️ Why they differ: {why}. Kasafi doesn't average them or pick one.",
+           "based": "the statewide figures of {names} are {source} counts, not separate counts; they differ by "
+                    "round and date",
+           "based_one": "{names} is a {source} count, not a separate count; they differ by round and date",
+           "via": "via {names}",
            "same": "the same number ({value}) appears in {a} ({da}) and {b} ({db}): the later one repeats that count, "
                    "it isn't a new one",
            "dates": "they refer to different dates ({dates})", "geo": "they cover different areas ({areas})",
@@ -423,9 +490,14 @@ W = {
            "in_library": "In Kasafi's library now: {titles}.", "found_web": "Also found on partner websites "
            "(not read yet): {titles}."},
     "ha": {"newest": "📊 Alƙaluma mafi sabo: *{value}{unit}* – {what}{geo} ({pub}, {date}).",
-           "head": "Daga kowace majiya:", "line": "• {pub}: {value}{unit} – {what}{geo}; {date} ({title}, shafi {page})",
+           "head": "Daga kowace majiya:", "line": "• {pub}: {value}{unit} – {what}{geo}; {date} ({cite})",
            "differ": "↔️ Dalilin bambanci: {why}. Waɗannan ƙididdiga ne daban-daban; Kasafi ba ya haɗa su ko zaɓar "
                      "ɗaya.",
+           "differ_based": "↔️ Dalilin bambanci: {why}. Kasafi ba ya haɗa su ko zaɓar ɗaya.",
+           "based": "alƙaluman jiha na {names} ƙidayar {source} ne, ba ƙidaya daban ba; zagaye da kwanan wata ne "
+                    "suka bambanta",
+           "based_one": "{names} ƙidayar {source} ce, ba ƙidaya daban ba; zagaye da kwanan wata ne suka bambanta",
+           "via": "ta hannun {names}",
            "same": "adadi ɗaya ({value}) ne a {a} ({da}) da {b} ({db}): na baya maimaita wannan ƙidayar ne, ba sabuwa ba",
            "dates": "lokutansu sun bambanta ({dates})", "geo": "wuraren da suka shafa sun bambanta ({areas})",
            "defs": "abin da suke ƙidaya ya bambanta ({defs})",
@@ -459,10 +531,20 @@ def _when(c: Card) -> str:
 def _sort_key(c: Card) -> tuple:
     """Newest first, by the latest year and month named in its date (edition when the date names none)."""
     text = f"{c.ref_date} {c.edition}"
+    if iso := re.findall(r"\b(20\d\d)-(\d\d)-\d\d\b", text):            # an API reporting date
+        return max((int(y), int(m)) for y, m in iso)
     years = [int(y) for y in _YEAR.findall(text)]
     months = [i for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov",
                                        "dec"), 1) if re.search(rf"(?i)\b{m}", text)]
     return (max(years) if years else 0, max(months) if months else 0)
+
+
+def _reply_order(cards: list[Card]) -> list[Card]:
+    """The newest figure first; then the others newest first, with surveys of part of the state (a town) last."""
+    by_date = sorted(cards, key=_sort_key, reverse=True)
+    if not by_date:
+        return []
+    return [by_date[0]] + sorted(by_date[1:], key=lambda c: c.publisher.level.startswith("town"))
 
 
 def why_differ(cards: list[Card], lang: str) -> str:
@@ -473,6 +555,34 @@ def why_differ(cards: list[Card], lang: str) -> str:
     if len({c.number for c in main}) < 2 and len(main) < 2:
         return ""
     reasons = []
+    # figures the pages themselves say are another publisher's count ("Source: ... IOM DTM R19"): one count,
+    # repeated, not separate counts
+    def source_of(c: Card) -> Card | None:
+        """The other card whose publisher the page names as this figure's source."""
+        words = set(re.findall(r"[a-z]{3,}", c.based_on.lower()))
+        hits = [o for o in main if o is not c and c.based_on and publisher_names(o.publisher) & words]
+        return min(hits, key=lambda o: (o.based_on != "", o.publisher.tier)) if hits else None   # the root first
+
+    counted: dict[str, list[tuple[Card, str]]] = {}
+    for c in main:
+        via, o, seen = [], source_of(c), {c.publisher.id}
+        while o is not None and o.publisher.id not in seen:      # SBS -> UNHCR -> DTM: the root count
+            seen.add(o.publisher.id)
+            nxt = source_of(o)
+            if nxt is None:
+                break
+            via.append(short_pub(o.publisher))
+            o = nxt
+        if o is not None:
+            rounds = ", ".join(re.findall(r"(?i)\b(?:R|Round )\d{1,2}\b", c.based_on))
+            note = "; ".join(x for x in (rounds, w["via"].format(names=", ".join(via)) if via else "") if x)
+            counted.setdefault(o.publisher.id, []).append((c, note))
+    for pid, cs in counted.items():
+        src = next(o for o in main if o.publisher.id == pid)
+        names = " / ".join(f"{short_pub(c.publisher)} ({c.value}{', ' + note if note else ''})" for c, note in cs)
+        reasons.append(w["based" if len(cs) > 1 else "based_one"].format(names=names, source=short_pub(src.publisher)))
+    if counted:
+        return w["differ_based"].format(why="; ".join(reasons))
     for i, a in enumerate(main):
         for b in main[i + 1:]:
             if a.number == b.number and a.publisher.id != b.publisher.id and _when(a) != _when(b):
@@ -501,7 +611,7 @@ def note_of(p: Publisher) -> str:
 
 def compose(topic: Topic, sources: list[SourceResult], related: list[SourceResult], lang: str) -> tuple[str, bool]:
     w = W.get(lang, W["en"])
-    cards = sorted((c for s in sources for c in s.cards[:1]), key=_sort_key, reverse=True)
+    cards = _reply_order([c for s in sources for c in s.cards[:1]])
     extra = [c for s in sources for c in s.cards[1:]]
     missing = [short_pub(s.publisher) for s in sources if not s.cards]
     if not cards:
@@ -517,9 +627,12 @@ def compose(topic: Topic, sources: list[SourceResult], related: list[SourceResul
     top = cards[0]
     out = [w["newest"].format(value=top.value, unit=unit(top), what=top.what, geo=geo(top), pub=short_pub(top.publisher),
                               date=_when(top)), "", w["head"]]
-    for c in cards + extra:
-        out.append(w["line"].format(pub=short_pub(c.publisher), value=c.value, unit=unit(c), what=c.what, geo=geo(c),
-                                    date=_when(c), title=c.title, page=c.page))
+    def line(c: Card) -> str:
+        cite = f"{c.title}, {w['page']} {c.page}" if c.page else c.title
+        return w["line"].format(pub=short_pub(c.publisher), value=c.value, unit=unit(c), what=c.what, geo=geo(c),
+                                date=_when(c), cite=cite)
+    for first in cards:                  # each source's lines together, in the order of their main figure
+        out += [line(c) for s in sources if s.cards and s.cards[0] is first for c in s.cards]
     if why := why_differ(cards, lang):
         out += ["", why]
     notes = [w["note"].format(pub=short_pub(s.publisher), note=note_of(s.publisher))
@@ -530,19 +643,19 @@ def compose(topic: Topic, sources: list[SourceResult], related: list[SourceResul
         out += [""] + notes
     rel = [c for s in related for c in s.cards[:1]]
     if rel:
-        out += ["", w["related"]] + [w["line"].format(pub=short_pub(c.publisher), value=c.value, unit=unit(c),
-                                                      what=c.what, geo=geo(c), date=_when(c), title=c.title,
-                                                      page=c.page) for c in rel]
+        out += ["", w["related"]] + [line(c) for c in rel]
     if missing:
         out += ["", w["missing"].format(names=", ".join(missing))]
     used: dict[str, list[int]] = {}
     for c in cards + extra + rel:
         used.setdefault(c.title, [])
-        if c.page not in used[c.title]:
+        if c.page and c.page not in used[c.title]:
             used[c.title].append(c.page)
-    out += ["", f"📄 *{w['sources']}:* " + "; ".join(f"{t}, {w['page']} {', '.join(map(str, sorted(ps)))}"
-                                                    for t, ps in used.items())]
-    return "\n".join(out), len(cards) < MIN_SOURCES or bool(missing)
+    out += ["", f"📄 *{w['sources']}:* " + "; ".join(f"{t}, {w['page']} {', '.join(map(str, sorted(ps)))}" if ps
+                                                    else t for t, ps in used.items())]
+    # partial: fewer sources than a topic answer needs, or one couldn't be got (a question naming one publisher
+    # needs only that one)
+    return "\n".join(out), len(cards) < min(MIN_SOURCES, len(sources)) or bool(missing)
 
 
 # --- "which partners publish ...?" -----------------------------------------------------------------------------
@@ -615,6 +728,8 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
         budget = settings.kasafi_topic_budget_s
 
         async def one(p: Publisher) -> SourceResult:
+            if "dtm_api" in p.discovery and settings.dtmapi_subscription_key:    # figures from the API, not PDFs
+                return await dtm_api_source(p, http, settings)
             src = await get_document(conn, p, topic, today, http=http, robots=robots, client=client,
                                      settings=settings)
             if src.doc_id:
@@ -646,9 +761,12 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
         sources = [results[p.id] for p in primary]
         related = [results[p.id] for p in context if p.id in results]
         text, partial = compose(topic, sources, related, lang)
-        cited = list(dict.fromkeys((c.doc_id, c.title, c.page) for s in sources + related for c in s.cards))
+        # API figures have no document page to cite or crop: the sources line names them
+        cited = list(dict.fromkeys((c.doc_id, c.title, c.page) for s in sources + related for c in s.cards
+                                   if c.doc_id))
+        found = any(s.cards for s in sources)
         log.info("topic %s: %s", topic_id, {s.publisher.id: (s.status, s.doc_id, len(s.cards)) for s in sources})
-        return TopicResult(topic_id, text, bool(cited), partial, sources, related, cited,
+        return TopicResult(topic_id, text, found, partial, sources, related, cited,
                            {"topic": time.perf_counter() - t0})
     finally:
         if own:

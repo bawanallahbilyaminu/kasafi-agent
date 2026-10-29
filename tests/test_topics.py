@@ -171,3 +171,43 @@ def test_a_publisher_that_just_failed_isnt_searched_again_for_12_hours(monkeypat
     go()
     assert calls == ["iom_dtm", "iom_dtm"]
     tp._missed.clear()
+
+
+def test_dtm_figures_come_from_its_api_with_round_date_and_top_lgas(monkeypatch) -> None:
+    import asyncio
+    from app.sources import dtm
+    rounds = [dtm.RoundFigure("Sokoto", 18, "2025-10-31", 181526, {}), dtm.RoundFigure("Sokoto", 17, "2025-05-31", 88562, {})]
+    lgas = [dtm.RoundFigure(n, 18, "2025-10-31", v, {}) for n, v in (("Sabon Birni", 40729), ("Tangaza", 19151))]
+
+    async def state(http, s, st):
+        return rounds
+
+    async def lga(http, s, st, r):
+        return lgas
+    monkeypatch.setattr(dtm, "state_rounds", state)
+    monkeypatch.setattr(dtm, "lga_round", lga)
+    tp._api_cache.clear()
+    src = asyncio.run(tp.dtm_api_source(DTM, None, None))
+    tp._api_cache.clear()
+    assert [c.value for c in src.cards] == ["181,526", "40,729", "88,562"]
+    assert src.cards[0].ref_date == "Round 18, reporting date 2025-10-31" and not src.cards[0].doc_id
+    assert src.cards[1].what == "in Sabon Birni, the most of its 2 LGAs (then Tangaza 19,151)"
+
+
+def test_figures_that_are_dtm_counts_are_said_to_be_so_and_the_newest_leads() -> None:
+    api = tp.Card(DTM, "", "IOM DTM API (Baseline)", 0, "181,526", "IDPs", "IDPs", "Round 18, reporting date 2025-10-31")
+    unhcr = tp.Card(UNHCR, "u", "UNHCR dashboard", 1, "176,099", "individuals", "IDPs", "1 October 2026",
+                    based_on="IOM DTM R19")
+    sbs = tp.Card(SBS, "s", "Durable Solutions", 12, "over 181,500", "people", "IDPs", "early 2026",
+                  based_on="UNHCR and NCFRMI (2026)")                   # cites UNHCR, which cites DTM
+    sources = [tp.SourceResult(p, cards=[c]) for p, c in ((SBS, sbs), (DTM, api), (UNHCR, unhcr))]
+    text, _ = tp.compose(registry().topics["displacement_humanitarian"], sources, [], "en")
+    lines = [l for l in text.splitlines() if l.startswith("• ")]
+    assert text.startswith("📊 Newest figure: *176,099 individuals*")
+    assert [l.split(":")[0] for l in lines] == ["• UNHCR Nigeria Forcibly Displaced Populations Dashboard",
+                                               "• IOM Displacement Tracking Matrix",
+                                               "• Sokoto State Bureau of Statistics, JIPS, DRC"]
+    assert ("the statewide figures of Sokoto State Bureau of Statistics, JIPS, DRC (over 181,500, via UNHCR Nigeria "
+            "Forcibly Displaced Populations Dashboard) / UNHCR Nigeria Forcibly Displaced Populations Dashboard "
+            "(176,099, R19) are IOM Displacement Tracking Matrix counts, not separate counts") in text
+    assert "These are separate counts" not in text and "IOM DTM API (Baseline)" in text.splitlines()[-1]
