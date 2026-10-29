@@ -192,6 +192,10 @@ TEXTS = {
         "ha": "To, ban lissafa ba.",
         "en": "OK, I won't calculate it.",
     },
+    "still_working": {
+        "ha": "⏳ Ina ci gaba da dubawa: ina tabbatar da alƙaluman a cikin takardun…",
+        "en": "⏳ Still checking: I'm verifying the figures in the documents…",
+    },
     "no_working": {
         "ha": "Babu lissafin da zan nuna: amsar da ta gabata ba ta da layukan kasafi da aka haɗa.",
         "en": "There's no working to show: the last answer didn't add up budget lines.",

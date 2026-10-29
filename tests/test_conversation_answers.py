@@ -46,6 +46,18 @@ def test_show_working_sends_the_stored_working_without_a_model(ask: str) -> None
     assert calls == [] and outs[0].text == t("no_working", "ha")
 
 
+def test_a_slow_answer_gets_one_still_checking_note(monkeypatch) -> None:
+    from app.whatsapp import conversation
+    monkeypatch.setattr(conversation, "SLOW_ANSWER_S", 0.01)
+    notified, calls = [], []
+    outs, _ = run_handle(text(Q), store=consented(), answer_calls=calls, notified=notified, answer_delay=0.05)
+    assert [o.text for o in notified] == [t("searching", "ha"), t("still_working", "ha")]
+    assert outs[0].text == f"ANSWER[ha]: {Q}"
+    notified = []
+    run_handle(text(Q), store=consented(), answer_calls=calls, notified=notified)      # a quick one: no extra note
+    assert [o.text for o in notified] == [t("searching", "ha")]
+
+
 def test_english_user_gets_english_answer() -> None:
     calls = []
     outs, _ = run_handle(text("How much for health in 2026?"), store=consented("en"), answer_calls=calls)

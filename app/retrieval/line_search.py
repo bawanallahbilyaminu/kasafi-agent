@@ -42,7 +42,14 @@ _FILTERS = """(cardinality(%(years)s::int[]) = 0
 # Terms come most specific first; earlier terms weigh more. Ordered in SQL, so a broad term can't crowd out the
 # lines that match the core term before scoring.
 _SQL = """
-WITH t AS (SELECT * FROM unnest(%(terms)s::text[], %(weights)s::float8[]) WITH ORDINALITY AS t(term, w, i))
+WITH t AS (SELECT * FROM unnest(%(terms)s::text[], %(weights)s::float8[]) WITH ORDINALITY AS t(term, w, i)),
+-- the candidate lines, by three lookups the indexes serve (an OR of them scanned every line and computed a
+-- trigram similarity per line and term: 1-1.7 s; this is 0.25-0.8 s for the same lines and scores)
+cand AS (
+    SELECT l.id FROM budget_lines l WHERE l.row_text ILIKE ANY(%(pats)s)
+    UNION SELECT l.id FROM budget_lines l, t WHERE l.tsv @@ plainto_tsquery('english', t.term)
+    UNION SELECT l.id FROM budget_lines l, t WHERE l.name %% t.term
+)
 SELECT """ + _COLS + """,
        -- the best single match counts: in the line's own name most, elsewhere in the row (codes, function and
        -- location columns of a project) less; more matched terms add only a little
@@ -51,12 +58,9 @@ SELECT """ + _COLS + """,
        + (SELECT COALESCE(max(w), 0) FROM t WHERE l.tsv @@ plainto_tsquery('english', t.term))
        + (SELECT COALESCE(max(similarity(l.name, t.term) * w), 0) FROM t) * 2
        + (SELECT count(*) FROM t WHERE l.row_text ILIKE '%%' || t.term || '%%') * 0.3 AS score
-FROM budget_lines l JOIN documents d ON d.id = l.doc_id
-WHERE (l.row_text ILIKE ANY(%(pats)s)
-       OR EXISTS (SELECT 1 FROM t WHERE l.tsv @@ plainto_tsquery('english', t.term))
-       OR EXISTS (SELECT 1 FROM t WHERE l.name %% t.term))
-  AND """ + _FILTERS + """
-ORDER BY score DESC
+FROM cand JOIN budget_lines l ON l.id = cand.id JOIN documents d ON d.id = l.doc_id
+WHERE """ + _FILTERS + """
+ORDER BY score DESC, l.id
 LIMIT %(cap)s
 """
 

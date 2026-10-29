@@ -14,6 +14,7 @@ Order matters:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import time
@@ -51,6 +52,7 @@ IMAGE_COMMANDS = {"images off": False, "/images off": False, "no images": False,
                   "images on": True, "/images on": True, "kunna hotuna": True, "hotuna a kunna": True,
                   "/hotuna kunna": True}
 CONSENT_TEXTS = {"ok", "okay", "na yarda", "na amince", "i agree", "agree", "ok na yarda"}
+SLOW_ANSWER_S = 12.0        # after this, a "still checking" note (unless a fetch note was already sent)
 # the rows and arithmetic behind the last answer, kept with the turn: sent from the store, no model call
 SHOW_WORKING = {"nuna lissafi", "nuna min lissafi", "nuna lissafin", "yadda aka lissafa", "lissafi",
                 "show working", "show the working", "show me the working", "show calculation", "working", "/lissafi",
@@ -168,11 +170,23 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             log.warning("daily spend cap reached")
             return [Out(t("busy", lang))]
         store.add_spend(settings.kasafi_cost_per_question_usd)
-        await notify(Out(t("searching", lang)))   # planning + search + answer takes ~8 s
+        await notify(Out(t("searching", lang)))   # planning + search + answer: median ~10 s
+        sent: list[str] = []
+
+        async def still_working() -> None:        # a slow answer (a second search, a fallback) gets one more word
+            await asyncio.sleep(SLOW_ANSWER_S)
+            if not sent:
+                await notify(Out(t("still_working", lang)))
+        slow = asyncio.create_task(still_working())
         try:
             async def send_now(text: str) -> None:   # e.g. "Ina neman takardar…" while a document is fetched
+                sent.append(text)
                 await notify(Out(text))
-            result = await answer(question, lang, settings=settings, notify=send_now, history=store.recent_turns(key))
+            try:
+                result = await answer(question, lang, settings=settings, notify=send_now,
+                                      history=store.recent_turns(key))
+            finally:
+                slow.cancel()
             body = result if isinstance(result, str) else result.text
             # Keep the turn for follow-ups ("check again", "what about 2024?"): 5 turns, 90 days, no number.
             store.add_turn(key, lang, question, body, getattr(result, "sources", []), getattr(result, "working", ""))

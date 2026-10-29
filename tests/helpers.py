@@ -27,7 +27,7 @@ def run_handle(msg: dict, *, store: UserStore | None = None, settings: Settings 
                notified: list | None = None, spoken: SpeechResult | None = None, corrections: dict | None = None,
                resolve_calls: list | None = None, model_verdicts: dict | None = None, guard_calls: list | None = None,
                answer_calls: list | None = None, answer_error: Exception | None = None,
-               history_calls: list | None = None):
+               history_calls: list | None = None, answer_delay: float = 0.0):
     """Run the conversation flow with fakes.
 
     spoken:      what the fake voice pipeline "heard" (None means a plain VOICE[lang] reply)
@@ -70,6 +70,8 @@ def run_handle(msg: dict, *, store: UserStore | None = None, settings: Settings 
         answer_calls.append((question, lang))
         if history_calls is not None:
             history_calls.append(history)
+        if answer_delay:
+            await asyncio.sleep(answer_delay)
         return f"ANSWER[{lang}]: {question}"
 
     async def notify(out):
