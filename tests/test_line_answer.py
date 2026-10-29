@@ -265,3 +265,22 @@ def test_two_readings_with_nothing_in_common_ask_which_one() -> None:
     res = reconcile(r1, _pick("L1"), r2, LINES, [], "How much for counterpart funds?", "ha")
     assert not res.selections and len(res.clarify) == 2 and res.clarify_question.startswith("Zan iya")
     assert res.clarify[1]["question"].startswith("How much for counterpart funds? (Ministry of Health")
+
+
+def test_missing_terms_split_on_and_or_and_hausa_da() -> None:
+    assert ans.missing_terms("orphanages and destitute homes")[:2] == ["orphanages", "destitute homes"]
+    assert ans.missing_terms("gidajen ma'aikata da gidaje")[:2] == ["gidajen ma'aikata", "gidaje"]
+    assert ans.missing_terms("special schools – none shown")[:1] == ["special schools"]
+
+
+def test_the_same_figure_from_another_document_counts_as_the_same_pick() -> None:
+    from app.agent.line_answer import reconcile
+    bud = _c(1, "INDEPENDENT REVENUE", 1, "2025 Approved Budget", "47444195829.40", doc="budget-2025-approved")
+    rep = _c(2, "INDEPENDENT REVENUE", 9, "2025 Original Budget", "47444195829.40", doc="bir-2025-q4")
+    rep.cells[0].measure = "original"
+    lines = [bud, rep]
+    d1 = {"selected": [{"line": "L1", "column": "2025 Approved Budget"}], "found": "full"}
+    r1, _ = verify(d1, lines)
+    r2, _ = verify({"selected": [{"line": "L2", "column": "2025 Original Budget"}], "found": "full"}, lines)
+    res = reconcile(r1, d1, r2, lines, [], "q", "en")
+    assert [s.line.id for s in res.selections] == [bud.id] and not res.uncertain and not res.clarify

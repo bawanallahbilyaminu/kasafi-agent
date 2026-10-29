@@ -54,3 +54,14 @@ def test_year_filter_and_empty_terms(conn) -> None:
     assert search_lines(conn, ["", "x"]) == []                  # too short to search
     hits = search_lines(conn, ["tertiary education"], year=2026, limit=20)
     assert hits and all(any(c.year == 2026 for c in h.cells) for h in hits)
+
+
+def test_page_search_gets_the_printed_rows_its_key_terms_name(conn) -> None:
+    # m37: page search took p16; the ministry's 2026 total is on p17. m16: the 2026 IGR target row (p1).
+    from app.agent.answer import Plan, line_evidence
+    ict = line_evidence(conn, Plan("ICT and Innovation totals in 2025 and 2026", [], ["budget-2025-approved",
+                                   "budget-2026-approved"], key_terms=["ICT", "Innovation", "Total Expenditure"]), [])
+    assert ("budget-2026-approved", 17) in {(e.doc_id, e.page) for e in ict}
+    igr = line_evidence(conn, Plan("IGR target for 2026", [], ["budget-2026-approved"],
+                                   key_terms=["Independent Revenue"]), [])
+    assert igr and igr[0].doc_id == "budget-2026-approved" and "INDEPENDENT REVENUE" in igr[0].text

@@ -60,6 +60,8 @@ PLAN_SYSTEM = (
     '{"english_question": "<faithful English translation>", '
     '"search_queries": ["<2-3 short English keyword queries using document vocabulary, e.g. \'Ministry of Health '
     "total expenditure', 'health sector allocation'>\"], "
+    '"key_terms": ["<2-5 short names of the budget lines or items the answer needs, as budgets print them, e.g. '
+    "'Independent Revenue', 'Ministry of Health', 'Recurrent Expenditure'>\"], "
     '"doc_ids": ["<2-3 catalog ids most likely to contain the answer, best first; only 1 if it is certainly '
     "enough. Figures often appear in more than one document, e.g. debt stock in both the DSA and the MTEF / Fiscal "
     'Strategy Paper>"], '
@@ -265,6 +267,7 @@ class Plan:
     budget_query: dict = field(default_factory=dict)   # query_budget spec (app/agent/budget_query.py)
     clarify: dict = field(default_factory=dict)        # {"question", "options"} when two readings differ
     line_search: dict = field(default_factory=dict)    # {"terms": [...], "years": [...]} for budget-line questions
+    key_terms: list[str] = field(default_factory=list)  # short line names: budget rows join the page evidence
 
     def assumption_for(self, lang: str) -> str:
         if not self.assumption:
@@ -341,6 +344,8 @@ async def plan_question(question: str, catalog: list[dict], client: ChatClient, 
     return Plan(
         english_question=str(d.get("english_question", question)),
         search_queries=[str(q) for q in d.get("search_queries") or [question]][:3],
+        key_terms=[str(x)[:80] for x in d.get("key_terms") or [] if str(x).strip()][:5]
+        if isinstance(d.get("key_terms"), list) else [],
         doc_ids=[i for i in d.get("doc_ids") or [] if i in known][:MAX_DOCS],
         assumption=str(d.get("assumption") or ""),
         assumption_ha=str(d.get("assumption_ha") or ""),
@@ -423,8 +428,55 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
     sources = dict(((d, p), s) for d, p, s in conn.execute(
         "SELECT doc_id, page, source FROM pages WHERE (doc_id, page) IN (SELECT unnest(%s::text[]), unnest(%s::int[]))",
         ([h.doc_id for h in ranked], [h.page for h in ranked])).fetchall()) if ranked else {}
-    return [Evidence(i, h.doc_id, h.title, h.year, h.page, sources.get((h.doc_id, h.page), "text"),
-                     texts[(h.doc_id, h.page)][:EVIDENCE_CHARS]) for i, h in enumerate(ranked, start=1)]
+    evidence = [Evidence(i, h.doc_id, h.title, h.year, h.page, sources.get((h.doc_id, h.page), "text"),
+                         texts[(h.doc_id, h.page)][:EVIDENCE_CHARS]) for i, h in enumerate(ranked, start=1)]
+    return evidence + line_evidence(conn, plan, evidence)
+
+
+LINE_EVIDENCE_PAGES = 6       # each is a few printed rows, not a whole page
+
+
+def line_evidence(conn: psycopg.Connection, plan: Plan, have: list[Evidence]) -> list[Evidence]:
+    """The printed budget rows named by the planner's key terms, as extra evidence. Page search can miss the
+    one page with the row ('INDEPENDENT REVENUE ... 2026 Approved Budget'), and then the answer wrongly says
+    it isn't there. Only rows that carry a key term in their own name; for each term in turn its best rows
+    (planned documents first, then tables whose title holds another key term, e.g. 'Total Expenditure'),
+    one per document; at most a few extra pages."""
+    terms = [t for t in plan.key_terms if len(t) >= 3]
+    if not terms:
+        return []
+    years = sorted({int(y) for y in re.findall(r"\b(20\d\d)\b", plan.english_question)})
+    got = {(e.doc_id, e.page) for e in have}
+    # revenue tables print every MDA too; they only help a question about revenue
+    revenue = re.search(r"revenue|\bigr\b|receipt|grant|tax|levy|levies|kudin shiga|haraji",
+                        " ".join([plan.english_question, *terms]), re.IGNORECASE)
+    hits = search_lines(conn, terms, years=years, limit=80, spend="any" if revenue else "expenditure")
+    planned = {d: i for i, d in enumerate(plan.doc_ids)}
+
+    def fit(x, term) -> tuple:
+        title = x.table_title.lower()
+        return (x.doc_id not in planned, -sum(t.lower() in title for t in terms if t != term and len(t) > 6),
+                planned.get(x.doc_id, 99), -x.score)
+    queues = []
+    for term in terms:
+        named = sorted((x for x in hits if term.lower() in x.name.lower()), key=lambda x: fit(x, term))
+        best, docs = [], set()
+        for x in named:
+            if x.doc_id not in docs:
+                docs.add(x.doc_id)
+                best.append(x)
+        queues.append(best)
+    pages: dict[tuple[str, int], list] = {}
+    for rank in range(max((len(q) for q in queues), default=0)):
+        for q in queues:
+            if rank < len(q) and len(pages) < LINE_EVIDENCE_PAGES:
+                x = q[rank]
+                if (x.doc_id, x.page) not in got:
+                    pages.setdefault((x.doc_id, x.page), []).append(x)
+    n = len(have)
+    return [Evidence(n + i, d, ls[0].title, None, p, "text",
+                     "\n".join(dict.fromkeys(f"[Table: {x.table_title}]\n{x.row_text}" for x in ls[:4]))[:EVIDENCE_CHARS])
+            for i, ((d, p), ls) in enumerate(pages.items(), start=1)]
 
 
 def _join_chunks(chunks: list[str]) -> str:
@@ -828,7 +880,7 @@ _STOP = {"the", "and", "for", "of", "in", "on", "to", "a", "an", "line", "lines"
 
 def missing_terms(missing: str) -> list[str]:
     """Search terms for what the model couldn't find: each phrase, then its meaningful words."""
-    phrases = [p.strip(" .-") for p in re.split(r"[;,]|and|or|da|\s[-–]\s", missing) if p.strip(" .-")]
+    phrases = [p.strip(" .-") for p in re.split(r"[;,]|\band\b|\bor\b|\bda\b|\s[-–]\s", missing) if p.strip(" .-")]
     words = [w for p in phrases for w in re.findall(r"[A-Za-z']{4,}", p) if w.lower() not in _STOP]
     return list(dict.fromkeys(phrases[:4] + words))[:10]
 

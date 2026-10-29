@@ -318,8 +318,14 @@ async def read_lines(question: str, english: str, lang: str, lines: list[Line], 
     return reconcile(r1, d1, r2, lines, extra_numbers, question, lang)
 
 
-def _key(res: LineResult) -> set[tuple[str, str]]:
-    return {(s.line.id, s.cell.column) for s in res.selections}
+def _sig(s: Selection) -> tuple:
+    """What a pick means, not where it was read: the same line's figure for the same year, whichever document
+    or column printed it ('2025 Approved Budget' in the budget = '2025 Original Budget' in a report)."""
+    return (" ".join(short_name(s.line).lower().split()), s.cell.year, s.cell.measure == "actual", s.cell.amount)
+
+
+def _key(res: LineResult) -> set[tuple]:
+    return {_sig(s) for s in res.selections}
 
 
 CLARIFY_READINGS = {"en": "I can read your question two ways. Which do you mean?",
@@ -347,14 +353,14 @@ def reconcile(r1: LineResult, d1: dict, r2: LineResult, lines: list[Line], extra
         return LineResult(clarify=opts, clarify_question=CLARIFY_READINGS.get(lang, CLARIFY_READINGS["en"]))
     index = {x.id: i for i, x in enumerate(lines, 1)}
     kept = {**d1, "selected": [{"line": f"L{index[s.line.id]}", "column": s.cell.column, "part": s.part}
-                               for s in r1.selections if (s.line.id, s.cell.column) in common]}
+                               for s in r1.selections if _sig(s) in common]}
     res, _ = verify(kept, lines)
     res.summary = fill(str(d1.get("summary") or ""), res)
     if _number_ok(res.summary, allowed_numbers(res, extra_numbers)):
         res.summary = ""                 # it spoke of rows only one reading chose
     res.found = "partial"
-    by_id = {x.id: x for x in lines}
-    res.uncertain = list(dict.fromkeys(f"{short_name(by_id[i])} ({col})" for i, col in sorted((a | b) - common)))
+    res.uncertain = list(dict.fromkeys(f"{short_name(s.line)} ({s.cell.column})" for s in r1.selections + r2.selections
+                                       if _sig(s) not in common))
     log.info("two readings differ: %d rows agreed, %d not counted", len(common), len(res.uncertain))
     return res
 
