@@ -356,6 +356,13 @@ def test_a_share_of_the_whole_budget_takes_the_printed_total_expenditure() -> No
     res, _ = verify(_share(("L1", "top")), SHARE_LINES)
     budget_whole(res, SHARE_LINES, q)
     assert [s.line.name for s in res.selections] == ["HEALTH", "Total Expenditure"] and res.share_pct == Decimal("15.8")
+    sub = L(10, "Total Expenditure", 79, [("2026 Approved Budget", "7210210444.94")],
+            table="Primary Health Expenditure by Economic Classification")
+    lines = [HEALTH, sub, TOTAL_EXP]
+    for picks in ((("L1", "top"),), (("L1", "top"), ("L2", "bottom"))):    # left out, or a sector's own total
+        res, _ = verify(_share(*picks), lines)
+        budget_whole(res, lines, q)
+        assert [s.line.page for s in res.selections] == [32, 1] and res.share_pct == Decimal("15.8")
     res, _ = verify(_share(("L1", "top")), SHARE_LINES)           # a ministry's share: no whole is guessed
     budget_whole(res, SHARE_LINES, "What share of the Ministry of Health's 2026 budget is capital?")
     assert res.share_pct is None and len(res.selections) == 1

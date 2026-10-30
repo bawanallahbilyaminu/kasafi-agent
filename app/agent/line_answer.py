@@ -451,22 +451,25 @@ WHOLE_BUDGET = re.compile(r"(?i)\b(?:of|in) the (?:overall |whole |entire |total
 
 
 def budget_whole(res: LineResult, lines: list[Line], english: str) -> None:
-    """A share of the whole state budget that a reading left without its whole (even after the retry): the
-    printed Total Expenditure line among the lines, for the part's year, is the whole. Code takes the printed
-    total, never a sum, and never guesses a whole for any other share (a ministry's, a sector's)."""
+    """A share of the whole state budget: its whole is the state's printed Total Expenditure for the part's year,
+    the largest 'Total Expenditure' printed (a sector's own table, Primary Health's, has one too). A reading that
+    left the whole out (even after the retry) or took a smaller one gets it. Code takes the printed total, never
+    a sum, and never sets a whole for any other share (a ministry's, a sector's)."""
     top = [s for s in res.selections if s.part in ("top", "both")]
-    if res.operation != "share" or not top or any(s.part in ("bottom", "both") for s in res.selections) \
+    bottom = [s for s in res.selections if s.part in ("bottom", "both")]
+    if res.operation != "share" or not top or any(s.part == "both" for s in res.selections) \
             or not WHOLE_BUDGET.search(english or ""):
         return
     t = top[0]
-    totals = [x for x in lines if short_name(x).lower() == "total expenditure"]
-    pick = None
-    for x in sorted(totals, key=lambda x: (x.doc_id != t.line.doc_id, x.page)):
-        pick = pick or next(((x, c) for c in x.cells if c.column == t.cell.column), None) or \
-            next(((x, c) for c in x.cells if c.year == t.cell.year and c.measure == t.cell.measure), None)
-    if pick is None:
+    cells = [(x, c) for x in lines if short_name(x).lower() == "total expenditure" for c in x.cells
+             if c.column == t.cell.column or (c.year == t.cell.year and c.measure == t.cell.measure)]
+    if not cells:
         return
-    res.selections.append(Selection(pick[0], pick[1], "bottom"))
+    pick = max(cells, key=lambda xc: (xc[1].amount, xc[1].column == t.cell.column, xc[0].doc_id == t.line.doc_id))
+    if bottom and not (len(bottom) == 1 and short_name(bottom[0].line).lower() == "total expenditure"
+                       and bottom[0].cell.amount < pick[1].amount):
+        return                       # the reading's own whole stands, unless it is a smaller Total Expenditure
+    res.selections = [s for s in res.selections if s not in bottom] + [Selection(pick[0], pick[1], "bottom")]
     res.summary = ""                 # it was written without the whole ('the total is not among the lines')
     part = sum((s.cell.amount for s in top), Decimal(0))
     if pick[1].amount:

@@ -55,7 +55,7 @@ from app.agent.budget_query import QueryResult, context_text, lga_in, render_wor
 from app.agent import trace
 from app.agent.category import TOP_UNITS, CategoryResult, pct, run_category
 from app.agent.calculate import MIXED, CalcError, Calculation, MixedBases, offer_text, validate
-from app.agent.line_answer import (LineResult, fmt, is_location, item_of, kind_of, level, read_lines,
+from app.agent.line_answer import (WHOLE_BUDGET, LineResult, fmt, is_location, item_of, kind_of, level, read_lines,
                                    short_name)
 from app.retrieval.line_search import MAX_LINES, name_key, nearest, search_lines
 from app.config import Settings, get_settings
@@ -1541,6 +1541,14 @@ async def _line_path(conn, plan: Plan, question: str, lang: str, client, second,
     log.info("line search: %d terms, %d hits", len(plan.line_search["terms"]), len(hits))
     if not hits:
         return None
+    if WHOLE_BUDGET.search(plan.english_question or ""):
+        # a share of the whole state budget: the state's printed Total Expenditure is among the lines read (the
+        # largest one printed: a sector's own table has a 'Total Expenditure' row too)
+        have = {x.id for x in hits[:MAX_LINES]}
+        whole = [x for x in search_lines(conn, ["Total Expenditure"], years=plan.line_search["years"], limit=40)
+                 if short_name(x).lower() == "total expenditure" and x.cells]
+        if whole and (top := max(whole, key=lambda x: max(c.amount for c in x.cells))).id not in have:
+            hits = [top, *hits]
     t0 = time.perf_counter()
     res = await read_lines(question, plan.english_question, lang, hits, client, settings,
                            question_years(question, plan.english_question), chat_json, second)
