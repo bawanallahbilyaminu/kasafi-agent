@@ -207,9 +207,11 @@ def test_figures_that_are_dtm_counts_are_said_to_be_so_and_the_newest_leads() ->
     text, _ = tp.compose(registry().topics["displacement_humanitarian"], sources, [], "en")
     lines = [l for l in text.splitlines() if l.startswith("• ")]
     assert text.startswith("📊 Newest figure: *176,099 individuals*")
-    assert [l.split(":")[0] for l in lines] == ["• UNHCR Nigeria Forcibly Displaced Populations Dashboard",
-                                               "• IOM Displacement Tracking Matrix",
-                                               "• Sokoto State Bureau of Statistics, JIPS, DRC"]
+    # a figure the page says is another publisher's is labelled as that publisher's, as cited in the document
+    assert [l.split(":")[0] for l in lines] == [
+        "• IOM DTM R19, as cited in UNHCR Nigeria Forcibly Displaced Populations Dashboard",
+        "• IOM Displacement Tracking Matrix",
+        "• UNHCR and NCFRMI (2026), as cited in Sokoto State Bureau of Statistics, JIPS, DRC"]
     assert ("the statewide figures of Sokoto State Bureau of Statistics, JIPS, DRC (over 181,500, via UNHCR Nigeria "
             "Forcibly Displaced Populations Dashboard) / UNHCR Nigeria Forcibly Displaced Populations Dashboard "
             "(176,099, R19) are IOM Displacement Tracking Matrix counts, not separate counts") in text
@@ -239,3 +241,88 @@ def test_an_api_outage_uses_the_last_good_pull_with_its_date(monkeypatch, tmp_pa
     src = asyncio.run(tp.dtm_api_source(DTM, None, s))
     tp._api_cache.clear()
     assert src.status == "ok" and src.cards[0].value == "181,526" and "as pulled on" in src.cards[0].title
+
+
+# --- multi-source reasoning: measures, primary sources, named publishers, changes -------------------------------
+
+NBS_MPI = Publisher("nbs_mpi", "NBS Nigeria Multidimensional Poverty Index (MPI) 2022", ("nigerianstat.gov.ng",),
+                    level="state", tier=1)
+SBS_MPI = Publisher("sokoto_mpi", "Sokoto State Bureau of Statistics (SBS) Sokoto State Multidimensional Poverty "
+                    "Index (MPI) Report 2025", level="lga", tier=1)
+DS = Publisher("sokoto_sbs", "Sokoto State Bureau of Statistics (state surveys and co-published reports)",
+               ("sbs.sk.gov.ng",), level="lga", tier=1)
+
+
+def mpi(p, value, ref, measure, what, based_on="", page=13, doc=None):
+    return tp.Card(p, doc or p.id, f"{p.id} report", page, value, "", what, ref, "Sokoto State", "", based_on,
+                   measure)
+
+
+def test_the_kind_of_number_is_checked_against_what_is_printed() -> None:
+    assert tp.measure_of("0.239", "", "index") == "index" and tp.measure_of("0.239", "", "") == "index"
+    assert tp.measure_of("59.1%", "", "index") == "rate"          # a % is never a 0-1 index
+    assert tp.measure_of("59.1%", "%", "headcount") == "headcount" and tp.measure_of("59.1", "", "headcount") == \
+        "headcount"
+    assert tp.measure_of("0.591", "", "headcount") == "other"     # a fraction or an index: unclear, never compared
+    assert tp.measure_of("181,526", "people", "count") == "count"
+
+
+def test_a_document_is_its_publishers_by_two_title_words_and_its_place() -> None:
+    nbs_cpi = ("nbs-cpi-2026-09", "Consumer Price Index (CPI) September 2026", 2026, "https://nigerianstat.gov.ng/download/1",
+               None, None, None)
+    nbs_mpi = ("nbs-mpi-2022", "Nigeria Multidimensional Poverty Index (2022)", 2022,
+               "https://nigerianstat.gov.ng/download/1241254", None, None, None)
+    ophi = ("mpi-2026-sokoto", "The global Multidimensional Poverty Index (MPI) 2026: Disaggregation results", 2026,
+            "https://ophi.org.uk/x.pdf", None, None, None)
+    sbs = ("mpi-2025-sokoto", "Sokoto State Multi-dimensional Poverty Index (MPI) Report 2025", 2025,
+           "https://mof.sk.gov.ng/MPI.pdf", None, None, None)
+
+    class Conn:
+        def execute(self, *a):
+            return type("R", (), {"fetchall": lambda _: [nbs_cpi, nbs_mpi, ophi, sbs]})()
+    assert [r[0] for r in tp.local_documents(Conn(), NBS_MPI)] == ["nbs-mpi-2022"]     # not the CPI ('Index')
+    assert [r[0] for r in tp.local_documents(Conn(), SBS_MPI)] == ["mpi-2025-sokoto"]  # not OPHI's global note
+
+
+def test_each_named_publisher_is_required_and_the_topic_word_names_none() -> None:
+    topic = registry().topics["poverty_welfare"]
+    q = "According to NBS what is Sokoto's MPI, and according to SBS how much has it improved?"
+    assert [p.id for p in tp.named_publishers(topic, q)] == ["sokoto_mpi", "nbs_mpi"]
+    assert [p.id for p in tp.named_publishers(registry().topics["displacement_humanitarian"],
+                                               "How many IDPs according to IOM?")] == ["iom_dtm"]
+
+
+def test_a_quoted_figure_is_labelled_as_its_publishers_and_its_primary_source_is_sought() -> None:
+    quoted = mpi(DS, "91%", "2022", "headcount", "multidimensional poverty incidence", based_on="NBS MPI 2022",
+                 doc="durable-solutions-2026-sokoto", page=12)
+    sources = [tp.SourceResult(DS, "durable-solutions-2026-sokoto", status="ok", cards=[quoted])]
+    assert tp.source_label(quoted, "en") == "NBS MPI 2022, as cited in Sokoto State Bureau of Statistics"
+    assert tp.card_year(quoted) == 2022
+    assert [p.id for p in tp.primary_sources(registry().topics["poverty_welfare"], sources)] == ["nbs_mpi"]
+
+
+def test_a_change_is_computed_between_the_same_measure_with_a_comparability_note() -> None:
+    cards = [mpi(NBS_MPI, "0.409", "2022", "index", "MPI value", page=123),
+             mpi(NBS_MPI, "90.5", "2022", "headcount", "incidence (H, %)", page=123),
+             mpi(SBS_MPI, "0.239", "2025", "index", "MPI value"),
+             mpi(SBS_MPI, "59.1%", "2025", "headcount", "multidimensionally poor")]
+    sources = [tp.SourceResult(NBS_MPI, "nbs", status="ok", cards=cards[:2]),
+               tp.SourceResult(SBS_MPI, "sbs", status="ok", cards=cards[2:])]
+    text, _ = tp.compose(registry().topics["poverty_welfare"], sources, [], "en",
+                         "According to NBS what is Sokoto's MPI, and according to SBS how much has it improved?")
+    assert "📈 Change in the index value, 0–1: 0.409 (NBS Nigeria Multidimensional Poverty Index, 2022) → 0.239" in text
+    assert "down by 0.17 (41.6% of the earlier value)" in text
+    assert "📈 Change in the headcount, % of people: 90.5" in text and "down by 31.4 percentage points" in text
+    assert text.count("are different surveys") == 2 and "different measures (index value, 0–1; headcount" in text
+    # never an index against a %: no change line mixes them, and no 'why they differ' line compares them
+    assert "0.239 (" not in text.split("headcount, % of people:")[-1]
+    no_pair = tp.change_lines([cards[0], cards[3]], "how much has it improved?", "en")
+    assert no_pair == [tp.W["en"]["no_change"]]
+    assert tp.change_lines(cards, "What is Sokoto's MPI?", "en") == []          # not a change question
+
+
+def test_a_follow_up_naming_a_source_is_a_source_hint() -> None:
+    from app.agent.answer import names_source
+    assert names_source("poverty_welfare", "There's an NBS MPI report from 2022")
+    assert names_source("poverty_welfare", "Check the 2022 survey report")
+    assert not names_source("poverty_welfare", "thanks, and in Hausa?")

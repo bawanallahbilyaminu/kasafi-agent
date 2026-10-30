@@ -987,10 +987,15 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             return a
         # a follow-up is planned as its standalone question ("which LGA have the most IDPs living there?" ->
         # "Which LGAs in Sokoto State have the most IDPs?"), so it takes the topic path too; a recheck doesn't
-        if (tid := topic_route(question, plan)) and plan.followup != "recheck":
+        tid = topic_route(question, plan)
+        # a follow-up that names a source for the earlier question ("there's an NBS MPI report from 2022"): that
+        # source is required, and the earlier question is answered again with it
+        hint = bool(tid and prev and plan.followup != "none" and names_source(tid, question))
+        if tid and (plan.followup != "recheck" or hint):
             t0 = time.perf_counter()
             tr = await topic_answer(conn, tid, question, plan.english_question, lang, client=client,
-                                    settings=settings, notify=notify, today=today)
+                                    settings=settings, notify=notify, today=today,
+                                    previous=str(prev.get("question") or "")[:300] if hint else "")
             t["topic"] = time.perf_counter() - t0
             if tr.found:
                 return Answer(tr.text, True, True, [Evidence(i, d, title, None, p, "text", "")
@@ -1226,6 +1231,14 @@ def off_topic_note(conn, plan: Plan, question: str, cited: list[Evidence], lang:
 
 MONEY_WORDS = re.compile(r"(?i)\b(?:budget\w*|allocat\w*|kasafi\w*|naira|spen[dt]\w*|expenditure|funds?|funding|"
                          r"cost\w*|revenue|IGR|appropriat\w*|ware|kashe|kuɗi|kudi)\b|₦")
+
+
+def names_source(topic_id: str, text: str) -> bool:
+    """The message names a publisher of the topic (NBS, IOM, SBS ...), or a report and its year."""
+    topic = registry().topics.get(topic_id)
+    return bool(topic and named_publishers(topic, text)) or \
+        bool(re.search(r"(?i)\b(?:report|survey|index|bulletin|round)\b.*\b20\d\d\b|\b20\d\d\b.*\b(?:report|survey)\b",
+                       text))
 
 
 def topic_route(question: str, plan: Plan) -> str:

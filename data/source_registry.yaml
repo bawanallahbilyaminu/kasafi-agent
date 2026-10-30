@@ -283,10 +283,12 @@ topics:
     answer_pattern: multi_source
     publishers:
       - id: sokoto_mpi
-        name: Sokoto State MPI Report 2025
+        name: Sokoto State Bureau of Statistics (SBS) Sokoto State Multidimensional Poverty Index (MPI) Report 2025
+        urls:
+          - https://mof.sk.gov.ng/wp-content/uploads/MPI-2025-SOKOTO-STATE-Report.pdf
         level: lga
         tier: 1
-        note: already indexed
+        note: already indexed; published by SBS (front page)
       - id: sokoto_sbs
         name: Sokoto State Bureau of Statistics (state surveys and co-published reports)
         domains: [sbs.sk.gov.ng]
@@ -295,8 +297,11 @@ topics:
         discovery: [sokoto_sbs_documents]
         verified: 2026-10-29
       - id: nbs_mpi
-        name: NBS Nigeria Multidimensional Poverty Index 2022
+        name: NBS Nigeria Multidimensional Poverty Index (MPI) 2022
         domains: [nigerianstat.gov.ng]
+        urls:
+          - https://nigerianstat.gov.ng/download/1241254
+        doc_types: [national MPI report with state MPI, headcount and intensity]
         level: state
         tier: 1
         verified: "no"
