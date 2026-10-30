@@ -363,6 +363,12 @@ def test_only_the_same_measure_of_the_same_population_is_compared() -> None:
     state = mpi(NBS_MPI, "0.409", "2022", "index", "MPI value", page=123)
     state.population = "all"
     assert "0.409 (NBS" in tp.change_lines([child, state, sbs], "how much has it improved?", "en")[0]
+    district = mpi(SBS_MPI, "0.273", "2025", "index", "MPI value")
+    district.population, district.geography = "all", "Sokoto North Senatorial District"
+    assert tp.change_lines([state, district], "how much has it improved?", "en") == [tp.W["en"]["no_change"]]
+    assert tp.area_of(sbs) == "state" and tp.area_of(district) == "sokoto north senatorial district"
+    text = {13: "INCIDENCE 59.1% ... MPI VALUE 0.239 for Sokoto State", 42: "Sokoto North 0.273 63.3 43.1 Sokoto"}
+    assert tp.page_order(text, "Sokoto MPI value", by_state=False)[0] == 13         # a Sokoto report's rows: districts
 
 
 def test_a_source_already_answering_is_not_sought_again() -> None:
@@ -389,10 +395,14 @@ def test_sources_without_a_common_measure_are_each_asked_for_the_others() -> Non
     for c in nbs.cards + sbs.cards:
         c.population = "all"
     asks = dict((s.publisher.id, want) for s, want in tp.align_wants([nbs, sbs]))
-    assert asks == {"nbs_mpi": tp.WANT["index"], "sokoto_mpi": tp.WANT["headcount"]}
+    assert asks == {"nbs_mpi": tp.WANT["index"] + " for Sokoto State as a whole",
+                    "sokoto_mpi": tp.WANT["headcount"] + " for Sokoto State as a whole"}
     sbs.cards.append(mpi(SBS_MPI, "59.1%", "2025", "headcount", "headcount"))
     sbs.cards[-1].population = "all"
-    assert tp.align_wants([nbs, sbs]) == []                   # a common measure: nothing more to ask
+    assert [s.publisher.id for s, _ in tp.align_wants([nbs, sbs])] == ["nbs_mpi"]   # only what it still lacks
+    nbs.cards.append(mpi(NBS_MPI, "0.409", "2022", "index", "MPI value"))
+    nbs.cards[-1].population = "all"
+    assert tp.align_wants([nbs, sbs]) == []                   # the same measures: nothing more to ask
     assert tp.across_sources("how much has it improved?") and tp.across_sources("compare NBS and SBS")
     assert not tp.across_sources("What is Sokoto's MPI?")
 

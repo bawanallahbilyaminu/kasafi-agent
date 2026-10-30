@@ -612,11 +612,13 @@ def topic_query(topic: Topic, question: str) -> str:
     return " ".join(dict.fromkeys(["Sokoto", *topic.synonyms_en[:4], *re.findall(r"[A-Za-z]{5,}", question)[:6]]))
 
 
-def page_order(text: dict[int, str], question: str) -> list[int]:
+def page_order(text: dict[int, str], question: str, by_state: bool = True) -> list[int]:
     """The pages to read for Sokoto's figures, best first (stable: search order breaks ties): a page naming
-    Sokoto, with a Sokoto table row ('Sokoto 0.409 0.391 ... 90.5': the state's own figures, not only a
-    summary's), with more of the question's words (the measure asked: 'MPI value', 'intensity'); a table for a
-    group (a Child MPI) after the whole population's, unless the question asks about that group."""
+    Sokoto, then, in a report by state (`by_state`: Sokoto is one row among the states), one with a Sokoto table
+    row ('Sokoto 0.409 0.391 ... 90.5': the state's own figures, not only a summary's; in a Sokoto report its
+    rows are districts and LGAs); with more of the question's words (the measure asked: 'MPI value',
+    'intensity'); a table for a group (a Child MPI) after the whole population's, unless the question asks
+    about that group."""
     words = {w for w in re.findall(r"[a-z]{3,}", question.lower())
              if w not in ("the", "and", "what", "how", "much", "has", "according", "sokoto", "state")}
     asked = population_of("", question)
@@ -624,7 +626,7 @@ def page_order(text: dict[int, str], question: str) -> list[int]:
     def key(p: int) -> tuple:
         low = text[p].lower()
         group = population_of("", low[:600])          # a table's own title says whose figures it has
-        return ("sokoto" in low, bool(SOKOTO_ROW.search(text[p])), group == asked or group == "all",
+        return ("sokoto" in low, by_state and bool(SOKOTO_ROW.search(text[p])), group == asked or group == "all",
                 sum(w in low for w in words))
     return sorted(text, key=key, reverse=True)
 
@@ -639,7 +641,7 @@ async def fact_cards(conn: psycopg.Connection, src: SourceResult, topic: Topic, 
                                           "ORDER BY page LIMIT 40", (src.doc_id,)) if r[0] not in ranked]
     text = {p: (conn.execute("SELECT text FROM pages WHERE doc_id = %s AND page = %s", (src.doc_id, p)).fetchone()
                 or [""])[0] for p in ranked}
-    pages = {p: text[p] for p in page_order(text, f"{question} {want}")[:CARD_PAGES]}
+    pages = {p: text[p] for p in page_order(text, f"{question} {want}", src.publisher.level_rank >= 1)[:CARD_PAGES]}
     if not pages:
         return []
     own_year = (conn.execute("SELECT year FROM documents WHERE id = %s", (src.doc_id,)).fetchone() or [None])[0]
@@ -803,6 +805,14 @@ def _amount(c: Card) -> Decimal | None:
     return Decimal(m.group(0).replace(",", "")) if m else None
 
 
+def area_of(c: Card) -> str:
+    """Where the figure is for: 'state' for Sokoto State (or no area named), else the area itself ('sokoto north
+    senatorial district', 'sokoto town'): a district's MPI is not the state's."""
+    g = re.sub(r"[^a-z ]", " ", c.geography.lower())
+    g = " ".join(w for w in g.split() if w not in ("nigeria", "the", "of"))
+    return "state" if g in ("", "sokoto", "sokoto state", "state") else g
+
+
 CHANGE_Q = re.compile(r"(?i)\b(?:improv\w*|chang\w*|progress\w*|reduc\w*|declin\w*|fallen|fell|dropp\w*|risen|rose|"
                       r"increas\w*|decreas\w*|trend\w*|since|better|worse|ya ragu|ya ƙaru|ya karu|canz\w*|"
                       r"ci gaba)\b")
@@ -817,11 +827,12 @@ def change_lines(cards: list[Card], question: str, lang: str) -> list[str]:
         return []
     w, label = W.get(lang, W["en"]), MEASURE_LABEL.get(lang, MEASURE_LABEL["en"])
     out = []
-    groups = list(dict.fromkeys((c.measure, c.population or "all") for c in cards if c.measure in COMPARED))
-    for m, pop in sorted(groups, key=lambda g: (COMPARED.index(g[0]), g[1] != "all")):
-        # the same measure of the same population (a Child MPI is not the MPI); a publisher's own figure before a
-        # document's quote of it
-        same = sorted((c for c in cards if c.measure == m and (c.population or "all") == pop
+    groups = list(dict.fromkeys((c.measure, c.population or "all", area_of(c)) for c in cards
+                                if c.measure in COMPARED))
+    for m, pop, area in sorted(groups, key=lambda g: (COMPARED.index(g[0]), g[1] != "all", g[2] != "state")):
+        # the same measure of the same population for the same area (a Child MPI is not the MPI, a district's
+        # not the state's); a publisher's own figure before a document's quote of it
+        same = sorted((c for c in cards if c.measure == m and (c.population or "all") == pop and area_of(c) == area
                        and _amount(c) is not None and card_year(c)), key=cited_from_other)
         years = sorted({card_year(c) for c in same})
         if len(years) < 2:
@@ -837,7 +848,7 @@ def change_lines(cards: list[Card], question: str, lang: str) -> list[str]:
                 size += f" ({w['relative'].format(pct=(abs(diff) / _amount(a) * 100).quantize(Decimal('0.1'), ROUND_HALF_UP))})"
         direction = w["fell"] if diff < 0 else w["rose"] if diff > 0 else w["unchanged"]
         pa, pb = f"{source_label(a, lang)}, {years[0]}", f"{source_label(b, lang)}, {years[-1]}"
-        what = (label[m] or m) + ("" if pop == "all" else f", {pop}")
+        what = (label[m] or m) + ("" if pop == "all" else f", {pop}") + ("" if area == "state" else f", {area}")
         out.append(w["change"].format(what=what, a=a.value, b=b.value, pa=pa, pb=pb, direction=direction,
                                       diff=size))
         origin = lambda c: c.based_on.lower() if cited_from_other(c) else c.publisher.id      # noqa: E731
@@ -1066,18 +1077,20 @@ WANT = {"index": "the index value (0-1 scale, e.g. the MPI value)", "headcount":
 
 
 def align_wants(sources: list[SourceResult]) -> list[tuple[SourceResult, str]]:
-    """For a change or comparison: when no measure (of one population) is given by two sources, each source with
-    a document is asked for the measures the others gave and it lacks."""
-    def keys(s: SourceResult) -> set[tuple[str, str]]:
-        return {(c.measure, c.population or "all") for c in s.cards if c.measure in WANT}
+    """For a change or comparison: each source with a document is asked, once, for the measures (of one
+    population) the other sources gave and it lacks (SBS's MPI value beside NBS's)."""
+    def keys(s: SourceResult) -> set[tuple[str, str, str]]:
+        return {(c.measure, c.population or "all", area_of(c)) for c in s.cards if c.measure in WANT}
     got = [s for s in sources if s.doc_id and s.cards]
-    if len(got) < 2 or any(len([s for s in got if k in keys(s)]) >= 2 for s0 in got for k in keys(s0)):
+    if len(got) < 2:
         return []
     out = []
     for s in got:
         lacking = set().union(*(keys(o) for o in got if o is not s)) - keys(s)
         if lacking:
-            out.append((s, "; ".join(WANT[m] + ("" if pop == "all" else f" for {pop}") for m, pop in sorted(lacking))))
+            out.append((s, "; ".join(WANT[m] + ("" if pop == "all" else f" for {pop}")
+                                     + (" for Sokoto State as a whole" if area == "state" else f" for {area}")
+                                     for m, pop, area in sorted(lacking))))
     return out
 
 
@@ -1173,14 +1186,14 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
                         sources.append(task.result())
         # a change or comparison across sources needs the same measure from each: a source without one another
         # source gave is asked for it, once ('the MPI value' from NBS beside SBS's, 'the headcount' from SBS)
-        left = budget - (time.perf_counter() - t0)
-        if across_sources(ask) and left > 5 and (asks := align_wants(sources)):
+        if across_sources(ask) and (asks := align_wants(sources)):
             async def again(s: SourceResult, want: str) -> None:
                 more = await fact_cards(conn, s, topic, ask, client, settings, want=want)
                 seen = {(c.value, c.page) for c in s.cards}
                 s.cards += [c for c in more if (c.value, c.page) not in seen]
             jobs = [asyncio.ensure_future(again(s, want)) for s, want in asks]
-            _, late = await asyncio.wait(jobs, timeout=left)
+            # one read of local pages each, in parallel: the change can't be computed without it
+            _, late = await asyncio.wait(jobs, timeout=max(15.0, budget - (time.perf_counter() - t0)))
             for task in late:
                 task.cancel()
             log.info("aligned measures across %d sources", len(asks))
