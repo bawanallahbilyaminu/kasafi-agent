@@ -73,7 +73,8 @@ remote_and_report() {
 case "${1:-}" in
   "")
     [ "$(git rev-parse --abbrev-ref HEAD)" = main ] || die "not on main"
-    [ -z "$(git status --porcelain)" ] || die "working tree has uncommitted changes; commit or stash first"
+    # the pushed commit is what ships (by its hash), so untracked local files (notes, drafts) can't reach the server
+    [ -z "$(git status --porcelain --untracked-files=no)" ] || die "working tree has uncommitted changes; commit or stash first"
     git fetch -q origin main
     LOCAL=$(git rev-parse HEAD); REMOTE=$(git rev-parse origin/main)
     [ "$LOCAL" = "$REMOTE" ] || die "local main (${LOCAL:0:7}) != origin/main (${REMOTE:0:7}); push or pull first"
