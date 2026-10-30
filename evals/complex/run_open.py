@@ -71,8 +71,10 @@ async def main(path: Path, ids: list[str] | None, out: Path, resume: bool = Fals
 
     async def one(q: dict, conn) -> None:
         t0 = time.perf_counter()
+        # a follow-up is asked after its previous question (its answer isn't needed: the planner reads the question)
+        history = [{"question": q["previous"], "answer": "", "sources": []}] if q.get("previous") else None
         try:
-            a = await answer_question(q["text"], q["lang"], conn,         # the library only: no fetching
+            a = await answer_question(q["text"], q["lang"], conn, history=history,   # the library only: no fetching
                                       settings=usage.eval_settings(s, fetch=bool(q.get("may_fetch"))))
         except Exception as e:      # one bad question must not stop the run
             conn.rollback()

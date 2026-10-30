@@ -1,0 +1,32 @@
+{
+ "_about": "Checked facts for evals/topics/multi_source.json (drafted Oct 30 2026 from the pages named in evals/topics/README.md; for Bilyaminu to check). any: one group's figures all in the reply; all_re: patterns that must match; must_not: a pattern that must not.",
+ "checks": {
+  "t01": {"any": [["0.409", "0.239"]], "all_re": ["down by 0\\.17", "different surveys"],
+          "must_not": "(?i)(?:91|90\\.5|59\\.1)%?[^\\n]{0,80}→[^\\n]{0,60}0\\.2\\d|0\\.\\d+[^\\n]{0,80}→[^\\n]{0,60}(?:91|59\\.1)%",
+          "source": "NBS MPI 2022 (nbs-mpi-2022) PDF p123, Appendix D state table: Sokoto MPI 0.409 (CI 0.391-0.427), incidence 90.5%, intensity 45.2%; SBS MPI 2025 (mpi-2025-sokoto) p13 / p34: MPI 0.239, headcount 59.1%, intensity 40.3% (p61 prints 0.23853). MPI change 0.409 -> 0.239 = -0.17 (-41.6%); SBS p31 warns about direct comparison with earlier surveys; SBS covers 18 accessible LGAs."},
+  "t02": {"any": [["0.409", "0.239"]], "all_re": ["0\\.17"], "source": "as t01"},
+  "t03": {"any": [["0.409", "0.239"], ["90.5", "59.1"]], "all_re": ["Nigeria Multidimensional Poverty Index"],
+          "source": "as t01: the NBS report itself is cited, and a change is computed"},
+  "t04": {"any": [["91"]], "all_re": ["(?i)NBS|National Bureau|Nigeria Multidimensional Poverty Index"],
+          "must_not": "Sokoto State Bureau of Statistics: 91%",
+          "source": "NBS MPI 2022 p16 / p48: 91% in Sokoto (summary; p123 table: 90.5%). SBS MPI 2025 p17 and the SBS/JIPS/DRC report p12 quote it ('the 2022 National MPI', 'According to the 2022 Nigeria MPI'): NBS's figure, as cited. SBS's own figure is 59.1% (2025)."},
+  "t05": {"any": [["0.239"]], "all_re": ["(?i)different measures|not directly comparable"],
+          "must_not": "91%[^\\n]{0,80}→[^\\n]{0,60}0\\.239",
+          "source": "91% (NBS 2022 headcount) and 0.239 (SBS 2025 MPI value) are different measures: the like-for-like pairs are 0.409 -> 0.239 and 90.5% -> 59.1%."},
+  "t06": {"any": [["181,526", "176,099"]], "all_re": ["(?i)IOM|DTM", "UNHCR"],
+          "source": "IOM DTM API Round 18 (31 Oct 2025): 181,526; UNHCR Forcibly Displaced Populations 1 October 2026 (unhcr-fdp-2026-10) p1: Sokoto 176,099; SBS/JIPS/DRC report p6 / p12: 'over 181,500', from its footnote 1 (another publisher's count: as cited)."},
+  "t07": {"any": [["181,526", "88,562", "99,729"], ["181,526", "88,562"]],
+          "source": "IOM DTM API (dtm-api-sokoto.json, pulled Oct 30 2026): R16 30 Nov 2024 99,729; R17 31 May 2025 88,562; R18 31 Oct 2025 181,526."},
+  "t08": {"any": [["1.2", "14%"]], "all_re": ["(?i)town"], "must_not": "(?i)change in the [^\\n]*(?:1\\.2|14%)",
+          "source": "NBS NLFS 2023 (nbs-nlfs-2023) PDF p45, Table 11 Unemployment Rate by State and Sex: Sokoto 1.2% (male 1.3, female 1.1); SBS/JIPS/DRC report p68 Annex I (Sokoto town): IDPs 14% unemployed (110 of 763), non-displaced 5% (65 of 1,355). NBS's definition note applies to the 1.2%."},
+  "t09": {"any": [["3.8"]], "all_re": ["(?i)NLFS|NBS|National Bureau"],
+          "must_not": "Sokoto State Bureau of Statistics, JIPS, DRC: 3\\.8%",
+          "source": "SBS/JIPS/DRC report p40 quotes 'only 3.8% of employed persons were wage employees (NBS, Annual NLFS Report 2023 ...)'; NLFS 2023 PDF p35, Table 8 Status in Employment: Sokoto employees 3.8% (self-employed 96.2%)."},
+  "t10": {"any": [["8.0", "3.01"], ["8.0%"], ["3.01%"]], "all_re": ["(?i)Sept(?:ember)?\\.? 2026|Satumba 2026"],
+          "source": "NBS CPI September 2026 (nbs-cpi-2026-09) p16-17: Sokoto month-on-month 3.01%; p19 appendix: Sokoto all items YoY 8.0, MoM 3.0; food YoY 6.1, MoM -1.6."},
+  "t11": {"any": [["42.8"]], "all_re": ["(?i)no change can be computed|ba za a iya lissafin canji"],
+          "source": "NDHS 2024 (ndhs-2024) PDF p366, Table 11.1 (continued): Sokoto children under 5 below -2 SD height-for-age 42.8% (below -3 SD 14.8%). MICS 2021 in the library has no anthropometry (2 pages mention stunting, no Sokoto row): no second figure, so no change."},
+  "t12": {"any": [["90.5", "59.1"], ["91%", "59.1"]], "all_re": ["31\\.[49] percentage points", "different surveys"],
+          "source": "NBS MPI 2022 p123: incidence 90.5%; SBS MPI 2025 p33: 59.1%: -31.4 percentage points (with the 91% summary figure: -31.9)."}
+ }
+}

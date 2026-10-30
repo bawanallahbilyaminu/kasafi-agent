@@ -1,0 +1,30 @@
+{
+ "_about": "Multi-source questions (docs: evals/topics/README.md): measure identity, primary vs secondary citation, named publishers as required sources, change questions, follow-ups that name a source. Run before deploys only: uv run python evals/complex/run_open.py --file evals/topics/multi_source.json --out evals/topics/report.md",
+ "questions": [
+  {"id": "t01", "lang": "en", "text": "According to NBS what is Sokoto's MPI, and according to SBS how much has it improved?",
+   "note": "Bilyaminu's phone test, Oct 30 2026: NBS's own 2022 report and SBS's own 2025 report; the change only between the same measure"},
+  {"id": "t02", "lang": "ha", "text": "A cewar NBS, menene MPI na jihar Sokoto, kuma a cewar SBS nawa ne ya inganta?",
+   "note": "t01 in Hausa"},
+  {"id": "t03", "lang": "en", "previous": "What is Sokoto's multidimensional poverty according to SBS?",
+   "text": "There's also an NBS MPI report from 2022. How has it changed since then?",
+   "note": "a follow-up naming a source: NBS's own report is required, and the earlier question is answered again with it"},
+  {"id": "t04", "lang": "en", "text": "According to SBS, what was Sokoto's multidimensional poverty incidence in 2022?",
+   "note": "attribution trap: SBS's reports quote NBS's 2022 figure (91%); it is NBS's, as cited, never SBS's own"},
+  {"id": "t05", "lang": "en", "text": "Did multidimensional poverty in Sokoto fall from 91% to 0.239?",
+   "note": "a false comparison: a headcount % against an MPI value (0-1)"},
+  {"id": "t06", "lang": "en", "text": "How many IDPs are there in Sokoto State according to each source?",
+   "note": "IOM DTM, UNHCR, the SBS/JIPS/DRC report (which quotes others)"},
+  {"id": "t07", "lang": "en", "text": "How has the number of IDPs in Sokoto changed over the last three DTM rounds?",
+   "note": "a change question on one source's series"},
+  {"id": "t08", "lang": "en", "text": "What is the unemployment rate in Sokoto according to NBS, and what did the SBS/JIPS/DRC survey find for IDPs in Sokoto town?",
+   "note": "the state's rate and a town survey's IDP share: different populations and areas, side by side, no change"},
+  {"id": "t09", "lang": "en", "text": "According to the SBS/JIPS/DRC durable solutions report, what share of employed people in Sokoto are wage employees?",
+   "note": "attribution trap: the report quotes NBS NLFS 2023 (Table 8: employees 3.8%)"},
+  {"id": "t10", "lang": "en", "text": "What is Sokoto's latest inflation rate according to NBS?",
+   "note": "the newest CPI edition in the library (September 2026)"},
+  {"id": "t11", "lang": "en", "text": "What percentage of children under 5 in Sokoto are stunted, and how has it changed?",
+   "note": "NDHS 2024 only: MICS 2021 has no anthropometry, so no change can be computed (said so)"},
+  {"id": "t12", "lang": "en", "text": "By how many percentage points did the share of multidimensionally poor people in Sokoto change between the NBS 2022 MPI and the SBS 2025 MPI?",
+   "note": "the headcount pair, in percentage points, with a comparability note"}
+ ]
+}
