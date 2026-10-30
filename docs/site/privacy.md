@@ -5,7 +5,7 @@ permalink: /privacy/
 
 # Kasafi Privacy Policy
 
-*Last updated: 29 October 2026 (answer traces)*
+*Last updated: 30 October 2026 (location)*
 
 Kasafi is a WhatsApp assistant run by **Halal Numeriq Limited**, Sokoto, Nigeria ("we"). We are the data controller
 under the **Nigeria Data Protection Act 2023 (NDPA)**. Contact: [bilyaminu@halalnumeriq.com.ng](mailto:bilyaminu@halalnumeriq.com.ng).
@@ -22,7 +22,25 @@ under the **Nigeria Data Protection Act 2023 (NDPA)**. Contact: [bilyaminu@halal
   (Hausa or English), and how many messages you sent each day (for the daily limits). The ID is made from your number
   with a secret key, so we don't store the number itself.
 
-We don't ask for your name, ID, address or location. Please don't send private details about your health or anyone else's.
+We don't ask for your name, ID or address. Please don't send private details about your health or anyone else's.
+
+### Your location
+
+Kasafi asks for a location only when a question needs a place, for example "where is the nearest health facility?"
+or "will it be hot here tomorrow?". You can share it with WhatsApp's location button, type an LGA, ward or town, or
+use the LGA you chose before. The first time, Kasafi says: *"Kasafi will use your location only to answer this and
+won't keep it. Only your LGA is remembered for follow-ups."*
+
+- Kasafi works out your **Local Government Area** (and ward) from the location on our own server. The exact location
+  is never sent to an AI service or anyone else.
+- The **exact location** is kept only in our server's working memory for **up to 30 minutes**, for follow-up
+  questions such as "the next one?", and is then forgotten. It is **never written to our database, logs or answer
+  traces**. If you type coordinates into a question, they are removed before the question is logged.
+- Only your **LGA** is stored with your coded ID, for **90 days**, so "here" means your LGA in later questions. Send
+  GOGE BAYANAI NA or DELETE MY DATA to delete it, along with any location still in memory.
+- A location outside Sokoto State isn't used: Kasafi only covers Sokoto State.
+
+Location data is personal data under the NDPA. Kasafi uses it only for the request you made.
 
 ## Why
 
@@ -57,6 +75,7 @@ protection terms and the NDPA's rules on transfers.
   of the question, the steps Kasafi took (which documents and rows it read and checked) and the reply, with **no phone
   number or ID linked to you**, so our team can check that answers are accurate.
 - **Daily usage counts:** 30 days. **Consent and language settings:** until you ask us to delete them.
+- **Location:** the exact location for up to 30 minutes, in memory only; your LGA for 90 days.
 - **Review queue:** when Kasafi can't answer a question, or can't find a document it needs, we keep the English
   wording of the question, what was missing and which trusted sites were searched for **90 days**, so our team can add
   the missing document. This record has **no phone number or ID linked to you**, so it can't be traced back to you
