@@ -114,6 +114,11 @@ def test_muse_spark_open_falls_back_from_baseten_to_fireworks_with_its_own_model
     assert seen == [("inference.baseten.co", s.baseten_model), ("api.fireworks.ai", s.fireworks_model)]
 
 
+def test_the_hazard_keys_are_optional() -> None:
+    s = make_settings()
+    assert s.ors_api_key is None and s.firms_map_key is None      # everything must work without them
+
+
 def test_fetching_off_is_not_a_failed_search_and_the_limit_is_said_plainly() -> None:
     s = usage.eval_settings(make_settings(), fetch=False)
     assert not s.kasafi_fetch_enabled and not s.kasafi_open_web

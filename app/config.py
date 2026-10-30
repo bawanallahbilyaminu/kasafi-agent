@@ -87,6 +87,10 @@ class Settings(BaseSettings):
     baseten_base_url: str = "https://inference.baseten.co/v1"
     # The hackathon key only works with this exact ID (not the docs' "meta-models/muse-spark-open").
     baseten_model: str = "meta-models/muse-spark-open-1026"
+    # Hazard information (docs/hazard-and-services.md), both optional: OpenRouteService directions (without it,
+    # straight-line distance) and NASA FIRMS fire detections (without it, no fires layer)
+    ors_api_key: SecretStr | None = None
+    firms_map_key: SecretStr | None = None
     # Fireworks serves Muse Spark Open too: the fallback host when Baseten fails (app/providers/fireworks.py)
     fireworks_api_key: SecretStr | None = None
     fireworks_base_url: str = "https://api.fireworks.ai/inference/v1"
