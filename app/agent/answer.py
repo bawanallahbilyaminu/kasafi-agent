@@ -1272,8 +1272,9 @@ def write_budget_cells(need: Need, cells: list, lang: str, conn=None) -> tuple[s
                 label = f"{c.year} {label}" if len({x.year for x in row}) > 1 else label
                 val = f"{c.value}%" if c.measure == "performance_pct" else _struct_money(c.value, lang)
                 parts.append(f"{label} {val}" + (f" ({w['calc']})" if c.note == "calc" else ""))
+                shown = f"{c.value}%" if c.measure == "performance_pct" else fmt(Decimal(c.value))   # as printed
                 exact.append(f"{ent} | {split} | {c.measure} {c.year}{' Q' + str(c.quarter) if c.quarter else ''}: "
-                             f"{c.value} [{c.source}]")
+                             f"{shown} [{c.source}]")
             money = [c for c in row if c.measure != "performance_pct"]
             if len(money) == 2 and money[0].measure == money[1].measure and money[0].year != money[1].year:
                 a, b = sorted(money, key=lambda c: c.year)
@@ -1283,7 +1284,7 @@ def write_budget_cells(need: Need, cells: list, lang: str, conn=None) -> tuple[s
                 parts.append(f"{w['change']} {sign}{_struct_money(abs(diff), lang)}"
                              + (f" ({'+' if pct and pct > 0 else ''}{pct}%)" if pct is not None else "")
                              + f" ({w['calc']})")
-                exact.append(f"{ent} | {split} | change: {diff}")
+                exact.append(f"{ent} | {split} | change: {fmt(diff)}")
             out.append(f"• {w.get(split, split)}: " + "; ".join(parts))
     if missing:                       # partial answers name the missing cells, with the period or line that exists
         g = GAP_WORDS.get(lang, GAP_WORDS["en"])

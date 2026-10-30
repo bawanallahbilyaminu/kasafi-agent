@@ -50,7 +50,7 @@ def test_budget_cells_are_written_by_code_with_the_change_computed() -> None:
     text, exact = ans.write_budget_cells(Need("q", operation="compare"), cells, "en")
     assert text.splitlines()[0] == "*Government House* (code 011100100100):"
     assert "2025 approved budget ₦4.20 billion; 2026 approved budget ₦3.71 billion; change -₦489.02 million (-11.6%)" in text
-    assert "4201809645.00" in exact and "3712790422.00" in exact
+    assert "4,201,809,645.00" in exact and "3,712,790,422.00" in exact and "change: -489,019,223.00" in exact
 
 
 def test_dtm_cells_rank_lgas() -> None:

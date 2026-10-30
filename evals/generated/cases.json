@@ -1,0 +1,501 @@
+{
+ "_about": "Generate coverage questions from the data (docs/question-planning.md §6): templates per operation, filled with",
+ "seed": 7,
+ "cases": [
+  {
+   "id": "lookup-01",
+   "family": "lookup",
+   "lang": "en",
+   "text": "How much was approved for the Ministry of Education in the 2026 budget?",
+   "numbers": [
+    "68,951,198,631.73"
+   ],
+   "code": "051700000000"
+  },
+  {
+   "id": "lookup-02",
+   "family": "lookup",
+   "lang": "en",
+   "text": "How much was approved for the Ministry for Higher Education in the 2026 budget?",
+   "numbers": [
+    "33,986,201,399.04"
+   ],
+   "code": "056900000000"
+  },
+  {
+   "id": "lookup-03",
+   "family": "lookup",
+   "lang": "en",
+   "text": "How much was approved for the Ministry of Information in the 2026 budget?",
+   "numbers": [
+    "2,481,546,024.24"
+   ],
+   "code": "012300000000"
+  },
+  {
+   "id": "lookup-04",
+   "family": "lookup",
+   "lang": "en",
+   "text": "How much was approved for the Sokoto State House of Assembly in the 2026 budget?",
+   "numbers": [
+    "12,257,369,417.24"
+   ],
+   "code": "011200000000"
+  },
+  {
+   "id": "lookup-05",
+   "family": "lookup",
+   "lang": "en",
+   "text": "How much was approved for the Economic Sector in the 2026 budget?",
+   "numbers": [
+    "316,037,728,539.97"
+   ],
+   "code": "020000000000"
+  },
+  {
+   "id": "split-01",
+   "family": "split",
+   "lang": "en",
+   "text": "What are the personnel, overhead and capital allocations of the Department for Rural Roads in 2026?",
+   "numbers": [
+    "28,586,247.86",
+    "133,950,000.00",
+    "15,467,942,818.77"
+   ],
+   "code": "023405700100"
+  },
+  {
+   "id": "split-02",
+   "family": "split",
+   "lang": "en",
+   "text": "What are the personnel, overhead and capital allocations of the Sokoto State Independent Electoral Commission in 2026?",
+   "numbers": [
+    "128,764,612.92",
+    "106,000,000.00",
+    "225,711,564.00"
+   ],
+   "code": "014800100100"
+  },
+  {
+   "id": "split-03",
+   "family": "split",
+   "lang": "en",
+   "text": "What are the personnel, overhead and capital allocations of the Female Education Board in 2026?",
+   "numbers": [
+    "47,446,073.60",
+    "462,050,000.00",
+    "650,000,000.00"
+   ],
+   "code": "051705700100"
+  },
+  {
+   "id": "split-04",
+   "family": "split",
+   "lang": "en",
+   "text": "What are the personnel, overhead and capital allocations of the Ministry of Water Resources in 2026?",
+   "numbers": [
+    "236,462,921.80",
+    "745,500,000.00",
+    "8,607,283,643.50"
+   ],
+   "code": "025200100100"
+  },
+  {
+   "id": "split-05",
+   "family": "split",
+   "lang": "en",
+   "text": "What are the personnel, overhead and capital allocations of the Sokoto Urban & Reg. Planning Department in 2026?",
+   "numbers": [
+    "79,944,390.00",
+    "100,500,000.00",
+    "926,000,000.00"
+   ],
+   "code": "025300500100"
+  },
+  {
+   "id": "spend_quarter-01",
+   "family": "spend_quarter",
+   "lang": "en",
+   "text": "How much had the Commodity Board spent by the end of Q2 2026, against its revised budget?",
+   "numbers": [
+    "4,967,584.64",
+    "673,970,200.00"
+   ],
+   "code": "022200200100"
+  },
+  {
+   "id": "spend_quarter-02",
+   "family": "spend_quarter",
+   "lang": "en",
+   "text": "How much had the SUSTAINABLE DEVELOPMENT GOALS (SDG) spent by the end of Q2 2026, against its revised budget?",
+   "numbers": [
+    "1,000,000.00",
+    "42,000,000.00"
+   ],
+   "code": "023800600200"
+  },
+  {
+   "id": "spend_quarter-03",
+   "family": "spend_quarter",
+   "lang": "en",
+   "text": "How much had the Ministry of Budget and Economic Planning spent by the end of Q2 2026, against its revised budget?",
+   "numbers": [
+    "420,116,810.00",
+    "2,541,605,200.00"
+   ],
+   "code": "023800100100"
+  },
+  {
+   "id": "spend_quarter-04",
+   "family": "spend_quarter",
+   "lang": "en",
+   "text": "How much had the Bureau for Public Procurement and Price Intelligence spent by the end of Q2 2026, against its revised budget?",
+   "numbers": [
+    "4,859,011.52",
+    "81,758,005.00"
+   ],
+   "code": "011101000100"
+  },
+  {
+   "id": "spend_quarter-05",
+   "family": "spend_quarter",
+   "lang": "en",
+   "text": "How much had the Department for Security Matters spent by the end of Q2 2026, against its revised budget?",
+   "numbers": [
+    "7,612,786,073.92",
+    "37,151,867,627.25"
+   ],
+   "code": "017000100200"
+  },
+  {
+   "id": "compare-01",
+   "family": "compare",
+   "lang": "en",
+   "text": "Compare the Ministry of Justice's approved budget in 2025 and 2026.",
+   "numbers": [
+    "4,463,663,285.02",
+    "6,092,663,285.02"
+   ],
+   "code": "032600000000"
+  },
+  {
+   "id": "compare-02",
+   "family": "compare",
+   "lang": "en",
+   "text": "Compare the Ministry of Innovation and Digital Economy's approved budget in 2025 and 2026.",
+   "numbers": [
+    "1,348,794,500.56",
+    "3,589,478,500.56"
+   ],
+   "code": "027900000000"
+  },
+  {
+   "id": "compare-03",
+   "family": "compare",
+   "lang": "en",
+   "text": "Compare the Fiscal Responsibility Commission's approved budget in 2025 and 2026.",
+   "numbers": [
+    "58,993,780.12",
+    "60,993,780.12"
+   ],
+   "code": "025000000000"
+  },
+  {
+   "id": "compare-04",
+   "family": "compare",
+   "lang": "en",
+   "text": "Compare the Ministry for Women Affairs's approved budget in 2025 and 2026.",
+   "numbers": [
+    "8,444,823,620.00",
+    "7,236,808,166.70"
+   ],
+   "code": "051400000000"
+  },
+  {
+   "id": "compare-05",
+   "family": "compare",
+   "lang": "en",
+   "text": "Compare the Government House's approved budget in 2025 and 2026.",
+   "numbers": [
+    "14,028,166,805.41",
+    "18,527,180,961.21"
+   ],
+   "code": "011100000000"
+  },
+  {
+   "id": "share-01",
+   "family": "share",
+   "lang": "en",
+   "text": "What share of the Sokoto State Rima Televiosn (Rtv)'s 2026 approved budget is capital?",
+   "numbers_any": [
+    [
+     "20.0%"
+    ],
+    [
+     "20.0 %"
+    ],
+    [
+     "30,000,000.00",
+     "149,822,992.60"
+    ]
+   ],
+   "code": "012300300100"
+  },
+  {
+   "id": "share-02",
+   "family": "share",
+   "lang": "en",
+   "text": "What share of the Poultry Development Agency's 2026 approved budget is capital?",
+   "numbers_any": [
+    [
+     "78.1%"
+    ],
+    [
+     "78.1 %"
+    ],
+    [
+     "236,000,000.00",
+     "302,140,589.44"
+    ]
+   ],
+   "code": "026800300100"
+  },
+  {
+   "id": "share-03",
+   "family": "share",
+   "lang": "en",
+   "text": "What share of the Commodity Board's 2026 approved budget is capital?",
+   "numbers_any": [
+    [
+     "96.4%"
+    ],
+    [
+     "96.4 %"
+    ],
+    [
+     "650,000,000.00",
+     "673,970,200.00"
+    ]
+   ],
+   "code": "022200200100"
+  },
+  {
+   "id": "share-04",
+   "family": "share",
+   "lang": "en",
+   "text": "What share of the Sokoto State SME Development Agency's 2026 approved budget is capital?",
+   "numbers_any": [
+    [
+     "6.7%"
+    ],
+    [
+     "6.7 %"
+    ],
+    [
+     "100,000,000.00",
+     "1,484,587,287.28"
+    ]
+   ],
+   "code": "022205100100"
+  },
+  {
+   "id": "share-05",
+   "family": "share",
+   "lang": "en",
+   "text": "What share of the Fiscal Responsibility Commission's 2026 approved budget is capital?",
+   "numbers_any": [
+    [
+     "23.4%"
+    ],
+    [
+     "23.4 %"
+    ],
+    [
+     "14,250,000.00",
+     "60,993,780.12"
+    ]
+   ],
+   "code": "025000100100"
+  },
+  {
+   "id": "false_premise-01",
+   "family": "false_premise",
+   "lang": "en",
+   "text": "Why did the Ministry for Special Duties's approved budget fall from 2025 to 2026?",
+   "numbers": [
+    "423,000,138.00",
+    "829,500,000.00"
+   ],
+   "premise_false": true,
+   "code": "016700000000"
+  },
+  {
+   "id": "false_premise-02",
+   "family": "false_premise",
+   "lang": "en",
+   "text": "Why did the Social Sector's approved budget fall from 2025 to 2026?",
+   "numbers": [
+    "175,566,322,222.47",
+    "278,879,883,746.37"
+   ],
+   "premise_false": true,
+   "code": "050000000000"
+  },
+  {
+   "id": "false_premise-03",
+   "family": "false_premise",
+   "lang": "en",
+   "text": "Why did the Office of Auditor General's approved budget fall from 2025 to 2026?",
+   "numbers": [
+    "542,837,188.04",
+    "606,837,188.04"
+   ],
+   "premise_false": true,
+   "code": "014000000000"
+  },
+  {
+   "id": "false_premise-04",
+   "family": "false_premise",
+   "lang": "en",
+   "text": "Why did the Economic Sector's approved budget fall from 2025 to 2026?",
+   "numbers": [
+    "237,357,326,005.87",
+    "316,037,728,539.97"
+   ],
+   "premise_false": true,
+   "code": "020000000000"
+  },
+  {
+   "id": "false_premise-05",
+   "family": "false_premise",
+   "lang": "en",
+   "text": "Why did the Ministry of Youth and Sports Development's approved budget fall from 2025 to 2026?",
+   "numbers": [
+    "4,024,714,780.77",
+    "17,057,258,000.00"
+   ],
+   "premise_false": true,
+   "code": "051300000000"
+  },
+  {
+   "id": "not_in_data-01",
+   "family": "not_in_data",
+   "lang": "en",
+   "text": "How much did the Sokoto Road Maintenance Agency spend in Q4 2026?",
+   "expect_gap": "Q2 2026",
+   "numbers": [],
+   "code": "023400400100"
+  },
+  {
+   "id": "not_in_data-02",
+   "family": "not_in_data",
+   "lang": "en",
+   "text": "How much did the College of Nursing Sciences spend in Q4 2026?",
+   "expect_gap": "Q2 2026",
+   "numbers": [],
+   "code": "052110400100"
+  },
+  {
+   "id": "not_in_data-03",
+   "family": "not_in_data",
+   "lang": "en",
+   "text": "How much did the Ministry of Culture & Tourism spend in Q4 2026?",
+   "expect_gap": "Q2 2026",
+   "numbers": [],
+   "code": "023600100100"
+  },
+  {
+   "id": "not_in_data-04",
+   "family": "not_in_data",
+   "lang": "en",
+   "text": "How much did the College of Agriculture Wurno spend in Q4 2026?",
+   "expect_gap": "Q2 2026",
+   "numbers": [],
+   "code": "021502100100"
+  },
+  {
+   "id": "not_in_data-05",
+   "family": "not_in_data",
+   "lang": "en",
+   "text": "How much did the Infectious Diseases Hospital Amanawa spend in Q4 2026?",
+   "expect_gap": "Q2 2026",
+   "numbers": [],
+   "code": "052102600300"
+  },
+  {
+   "id": "rank_lga-01",
+   "family": "rank_lga",
+   "lang": "en",
+   "text": "Which 5 LGAs in Sokoto have the most IDPs?",
+   "numbers": [
+    "40,729",
+    "19,151",
+    "17,143",
+    "15,068",
+    "14,850"
+   ],
+   "names": [
+    "Sabon Birni",
+    "Tangaza",
+    "Tambuwal",
+    "Tureta",
+    "Shagari"
+   ]
+  },
+  {
+   "id": "lookup_lga-01",
+   "family": "lookup_lga",
+   "lang": "en",
+   "text": "How many IDPs are there in Silame LGA?",
+   "numbers": [
+    "3,386"
+   ]
+  },
+  {
+   "id": "lookup_lga-02",
+   "family": "lookup_lga",
+   "lang": "en",
+   "text": "How many IDPs are there in Shagari LGA?",
+   "numbers": [
+    "14,850"
+   ]
+  },
+  {
+   "id": "lookup_lga-03",
+   "family": "lookup_lga",
+   "lang": "en",
+   "text": "How many IDPs are there in Bodinga LGA?",
+   "numbers": [
+    "1,990"
+   ]
+  },
+  {
+   "id": "lookup_lga-04",
+   "family": "lookup_lga",
+   "lang": "en",
+   "text": "How many IDPs are there in Tureta LGA?",
+   "numbers": [
+    "15,068"
+   ]
+  },
+  {
+   "id": "lookup_lga-05",
+   "family": "lookup_lga",
+   "lang": "en",
+   "text": "How many IDPs are there in Goronyo LGA?",
+   "numbers": [
+    "1,926"
+   ]
+  },
+  {
+   "id": "trend-01",
+   "family": "trend",
+   "lang": "en",
+   "text": "How has the number of IDPs in Sokoto State changed over the last DTM rounds?",
+   "numbers": [
+    "181,526",
+    "88,562"
+   ]
+  }
+ ]
+}
