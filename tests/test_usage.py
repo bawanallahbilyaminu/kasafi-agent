@@ -1,6 +1,7 @@
 """Eval runs: what they cost, that they fetch only when a case needs it, and that they never message anyone."""
 
 import asyncio
+import json
 import subprocess
 import sys
 
@@ -89,6 +90,28 @@ def test_a_stage_on_muse_spark_open_falls_back_to_muse_spark(monkeypatch) -> Non
     asyncio.run(ans.stage_json("scope", Client("meta"), Client("open"), s, msgs, reasoning_effort="low",
                                max_tokens=100))
     assert calls == [("meta", s.meta_model)]                    # not listed: Muse Spark
+
+
+def test_muse_spark_open_falls_back_from_baseten_to_fireworks_with_its_own_model_id() -> None:
+    import httpx
+
+    from app.providers.baseten import BasetenClient
+    from app.providers.fireworks import FireworksClient, OpenModel
+    from pydantic import SecretStr
+    seen = []
+
+    def host(status):
+        def reply(request):
+            seen.append((request.url.host, json.loads(request.content)["model"]))
+            return httpx.Response(status, json={"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+                                                "usage": {}} if status == 200 else {"error": "out of credits"})
+        return httpx.MockTransport(reply)
+    s = make_settings(baseten_api_key=SecretStr("b"), fireworks_api_key=SecretStr("f"))
+    open_model = OpenModel([BasetenClient(s, transport=host(402), max_retries=0),
+                            FireworksClient(s, transport=host(200), max_retries=0)])
+    r = asyncio.run(open_model.chat([{"role": "user", "content": "q"}], model="ignored"))
+    assert r.content == "ok"
+    assert seen == [("inference.baseten.co", s.baseten_model), ("api.fireworks.ai", s.fireworks_model)]
 
 
 def test_fetching_off_is_not_a_failed_search_and_the_limit_is_said_plainly() -> None:

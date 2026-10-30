@@ -61,6 +61,7 @@ from app.agent.line_answer import (WHOLE_BUDGET, LineResult, fmt, is_location, i
 from app.retrieval.line_search import MAX_LINES, name_key, nearest, search_lines
 from app.config import Settings, get_settings
 from app.providers.baseten import BasetenClient
+from app.providers.fireworks import FireworksClient, OpenModel
 from app.providers.chat import ChatClient
 from app.providers.meta import MetaClient
 from app.providers.stt import parse_json_reply
@@ -706,11 +707,18 @@ async def compose(question: str, lang: str, plan: Plan, evidence: list[Evidence]
 
 @asynccontextmanager
 async def open_reader(settings: Settings) -> AsyncIterator[ChatClient | None]:
-    """Muse Spark Open on Baseten for the second row reading, or None when it's off or has no key."""
-    if not (settings.kasafi_open_reader and settings.baseten_api_key):
+    """Muse Spark Open for the second row reading (and the stages in kasafi_open_stages): Baseten, then
+    Fireworks if Baseten fails; None when it's off or neither key is set."""
+    if not settings.kasafi_open_reader:
         yield None
         return
-    async with BasetenClient(settings, timeout=settings.kasafi_open_read_timeout_s, max_retries=1) as c:
+    hosts = [cls(settings, timeout=settings.kasafi_open_read_timeout_s, max_retries=1)
+             for cls, key in ((BasetenClient, settings.baseten_api_key), (FireworksClient, settings.fireworks_api_key))
+             if key]
+    if not hosts:
+        yield None
+        return
+    async with OpenModel(hosts) as c:
         yield c
 
 

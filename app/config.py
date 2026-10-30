@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     kasafi_price_baseten_in: float = 1.25
     kasafi_price_baseten_cached: float = 0.15
     kasafi_price_baseten_out: float = 4.25
+    kasafi_price_fireworks_in: float = 1.25          # Fireworks' model page, Oct 30 2026
+    kasafi_price_fireworks_cached: float = 0.15
+    kasafi_price_fireworks_out: float = 4.25
     # Eval runs stop when the day's eval spend (all runs, both providers) reaches this (evals/runtime.DailyBudget)
     eval_daily_usd: float = 5.0
     # How long a read-back question waits for Eh / A'a / a correction
@@ -84,6 +87,10 @@ class Settings(BaseSettings):
     baseten_base_url: str = "https://inference.baseten.co/v1"
     # The hackathon key only works with this exact ID (not the docs' "meta-models/muse-spark-open").
     baseten_model: str = "meta-models/muse-spark-open-1026"
+    # Fireworks serves Muse Spark Open too: the fallback host when Baseten fails (app/providers/fireworks.py)
+    fireworks_api_key: SecretStr | None = None
+    fireworks_base_url: str = "https://api.fireworks.ai/inference/v1"
+    fireworks_model: str = "accounts/fireworks/models/muse-spark-open"
     # The second of the two independent row readings runs on Muse Spark Open (app/agent/line_answer.py); slower
     # than this, or failing, and Muse Spark reads instead
     kasafi_open_reader: bool = True

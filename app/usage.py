@@ -120,7 +120,9 @@ EVAL_STAGES = ("/paraphrase",)
 def prices(settings) -> dict[str, tuple[float, float, float]]:
     return {"Meta": (settings.kasafi_price_meta_in, settings.kasafi_price_meta_cached, settings.kasafi_price_meta_out),
             "Baseten": (settings.kasafi_price_baseten_in, settings.kasafi_price_baseten_cached,
-                        settings.kasafi_price_baseten_out)}
+                        settings.kasafi_price_baseten_out),
+            "Fireworks": (settings.kasafi_price_fireworks_in, settings.kasafi_price_fireworks_cached,
+                          settings.kasafi_price_fireworks_out)}
 
 
 def total_dollars(settings) -> float:
