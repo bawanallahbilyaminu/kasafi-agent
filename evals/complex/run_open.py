@@ -5,6 +5,7 @@ passed the number check, citations, whether the working was shown, the path take
 search), and time. Writes a Markdown report with every reply, for a person to check the figures.
 
     uv run python evals/complex/run_open.py [--file evals/complex/mid_tier.json] [--ids m01 m05] [--out report.md]
+                                            [--resume]    # continue a stopped run (evals/runtime.py)
 """
 
 from __future__ import annotations
@@ -22,11 +23,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-import psycopg  # noqa: E402
-
 from app.agent.answer import UNVERIFIED, answer_question  # noqa: E402
 from app import usage  # noqa: E402
 from app.config import get_settings  # noqa: E402
+from evals.runtime import Checkpoint, memory_line, run_each, warm  # noqa: E402
 
 
 STAGES = ("plan", "acquire", "line_search", "read", "read1", "read2", "reread", "page_search", "compose",
@@ -59,44 +59,56 @@ def outcome(a) -> str:
     return "partial" if a.partial else "answered"
 
 
-async def main(path: Path, ids: list[str] | None, out: Path) -> None:
+async def main(path: Path, ids: list[str] | None, out: Path, resume: bool = False, concurrency: int = 1) -> None:
     s = get_settings()
     qs = [q for q in json.loads(path.read_text(encoding="utf-8"))["questions"] if not ids or q["id"] in ids]
-    rows, report, stages, checked = [], [f"# Open-question run: {path.name}\n"], [], []
     checks_file = path.with_name(f"{path.stem}_checks.json")
     checks_file = checks_file if checks_file.exists() else path.parent / "mid_tier_checks.json"
     checks = json.loads(checks_file.read_text(encoding="utf-8"))["checks"] if checks_file.exists() else {}
-    with psycopg.connect(s.db_url()) as conn:
-        for q in qs:
-            t0 = time.perf_counter()
-            try:
-                a = await answer_question(q["text"], q["lang"], conn,         # the library only: no fetching
-                                          settings=usage.eval_settings(s, fetch=bool(q.get("may_fetch"))))
-            except Exception as e:      # one bad question must not stop the run
-                conn.rollback()
-                rows.append((q["id"], "error", False, 0, False, "-", time.perf_counter() - t0))
-                report.append(f"## {q['id']} ERROR {type(e).__name__}\n\n{q['text']}\n")
-                print(f"{q['id']:>4} ERROR {type(e).__name__}")
-                continue
-            dt = time.perf_counter() - t0
-            path_taken = (f"topic:{a.topic.topic}" if getattr(a, "topic", None) is not None else
-                          f"analysis:{a.analysis.tool}" if getattr(a, "analysis", None) is not None else
-                          "category" if getattr(a, "category", None) is not None else
-                          f"lines:{a.lines.operation}" if getattr(a, "lines", None) is not None else
-                          f"query_budget:{a.budget.operation}" if a.budget is not None else
-                          "latest" if a.latest else "fetch" if a.acquired else "search")
-            res = (q["id"], outcome(a), a.verified, len(a.cited), bool(getattr(a, "working", "")), path_taken, dt)
-            rows.append(res)
-            stages.append(dict(a.timings))
-            why = wrong(checks.get(q["id"]), a)
-            if q["id"] in checks:
-                checked.append((q["id"], why))
-            parts = " ".join(f"{k}={v:.1f}" for k, v in a.timings.items() if k in STAGES)
-            print(f"{q['id']:>4} {res[1]:<10} {'WRONG ' if why else ''}cites={res[3]} {path_taken:<22} "
-                  f"{dt:5.1f}s  [{parts}]" + (f"  {why}" if why else ""))
-            report.append(f"## {q['id']}: {res[1]}{' WRONG: ' + why if why else ''} ({path_taken}, {dt:.1f}s)\n\n"
-                          f"**Q:** {q['text']}\n"
-                          + (f"\n_{q['note']}_\n" if q.get("note") else "") + f"\n```\n{a.text}\n```\n")
+    ckpt = Checkpoint(out.stem, {"file": str(path), "ids": ids}, resume=resume)
+    resumed = len(ckpt.done)
+    warm()
+
+    async def one(q: dict, conn) -> None:
+        t0 = time.perf_counter()
+        try:
+            a = await answer_question(q["text"], q["lang"], conn,         # the library only: no fetching
+                                      settings=usage.eval_settings(s, fetch=bool(q.get("may_fetch"))))
+        except Exception as e:      # one bad question must not stop the run
+            conn.rollback()
+            print(f"{q['id']:>4} ERROR {type(e).__name__}")
+            ckpt.add(q["id"], {"row": [q["id"], "error", False, 0, False, "-", time.perf_counter() - t0],
+                               "error": type(e).__name__})
+            return
+        dt = time.perf_counter() - t0
+        path_taken = (f"topic:{a.topic.topic}" if getattr(a, "topic", None) is not None else
+                      f"analysis:{a.analysis.tool}" if getattr(a, "analysis", None) is not None else
+                      "category" if getattr(a, "category", None) is not None else
+                      f"lines:{a.lines.operation}" if getattr(a, "lines", None) is not None else
+                      f"query_budget:{a.budget.operation}" if a.budget is not None else
+                      "latest" if a.latest else "fetch" if a.acquired else "search")
+        res = [q["id"], outcome(a), a.verified, len(a.cited), bool(getattr(a, "working", "")), path_taken, dt]
+        why = wrong(checks.get(q["id"]), a)
+        parts = " ".join(f"{k}={v:.1f}" for k, v in a.timings.items() if k in STAGES)
+        print(f"{q['id']:>4} {res[1]:<10} {'WRONG ' if why else ''}cites={res[3]} {path_taken:<22} "
+              f"{dt:5.1f}s  [{parts}]" + (f"  {why}" if why else ""))
+        ckpt.add(q["id"], {"row": res, "timings": dict(a.timings), "why": why, "text": a.text})
+
+    await run_each([q for q in qs if q["id"] not in ckpt.done], one, s.db_url(), concurrency)
+    rows, report, stages, checked = [], [f"# Open-question run: {path.name}\n"], [], []
+    for q in qs:                    # in question order, whichever session ran them
+        r = ckpt.done[q["id"]]
+        rows.append(tuple(r["row"]))
+        if r.get("error"):
+            report.append(f"## {q['id']} ERROR {r['error']}\n\n{q['text']}\n")
+            continue
+        stages.append(r["timings"])
+        why, res = r["why"], r["row"]
+        if q["id"] in checks:
+            checked.append((q["id"], why))
+        report.append(f"## {q['id']}: {res[1]}{' WRONG: ' + why if why else ''} ({res[5]}, {res[6]:.1f}s)\n\n"
+                      f"**Q:** {q['text']}\n"
+                      + (f"\n_{q['note']}_\n" if q.get("note") else "") + f"\n```\n{r['text']}\n```\n")
     counts = Counter(r[1] for r in rows)
     bad = [i for i, why in checked if why]
     summary = (f"{len(rows)} questions: " + ", ".join(f"{k} {v}" for k, v in counts.most_common())
@@ -118,6 +130,7 @@ async def main(path: Path, ids: list[str] | None, out: Path) -> None:
     out.write_text("\n".join(report), encoding="utf-8")
     print(f"report: {out}")
     print(usage.summary(s))
+    print(memory_line(resumed))
 
 
 if __name__ == "__main__":
@@ -125,5 +138,7 @@ if __name__ == "__main__":
     p.add_argument("--file", default=str(ROOT / "evals/complex/mid_tier.json"))
     p.add_argument("--ids", nargs="+")
     p.add_argument("--out", default=str(ROOT / "evals/complex/mid_tier_report.md"))
+    p.add_argument("--resume", action="store_true", help="continue the stopped run with this --out")
+    p.add_argument("--concurrency", type=int, default=1, choices=[1, 2])
     a = p.parse_args()
-    asyncio.run(main(Path(a.file), a.ids, Path(a.out)))
+    asyncio.run(main(Path(a.file), a.ids, Path(a.out), a.resume, a.concurrency))

@@ -41,3 +41,5 @@ deploy/index.incoming.sql.gz
 
 # fresh generated-eval draws (each report names its seed, so a draw can be rebuilt)
 evals/generated/runs/
+# per-case results of eval runs in progress (evals/runtime.py, for --resume)
+evals/.checkpoints/

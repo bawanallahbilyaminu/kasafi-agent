@@ -40,6 +40,18 @@ def reset() -> None:
     counts.clear()
 
 
+def snapshot() -> dict:
+    """The counters as plain data, saved with an eval's checkpoint so a resumed run's cost covers the whole run."""
+    return {"chat": {p: vars(t).copy() for p, t in chat.items()}, "counts": dict(counts)}
+
+
+def restore(snap: dict) -> None:
+    reset()
+    for p, t in (snap.get("chat") or {}).items():
+        chat[p] = Tokens(**t)
+    counts.update(snap.get("counts") or {})
+
+
 def eval_settings(settings, *, fetch: bool):
     """An eval case's settings: fetching new documents and the open web only for the cases that need them."""
     return settings.model_copy(update={"kasafi_fetch_enabled": fetch, "kasafi_open_web": fetch})

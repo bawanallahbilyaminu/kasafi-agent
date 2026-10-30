@@ -5,7 +5,8 @@ Checks for each case:
 - every expected figure appears in the answer exactly as written in the document
 - at least one citation from an expected document (and page, if given)
 - expected terms present (any of the alternatives), and an assumption stated when required
-Usage:  uv run python evals/run_answer_eval.py [--ids 01 11] [--runs 2]
+Usage:  uv run python evals/run_answer_eval.py [--ids 01 11] [--runs 2] [--resume]
+(--resume continues a stopped run of the suite: each case's result is kept as it finishes, evals/runtime.py)
 """
 
 import argparse
@@ -19,12 +20,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import psycopg  # noqa: E402
-
 from app.agent.answer import answer_question  # noqa: E402
 from app import usage  # noqa: E402
 from app.config import get_settings  # noqa: E402
-
+from evals.runtime import Checkpoint, memory_line, run_each, warm  # noqa: E402
 
 
 def check(case: dict, a) -> list[str]:
@@ -67,7 +66,8 @@ def check(case: dict, a) -> list[str]:
     return fails
 
 
-async def main(ids: list[str] | None, runs: int, plan_reasoning: str | None = None, suite: str = "main") -> int:
+async def main(ids: list[str] | None, runs: int, plan_reasoning: str | None = None, suite: str = "main",
+               resume: bool = False, concurrency: int = 1) -> int:
     s = get_settings()
     if plan_reasoning:
         s = s.model_copy(update={"kasafi_plan_reasoning": plan_reasoning})
@@ -76,31 +76,40 @@ async def main(ids: list[str] | None, runs: int, plan_reasoning: str | None = No
     cases = json.loads((base / "answers.json").read_text(encoding="utf-8"))["cases"]
     questions = {q["id"]: q for q in json.loads((base / "questions.json").read_text(encoding="utf-8"))["questions"]}
     cases = [c for c in cases if not ids or c["id"] in ids]
-    passed, times, plan_t, answer_t = 0, [], [], []
-    with psycopg.connect(s.db_url()) as conn:
-        for run in range(runs):
-            for c in cases:
-                t0 = time.perf_counter()
-                q = questions[c["id"]]
-                a = await answer_question(q.get("text_ha") or q["text"], c["lang"], conn,
-                                          settings=usage.eval_settings(s, fetch=bool(c.get("may_fetch"))))
-                times.append(time.perf_counter() - t0)
-                plan_t.append(a.timings.get("plan", 0))
-                answer_t.append(a.timings.get("answer", 0))
-                fails = check(c, a)
-                # A fetch on a question the library can already answer costs ~15 s and money: flag it.
-                if a.plan and a.plan.missing_document and not c.get("may_fetch"):
-                    fails.append(f"unexpected fetch for '{a.plan.missing_document}'")
-                passed += not fails
-                print(f"[run {run + 1}] {c['id']:>3} {'PASS' if not fails else 'FAIL'} {times[-1]:5.1f}s  "
-                      f"{'; '.join(fails)}"
-                      + (f"  [fetch: {a.acquired.status} {a.acquired.doc_id or ''}]" if a.acquired else ""))
-                if fails:
-                    print("      " + a.text.replace("\n", "\n      "))
+    ckpt = Checkpoint(f"answers-{suite.replace('/', '-')}", {"suite": suite, "ids": ids, "runs": runs,
+                                                             "plan": s.kasafi_plan_reasoning}, resume=resume)
+    resumed = len(ckpt.done)
+    warm()
+
+    async def one(job: tuple[int, dict], conn) -> None:
+        run, c = job
+        t0 = time.perf_counter()
+        q = questions[c["id"]]
+        a = await answer_question(q.get("text_ha") or q["text"], c["lang"], conn,
+                                  settings=usage.eval_settings(s, fetch=bool(c.get("may_fetch"))))
+        dt = time.perf_counter() - t0
+        fails = check(c, a)
+        # A fetch on a question the library can already answer costs ~15 s and money: flag it.
+        if a.plan and a.plan.missing_document and not c.get("may_fetch"):
+            fails.append(f"unexpected fetch for '{a.plan.missing_document}'")
+        print(f"[run {run + 1}] {c['id']:>3} {'PASS' if not fails else 'FAIL'} {dt:5.1f}s  "
+              f"{'; '.join(fails)}"
+              + (f"  [fetch: {a.acquired.status} {a.acquired.doc_id or ''}]" if a.acquired else ""))
+        if fails:
+            print("      " + a.text.replace("\n", "\n      "))
+        ckpt.add(f"{run}:{c['id']}", {"fails": fails, "dt": dt, "plan": a.timings.get("plan", 0),
+                                      "answer": a.timings.get("answer", 0)})
+
+    jobs = [(run, c) for run in range(runs) for c in cases]
+    await run_each([j for j in jobs if f"{j[0]}:{j[1]['id']}" not in ckpt.done], one, s.db_url(), concurrency)
+    done = [ckpt.done[f"{run}:{c['id']}"] for run, c in jobs]
+    passed = sum(not r["fails"] for r in done)
+    times, plan_t, answer_t = [r["dt"] for r in done], [r["plan"] for r in done], [r["answer"] for r in done]
     total = len(cases) * runs
     print(f"\n{passed}/{total} passed  |  total median {statistics.median(times):.1f}s, max {max(times):.1f}s  |  "
           f"plan median {statistics.median(plan_t):.1f}s  |  answer median {statistics.median(answer_t):.1f}s")
     print(usage.summary(s))
+    print(memory_line(resumed))
     return 0 if passed == total else 1
 
 
@@ -110,5 +119,7 @@ if __name__ == "__main__":
     p.add_argument("--runs", type=int, default=1)
     p.add_argument("--plan-reasoning", choices=["minimal", "low", "medium"])
     p.add_argument("--suite", default="main", help="main (evals/) or a folder under evals/, e.g. complex")
+    p.add_argument("--resume", action="store_true", help="continue the stopped run of this suite")
+    p.add_argument("--concurrency", type=int, default=1, choices=[1, 2])
     a = p.parse_args()
-    raise SystemExit(asyncio.run(main(a.ids, a.runs, a.plan_reasoning, a.suite)))
+    raise SystemExit(asyncio.run(main(a.ids, a.runs, a.plan_reasoning, a.suite, a.resume, a.concurrency)))
