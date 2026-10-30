@@ -157,9 +157,10 @@ async def rank_candidates(description: str, candidates: list[Candidate], client:
     if not candidates:
         return []
     listing = json.dumps([{"n": i, **asdict(c)} for i, c in enumerate(candidates, 1)], ensure_ascii=False)
-    r = await client.chat([{"role": "system", "content": RANK_SYSTEM},
-                           {"role": "user", "content": f"DESCRIPTION: {description}\n\nRESULTS:\n{listing}"}],
-                          model=settings.meta_model, reasoning_effort="low", max_tokens=3000)
+    with usage.stage("acquire"):
+        r = await client.chat([{"role": "system", "content": RANK_SYSTEM},
+                               {"role": "user", "content": f"DESCRIPTION: {description}\n\nRESULTS:\n{listing}"}],
+                              model=settings.meta_model, reasoning_effort="low", max_tokens=3000)
     d = parse_json_reply(r.content)
     ns = [n for n in d.get("ranked") or [] if isinstance(n, int) and 1 <= n <= len(candidates)]
     log.info("document ranking: %s (%s)", ns[:most], str(d.get("why", ""))[:120])
@@ -171,9 +172,10 @@ async def pick_candidate(description: str, candidates: list[Candidate], client: 
     if not candidates:
         return None
     listing = json.dumps([{"n": i, **asdict(c)} for i, c in enumerate(candidates, 1)], ensure_ascii=False)
-    r = await client.chat([{"role": "system", "content": PICK_SYSTEM},
-                           {"role": "user", "content": f"DESCRIPTION: {description}\n\nRESULTS:\n{listing}"}],
-                          model=settings.meta_model, reasoning_effort="low", max_tokens=3000)
+    with usage.stage("acquire"):
+        r = await client.chat([{"role": "system", "content": PICK_SYSTEM},
+                               {"role": "user", "content": f"DESCRIPTION: {description}\n\nRESULTS:\n{listing}"}],
+                              model=settings.meta_model, reasoning_effort="low", max_tokens=3000)
     d = parse_json_reply(r.content)
     n = d.get("pick")
     log.info("document pick: %s (%s)", n, str(d.get("why", ""))[:120])

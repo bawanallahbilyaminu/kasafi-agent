@@ -4,7 +4,9 @@
   the run's settings in the first line and the cost counters so far in every line. `--resume` reads it back and runs
   only the cases not in it, so a killed run loses at most the cases in flight.
 - run_each: cases one or two at a time (each worker its own DB connection), garbage collected after every case.
-- warm: the embedding model loaded once, before the first case (every case then reuses it).
+- warm: the embedding model loaded once, before the first case (every case then reuses it); identical model calls
+  answered once for the run (app/usage.enable_cache).
+- DailyBudget: runs stop when the day's eval spend reaches EVAL_DAILY_USD (default $5); --resume continues.
 - peak_mb: the process's peak memory, printed at the end of a run.
 """
 
@@ -55,19 +57,65 @@ class Checkpoint:
 def warm() -> None:
     from app.retrieval.line_meaning import embed_queries
     embed_queries(["warm up"])        # loads the model once; it's cached for the process (line_meaning._model)
+    usage.enable_cache()              # identical model calls in this run are answered once
 
 
-async def run_each(items: list, fn, db_url: str, concurrency: int = 1) -> None:
-    """await fn(item, conn) for every item, `concurrency` (1-2) at a time."""
+class DailyBudget:
+    """What eval runs spent today (Africa/Lagos date), across runs, in evals/.checkpoints/spend.json. A run stops
+    when today's total reaches EVAL_DAILY_USD (settings.eval_daily_usd); its checkpoint keeps what it finished."""
+
+    def __init__(self, settings) -> None:
+        from app.agent.answer import lagos_today
+        self.settings, self.limit, self.day = settings, settings.eval_daily_usd, lagos_today().isoformat()
+        self.path = CHECKPOINTS / "spend.json"
+        self.mark = usage.total_dollars(settings)      # after a --resume restore: only new spend is charged
+
+    def _read(self) -> dict:
+        try:
+            return json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def spent(self) -> float:
+        return float(self._read().get(self.day, 0.0))
+
+    def charge(self) -> None:
+        now = usage.total_dollars(self.settings)
+        ledger = self._read()
+        ledger[self.day] = round(float(ledger.get(self.day, 0.0)) + now - self.mark, 6)
+        self.mark = now
+        self.path.parent.mkdir(exist_ok=True)
+        self.path.write_text(json.dumps(ledger, indent=1), encoding="utf-8")
+
+    def over(self) -> bool:
+        return self.spent() >= self.limit
+
+
+async def run_each(items: list, fn, db_url: str, concurrency: int = 1, settings=None) -> bool:
+    """await fn(item, conn) for every item, `concurrency` (1-2) at a time; False if the day's eval budget
+    (EVAL_DAILY_USD) stopped it first (the checkpoint keeps the finished cases: --resume continues)."""
     queue = list(items)
+    budget = DailyBudget(settings) if settings is not None else None
+    stopped = []
 
     async def worker() -> None:
         with psycopg.connect(db_url) as conn:
             while queue:
+                if budget is not None and budget.over():
+                    stopped.append(len(queue))
+                    return
                 await fn(queue.pop(0), conn)
+                if budget is not None:
+                    budget.charge()
                 gc.collect()            # free the case's evidence, pages and crops before the next one
 
     await asyncio.gather(*(worker() for _ in range(max(1, min(concurrency, 2, len(queue))))))
+    if stopped:
+        print(f"\nSTOPPED: today's eval spend reached EVAL_DAILY_USD (${budget.limit:.2f}; spent "
+              f"${budget.spent():.2f}). {max(stopped)} cases not run; --resume continues the run "
+              f"(tomorrow, or with a higher EVAL_DAILY_USD).")
+        print(usage.summary(settings))
+    return not stopped
 
 
 def peak_mb() -> float:

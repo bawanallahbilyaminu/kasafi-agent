@@ -20,6 +20,7 @@ import time
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 
+from app import usage
 from app.config import Settings
 from app.providers.chat import ChatClient
 from app.retrieval.line_search import MAX_LINES, Cell, Line, groups, ministry_of
@@ -426,7 +427,8 @@ async def read_lines(question: str, english: str, lang: str, lines: list[Line], 
     messages = [{"role": "system", "content": SELECT_SYSTEM}, {"role": "user", "content": user}]
     async def timed(key: str, coro):
         t0 = time.perf_counter()
-        out = await coro
+        with usage.stage(key):        # read1 / read2: the two independent readings, counted (and cached) apart
+            out = await coro
         took[key] = time.perf_counter() - t0
         return out
     took: dict[str, float] = {}

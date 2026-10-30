@@ -56,6 +56,32 @@ def test_cases_run_at_most_two_at_a_time_each_with_its_own_connection(monkeypatc
     assert len(conns) == 3
 
 
+def test_runs_stop_when_the_days_eval_budget_is_spent(tmp_path, monkeypatch) -> None:
+    from tests.helpers import make_settings
+    monkeypatch.setattr(runtime, "CHECKPOINTS", tmp_path)
+
+    @contextlib.contextmanager
+    def connect(_url):
+        yield object()
+    monkeypatch.setattr(runtime.psycopg, "connect", connect)
+    usage.reset()
+    ran = []
+
+    async def fn(item, conn):                       # each case costs $1.25 (1M prompt tokens on Meta)
+        ran.append(item)
+        usage.record_chat("Meta", {"prompt_tokens": 1_000_000, "completion_tokens": 0})
+    s = make_settings(eval_daily_usd=3.0)
+    assert asyncio.run(runtime.run_each(list(range(5)), fn, "db", settings=s)) is False
+    assert ran == [0, 1, 2]                         # $3.75 >= $3: stopped before the fourth
+    assert runtime.DailyBudget(s).over()            # a later run today stops at once
+    usage.reset()
+
+
+def test_about_50_fresh_cases_in_development_155_before_a_deploy() -> None:
+    from evals.generated.run import per_family
+    assert (per_family(50), per_family(155)) == (6, 19)
+
+
 def test_the_run_reports_its_peak_memory() -> None:
     assert runtime.peak_mb() > 1
     assert runtime.memory_line(4).startswith("peak memory: ") and "4 cases were done before --resume" in \

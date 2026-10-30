@@ -24,6 +24,73 @@ def test_a_runs_cost_is_counted_per_provider_with_cached_tokens_cheaper() -> Non
     usage.reset()
 
 
+def test_cost_per_answer_is_broken_down_by_stage_and_provider_without_the_evals_own_calls() -> None:
+    usage.reset()
+    for stage, prov in (("plan", "Meta"), ("read1", "Meta"), ("read2", "Baseten"), ("paraphrase", "Meta")):
+        with usage.stage(stage):
+            usage.record_chat(prov, {"prompt_tokens": 1_000_000, "completion_tokens": 0})
+    out = usage.summary(make_settings(), answers=2)
+    assert "per answer (2 answers): $1.8750, 1.5 model calls" in out           # 3 calls x $1.25, paraphrase out
+    assert "Meta/plan" in out and "Baseten/read2" in out and "Meta/paraphrase" not in out
+    usage.reset()
+
+
+def test_identical_calls_in_an_eval_run_are_answered_once_but_never_across_the_two_readings() -> None:
+    import httpx
+
+    from app.providers.chat import ChatClient
+    sent = []
+
+    def reply(request):
+        sent.append(request)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "{}"}, "finish_reason": "stop"}],
+                                         "usage": {"prompt_tokens": 10, "completion_tokens": 1}})
+    c = ChatClient(base_url="https://x", api_key="k", default_model="m", transport=httpx.MockTransport(reply))
+    usage.reset()
+    usage._cache = None
+    msgs = [{"role": "user", "content": "q"}]
+    asyncio.run(c.chat(msgs))
+    asyncio.run(c.chat(msgs))
+    assert len(sent) == 2                                      # the app never caches
+    usage.enable_cache()
+    try:
+        for stage in ("read1", "read1", "read2"):
+            with usage.stage(stage):
+                asyncio.run(c.chat(msgs))
+        assert len(sent) == 4 and usage.counts["cache_hits"] == 1    # read2 is its own reading, not read1's reply
+    finally:
+        usage._cache = None
+        usage.reset()
+
+
+def test_a_stage_on_muse_spark_open_falls_back_to_muse_spark(monkeypatch) -> None:
+    calls = []
+
+    class Client:
+        def __init__(self, name, fail=False):
+            self.name, self.fail = name, fail
+
+        async def chat(self, messages, **kw):
+            calls.append((self.name, kw["model"]))
+            if self.fail:
+                raise RuntimeError("down")
+            from app.providers.chat import ChatResult
+            return ChatResult(content='{"ok": 1}', model=kw["model"], finish_reason="stop")
+    s = make_settings(kasafi_open_stages="plan, compose")
+    msgs = [{"role": "user", "content": "q"}]
+    assert asyncio.run(ans.stage_json("plan", Client("meta"), Client("open"), s, msgs, reasoning_effort="minimal",
+                                      max_tokens=3000)) == {"ok": 1}
+    assert calls == [("open", s.baseten_model)]
+    calls.clear()
+    asyncio.run(ans.stage_json("plan", Client("meta"), Client("open", fail=True), s, msgs,
+                               reasoning_effort="minimal", max_tokens=3000))
+    assert calls == [("open", s.baseten_model), ("meta", s.meta_model)]
+    calls.clear()
+    asyncio.run(ans.stage_json("scope", Client("meta"), Client("open"), s, msgs, reasoning_effort="low",
+                               max_tokens=100))
+    assert calls == [("meta", s.meta_model)]                    # not listed: Muse Spark
+
+
 def test_fetching_off_is_not_a_failed_search_and_the_limit_is_said_plainly() -> None:
     s = usage.eval_settings(make_settings(), fetch=False)
     assert not s.kasafi_fetch_enabled and not s.kasafi_open_web

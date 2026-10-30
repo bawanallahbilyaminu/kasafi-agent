@@ -39,6 +39,7 @@ from pathlib import Path
 import httpx
 import psycopg
 
+from app import usage
 from app.acquisition.channels import catalog_candidates, from_publisher, hdx_datasets, reliefweb_reports
 from app.acquisition.find import Candidate, excluded, pick_candidate, search_web
 from app.acquisition.library import fetch_and_index, fetches_today, ocr_pages
@@ -502,7 +503,8 @@ async def fact_cards(conn: psycopg.Connection, src: SourceResult, topic: Topic, 
                 {"role": "user", "content": f"QUESTION: {question}\nDOCUMENT: {src.title}\n\n{body}"}]
     d = {}
     for _ in range(2):          # dense state tables can use up a reply on reasoning: once more on an empty one
-        r = await client.chat(messages, model=settings.meta_model, reasoning_effort="low", max_tokens=8000)
+        with usage.stage("topic"):
+            r = await client.chat(messages, model=settings.meta_model, reasoning_effort="low", max_tokens=8000)
         try:
             d = parse_json_reply(r.content)
             break

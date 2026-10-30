@@ -18,6 +18,7 @@ import logging
 import re
 from dataclasses import dataclass
 
+from app import usage
 from app.config import Settings, get_settings
 from app.providers.chat import ChatClient, ProviderError
 from app.providers.meta import MetaClient
@@ -112,11 +113,12 @@ def classifier_prompt(allow_security_budget: bool) -> str:
 
 async def classify(texts: list[str], client: ChatClient, settings: Settings) -> str:
     versions = "\n".join(f"- {t}" for t in dict.fromkeys(t.strip() for t in texts if t and t.strip()))
-    r = await client.chat(
-        [{"role": "system", "content": classifier_prompt(settings.kasafi_allow_security_budget)},
-         {"role": "user", "content": f"MESSAGE (versions):\n{versions}"}],
-        model=settings.meta_model, reasoning_effort="low", max_tokens=1500,
-    )
+    with usage.stage("scope"):
+        r = await client.chat(
+            [{"role": "system", "content": classifier_prompt(settings.kasafi_allow_security_budget)},
+             {"role": "user", "content": f"MESSAGE (versions):\n{versions}"}],
+            model=settings.meta_model, reasoning_effort="low", max_tokens=1500,
+        )
     cat = parse_json_reply(r.content).get("category")
     return cat if cat in CATEGORIES else "ok"
 

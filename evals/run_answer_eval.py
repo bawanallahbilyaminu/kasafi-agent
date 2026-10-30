@@ -101,14 +101,16 @@ async def main(ids: list[str] | None, runs: int, plan_reasoning: str | None = No
                                       "answer": a.timings.get("answer", 0)})
 
     jobs = [(run, c) for run in range(runs) for c in cases]
-    await run_each([j for j in jobs if f"{j[0]}:{j[1]['id']}" not in ckpt.done], one, s.db_url(), concurrency)
+    if not await run_each([j for j in jobs if f"{j[0]}:{j[1]['id']}" not in ckpt.done], one, s.db_url(),
+                          concurrency, s):
+        return 2                                     # the day's eval budget: --resume continues
     done = [ckpt.done[f"{run}:{c['id']}"] for run, c in jobs]
     passed = sum(not r["fails"] for r in done)
     times, plan_t, answer_t = [r["dt"] for r in done], [r["plan"] for r in done], [r["answer"] for r in done]
     total = len(cases) * runs
     print(f"\n{passed}/{total} passed  |  total median {statistics.median(times):.1f}s, max {max(times):.1f}s  |  "
           f"plan median {statistics.median(plan_t):.1f}s  |  answer median {statistics.median(answer_t):.1f}s")
-    print(usage.summary(s))
+    print(usage.summary(s, answers=total))
     print(memory_line(resumed))
     return 0 if passed == total else 1
 

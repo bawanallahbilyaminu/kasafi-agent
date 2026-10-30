@@ -102,11 +102,12 @@ CONFIRM_SYSTEM = (
 async def confirm_document(description: str, pages: list[str], existing_ids: list[str], client: ChatClient,
                            settings: Settings) -> dict:
     head = "\n\n".join(f"--- page {i} ---\n{p}" for i, p in enumerate(pages[:3], 1))[:CONFIRM_CHARS]
-    r = await client.chat(
-        [{"role": "system", "content": CONFIRM_SYSTEM},
-         {"role": "user", "content": f"DESCRIPTION: {description}\nEXISTING IDS: {', '.join(existing_ids)}\n\n"
-                                     f"PDF TEXT:\n{head}"}],
-        model=settings.meta_model, reasoning_effort="low", max_tokens=3000)
+    with usage.stage("acquire"):
+        r = await client.chat(
+            [{"role": "system", "content": CONFIRM_SYSTEM},
+             {"role": "user", "content": f"DESCRIPTION: {description}\nEXISTING IDS: {', '.join(existing_ids)}\n\n"
+                                         f"PDF TEXT:\n{head}"}],
+            model=settings.meta_model, reasoning_effort="low", max_tokens=3000)
     return parse_json_reply(r.content)
 
 

@@ -94,7 +94,8 @@ async def main(path: Path, ids: list[str] | None, out: Path, resume: bool = Fals
               f"{dt:5.1f}s  [{parts}]" + (f"  {why}" if why else ""))
         ckpt.add(q["id"], {"row": res, "timings": dict(a.timings), "why": why, "text": a.text})
 
-    await run_each([q for q in qs if q["id"] not in ckpt.done], one, s.db_url(), concurrency)
+    if not await run_each([q for q in qs if q["id"] not in ckpt.done], one, s.db_url(), concurrency, s):
+        raise SystemExit(2)                          # the day's eval budget: --resume continues
     rows, report, stages, checked = [], [f"# Open-question run: {path.name}\n"], [], []
     for q in qs:                    # in question order, whichever session ran them
         r = ckpt.done[q["id"]]
@@ -129,7 +130,7 @@ async def main(path: Path, ids: list[str] | None, out: Path, resume: bool = Fals
     report.insert(1, summary + "\n\n```\n" + "\n".join(lines) + "\n```\n")
     out.write_text("\n".join(report), encoding="utf-8")
     print(f"report: {out}")
-    print(usage.summary(s))
+    print(usage.summary(s, answers=len(rows)))
     print(memory_line(resumed))
 
 

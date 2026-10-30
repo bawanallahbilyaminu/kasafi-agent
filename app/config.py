@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     kasafi_price_baseten_in: float = 1.25
     kasafi_price_baseten_cached: float = 0.15
     kasafi_price_baseten_out: float = 4.25
+    # Eval runs stop when the day's eval spend (all runs, both providers) reaches this (evals/runtime.DailyBudget)
+    eval_daily_usd: float = 5.0
     # How long a read-back question waits for Eh / A'a / a correction
     kasafi_pending_ttl_minutes: int = 15
 
@@ -86,6 +88,10 @@ class Settings(BaseSettings):
     # than this, or failing, and Muse Spark reads instead
     kasafi_open_reader: bool = True
     kasafi_open_read_timeout_s: float = 20.0
+    # Other stages run on Muse Spark Open too, to spend Baseten's credits rather than Meta's (comma list of plan,
+    # compose; app/agent/answer.stage_json). Slower than the timeout, or failing, and Muse Spark answers instead
+    kasafi_open_stages: str = ""
+    kasafi_open_stage_timeout_s: float = 15.0
 
     # Web search
     serper_api_key: SecretStr | None = None

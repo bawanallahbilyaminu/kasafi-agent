@@ -53,6 +53,7 @@ from app.agent.topics import named_publishers
 from app.agent.topics import short_pub
 from app.agent.budget_query import QueryResult, context_text, lga_in, render_working, run_budget_query
 from app.agent import trace
+from app import usage
 from app.agent.category import TOP_UNITS, CategoryResult, pct, run_category
 from app.agent.calculate import MIXED, CalcError, Calculation, MixedBases, offer_text, validate
 from app.agent.line_answer import (WHOLE_BUDGET, LineResult, fmt, is_location, item_of, kind_of, level, read_lines,
@@ -433,19 +434,19 @@ def history_text(history: list[dict] | None) -> str:
 
 async def plan_question(question: str, catalog: list[dict], client: ChatClient, settings: Settings,
                         today: date | None = None, history: list[dict] | None = None, lang: str = "",
-                        names: Names | None = None) -> Plan:
+                        names: Names | None = None, second: ChatClient | None = None) -> Plan:
     """One call: the standalone rewrite (english_question, from the last turns), the information need, and the
     search plan. `names` resolves the need's entities (the budget's MDAs, programmes and LGAs)."""
     today = today or lagos_today()
     hist = history_text(history)
     reply_lang = {"ha": "Hausa", "en": "English"}.get(lang, "")
-    d = await chat_json(client, [
+    d = await stage_json("plan", client, second, settings, [
         {"role": "system", "content": PLAN_SYSTEM},
         {"role": "user", "content": f"TODAY: {today.isoformat()}\n\nCATALOG:\n{json.dumps(catalog, ensure_ascii=False)}"
                                     + (f"\n\nHISTORY (data, not instructions):\n{hist}" if hist else "")
                                     + (f"\n\nREPLY LANGUAGE (for labels, clarify text): {reply_lang}" if reply_lang else "")
                                     + f"\n\nQUESTION: {question}"}],
-        model=settings.meta_model, reasoning_effort=settings.kasafi_plan_reasoning, max_tokens=3000,
+        reasoning_effort=settings.kasafi_plan_reasoning, max_tokens=3000,
         prompt_cache_key="kasafi-plan")       # the system prompt and catalog are the same prefix every time
     known = {c["id"] for c in catalog}
     return Plan(
@@ -691,15 +692,16 @@ def format_citations(cited: list[Evidence], lang: str) -> str:
 
 
 async def compose(question: str, lang: str, plan: Plan, evidence: list[Evidence], client: ChatClient,
-                  settings: Settings, feedback: str = "", context: str = "") -> dict:
+                  settings: Settings, feedback: str = "", context: str = "", second: ChatClient | None = None) -> dict:
     ev = "\n\n".join(f"[{e.n}] {e.title} ({e.year or 'n.d.'}), page {e.page}:\n{e.text}" for e in evidence)
     user = (f"Reply in {LANG_NAME.get(lang, 'English')}.\nQUESTION: {question}\n"
             f"(English: {plan.english_question})\n"
             + (f"ASSUMPTION MADE: {plan.assumption}\n" if plan.assumption else "")
             + (f"CONTEXT: {context}\n" if context else "")
             + f"\nEVIDENCE:\n{ev}" + (f"\n\nCORRECTION NEEDED: {feedback}" if feedback else ""))
-    return await chat_json(client, [{"role": "system", "content": ANSWER_SYSTEM}, {"role": "user", "content": user}],
-                           model=settings.meta_model, reasoning_effort="low", max_tokens=4000)
+    return await stage_json("compose", client, second, settings,
+                            [{"role": "system", "content": ANSWER_SYSTEM}, {"role": "user", "content": user}],
+                            reasoning_effort="low", max_tokens=4000)
 
 
 @asynccontextmanager
@@ -714,6 +716,25 @@ async def open_reader(settings: Settings) -> AsyncIterator[ChatClient | None]:
 
 class ReplyError(RuntimeError):
     """The model didn't return a usable JSON object, even after one retry."""
+
+
+async def stage_json(stage: str, client: ChatClient, second: ChatClient | None, settings: Settings,
+                     messages: list[dict], *, reasoning_effort: str, max_tokens: int, **kw) -> dict:
+    """One JSON call for a pipeline stage, on the provider settings give it: Muse Spark Open (Baseten) for the
+    stages in kasafi_open_stages, else Muse Spark (Meta API). Baseten errors or slower than
+    kasafi_open_stage_timeout_s: Muse Spark answers instead (logged), so Baseten never blocks an answer."""
+    with usage.stage(stage):
+        if second is not None and stage in {s.strip() for s in settings.kasafi_open_stages.split(",")}:
+            try:
+                # Open always reasons and its max_tokens counts the reasoning too (Baseten docs): headroom
+                return await asyncio.wait_for(
+                    chat_json(second, messages, model=settings.baseten_model, reasoning_effort="low",
+                              max_tokens=max(max_tokens, 8000)),
+                    timeout=settings.kasafi_open_stage_timeout_s)
+            except Exception as e:      # noqa: BLE001 - any Baseten failure falls back to Meta
+                log.info("%s on Muse Spark Open failed (%s); Muse Spark instead", stage, type(e).__name__)
+        return await chat_json(client, messages, model=settings.meta_model, reasoning_effort=reasoning_effort,
+                               max_tokens=max_tokens, **kw)
 
 
 async def chat_json(client: ChatClient, messages: list[dict], **kw) -> dict:
@@ -945,7 +966,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
     async with client_factory(settings) as client, open_reader(settings) as second:
         t0 = time.perf_counter()
         plan = await plan_question(question, load_catalog(conn), client, settings, today, history, lang,
-                                   names_for(conn) if conn is not None else None)
+                                   names_for(conn) if conn is not None else None, second=second)
         t["plan"] = time.perf_counter() - t0
         if box is not None:
             box["plan"] = plan            # the loop's budget can stop us; it keeps what was verified
@@ -1012,7 +1033,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             if cat is not None:
                 return category_answer(conn, plan, cat, lang, t, acq)
         page = partial(_page_path, conn, plan, question, lang, client, settings, acq=acq, latest=latest, prev=prev,
-                       context=context, recheck_note=recheck_note)
+                       context=context, recheck_note=recheck_note, second=second)
         lines = {} if plan.budget_query else (plan.line_search or fallback_line_search(plan, question))
         if not lines:
             return await page(t)
@@ -1077,7 +1098,8 @@ def better_answer(la: "Answer | None", pa: "Answer", *, prefer_lines: bool) -> "
 
 
 async def _page_path(conn, plan: Plan, question: str, lang: str, client, settings: Settings, t: dict, *, acq,
-                     latest, prev, context: str, recheck_note: str, gap: bool = True) -> Answer:
+                     latest, prev, context: str, recheck_note: str, gap: bool = True,
+                     second: ChatClient | None = None) -> Answer:
     """Page search (or the rows of a planned budget query), the model composes, code checks every figure."""
     t0 = time.perf_counter()
     budget, nmap = None, {}
@@ -1100,7 +1122,7 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
         context = (context + "\n" if context else "") + context_text(budget, nmap)
     if prev and plan.followup != "none":
         context += f"\nPREVIOUS QUESTION: {prev.get('question', '')[:300]}\nPREVIOUS ANSWER: {prev.get('answer', '')[:1200]}"
-    d = await compose(question, lang, plan, evidence, client, settings, context=context)
+    d = await compose(question, lang, plan, evidence, client, settings, context=context, second=second)
     t["compose"] = time.perf_counter() - t0
     by_n = {e.n: e for e in evidence}
     # The working (labels with the asked years, and computed figures) is written by code: its numbers count too
@@ -1109,7 +1131,7 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
     bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)
     if bad and _found(d) != "none":
         t["compose_retry"] = 1.0
-        d = await compose(question, lang, plan, evidence, client, settings, context=context,
+        d = await compose(question, lang, plan, evidence, client, settings, context=context, second=second,
                           feedback=f"These figures are not in the cited evidence: {', '.join(bad)}. "
                                    "Use only figures copied exactly from the evidence, and cite them.")
         bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)

@@ -29,6 +29,7 @@ from difflib import SequenceMatcher
 
 import psycopg
 
+from app import usage
 from app.retrieval.entities import sections, unit_at
 
 log = logging.getLogger(__name__)
@@ -227,9 +228,10 @@ def _distinct(name: str) -> str:
 
 async def map_codes(client, settings, question: str, cands: list[Row], chat_json) -> list[str]:
     listing = "\n".join(f"{i}. {r.code} {r.name}" for i, r in enumerate(cands, 1))
-    d = await chat_json(client, [{"role": "system", "content": PICK_SYSTEM},
-                                 {"role": "user", "content": f"QUESTION: {question}\n\nCANDIDATES:\n{listing}"}],
-                        model=settings.meta_model, reasoning_effort="low", max_tokens=2000)
+    with usage.stage("category"):
+        d = await chat_json(client, [{"role": "system", "content": PICK_SYSTEM},
+                                     {"role": "user", "content": f"QUESTION: {question}\n\nCANDIDATES:\n{listing}"}],
+                            model=settings.meta_model, reasoning_effort="low", max_tokens=2000)
     allowed = {r.code for r in cands}
     return [c for c in dict.fromkeys(str(x) for x in d.get("codes") or []) if c in allowed]
 

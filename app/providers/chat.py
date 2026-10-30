@@ -91,6 +91,9 @@ class ChatClient:
         **params: Any,
     ) -> ChatResult:
         body = {"model": model or self.default_model, "messages": messages, **params}
+        key = usage.cache_key(self.provider, body)       # eval runs only: an identical call is answered once
+        if (hit := usage.cached(key)) is not None:
+            return hit
         data = (await self._request("POST", "/chat/completions", json=body)).json()
         choice = data["choices"][0]
         msg = choice["message"]
@@ -101,7 +104,7 @@ class ChatClient:
             reasoning = reasoning or m.group(0).strip()[7:-8].strip()
             content = content[m.end():]
         usage.record_chat(self.provider, data.get("usage") or {})
-        return ChatResult(
+        result = ChatResult(
             content=content,
             model=data.get("model", body["model"]),
             finish_reason=choice.get("finish_reason"),
@@ -109,6 +112,8 @@ class ChatClient:
             usage=data.get("usage") or {},
             raw=data,
         )
+        usage.keep(key, result)
+        return result
 
     async def list_models(self) -> list[str]:
         resp = await self._request("GET", "/models")

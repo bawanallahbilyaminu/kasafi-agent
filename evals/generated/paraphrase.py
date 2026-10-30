@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from app.config import get_settings  # noqa: E402
+from app.usage import stage as usage_stage  # noqa: E402
 from app.providers.meta import MetaClient  # noqa: E402
 from app.providers.stt import parse_json_reply  # noqa: E402
 
@@ -44,9 +45,10 @@ async def paraphrase(path: Path = CASES, at_once: int = AT_ONCE) -> None:
     async with MetaClient(s) as client:
         async def one(c: dict) -> None:
             async with gate:
-                r = await client.chat([{"role": "system", "content": SYSTEM},
-                                       {"role": "user", "content": f"QUESTION: {c['text']}"}],
-                                      model=s.meta_model, reasoning_effort="low", max_tokens=3000)
+                with usage_stage("paraphrase"):
+                    r = await client.chat([{"role": "system", "content": SYSTEM},
+                                           {"role": "user", "content": f"QUESTION: {c['text']}"}],
+                                          model=s.meta_model, reasoning_effort="low", max_tokens=3000)
             try:
                 d = parse_json_reply(r.content)
             except ValueError:

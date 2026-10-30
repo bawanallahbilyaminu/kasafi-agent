@@ -15,6 +15,7 @@ from typing import Any
 
 import pypdfium2 as pdfium
 
+from app import usage
 from app.providers.chat import ChatClient, text_part
 
 log = logging.getLogger(__name__)
@@ -58,8 +59,9 @@ def clean_ocr(text: str) -> str:
 
 
 async def ocr_image(client: ChatClient, jpeg: bytes, *, model: str) -> str:
-    r = await client.chat([{"role": "user", "content": [text_part(PROMPT), image_part(jpeg)]}],
-                          model=model, reasoning_effort="minimal", max_tokens=24000)
+    with usage.stage("ocr"):
+        r = await client.chat([{"role": "user", "content": [text_part(PROMPT), image_part(jpeg)]}],
+                              model=model, reasoning_effort="minimal", max_tokens=24000)
     if r.finish_reason == "length":
         log.warning("OCR output hit max_tokens; page may be truncated")
     text = clean_ocr(r.content)

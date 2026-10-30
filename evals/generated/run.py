@@ -6,8 +6,9 @@ missing (exact, or in its readable form '₦42.00 million'), a false premise is 
 for a period that isn't published. Not found where the data has the answer counts as wrong too.
 
     uv run python evals/generated/run.py [--forms all|template|paraphrase] [--seed 1] [--families split lookup]
-    uv run python evals/generated/run.py --fresh 17      # new random entities and periods (17 per family, ~150
-                                                         # cases), paraphrased, then run; cases kept in runs/
+    uv run python evals/generated/run.py --fresh         # ~50 new random cases (development), paraphrased, then
+                                                         # run; cases kept in runs/
+    uv run python evals/generated/run.py --fresh 155     # the full ~155, only before a deploy
     uv run python evals/generated/run.py --resume --out ...   # continue a stopped run (same draw, same forms)
 
 Each case's result is written to evals/.checkpoints/<out stem>.jsonl as it finishes (evals/runtime.py).
@@ -99,6 +100,12 @@ def corrects(text: str, premise: str) -> bool:
     return bool(DENIES.search(text) or (real and DIRECTION[real].search(text)))
 
 
+def per_family(cases: int) -> int:
+    """Entities per family for about `cases` cases: 8 families take one each, rank_lga up to 3, trend 1
+    (50 -> 6 per family, 52 cases; 155 -> 19, 156 cases)."""
+    return max(1, round((cases - 4) / 8))
+
+
 def pick_form(c: dict, forms: str, seed: int) -> str:
     """The case's form for this run: drawn per case from the seed, so a resumed run asks the same forms."""
     options = ["template"] + list((c.get("forms") or {}).keys())
@@ -141,7 +148,8 @@ async def main(forms: str, seed: int, families: list[str] | None, out: Path, cas
         print(f"{c['id']:18} {form:13} {'WRONG ' + why if why else 'ok':60.60} {dt:5.1f}s")
         ckpt.add(c["id"], {"family": c["family"], "form": form, "q": q, "why": why, "dt": dt, "text": text})
 
-    await run_each([c for c in cases if c["id"] not in ckpt.done], one, s.db_url(), concurrency)
+    if not await run_each([c for c in cases if c["id"] not in ckpt.done], one, s.db_url(), concurrency, s):
+        raise SystemExit(2)                          # the day's eval budget: --resume continues
     per_family: dict[str, list] = defaultdict(list)
     per_form: dict[str, list] = defaultdict(list)
     times, report = [], [f"# Generated coverage run\n\nCases: {cases_path.name} (draw seed {data.get('seed')}), "
@@ -162,7 +170,7 @@ async def main(forms: str, seed: int, families: list[str] | None, out: Path, cas
     summary = (f"{len(cases)} cases: wrong {total} ({100 * total / max(len(cases), 1):.1f}%), of them wrong agency "
                f"{agency} | median {statistics.median(times):.1f}s")
     print("\n" + summary + "\n" + "\n".join(lines))
-    cost = usage.summary(s) + "\n" + memory_line(resumed)
+    cost = usage.summary(s, answers=len(cases)) + "\n" + memory_line(resumed)
     print(cost)
     out.write_text("\n".join([report[0], summary, "", *lines, "", "```", cost, "```", "", *report[1:]]),
                    encoding="utf-8")
@@ -175,7 +183,8 @@ if __name__ == "__main__":
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--families", nargs="+")
     p.add_argument("--out", type=Path, default=Path(__file__).with_name("report.md"))
-    p.add_argument("--fresh", type=int, metavar="N", help="draw N new entities per family (a new seed), paraphrase "
+    p.add_argument("--fresh", type=int, nargs="?", const=50, metavar="CASES",
+                   help="draw about CASES new cases (default 50 for development; 155 before a deploy), paraphrase "
                                                           "them, then run")
     p.add_argument("--resume", action="store_true", help="continue the stopped run with this --out (same draw and "
                                                          "seed), running only the cases it hadn't finished")
@@ -189,7 +198,7 @@ if __name__ == "__main__":
     elif a.fresh:
         from evals.generated.generate import build
         draw = random.randrange(10**6)
-        cases_path = build(a.fresh, draw, RUNS / f"cases-{draw}.json")
+        cases_path = build(per_family(a.fresh), draw, RUNS / f"cases-{draw}.json")
     if ckpt is None or not ckpt.header.get("cases"):  # the cases file is known before any model call is made
         ckpt = Checkpoint(a.out.stem, header | {"cases": str(cases_path)}, resume=False)
     if a.fresh:                                      # paraphrases only the cases that don't have them yet
