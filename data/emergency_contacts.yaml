@@ -1,0 +1,13 @@
+# Emergency numbers Kasafi may show (docs/hazard-and-services.md section 7). Maintained by Bilyaminu.
+# Only entries with verified_on set (the date someone confirmed the number works from Sokoto) are ever shown;
+# an entry without it is kept here to be checked, never shown. Public service numbers only: no personal numbers.
+#
+# Fields: number, service (English), service_ha (Hausa), area (state-wide, or an LGA), verified_on (YYYY-MM-DD),
+#         note (how it was verified)
+contacts:
+  - number: "112"
+    service: National emergency number
+    service_ha: Lambar gaggawa ta ƙasa
+    area: state-wide
+    verified_on:            # not yet: its rollout is still being finalised (design, section 7)
+    note: check that a call from Sokoto connects, from MTN, Airtel and Glo lines

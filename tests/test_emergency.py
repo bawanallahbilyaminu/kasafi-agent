@@ -39,6 +39,24 @@ def test_emergency_found_in_raw_hypothesis_even_if_merge_dropped_it() -> None:
     assert compose_reply(r) == EMERGENCY_REPLY
 
 
+def test_only_verified_emergency_numbers_are_shown(tmp_path) -> None:
+    from app.guardrails.emergency import CONTACTS_PATH, emergency_reply, verified_contacts
+    f = tmp_path / "contacts.yaml"
+    f.write_text("contacts:\n"
+                 "  - {number: '112', service: National emergency number, service_ha: Lambar gaggawa, area: state-wide}\n"
+                 "  - {number: '0800 000 0000', service: State ambulance, service_ha: Motar asibiti, area: Wamakko,\n"
+                 "     verified_on: 2026-10-30}\n", encoding="utf-8")
+    shown = verified_contacts(f)
+    assert [c.number for c in shown] == ["0800 000 0000"]                    # 112 has no verified_on: never shown
+    text = emergency_reply(shown)
+    assert "*0800 000 0000*: Motar asibiti (Wamakko)" in text and "*0800 000 0000*: State ambulance (Wamakko)" in text
+    assert "112" not in text
+    assert verified_contacts(tmp_path / "missing.yaml") == []
+    # the repo's own file: no number is verified yet, so the reply sends people to the nearest facility only
+    assert all(c.verified_on for c in verified_contacts(CONTACTS_PATH))
+    assert "112" not in EMERGENCY_REPLY and "nearest health facility *now*" in EMERGENCY_REPLY
+
+
 def test_budget_question_about_emergency_care_does_not_trigger_on_raw_text() -> None:
     r = SpeechResult(transcript="Me rahoton UNFPA kan kulawar gaggawa ga mata masu haihuwa ya gano?",
                      english="What did the UNFPA report on emergency care for mothers find?", language="ha",

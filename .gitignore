@@ -9,6 +9,7 @@ data/*
 !data/provenance.json
 !data/source_registry.yaml
 !data/catalog.yaml
+!data/emergency_contacts.yaml
 # internal hints (partner registry): never committed, never quoted, never sent to a model
 data/private/
 
