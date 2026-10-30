@@ -42,6 +42,7 @@ from app.acquisition.editions import (SERIES, Latest, Series, doc_edition, editi
 from app.acquisition.library import Acquired, fetch_and_index, find_and_fetch, log_gap
 from app.acquisition.registry import detect_topic, registry
 from app.agent.analysis import TOOLS, AnalysisResult, run_analysis
+from app.agent.need import NEED_PROMPT, Names, Need, names_for, parse_need
 from app.agent.topics import TopicResult, topic_answer
 from app.agent.topics import note_of as topic_note
 from app.agent.topics import local_documents as topics_local
@@ -151,6 +152,7 @@ PLAN_SYSTEM = (
     "Still give search_queries and doc_ids: they are the fallback. "
     "CURRENT SITUATION: add \"current_situation\": true when the question asks about the situation now (e.g. how "
     "many displaced people or IDPs there are, current conditions or needs), not a budget figure; else false. "
+    + NEED_PROMPT +
     "STATISTICS: add \"statistics\": true when the question asks for statistics or the situation on a topic "
     "(numbers or rates of people, households or conditions, e.g. IDPs, unemployment, malnutrition, poverty, or "
     "which organisations publish such data), not government budget money; else false. And \"topic\": the closest "
@@ -355,6 +357,8 @@ class Plan:
     current: bool = False                               # asks about the present situation (people, conditions now)
     statistics: bool = False                            # asks for statistics on a topic, not budget money
     topic: str = ""                                     # the planner's registry topic (synonyms are tried first)
+    need: Need | None = None                            # the information need, checked (app/agent/need.py)
+    original: str = ""                                  # the message as sent (english_question is standalone)
 
     def assumption_for(self, lang: str) -> str:
         if not self.assumption:
@@ -420,7 +424,10 @@ def history_text(history: list[dict] | None) -> str:
 
 
 async def plan_question(question: str, catalog: list[dict], client: ChatClient, settings: Settings,
-                        today: date | None = None, history: list[dict] | None = None, lang: str = "") -> Plan:
+                        today: date | None = None, history: list[dict] | None = None, lang: str = "",
+                        names: Names | None = None) -> Plan:
+    """One call: the standalone rewrite (english_question, from the last turns), the information need, and the
+    search plan. `names` resolves the need's entities (the budget's MDAs, programmes and LGAs)."""
     today = today or lagos_today()
     hist = history_text(history)
     reply_lang = {"ha": "Hausa", "en": "English"}.get(lang, "")
@@ -453,6 +460,9 @@ async def plan_question(question: str, catalog: list[dict], client: ChatClient, 
         current=d.get("current_situation") is True,
         statistics=d.get("statistics") is True,
         topic=d.get("topic") if d.get("topic") in registry().topics else "",
+        need=parse_need(d.get("need"), str(d.get("english_question", question)), names,
+                        tuple(registry().topics)),
+        original=question,
     )
 
 
@@ -887,13 +897,16 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
     recheck_note, context = "", ""
     async with client_factory(settings) as client, open_reader(settings) as second:
         t0 = time.perf_counter()
-        plan = await plan_question(question, load_catalog(conn), client, settings, today, history, lang)
+        plan = await plan_question(question, load_catalog(conn), client, settings, today, history, lang,
+                                   names_for(conn) if conn is not None else None)
         t["plan"] = time.perf_counter() - t0
         if plan.clarify and plan.followup == "none":          # two readings, both can't be shown: ask
             return Answer(plan.clarify["question"], False, True, plan=plan, timings=t,
                           clarify=plan.clarify["options"])
         prev = history[-1] if history else None
-        if (tid := topic_route(question, plan)) and plan.followup == "none":
+        # a follow-up is planned as its standalone question ("which LGA have the most IDPs living there?" ->
+        # "Which LGAs in Sokoto State have the most IDPs?"), so it takes the topic path too; a recheck doesn't
+        if (tid := topic_route(question, plan)) and plan.followup != "recheck":
             t0 = time.perf_counter()
             tr = await topic_answer(conn, tid, question, plan.english_question, lang, client=client,
                                     settings=settings, notify=notify, today=today)
@@ -1113,13 +1126,19 @@ def topic_route(question: str, plan: Plan) -> str:
     # question ("How many IDPs according to IOM?" got line_search): without money words, the topic path wins
     if (plan.line_search or plan.budget_query or plan.analysis or plan.category) and MONEY_WORDS.search(text):
         return ""
-    tid = detect_topic(text) or plan.topic
+    need_topics = plan.need.topics if plan.need else []
+    tid = detect_topic(text) or (need_topics[0] if need_topics else "") or plan.topic
     topic = registry().topics.get(tid)
     if not topic or topic.answer_pattern != "multi_source":
         return ""
+    stat_need = bool(plan.need and set(plan.need.measures) & STAT_MEASURES)
     # the planner may call a publisher's figure a missing document ("IDPs according to IOM"): still a topic
-    return tid if plan.statistics or plan.current or named_publishers(topic, f"{text} {plan.missing_document}") \
-        else ""
+    return tid if plan.statistics or plan.current or stat_need or \
+        named_publishers(topic, f"{text} {plan.missing_document}") else ""
+
+
+STAT_MEASURES = {"idp_count", "returnee_count", "idp_households", "unemployment_rate", "underemployment_rate",
+                 "poverty_rate", "malnutrition_rate", "population"}
 
 
 async def _line_path(conn, plan: Plan, question: str, lang: str, client, second, settings: Settings, t: dict,

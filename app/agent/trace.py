@@ -31,8 +31,8 @@ def redact(text: str) -> str:
     text = _PHONE.sub("[number removed]", text)
     return _LONG_DIGITS.sub("[number removed]", text)
 
-PLAN_FIELDS = ("english_question", "doc_ids", "search_queries", "key_terms", "line_search", "budget_query",
-               "assumption", "missing_document", "latest", "followup")
+PLAN_FIELDS = ("original", "english_question", "doc_ids", "search_queries", "key_terms", "line_search",
+               "budget_query", "assumption", "missing_document", "latest", "followup")
 
 
 def outcome(a) -> str:
@@ -86,6 +86,9 @@ def scrub_reply(text: str) -> str:
 
 def record(a) -> dict:
     plan = {k: _scrub(getattr(a.plan, k)) for k in PLAN_FIELDS if a.plan is not None and getattr(a.plan, k, None)}
+    if a.plan is not None and getattr(a.plan, "need", None) is not None:      # the information need, as checked
+        from dataclasses import asdict
+        plan["need"] = _scrub(asdict(a.plan.need))
     t: dict = {"plan": plan, "timings": {k: round(v, 2) for k, v in a.timings.items()},
                "cited": [{"n": e.n, "doc": e.doc_id, "title": e.title, "page": e.page, "source": e.source}
                          for e in a.cited],
