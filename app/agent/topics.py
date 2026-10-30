@@ -341,7 +341,13 @@ def _saved_path(settings: Settings, state: str) -> Path:
 
 
 def _save(settings: Settings, state: str, rounds: list, lgas: list) -> None:
+    """Keep the pull; an API answering without the round's LGAs (Oct 30: LGA data only up to round 9 for a while)
+    keeps the LGAs already saved for that round."""
     from dataclasses import asdict
+    if not lgas and rounds:
+        saved = _load_saved(settings, state)
+        if saved and saved[1] and saved[1][0].round == rounds[0].round:
+            lgas = saved[2]
     try:
         path = _saved_path(settings, state)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -349,6 +355,12 @@ def _save(settings: Settings, state: str, rounds: list, lgas: list) -> None:
                                     "lgas": [asdict(x) for x in lgas]}), encoding="utf-8")
     except OSError as e:
         log.info("couldn't keep the DTM pull: %s", type(e).__name__)
+
+
+def saved_lgas(settings: Settings, state: str, round_number: int) -> list:
+    """The saved pull's LGA figures for this round, if the API just answered without them."""
+    saved = _load_saved(settings, state)
+    return saved[2] if saved and saved[1] and saved[1][0].round == round_number else []
 
 
 def _load_saved(settings: Settings, state: str) -> tuple[str, list, list] | None:
@@ -375,6 +387,7 @@ async def dtm_api_source(p: Publisher, http: httpx.AsyncClient, settings: Settin
         try:
             rounds = await dtm_api.state_rounds(http, settings, state) or []
             lgas = await dtm_api.lga_round(http, settings, state, rounds[0].round) if rounds else []
+            lgas = lgas or (saved_lgas(settings, state, rounds[0].round) if rounds else [])
         except (dtm_api.DtmError, httpx.HTTPError) as e:
             # an API outage (Oct 30: "No Country found" for every query for a while): the last good pull,
             # up to a month old, with its date

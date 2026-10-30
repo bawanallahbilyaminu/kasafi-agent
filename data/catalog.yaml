@@ -1,0 +1,76 @@
+# Kasafi capability catalog (docs/question-planning.md §3)
+# What each source or tool can answer. Data, like the source registry, not code: app/agent/capabilities.py
+# turns a question's information need into cells (measure x entity x level x time x split) and lists, for each
+# cell, the capabilities that can fill it, best first: structured before text, finer level before coarser,
+# newer before older. A cell nothing can fill at the requested level is a coverage gap, said as such.
+
+version: 1
+
+capabilities:
+  - id: budget_core
+    what: SQL on the structured budget core (budget_items, perf_items, projects), built from the state budgets and quarterly implementation reports
+    kind: structured
+    measures: [approved, revised, original, actual_ytd, quarter_spent, performance_pct]
+    entity_types: [state, mda, sub_agency]
+    geo_levels: [state]
+    splits: [personnel, overhead, capital, total]
+    operations: [lookup, breakdown, compare, trend, share]
+    time: approved budgets by year; revised budgets and spending by quarter from the implementation reports (code checks which years and quarters exist)
+    cites: the printed row (document, page)
+
+  - id: dtm_api
+    what: IOM DTM Baseline API v3 (displacement figures by state and LGA, every round)
+    kind: structured
+    measures: [idp_count]
+    entity_types: [state, lga]
+    geo_levels: [state, lga]
+    operations: [lookup, rank, list, trend, breakdown, compare]
+    breakdowns: [displacement_reason]
+    time: rounds (roundNumber, reportingDate); the newest round per daily pull
+    needs_key: DTMAPI_SUBSCRIPTION_KEY
+    cites: API round and reporting date
+
+  - id: analysis_tools
+    what: counts and sums in SQL over projects and budget lines (project status, LGA projects, rankings, ministry and function profiles, revenue)
+    kind: structured
+    measures: [approved, revised, actual, project_count, revenue_budget, revenue_actual]
+    entity_types: [state, mda, lga, project, function, revenue_line]
+    geo_levels: [state, lga]
+    operations: [list, rank, breakdown, lookup]
+    cites: the printed rows
+
+  - id: line_search
+    what: wide search over every budget line; the model picks rows, code verifies and computes
+    kind: semi_structured
+    measures: [approved, revised, original, actual, actual_ytd, quarter_spent, performance_pct, share_of_budget]
+    entity_types: [state, mda, sub_agency, programme, project, function, economic_item, revenue_line, sector, lga]
+    geo_levels: [state, lga]
+    operations: [lookup, compare, share, list, rank, breakdown]
+    cites: the printed row
+
+  - id: topic_sweep
+    what: several registry publishers side by side, newest edition of each (data/source_registry.yaml)
+    kind: text
+    measures: [idp_count, returnee_count, idp_households, unemployment_rate, underemployment_rate, poverty_rate, malnutrition_rate, population, other]
+    entity_types: [state, lga, publisher]
+    geo_levels: [state, lga, town, zone]
+    operations: [lookup, compare, list, explain]
+    cites: document page
+
+  - id: page_search
+    what: full-text search over every indexed page; the model composes, code checks every figure
+    kind: text
+    measures: [any]
+    entity_types: [any]
+    geo_levels: [state, lga, town, zone, national]
+    operations: [lookup, explain, list, compare, verify_claim]
+    cites: document page
+
+  - id: open_web_search
+    what: the open web, documents accepted only from trusted patterns (app/acquisition/policy.py), others queued for approval
+    kind: text
+    measures: [any]
+    entity_types: [any]
+    geo_levels: [state, lga, town, zone, national]
+    operations: [lookup, explain]
+    cites: document page

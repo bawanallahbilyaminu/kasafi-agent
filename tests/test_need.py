@@ -45,3 +45,11 @@ def test_unknown_names_are_dropped_and_noted_never_guessed() -> None:
 def test_no_need_is_an_empty_need() -> None:
     n = parse_need(None, "q")
     assert n.standalone_question == "q" and n.measures == [] and n.time == {"kind": "latest"}
+
+
+def test_the_lgas_named_together_mean_every_lga_of_the_state() -> None:
+    n = parse_need({"measures": ["idp_count"], "entities": [{"type": "lga", "name": "Sokoto State LGAs"}],
+                    "geo_level": "state", "operation": "list"}, "List of LGAs and number of IDPs", NAMES)
+    assert [(e.type, e.resolved) for e in n.entities] == [("state", "Sokoto")] and n.geo_level == "lga"
+    one = parse_need({"measures": ["idp_count"], "entities": [{"type": "lga", "name": "Tambuwal"}]}, "q", NAMES)
+    assert one.entities[0].resolved == "Tambuwal" and one.geo_level == "state"

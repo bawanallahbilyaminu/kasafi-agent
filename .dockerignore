@@ -4,6 +4,7 @@
 data/
 # ... except the source registry (public; the fetch allowlist and topics come from it). data/private/ stays out.
 !data/source_registry.yaml
+!data/catalog.yaml
 .git/
 .venv/
 __pycache__/

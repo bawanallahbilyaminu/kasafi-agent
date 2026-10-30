@@ -31,10 +31,11 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from functools import partial
 from urllib.parse import urlsplit
 
+import httpx
 import psycopg
 
 from app.acquisition.editions import (SERIES, Latest, Series, doc_edition, editions_back, find_latest,
@@ -43,6 +44,8 @@ from app.acquisition.library import Acquired, fetch_and_index, find_and_fetch, l
 from app.acquisition.registry import detect_topic, registry
 from app.agent.analysis import TOOLS, AnalysisResult, run_analysis
 from app.agent.need import NEED_PROMPT, Names, Need, names_for, parse_need
+from app.agent.capabilities import available_capabilities, catalog, cover
+from app.agent.tools import APPROVED_YEARS, budget_fill, dtm_fill
 from app.agent.topics import TopicResult, topic_answer
 from app.agent.topics import note_of as topic_note
 from app.agent.topics import local_documents as topics_local
@@ -152,7 +155,9 @@ PLAN_SYSTEM = (
     "Still give search_queries and doc_ids: they are the fallback. "
     "CURRENT SITUATION: add \"current_situation\": true when the question asks about the situation now (e.g. how "
     "many displaced people or IDPs there are, current conditions or needs), not a budget figure; else false. "
-    + NEED_PROMPT +
+    + NEED_PROMPT + "TOOLS the app matches the need to (use their measure names): "
+    + "; ".join(f"{c.id}: {c.what} (measures {', '.join(c.measures)})" for c in catalog()
+                if c.id in ("budget_core", "dtm_api")) + ". " +
     "STATISTICS: add \"statistics\": true when the question asks for statistics or the situation on a topic "
     "(numbers or rates of people, households or conditions, e.g. IDPs, unemployment, malnutrition, poverty, or "
     "which organisations publish such data), not government budget money; else false. And \"topic\": the closest "
@@ -904,6 +909,9 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             return Answer(plan.clarify["question"], False, True, plan=plan, timings=t,
                           clarify=plan.clarify["options"])
         prev = history[-1] if history else None
+        # every cell of the need fillable by one structured tool (budget_core, dtm_api): answered from the data
+        if (a := await structured_answer(conn, plan, lang, settings, t)) is not None:
+            return a
         # a follow-up is planned as its standalone question ("which LGA have the most IDPs living there?" ->
         # "Which LGAs in Sokoto State have the most IDPs?"), so it takes the topic path too; a recheck doesn't
         if (tid := topic_route(question, plan)) and plan.followup != "recheck":
@@ -1135,6 +1143,135 @@ def topic_route(question: str, plan: Plan) -> str:
     # the planner may call a publisher's figure a missing document ("IDPs according to IOM"): still a topic
     return tid if plan.statistics or plan.current or stat_need or \
         named_publishers(topic, f"{text} {plan.missing_document}") else ""
+
+
+STRUCT_WORDS = {
+    "en": {"approved": "approved budget", "revised": "revised budget", "original": "original budget",
+           "quarter_spent": "spent in Q{q}", "actual_ytd": "spent so far (Q1–Q{q})",
+           "performance_pct": "share of the revised budget spent", "idp_count": "IDPs",
+           "personnel": "Personnel (salaries)", "overhead": "Overhead (running costs)", "capital": "Capital",
+           "total": "Total", "calc": "Kasafi's calculation", "change": "change",
+           "dtm_state": "IOM DTM counts *{n}* IDPs in Sokoto State ({when}).",
+           "dtm_lga_head": "By LGA ({k} LGAs), the most:", "dtm_lga_list": "By LGA ({k} LGAs), most first:",
+           "dtm_trend_head": "Sokoto State, by round:",
+           "lga_one": "IOM DTM counts *{n}* IDPs in {lga} ({when})."},
+    "ha": {"approved": "kasafin da aka amince", "revised": "kasafin da aka sabunta", "original": "kasafin farko",
+           "quarter_spent": "abin da aka kashe a Q{q}", "actual_ytd": "abin da aka kashe zuwa yanzu (Q1–Q{q})",
+           "performance_pct": "kason kasafin da aka sabunta da aka kashe", "idp_count": "'yan gudun hijira",
+           "personnel": "Albashi", "overhead": "Kuɗin gudanarwa", "capital": "Manyan ayyuka", "total": "Jimilla",
+           "calc": "lissafin Kasafi", "change": "bambanci",
+           "dtm_state": "IOM DTM ta ƙidaya *{n}* 'yan gudun hijira a Jihar Sokoto ({when}).",
+           "dtm_lga_head": "Ta ƙaramar hukuma ({k}), mafi yawa:", "dtm_lga_list": "Ta ƙaramar hukuma ({k}), "
+           "daga mafi yawa:", "dtm_trend_head": "Jihar Sokoto, ta zagaye:",
+           "lga_one": "IOM DTM ta ƙidaya *{n}* 'yan gudun hijira a {lga} ({when})."},
+}
+
+
+def _struct_money(x, lang: str) -> str:
+    return readable_amounts(f"₦{Decimal(x):,.2f}", lang)
+
+
+def write_budget_cells(need: Need, cells: list, lang: str) -> tuple[str, str]:
+    """The reply and the exact working for budget_core cells: one line per entity and split, its measures by
+    year (a change between two years computed here, exactly)."""
+    w = STRUCT_WORDS.get(lang, STRUCT_WORDS["en"])
+    out, exact = [], []
+    for ent in dict.fromkeys(c.entity.resolved or c.entity.name for c in cells):
+        mine = [c for c in cells if (c.entity.resolved or c.entity.name) == ent]
+        code = mine[0].entity.code
+        out.append(f"*{ent}*" + (f" (code {code})" if code else "") + ":")
+        for split in dict.fromkeys(c.split or "total" for c in mine):
+            row = [c for c in mine if (c.split or "total") == split]
+            parts = []
+            for c in row:
+                label = w[c.measure].format(q=c.quarter or "")
+                label = f"{c.year} {label}" if len({x.year for x in row}) > 1 else label
+                val = f"{c.value}%" if c.measure == "performance_pct" else _struct_money(c.value, lang)
+                parts.append(f"{label} {val}" + (f" ({w['calc']})" if c.note == "calc" else ""))
+                exact.append(f"{ent} | {split} | {c.measure} {c.year}{' Q' + str(c.quarter) if c.quarter else ''}: "
+                             f"{c.value} [{c.source}]")
+            money = [c for c in row if c.measure != "performance_pct"]
+            if len(money) == 2 and money[0].measure == money[1].measure and money[0].year != money[1].year:
+                a, b = sorted(money, key=lambda c: c.year)
+                diff = Decimal(b.value) - Decimal(a.value)
+                pct = (diff / Decimal(a.value) * 100).quantize(Decimal("0.1"), ROUND_HALF_UP) if a.value else None
+                sign = "+" if diff > 0 else "-" if diff < 0 else ""
+                parts.append(f"{w['change']} {sign}{_struct_money(abs(diff), lang)}"
+                             + (f" ({'+' if pct and pct > 0 else ''}{pct}%)" if pct is not None else "")
+                             + f" ({w['calc']})")
+                exact.append(f"{ent} | {split} | change: {diff}")
+            out.append(f"• {w.get(split, split)}: " + "; ".join(parts))
+    return "\n".join(out), "\n".join(exact)
+
+
+def write_dtm_cells(need: Need, cells: list, api: str, lang: str) -> str:
+    w = STRUCT_WORDS.get(lang, STRUCT_WORDS["en"])
+    when = api.split(", ", 1)[1] if ", " in api else api
+    out = []
+    for c in cells:
+        if isinstance(c.value, list) and need.operation == "trend":
+            out += [w["dtm_trend_head"]] + [f"• {r}: {n:,}" for r, n in c.value]
+        elif isinstance(c.value, list):
+            rows = sorted(c.value, key=lambda r: -r[1])
+            top = rows[:need.top_n] if need.operation == "rank" and need.top_n else rows
+            head = w["dtm_lga_head"] if need.operation == "rank" else w["dtm_lga_list"]
+            out += [head.format(k=len(rows))] + [f"{i}. {p}: {n:,}" for i, (p, n) in enumerate(top, 1)]
+        elif c.entity.type == "lga":
+            out.append(w["lga_one"].format(n=f"{c.value:,}", lga=c.entity.resolved, when=when))
+        else:
+            out.insert(0, w["dtm_state"].format(n=f"{c.value:,}", when=when))
+    return "\n".join(out)
+
+
+def named_dtm(plan: Plan) -> bool:
+    """The question names the publisher behind the DTM API (IOM, DTM)."""
+    topic = registry().topics.get("displacement_humanitarian")
+    if not topic:
+        return False
+    named = named_publishers(topic, f"{plan.original} {plan.english_question}")
+    return any("dtm_api" in p.discovery for p in named)
+
+
+async def structured_answer(conn, plan: Plan, lang: str, settings: Settings, t: dict) -> Answer | None:
+    """When every cell of the question's need goes to one structured tool (budget_core, dtm_api) and the tool
+    fills them all, code answers from the data: no search, no model reading. Otherwise None: the other paths
+    answer (and, from step 3, the loop fills the cells they leave)."""
+    need = plan.need
+    if conn is None or need is None or not need.measures or plan.followup == "recheck":
+        return None
+    latest = conn.execute("SELECT max(year) FROM perf_items").fetchone()[0] if "approved" not in need.measures \
+        else max(APPROVED_YEARS)
+    cov = cover(need, available=available_capabilities(settings), latest_year=latest)
+    cap = cov.best()
+    if cap not in ("budget_core", "dtm_api") or not cov.all_by(cap):
+        return None
+    if cap == "dtm_api" and need.geo_level == "state" and not named_dtm(plan):
+        # a state figure on a multi-source topic is answered side by side (the sweep includes this API);
+        # by LGA, or when the question names IOM / DTM, the API alone answers
+        return None
+    t0 = time.perf_counter()
+    if cap == "budget_core":
+        filled = budget_fill(conn, cov.cells)
+    else:
+        async with httpx.AsyncClient(headers={"User-Agent": "KasafiBot/1.0 (+https://halalnumeriq.com.ng/kasafi)"}) as h:
+            filled = await dtm_fill(h, settings, need, cov.cells)
+    t["structured"] = time.perf_counter() - t0
+    if not all(c.filled for c in cov.cells):
+        log.info("%s filled %d of %d cells; other paths answer", cap,
+                 sum(c.filled for c in cov.cells), len(cov.cells))
+        return None
+    evidence = [Evidence(i, s.doc_id, s.title, None, s.page, "text", s.row_text)
+                for i, s in enumerate(filled.sources, 1)]
+    if cap == "budget_core":
+        body, exact = write_budget_cells(need, cov.cells, lang)
+        tail = sources_line(evidence, lang)
+    else:
+        body = write_dtm_cells(need, cov.cells, filled.api, lang)
+        exact = body
+        tail = f"📄 *{ANALYSIS_WORDS.get(lang, ANALYSIS_WORDS['en'])['sources']}:* {filled.api}"
+    log.info("structured answer from %s: %d cells", cap, len(cov.cells))
+    return Answer(f"{body}\n\n{tail}", True, True, evidence, plan, t, exact=f"{body}\n{exact}",
+                  sources=cited_sources(conn, evidence), working=exact)
 
 
 STAT_MEASURES = {"idp_count", "returnee_count", "idp_households", "unemployment_rate", "underemployment_rate",

@@ -8,6 +8,7 @@ data/*
 !data/manifest.json
 !data/provenance.json
 !data/source_registry.yaml
+!data/catalog.yaml
 # internal hints (partner registry): never committed, never quoted, never sent to a model
 data/private/
 

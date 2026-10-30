@@ -105,9 +105,15 @@ async def state_rounds(http: httpx.AsyncClient, settings: Settings, state: str =
 async def lga_round(http: httpx.AsyncClient, settings: Settings, state: str = "Sokoto",
                     round_number: int | None = None) -> list[RoundFigure] | None:
     """The state's LGAs in one round (the newest if none given), most IDPs first; None without a key."""
-    params = {"CountryName": "Nigeria", "Admin1Name": state}
-    if round_number:
-        params |= {"FromRoundNumber": round_number, "ToRoundNumber": round_number}
+    if not round_number:
+        # without a round the LGA endpoint may answer with old rounds only (Oct 30: up to round 9), so the
+        # newest round comes from the state figures and is asked for explicitly
+        rounds = await state_rounds(http, settings, state)
+        if not rounds:
+            return rounds
+        round_number = rounds[0].round
+    params = {"CountryName": "Nigeria", "Admin1Name": state,
+              "FromRoundNumber": round_number, "ToRoundNumber": round_number}
     rows = await _get(http, ADMIN2, settings.dtmapi_subscription_key, params)
     if rows is None:
         return None

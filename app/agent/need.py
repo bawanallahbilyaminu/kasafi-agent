@@ -46,6 +46,10 @@ NEED_PROMPT = (
 )
 
 
+COLLECTIVE_LGA = re.compile(r"(?i)\b(?:lgas|local governments|local government areas|all|every|each|kananan "
+                            r"hukumomi|ƙananan hukumomi)\b")
+
+
 @dataclass
 class Entity:
     type: str
@@ -194,6 +198,14 @@ def parse_need(d, standalone: str, names: Names | None = None, topics: tuple[str
             t = e.get("type") if e.get("type") in ENTITY_TYPES else "other"
             ent = Entity(t, str(e["name"]).strip()[:120])
             entities.append(resolve(ent, names) if names else ent)
+    geo = d.get("geo_level") if d.get("geo_level") in GEO_LEVELS else "state"
+    # "Sokoto State LGAs", "all LGAs", "local governments": every LGA of the state, not one LGA
+    collective = [e for e in entities if e.type == "lga" and not e.resolved and COLLECTIVE_LGA.search(e.name)]
+    if collective:
+        entities = [e for e in entities if e not in collective]
+        if not any(e.type == "state" for e in entities):
+            entities.insert(0, Entity("state", "Sokoto", "Sokoto"))
+        geo = "lga"
     op = d.get("operation") if d.get("operation") in OPERATIONS else "lookup"
     shape = d.get("output_shape") if d.get("output_shape") in SHAPES else ("table_top_n" if op == "rank" else "value")
     try:
@@ -202,8 +214,7 @@ def parse_need(d, standalone: str, names: Names | None = None, topics: tuple[str
         top_n = 0
     if op == "rank" and not top_n:
         top_n = 5
-    return Need(standalone, measures=listed("measures", MEASURES), entities=entities,
-                geo_level=d.get("geo_level") if d.get("geo_level") in GEO_LEVELS else "state",
+    return Need(standalone, measures=listed("measures", MEASURES), entities=entities, geo_level=geo,
                 splits=listed("splits", SPLITS), time=check_time(d.get("time"), problems), operation=op,
                 output_shape=shape, top_n=top_n,
                 premises=[str(p)[:200] for p in (d.get("premises") or []) if str(p).strip()][:3],
