@@ -48,7 +48,10 @@ CREATE TABLE IF NOT EXISTS users (
     pending_options  TEXT,         -- JSON {"replace": ..., "add": ...} while asking which one was meant
     pending_calc     TEXT,         -- JSON calculation offered ("Reply Eh to calculate"), until the next message
     images_off       INTEGER,      -- 1 = no evidence images with answers ("images off"); NULL/0 = send them
-    pending_clarify  TEXT          -- JSON options while Kasafi asks which reading of a question was meant
+    pending_clarify  TEXT,         -- JSON options while Kasafi asks which reading of a question was meant
+    last_lga         TEXT,         -- the LGA (P-code) of the user's last location; never coordinates (90 days)
+    last_lga_at      TEXT,
+    location_notice_at TEXT        -- when the one-line location notice was shown (once)
 );
 CREATE TABLE IF NOT EXISTS usage (
     user_key  TEXT NOT NULL,
@@ -124,6 +127,9 @@ class UserStore:
             self._db.execute("ALTER TABLE users ADD COLUMN images_off INTEGER")
         if "pending_clarify" not in have:
             self._db.execute("ALTER TABLE users ADD COLUMN pending_clarify TEXT")
+        for col in ("last_lga", "last_lga_at", "location_notice_at"):      # location: the LGA only (hazard step 1)
+            if col not in have:
+                self._db.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
         if "working" not in {row[1] for row in self._db.execute("PRAGMA table_info(turns)")}:
             self._db.execute("ALTER TABLE turns ADD COLUMN working TEXT")     # "nuna lissafi" / "show working"
 
@@ -197,6 +203,29 @@ class UserStore:
     def get_pending_calc(self, key: str) -> dict | None:
         row = self._exec("SELECT pending_calc FROM users WHERE user_key=?", (key,)).fetchone()
         return json.loads(row[0]) if row and row[0] else None
+
+    # location: only the LGA is kept (its P-code), for 90 days; coordinates never reach this store
+    def set_last_lga(self, key: str, lga_pcode: str) -> None:
+        self._exec("UPDATE users SET last_lga=?, last_lga_at=? WHERE user_key=?",
+                   (lga_pcode, datetime.now(timezone.utc).isoformat(), key))
+
+    def get_last_lga(self, key: str) -> str | None:
+        row = self._exec("SELECT last_lga, last_lga_at FROM users WHERE user_key=?", (key,)).fetchone()
+        if not row or not row[0] or not row[1]:
+            return None
+        if datetime.now(timezone.utc) - datetime.fromisoformat(row[1]) > timedelta(days=TURN_RETENTION_DAYS):
+            self._exec("UPDATE users SET last_lga=NULL, last_lga_at=NULL WHERE user_key=?", (key,))
+            return None
+        return row[0]
+
+    def location_notice_due(self, key: str) -> bool:
+        """True once: the first time the user shares or asks with a location (the one-line notice)."""
+        row = self._exec("SELECT location_notice_at FROM users WHERE user_key=?", (key,)).fetchone()
+        if row and row[0]:
+            return False
+        self._exec("UPDATE users SET location_notice_at=? WHERE user_key=?",
+                   (datetime.now(timezone.utc).isoformat(), key))
+        return True
 
     def clear_pending(self, key: str) -> None:
         self._exec("UPDATE users SET pending_question=NULL, pending_english=NULL, pending_at=NULL, "

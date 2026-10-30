@@ -103,6 +103,32 @@ TEXTS = {
         "ha": "Kasafi (gwaji): don Allah ka aiko da rubutu ko saƙon murya.",
         "en": "Kasafi (test): please send text or a voice note.",
     },
+    # Location (docs/hazard-and-services.md section 3): used for the request only; only the LGA is kept
+    "location_notice": {
+        "ha": "Kasafi zai yi amfani da wurinka ne kawai don amsa wannan, kuma ba zai ajiye shi ba. Ƙaramar hukumarka "
+              "kaɗai za a tuna don tambayoyin da za su biyo baya.",
+        "en": "Kasafi will use your location only to answer this and won't keep it. Only your LGA is remembered for "
+              "follow-ups.",
+    },
+    "location_got": {
+        "ha": "📍 Na gane wurinka: Ƙaramar Hukumar {lga}{ward}, Jihar Sokoto. Me kake so ka sani game da wurin?",
+        "en": "📍 Got it: you're in {lga} LGA{ward}, Sokoto State. What would you like to know about it?",
+    },
+    "location_ward": {"ha": " (mazaɓar {ward})", "en": " ({ward} ward)"},
+    "location_outside": {
+        "ha": "Wannan wurin yana wajen Jihar Sokoto. Kasafi yana bayani ne kan Jihar Sokoto kaɗai; ka aiko da wuri a "
+              "cikin jihar, ko ka rubuta sunan ƙaramar hukuma ko gari.",
+        "en": "That location is outside Sokoto State. Kasafi covers Sokoto State only; send a place inside the state, "
+              "or type an LGA or town name.",
+    },
+    "location_request": {
+        "ha": "Ka danna maɓallin da ke ƙasa don raba wurinka, ko ka rubuta sunan ƙaramar hukumarka ko garinka.",
+        "en": "Tap the button below to share your location, or tell me your LGA or town.",
+    },
+    "location_unavailable": {
+        "ha": "Ba zan iya gane wurare yanzu ba. Ka rubuta sunan ƙaramar hukumarka.",
+        "en": "I can't look up places right now. Please type your LGA.",
+    },
     # Voice notes
     "listening": {
         "ha": "🎧 Ina sauraro…",

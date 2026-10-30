@@ -86,3 +86,8 @@ def test_a_typed_place_is_found_in_the_gazetteer() -> None:
         assert geocode(c, "Akwai ambaliya a Goronyo?")[0].lga_pcode == "NG034006"
         assert geocode(c, "zafin rana a Wamako yau")[0].lga == "Wamakko"
         assert geocode(c, "how hot is it in Lagos") == []
+        from app.geo.location import area_from_text
+        area, spot = area_from_text(c, "Akwai ambaliya a Goronyo?")
+        assert area.lga_pcode == "NG034006" and spot.how == "place"
+        assert area_from_text(c, "how hot is it here today?", "NG034021")[0].lga == "Wamakko"   # the LGA on file
+        assert area_from_text(c, "how hot is it here today?") is None

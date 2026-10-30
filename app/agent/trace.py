@@ -22,12 +22,16 @@ TRACE_RETENTION_DAYS = 30
 # and printed amounts ("70,000,000.00") don't match.
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 _PHONE = re.compile(r"(?<![\w+])(?:\+\d{1,3}(?:[\s.-]?\(?\d\)?){7,12}|(?:234|0)[789][01](?:[\s.-]?\d){8})(?!\d)")
+# a latitude, longitude pair (4+ decimals, as phones give them; not figures like 'MPI 0.409, 0.239')
+_COORDS = re.compile(r"-?\b\d{1,3}\.\d{4,}\s*[,;/ ]\s*-?\d{1,3}\.\d{4,}\b")
 _LONG_DIGITS = re.compile(r"(?<!\d)(?<!\d[,.])\d{10,}(?!\d|[,.]\d)")
 
 
 def redact(text: str) -> str:
-    """The wording with emails, phone numbers and long digit strings (account, NIN) taken out."""
-    text = _EMAIL.sub("[email removed]", text or "")
+    """The wording with emails, phone numbers, long digit strings (account, NIN) and coordinates a user typed
+    ('13.0622, 5.2339') taken out: a location is never kept, only its LGA."""
+    text = _COORDS.sub("[location removed]", text or "")
+    text = _EMAIL.sub("[email removed]", text)
     text = _PHONE.sub("[number removed]", text)
     return _LONG_DIGITS.sub("[number removed]", text)
 

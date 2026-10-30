@@ -26,6 +26,8 @@ import httpx
 
 from app.config import Settings
 from app.data_rights import DELETED_REPLY, delete_user_data, is_delete_command
+from app.geo.location import SHARE, Spot, locate_point, pin_of
+from app.geo.location import memory as location_memory
 from app.guardrails import scope
 from app.guardrails.emergency import EMERGENCY_REPLY, is_medical_emergency
 from app.language import detect_language
@@ -65,6 +67,7 @@ class Out:
     buttons: list[tuple[str, str]] | None = None
     crops: list | None = None          # evidence images to send after this message (app/evidence/crops.py)
     lang: str = "ha"
+    location_request: bool = False     # sent as WhatsApp's location request message ("Share location" button)
 
 
 def _norm(text: str) -> str:
@@ -88,6 +91,7 @@ GuardFn = Callable[..., Awaitable[scope.Verdict]]
 AnswerFn = Callable[..., Awaitable[str]]
 _DEFAULT = object()   # answer_fn default: answer from the documents when a database is configured
 NotifyFn = Callable[[Out], Awaitable[None]]
+LocateFn = Callable[..., Awaitable[Any]]          # (settings, lat, lon) -> app.geo.Area | None
 
 
 async def _no_notify(out: Out) -> None:
@@ -97,7 +101,7 @@ async def _no_notify(out: Out) -> None:
 async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Settings,
                  voice_fn: VoiceFn = reply_for_voice, notify: NotifyFn = _no_notify,
                  resolve_fn: ResolveFn = resolve, guard_fn: GuardFn = scope.check,
-                 answer_fn: AnswerFn | None | object = _DEFAULT) -> list[Out]:
+                 answer_fn: AnswerFn | None | object = _DEFAULT, locate_fn: LocateFn = locate_point) -> list[Out]:
     """Returns the replies to send. `notify` sends a message right away (the "listening" ack)."""
     sender, kind = msg.get("from", ""), msg.get("type")
     text = (msg.get("text") or {}).get("body", "") if kind == "text" else ""
@@ -106,6 +110,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     # 1. Safety and data rights first
     if text and is_delete_command(text):
         delete_user_data(sender, store=store, settings=settings)
+        location_memory.forget(user_key(sender, settings))       # and any point still in memory
         return [Out(DELETED_REPLY)]
     if text and is_medical_emergency(text):
         return [Out(EMERGENCY_REPLY)]
@@ -143,6 +148,9 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
 
     # 5. Consented: limits (skipped for our own test numbers), then work
     lang = user.lang or "ha"
+    # a location pin, or "share my location": handled here (PostGIS, no model); the point stays in memory only
+    if kind == "location" or (text and SHARE.search(text)):
+        return await _location(msg, key, lang, store, settings, locate_fn)
     if (images := IMAGE_COMMANDS.get(_norm(text))) is not None:     # "images off" / "kashe hotuna": no model needed
         store.set_images(key, images)
         return [Out(t("images_on" if images else "images_off", lang))]
@@ -327,6 +335,29 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     if button == "consent_ok":
         return [Out(t("consent_thanks", lang))]
     return [Out(t("other", lang))]
+
+
+async def _location(msg: dict[str, Any], key: str, lang: str, store: UserStore, settings: Settings,
+                    locate_fn: LocateFn) -> list[Out]:
+    """A pin: its LGA (and ward) from the boundaries; the point kept in memory for 30 minutes, only the LGA on the
+    user record and in the log. No pin ("share my location"): the request button. The notice line comes once."""
+    outs = [Out(t("location_notice", lang))] if store.location_notice_due(key) else []
+    pin = pin_of(msg)
+    if pin is None:
+        return outs + [Out(t("location_request", lang), lang=lang, location_request=True)]
+    try:
+        area = await locate_fn(settings, *pin)
+    except Exception as e:      # no database or PostGIS down: ask for the LGA instead
+        log.warning("location lookup failed: %s", type(e).__name__)
+        return outs + [Out(t("location_unavailable", lang))]
+    if area is None:
+        log.info("location: outside Sokoto (pin)")
+        return outs + [Out(t("location_outside", lang))]
+    location_memory.remember(key, Spot(pin[0], pin[1], area.lga_pcode, area.lga, area.ward))
+    store.set_last_lga(key, area.lga_pcode)
+    log.info("location: %s LGA (pin)", area.lga)
+    ward = t("location_ward", lang, ward=area.ward) if area.ward else ""
+    return outs + [Out(t("location_got", lang, lga=area.lga, ward=ward))]
 
 
 async def _guarded(texts: list[str], lang: str, guard_fn: GuardFn, settings: Settings) -> Out | None:

@@ -120,6 +120,22 @@ class WhatsAppClient:
             resp.raise_for_status()
         return resp.json()
 
+    async def send_location_request(self, to: str, body: str) -> dict:
+        """Interactive location request message: the user's "Share location" button (body of 1024 or fewer)."""
+        resp = await self._http.post(f"/{self.phone_number_id}/messages", json={
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "interactive",
+            "interactive": {"type": "location_request_message", "body": {"text": body[:1024]},
+                            "action": {"name": "send_location"}},
+        })
+        if not resp.is_success:
+            log.warning("WhatsApp location request to %s failed: HTTP %s, Graph error code %s",
+                        mask_phone(to), resp.status_code, _graph_code(resp))
+            resp.raise_for_status()
+        return resp.json()
+
     async def upload_media(self, data: bytes, mime: str = "image/jpeg", filename: str = "evidence.jpg") -> str:
         resp = await self._http.post(f"/{self.phone_number_id}/media",
                                      data={"messaging_product": "whatsapp", "type": mime},

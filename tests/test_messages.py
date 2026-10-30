@@ -14,7 +14,8 @@ UNHOOKED = ["karbi", "sakon", "sako", "sakonka", "sakonninka", "kudi", "kudin", 
 
 
 def _all_messages() -> list[str]:
-    out = [v.format(n=20, minutes=3, text="x", transcript="x", question="x", value="x") for d in TEXTS.values() for v in d.values()]
+    out = [v.format(n=20, minutes=3, text="x", transcript="x", question="x", value="x", lga="x", ward="x")
+           for d in TEXTS.values() for v in d.values()]
     for lang, src in [("ha", "detected"), ("en", "detected"), ("ha", "chosen"), ("en", "chosen"), (None, None)]:
         out.extend(first_contact_notice(lang, src))
     return out + [DELETED_REPLY, EMERGENCY_REPLY, NOT_IN_PILOT]
