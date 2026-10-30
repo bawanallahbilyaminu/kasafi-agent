@@ -5,6 +5,7 @@ so this runs with long download timeouts and leaves the documents in the library
 Run it weekly (or after a publisher's release date). The daily fetch limit still applies.
 
     uv run python scripts/prefetch_topics.py [displacement_humanitarian labour_employment ...]
+    uv run python scripts/prefetch_topics.py poverty_welfare:nbs_mpi       # one publisher of a topic only
 """
 
 from __future__ import annotations
@@ -35,6 +36,8 @@ async def main(topic_ids: list[str]) -> None:
         logging.getLogger(name).setLevel(logging.WARNING)
     s = get_settings()
     reg = registry()
+    only = {t.split(":", 1)[0]: t.split(":", 1)[1] for t in topic_ids if ":" in t}    # topic -> one publisher
+    topic_ids = [t.split(":", 1)[0] for t in topic_ids]
     topics = [reg.topics[t] for t in topic_ids] if topic_ids else [t for t in reg.topics.values()
                                                                    if t.answer_pattern == "multi_source"]
     with psycopg.connect(s.db_url()) as conn:
@@ -43,6 +46,8 @@ async def main(topic_ids: list[str]) -> None:
             for t in topics:
                 primary, _ = choose_publishers(t)
                 for p in primary:
+                    if t.id in only and p.id != only[t.id]:
+                        continue
                     if not p.domains or ("dtm_api" in p.discovery and s.dtmapi_subscription_key):
                         continue          # nothing to fetch, or its figures come from its API (DTM)
                     res = await get_document(conn, p, t, date.today(), http=http, robots=robots, client=client,

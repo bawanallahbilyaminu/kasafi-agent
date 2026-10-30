@@ -305,7 +305,7 @@ topics:
         aliases: [National MPI, Nigeria MPI, Nigeria Multidimensional Poverty Index, Nigeria Child MPI]
         level: state
         tier: 1
-        verified: "no"
+        verified: 2026-10-30   # fetched from the registry URL (184 pages; Sokoto in Appendix D, PDF p123)
       - id: nbs_nlss_poverty
         name: NBS Poverty and Inequality in Nigeria (NLSS 2018/19)
         domains: [nigerianstat.gov.ng]
