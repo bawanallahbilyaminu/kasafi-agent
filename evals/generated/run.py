@@ -29,10 +29,12 @@ sys.path.insert(0, str(ROOT))
 import psycopg  # noqa: E402
 
 from app.agent.answer import answer_question, readable_amounts  # noqa: E402
+from app import usage  # noqa: E402
 from app.config import get_settings  # noqa: E402
 
 CASES = Path(__file__).with_name("cases.json")
 RUNS = Path(__file__).with_name("runs")          # fresh draws (not in git: the report names the seed)
+FETCH_FAMILIES = {"missing_document"}             # the only families that may fetch or search the open web
 
 
 def accepted(number: str, lang: str) -> list[str]:
@@ -47,7 +49,11 @@ def accepted(number: str, lang: str) -> list[str]:
 def wrong(case: dict, a, lang: str) -> str:
     text = f"{a.exact}\n{a.text}"
     if case.get("expect_gap"):                       # nothing published: no figure for that period, say what exists
-        if case["expect_gap"] not in a.text and "latest" not in a.text.lower() and "mafi sabo" not in a.text:
+        est = case.get("estimate")                   # ... or the budget's own out-year estimate, labelled as one
+        if est and any(f in text for f in accepted(est, lang)) and re.search(r"(?i)estimate|kiyasi|hasashe", a.text):
+            return ""
+        if case["expect_gap"] not in a.text and "newest" not in a.text.lower() and "latest" not in a.text.lower() \
+                and "mafi sabo" not in a.text:
             return f"no mention of what exists ({case['expect_gap']})"
         return ""
     if not a.found:
@@ -56,10 +62,23 @@ def wrong(case: dict, a, lang: str) -> str:
     if not any(all(any(f in text for f in accepted(n, lang)) for n in g) for g in groups):
         missing = [n for n in groups[0] if not any(f in text for f in accepted(n, lang))]
         return f"missing {missing}"
-    if case.get("premise_false") and re.search(r"(?i)\b(?:because|due to|reason (?:is|was)|saboda)\b", a.text) \
-            and not re.search(r"(?i)\b(?:actually|in fact|rose|increased|fell|decreased|ya karu|ya ragu)\b", a.text):
-        return "explained a premise the figures contradict"
+    if case.get("premise_false") and not corrects(a.text, case.get("premise", "")):
+        return "didn't correct a premise the figures contradict"
     return ""
+
+
+# a reply corrects a false premise when it says the change didn't happen ("did not go up", "there was no rise",
+# Hausa "bai karu ba") or names the real direction, the opposite of the premise's; a "because" is no sign either way
+DENIES = re.compile(r"(?i)\b(?:did not|didn't|does not|not (?:go|rise|fall|increase|decrease|drop)|"
+                    r"no (?:rise|fall|increase|decrease|drop)|actually|in fact|instead|rather|"
+                    r"bai (?:karu|ƙaru|ragu)|ba (?:ta|ya) (?:karu|ƙaru|ragu))\b")
+DIRECTION = {"rise": re.compile(r"(?i)\b(?:rose|increased|went up|grew|ya karu|ya ƙaru)\b"),
+             "fall": re.compile(r"(?i)\b(?:fell|decreased|dropped|went down|declined|ya ragu)\b")}
+
+
+def corrects(text: str, premise: str) -> bool:
+    real = {"rise": "fall", "fall": "rise"}.get(premise)
+    return bool(DENIES.search(text) or (real and DIRECTION[real].search(text)))
 
 
 async def main(forms: str, seed: int, families: list[str] | None, out: Path, cases_path: Path = CASES) -> None:
@@ -89,7 +108,8 @@ async def main(forms: str, seed: int, families: list[str] | None, out: Path, cas
                 lang = "ha" if form in ("hausa", "code_switched") else "en"
             t0 = time.perf_counter()
             try:
-                a = await answer_question(q, lang, conn, settings=s, history=history)
+                a = await answer_question(q, lang, conn, history=history,     # fetching only where a family needs it
+                                          settings=usage.eval_settings(s, fetch=c["family"] in FETCH_FAMILIES))
                 why = wrong(c, a, lang)
             except Exception as e:                       # one bad case must not stop the run
                 conn.rollback()
@@ -108,7 +128,10 @@ async def main(forms: str, seed: int, families: list[str] | None, out: Path, cas
     total = sum(sum(v) for v in per_family.values())
     summary = f"{len(cases)} cases: wrong {total} | median {statistics.median(times):.1f}s"
     print("\n" + summary + "\n" + "\n".join(lines))
-    out.write_text("\n".join([report[0], summary, "", *lines, "", *report[1:]]), encoding="utf-8")
+    cost = usage.summary(s)
+    print(cost)
+    out.write_text("\n".join([report[0], summary, "", *lines, "", "```", cost, "```", "", *report[1:]]),
+                   encoding="utf-8")
     print("report:", out)
 
 

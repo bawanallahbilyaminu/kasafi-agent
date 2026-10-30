@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT))
 import psycopg  # noqa: E402
 
 from app.agent.answer import UNVERIFIED, answer_question  # noqa: E402
+from app import usage  # noqa: E402
 from app.config import get_settings  # noqa: E402
 
 
@@ -69,7 +70,8 @@ async def main(path: Path, ids: list[str] | None, out: Path) -> None:
         for q in qs:
             t0 = time.perf_counter()
             try:
-                a = await answer_question(q["text"], q["lang"], conn, settings=s)
+                a = await answer_question(q["text"], q["lang"], conn,         # the library only: no fetching
+                                          settings=usage.eval_settings(s, fetch=bool(q.get("may_fetch"))))
             except Exception as e:      # one bad question must not stop the run
                 conn.rollback()
                 rows.append((q["id"], "error", False, 0, False, "-", time.perf_counter() - t0))
@@ -115,6 +117,7 @@ async def main(path: Path, ids: list[str] | None, out: Path) -> None:
     report.insert(1, summary + "\n\n```\n" + "\n".join(lines) + "\n```\n")
     out.write_text("\n".join(report), encoding="utf-8")
     print(f"report: {out}")
+    print(usage.summary(s))
 
 
 if __name__ == "__main__":

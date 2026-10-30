@@ -20,6 +20,8 @@ from typing import Any
 
 import httpx
 
+from app import usage
+
 log = logging.getLogger(__name__)
 
 RETRYABLE_STATUS = {429, 500, 503}
@@ -98,6 +100,7 @@ class ChatClient:
         if m := _THINK_BLOCK.match(content):
             reasoning = reasoning or m.group(0).strip()[7:-8].strip()
             content = content[m.end():]
+        usage.record_chat(self.provider, data.get("usage") or {})
         return ChatResult(
             content=content,
             model=data.get("model", body["model"]),

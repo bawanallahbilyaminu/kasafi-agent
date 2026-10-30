@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT))
 import psycopg  # noqa: E402
 
 from app.agent.answer import answer_question  # noqa: E402
+from app import usage  # noqa: E402
 from app.config import get_settings  # noqa: E402
 
 
@@ -81,7 +82,8 @@ async def main(ids: list[str] | None, runs: int, plan_reasoning: str | None = No
             for c in cases:
                 t0 = time.perf_counter()
                 q = questions[c["id"]]
-                a = await answer_question(q.get("text_ha") or q["text"], c["lang"], conn, settings=s)
+                a = await answer_question(q.get("text_ha") or q["text"], c["lang"], conn,
+                                          settings=usage.eval_settings(s, fetch=bool(c.get("may_fetch"))))
                 times.append(time.perf_counter() - t0)
                 plan_t.append(a.timings.get("plan", 0))
                 answer_t.append(a.timings.get("answer", 0))
@@ -98,6 +100,7 @@ async def main(ids: list[str] | None, runs: int, plan_reasoning: str | None = No
     total = len(cases) * runs
     print(f"\n{passed}/{total} passed  |  total median {statistics.median(times):.1f}s, max {max(times):.1f}s  |  "
           f"plan median {statistics.median(plan_t):.1f}s  |  answer median {statistics.median(answer_t):.1f}s")
+    print(usage.summary(s))
     return 0 if passed == total else 1
 
 

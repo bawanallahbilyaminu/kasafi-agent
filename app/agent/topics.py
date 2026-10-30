@@ -210,6 +210,8 @@ PICK_DESCRIPTION = ("{name}: {doc_type} covering Sokoto State (or the North-West
 async def find_candidates(http: httpx.AsyncClient, p: Publisher, topic: Topic, today: date,
                           settings: Settings) -> list[Candidate]:
     """The publisher's own listing and data APIs first, then web search limited to its domains."""
+    if not settings.kasafi_fetch_enabled:           # an eval run that doesn't fetch: local documents only
+        return []
     query = f"{p.name} {p.doc_types[0] if p.doc_types else ''} Sokoto"
     jobs: list = [catalog_candidates(http, query, list(p.domains))]
     if "hdx_ckan" in p.discovery:
@@ -747,7 +749,7 @@ async def publishers_answer(conn: psycopg.Connection, topic: Topic, lang: str, s
     if have:
         out += ["", w["in_library"].format(titles="; ".join(have))]
     sites = hint_sites(topic.id)
-    if sites and settings.serper_api_key:
+    if sites and settings.serper_api_key and settings.kasafi_fetch_enabled:
         q = f"Sokoto {topic.synonyms_en[0]} report (" + " OR ".join(f"site:{s}" for s in sites) + ")"
         try:
             found = await search_web(http, q, settings.serper_api_key.get_secret_value())

@@ -44,6 +44,19 @@ class Settings(BaseSettings):
     kasafi_plan_reasoning: str = "minimal"   # same eval score as "low", median 7.9 s vs 9.9 s (Oct 27)
     # ... and for Muse Spark's budget-line readings (Open always reasons): "minimal" is ~3 s faster (Oct 30)
     kasafi_read_reasoning: str = "minimal"
+    # Model prices in USD per 1M tokens, for the eval runs' cost line (app/usage.py). Meta: Muse Spark launch post;
+    # Baseten (Muse Spark Open): price trackers' copy of Baseten's page, Oct 23 2026. Cached reads not confirmed by
+    # Meta: its cached price is assumed equal to Baseten's. Reasoning tokens are billed as output.
+    # Fetching new documents (and the web searches that find them) and the open-web fallback. The eval runners
+    # turn both off except for the cases that need a fetch, so a run doesn't spend searches and downloads.
+    kasafi_fetch_enabled: bool = True
+    kasafi_open_web: bool = True
+    kasafi_price_meta_in: float = 1.25
+    kasafi_price_meta_cached: float = 0.15
+    kasafi_price_meta_out: float = 4.25
+    kasafi_price_baseten_in: float = 1.25
+    kasafi_price_baseten_cached: float = 0.15
+    kasafi_price_baseten_out: float = 4.25
     # How long a read-back question waits for Eh / A'a / a correction
     kasafi_pending_ttl_minutes: int = 15
 
