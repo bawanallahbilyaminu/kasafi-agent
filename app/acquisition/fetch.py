@@ -40,8 +40,8 @@ class Downloaded:
     kind: str = "pdf"   # pdf | zip
 
 
-async def check_url(url: str, robots: Robots) -> None:
-    if not host_allowed(url):
+async def check_url(url: str, robots: Robots, allowed=host_allowed) -> None:
+    if not allowed(url):
         raise FetchError(f"not https on an allowlisted domain: {url}")
     ok, why = await robots.allowed(url)
     if not ok:
@@ -67,20 +67,21 @@ def document_link(html: str, page_url: str) -> str | None:
 
 
 async def download_pdf(url: str, dest: Path, http: httpx.AsyncClient, robots: Robots,
-                       max_bytes: int = MAX_BYTES, timeout: httpx.Timeout = TIMEOUT) -> Downloaded:
+                       max_bytes: int = MAX_BYTES, timeout: httpx.Timeout = TIMEOUT, allowed=host_allowed) -> Downloaded:
     """The file is accepted by what it is (PDF or ZIP bytes; the address often has no .pdf). A landing page (HTML)
-    is followed one hop to the same site's document link; every hop passes the allowlist and robots.txt."""
+    is followed one hop to the same site's document link; every hop passes the allowlist and robots.txt.
+    `allowed`: the domain check for every hop (an open-web result: review.open_web_trusted)."""
     try:
-        return await _download(url, dest, http, robots, max_bytes, timeout)
+        return await _download(url, dest, http, robots, max_bytes, timeout, allowed)
     except httpx.HTTPError as e:          # a slow or broken server is a failed fetch, not a crash
         raise FetchError(f"{type(e).__name__} from the server") from e
 
 
 async def _download(url: str, dest: Path, http: httpx.AsyncClient, robots: Robots, max_bytes: int,
-                    timeout: httpx.Timeout) -> Downloaded:
+                    timeout: httpx.Timeout, allowed=host_allowed) -> Downloaded:
     current, hopped = url, False
     for _ in range(MAX_REDIRECTS + 2):
-        await check_url(current, robots)
+        await check_url(current, robots, allowed)
         async with http.stream("GET", current, headers={"User-Agent": USER_AGENT,
                                                         "Accept": "application/pdf, application/zip, */*;q=0.5"},
                                follow_redirects=False, timeout=timeout) as resp:

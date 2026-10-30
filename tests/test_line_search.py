@@ -85,3 +85,15 @@ def test_page_search_gets_the_printed_rows_its_key_terms_name(conn) -> None:
     igr = line_evidence(conn, Plan("IGR target for 2026", [], ["budget-2026-approved"],
                                    key_terms=["Independent Revenue"]), [])
     assert igr and igr[0].doc_id == "budget-2026-approved" and "INDEPENDENT REVENUE" in igr[0].text
+
+
+def test_an_acronym_gets_the_budgets_own_expansion_last(monkeypatch) -> None:
+    from app.retrieval import line_search as ls
+    assert ls.initials("Information Communication and Technology - General") == "ICT"
+    monkeypatch.setattr(ls, "_initials_cache", {"ICT": ["Information Communication and Technology"],
+                                                 "LGA": ["Local Government Audit"]})
+    terms = ["ICT and Innovation", "Total Expenditure"]
+    assert ls.expand_acronyms(None, terms) == terms + ["Information Communication and Technology"]
+    full = [f"term {i}" for i in range(ls.MAX_TERMS - 1)] + ["LGA projects"]
+    assert ls.expand_acronyms(None, full) == full                  # no room: the planner's terms stay
+    assert ls.expand_acronyms(None, ["LGA projects"])[-1] == "Local Government Audit"     # room: added last

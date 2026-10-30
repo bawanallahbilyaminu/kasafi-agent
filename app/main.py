@@ -48,6 +48,22 @@ _crawler: set = set()
 
 
 @app.on_event("startup")
+async def _load_approved_domains() -> None:
+    # Domains approved on /admin/review (open-web results) are fetchable from startup on.
+    import psycopg
+
+    from app.acquisition.review import load_approved
+    from app.config import get_settings
+    s = get_settings()
+    if s.has_database:
+        try:
+            with psycopg.connect(s.db_url(), connect_timeout=5) as conn:
+                load_approved(conn)
+        except psycopg.Error:
+            logging.getLogger(__name__).warning("approved domains not loaded")
+
+
+@app.on_event("startup")
 async def _crawl_libraries() -> None:
     # The registry's crawled libraries (Sokoto State Bureau of Statistics): new documents indexed weekly.
     import asyncio

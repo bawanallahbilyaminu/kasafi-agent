@@ -4,7 +4,8 @@
 - /admin/traces/{id}       one answer step by step: plan, search, the two model readings side by side, what code
                            verified and kept, citations, timings and the reply
 - /admin/review            the review queue: open gaps (questions Kasafi couldn't answer or documents it couldn't
-                           find) and flagged answers, each with a button to close it
+                           find), domains awaiting approval (open-web results on sites outside the allowlist and
+                           the trusted patterns) and flagged answers, each with a button to close it
 
 HTTP basic auth with ADMIN_USER / ADMIN_PASSWORD; without both the pages don't exist (404). Traces and gaps hold
 no phone number or user key. Every value shown is escaped (questions and document text are untrusted), and form
@@ -223,6 +224,18 @@ def review_queue(_: None = Depends(admin), settings: Settings = Depends(get_sett
         flagged = conn.execute("SELECT id, created_at, question, outcome, trace->'flags' FROM traces "
                                "WHERE review = 'open' AND jsonb_array_length(trace->'flags') > 0 "
                                "ORDER BY id DESC LIMIT 200").fetchall()
+        try:
+            domains = conn.execute("SELECT domain, last_seen, hits, question, url, title FROM domain_reviews "
+                                   "WHERE status = 'awaiting' ORDER BY last_seen DESC LIMIT 200").fetchall()
+        except psycopg.errors.UndefinedTable:          # before migration 0010
+            domains = []
+    domain_rows = "".join(
+        f'<tr><td><b>{e(d)}</b><div class="small mute">{hits}× · last {c:%b %d %H:%M}</div></td>'
+        f'<td class="q">{e(q)}</td><td class="small">{e(t or "-")}<div class="mute">{e(u)}</div></td><td>'
+        + "".join(f'<form class="inline" method="post" action="/admin/domains/{e(d)}?status={v}">'
+                  f'<button class="{k}">{n}</button></form> '
+                  for v, n, k in (("approved", "Approve", "good"), ("rejected", "Reject", "")))
+        + "</td></tr>" for d, c, hits, q, u, t in domains)
     gap_rows = "".join(
         f'<tr><td class="small mute">{c:%b %d %H:%M}</td><td class="q">{e(q)}'
         f'<div class="small mute">{e(json.dumps(d, ensure_ascii=False)[:300]) if d else ""}</div></td>'
@@ -241,6 +254,12 @@ def review_queue(_: None = Depends(admin), settings: Settings = Depends(get_sett
             f'<div class="card scroll"><h2>Gaps ({len(gaps)} open)</h2><table><tr><th>When</th><th>Question</th>'
             f'<th>Reason</th><th>Missing document</th><th></th></tr>'
             f'{gap_rows or "<tr><td colspan=5>No open gaps.</td></tr>"}</table></div>'
+            f'<div class="card scroll"><h2>Domains awaiting approval ({len(domains)})</h2><p class="mute small">'
+            f'Open-web results on sites outside the allowlist and the trusted patterns (*.gov.ng, *.int, UN '
+            f'domains, the World Bank): nothing was fetched from them. Approving makes the domain fetchable now; '
+            f'add it to data/source_registry.yaml too so it survives a fresh database.</p><table><tr><th>Domain</th>'
+            f'<th>Question that needed it</th><th>Document found</th><th></th></tr>'
+            f'{domain_rows or "<tr><td colspan=4>Nothing awaiting.</td></tr>"}</table></div>'
             f'<div class="card scroll"><h2>Flagged answers ({len(flagged)} to check)</h2><table><tr><th>When</th>'
             f'<th>Question</th><th>Outcome</th><th>Why</th></tr>'
             f'{trace_rows or "<tr><td colspan=4>Nothing flagged.</td></tr>"}</table></div>')
@@ -255,4 +274,18 @@ def close_gap(gid: int, request: Request, status: str, _: None = Depends(admin),
         raise HTTPException(400)
     with _conn(settings) as conn:
         conn.execute("UPDATE gaps SET status = %s WHERE id = %s", (status, gid))
+    return RedirectResponse("/admin/review", 303)
+
+
+@router.post("/domains/{domain}")
+def review_domain(domain: str, request: Request, status: str, _: None = Depends(admin),
+                  settings: Settings = Depends(get_settings)) -> RedirectResponse:
+    """Approve (fetchable from now on) or reject a domain an open-web result was on."""
+    same_site(request)
+    if status not in ("approved", "rejected"):
+        raise HTTPException(400)
+    from app.acquisition.review import load_approved
+    with _conn(settings) as conn:
+        conn.execute("UPDATE domain_reviews SET status = %s WHERE domain = %s", (status, domain))
+        load_approved(conn)
     return RedirectResponse("/admin/review", 303)

@@ -425,3 +425,29 @@ def test_a_budget_question_runs_line_search_and_page_search_together(monkeypatch
                                          client_factory=Client))
     assert a.text.startswith("Government House overhead") and set(started) == {"lines", "pages"}
     assert plan.line_search["terms"][:2] == ["Government House", "Overhead"]
+
+
+def test_a_complete_preferred_path_stops_the_other() -> None:
+    import asyncio
+    stopped = []
+
+    async def lines():
+        return ans.Answer("lines", True, True)
+
+    async def pages():
+        try:
+            await asyncio.sleep(5)
+        except asyncio.CancelledError:
+            stopped.append("pages")
+            raise
+    la, pa = asyncio.run(ans.first_complete(lines(), pages(), prefer_lines=True))
+    assert la.text == "lines" and pa is None and stopped == ["pages"]
+
+    async def half():
+        return ans.Answer("half", True, True, partial=True)
+
+    async def full_pages():
+        await asyncio.sleep(0.01)
+        return ans.Answer("pages", True, True)
+    la, pa = asyncio.run(ans.first_complete(half(), full_pages(), prefer_lines=True))   # partial: wait for pages
+    assert ans.better_answer(la, pa, prefer_lines=True).text == "pages"

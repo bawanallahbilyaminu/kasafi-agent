@@ -36,15 +36,49 @@ BASE_ALLOWLIST = (
 ALLOWLIST = tuple(dict.fromkeys(BASE_ALLOWLIST + tuple(registry().domains())))
 BLOCKED = tuple(registry().blocked())          # probed unreachable or disallowed: never fetched
 
+# Open-web results (docs/question-planning.md §5) are fetched without review only from these patterns: Nigerian
+# government (*.gov.ng), treaty organisations (*.int: who.int, iom.int, reliefweb.int ...), the UN system's own
+# domains and the World Bank. Partner-hint websites join only once they have a dated check in the registry's
+# domain_checks (trusted_hint_sites). Any other domain is queued for a person (app/acquisition/review.py).
+TRUSTED_SUFFIXES = ("gov.ng", "int")
+TRUSTED_DOMAINS = (
+    "un.org", "undp.org", "mptf.undp.org", "jointsdgfund.org", "unicef.org", "wfp.org", "ilo.org", "fao.org",
+    "unfpa.org", "unhcr.org", "unocha.org", "unwomen.org", "unesco.org", "unops.org", "worldbank.org",
+)
+APPROVED: set[str] = set()                     # approved on the admin page; loaded from domain_reviews at startup
 
-def host_allowed(url: str, allowlist: tuple[str, ...] = ALLOWLIST) -> bool:
+
+def _host(url: str) -> str | None:
     parts = urllib.parse.urlsplit(url)
     if parts.scheme != "https" or not parts.hostname or parts.username or parts.port not in (None, 443):
+        return None
+    return parts.hostname.lower().rstrip(".")
+
+
+def _under(host: str, domains) -> bool:
+    return any(host == d or host.endswith("." + d) for d in domains)
+
+
+def host_allowed(url: str, allowlist: tuple[str, ...] = ALLOWLIST) -> bool:
+    host = _host(url)
+    if host is None or _under(host, BLOCKED):     # e.g. ilostat.ilo.org: robots.txt says no
         return False
-    host = parts.hostname.lower().rstrip(".")
-    if any(host == d or host.endswith("." + d) for d in BLOCKED):     # e.g. ilostat.ilo.org: robots.txt says no
+    return _under(host, allowlist) or _under(host, APPROVED)
+
+
+def trusted(url: str, hint_sites: tuple[str, ...] = ()) -> bool:
+    """An open-web result we may fetch without review: allowlisted, approved, or on a trusted pattern."""
+    host = _host(url)
+    if host is None or _under(host, BLOCKED):
         return False
-    return any(host == d or host.endswith("." + d) for d in allowlist)
+    return (host_allowed(url) or _under(host, TRUSTED_DOMAINS) or _under(host, hint_sites)
+            or any(host.endswith("." + s) for s in TRUSTED_SUFFIXES))
+
+
+def site_of(url: str) -> str:
+    """The domain a person approves: the host without 'www.'."""
+    host = _host(url) or ""
+    return host[4:] if host.startswith("www.") else host
 
 
 def https_url(url: str) -> str:

@@ -153,6 +153,43 @@ def _clean(term: str) -> str:
     return " ".join(term.replace("%", " ").replace("_", " ").split())[:80]
 
 
+_ACRONYM = re.compile(r"\b[A-Z]{2,6}\b")
+_MINOR = {"and", "of", "the", "for", "in", "on", "to", "&"}
+_initials_cache: dict[str, list[str]] = {}
+
+
+def initials(name: str) -> str:
+    """'Information Communication and Technology - General' -> 'ICT' (the part before ' - ', minor words out)."""
+    words = re.findall(r"[A-Za-z]+", name.split(" - ")[0])
+    return "".join(w[0] for w in words if w.lower() not in _MINOR).upper()
+
+
+def acronym_names(conn: psycopg.Connection) -> dict[str, list[str]]:
+    """Every printed budget line name by its initials, built once: the budget's own expansion of an acronym."""
+    if not _initials_cache:
+        for (name,) in conn.execute("SELECT DISTINCT split_part(name, ' - ', 1) FROM budget_lines "
+                                    "WHERE length(name) BETWEEN 8 AND 120").fetchall():
+            name = re.sub(r"^\d+\s+", "", " ".join(name.split()))          # a leading code is not part of it
+            if len(key := initials(name)) >= 2 and name not in _initials_cache.get(key, []):
+                _initials_cache.setdefault(key, []).append(name)
+    return _initials_cache
+
+
+def expand_acronyms(conn: psycopg.Connection, terms: list[str], *, room: int = MAX_TERMS, most: int = 2) -> list[str]:
+    """Terms with an acronym in them ('ICT and Innovation') get the names the budgets print it as ('Information
+    Communication and Technology') when the planner didn't give the expansion itself. They go last (the lowest
+    weight), only in the room the planner's terms leave: an initials match can be wrong ('LGA' -> 'Local
+    Government Audit'), so it only adds lines to read, never displaces the planner's terms."""
+    terms = terms[:room]
+    if len(terms) >= room:
+        return terms
+    names = acronym_names(conn)
+    have = " ".join(terms).lower()
+    extra = list(dict.fromkeys(n for t in terms for a in _ACRONYM.findall(t)
+                               for n in sorted(names.get(a, []), key=len)[:most] if n.lower() not in have))
+    return terms + extra[:min(most, room - len(terms))]
+
+
 def _newest_first(x: Line) -> tuple:
     return (-int(x.edition[:4]) if x.edition[:4].isdigit() else 0, x.page)
 
@@ -220,25 +257,28 @@ def named_project(x: Line) -> bool:
 
 
 def cover(lines: list[Line], terms: list[str], per_term: int = PER_TERM,
-          per_term_projects: int = PER_TERM_PROJECTS) -> list[Line]:
+          per_term_projects: int = PER_TERM_PROJECTS, years: list[int] | None = None) -> list[Line]:
     """Every term's best `per_term` distinct names first (by name, row or code descriptions), and its best
     `per_term_projects` projects named by it, then the lines found by meaning alone (keyword score 0), then the
     rest in order: one broad term printed in many tables can't keep another term's lines out of what the model
     reads, and its summary rows (sector, ministry and item totals, printed in every table and report) can't keep
     out the projects it names ("housing": HOUSING, Ministry of Lands and Housing, ... and "Construction of 500
-    Housing Estate at Wajekke")."""
+    Housing Estate at Wajekke"). Several years asked: each year's budget gets its own best names (a 2025 and a
+    2026 total of one sector are both read)."""
     first: list[Line] = []
     ids: set[str] = set()
+    each_year = [str(y) for y in years or []] if len(years or []) >= 2 else [""]
 
     def take(t: str, match, most: int) -> None:
-        names: set[str] = set()
-        for x in lines:
-            if len(names) >= most:
-                break
-            if x.id not in ids and name_key(x) not in names and match(x, t):
-                first.append(x)
-                ids.add(x.id)
-                names.add(name_key(x))
+        for y in each_year:
+            names: set[str] = set()
+            for x in lines:
+                if len(names) >= most:
+                    break
+                if x.id not in ids and y in x.doc_id and name_key(x) not in names and match(x, t):
+                    first.append(x)
+                    ids.add(x.id)
+                    names.add(name_key(x))
 
     for t in (t.lower() for t in terms):
         take(t, lambda x, t: t in f"{x.name} {x.row_text} {x.context}".lower(), per_term)
@@ -257,7 +297,8 @@ def search_lines(conn: psycopg.Connection, terms: list[str], *, year: int | None
     At most `per_doc_name` copies of one line per document (the same agency is printed in many tables), so one
     item can't fill the list the model reads.
     """
-    terms = list(dict.fromkeys(t for t in (_clean(t) for t in terms) if len(t) >= 3))[:MAX_TERMS]
+    terms = list(dict.fromkeys(t for t in (_clean(t) for t in terms) if len(t) >= 3))
+    terms = expand_acronyms(conn, terms)
     if not terms:
         return []
     years = list(years or []) + ([year] if year else [])
@@ -277,7 +318,7 @@ def search_lines(conn: psycopg.Connection, terms: list[str], *, year: int | None
         if copies[key] < per_doc_name:
             copies[key] += 1
             kept.append(x)
-    lines = (cover(kept, terms) if question else kept)[:limit]
+    lines = (cover(kept, terms, years=years) if question else kept)[:limit]
     if lines:
         by_id = {x.id: x for x in lines}
         for lid, col, yr, measure, period, amount in conn.execute(

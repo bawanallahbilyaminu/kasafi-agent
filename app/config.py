@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     kasafi_allow_security_budget: bool = False
     # Reasoning effort for the answer planner (speed vs accuracy; see evals/run_answer_eval.py)
     kasafi_plan_reasoning: str = "minimal"   # same eval score as "low", median 7.9 s vs 9.9 s (Oct 27)
+    # ... and for Muse Spark's budget-line readings (Open always reasons): "minimal" is ~3 s faster (Oct 30)
+    kasafi_read_reasoning: str = "minimal"
     # How long a read-back question waits for Eh / A'a / a correction
     kasafi_pending_ttl_minutes: int = 15
 
