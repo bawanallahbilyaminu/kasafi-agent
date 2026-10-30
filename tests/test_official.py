@@ -129,10 +129,29 @@ def test_an_outbreak_row_gives_its_epi_week_period_and_page() -> None:
     a = official.outbreak_answer(Conn(outbreaks={"csm": CSM}), "Any meningitis in Sokoto now?", "en",
                                  date(2026, 10, 30))
     assert a.found and "*Meningitis (CSM)*: NCDC report for epi week 14 2025 (05 Apr 2025): Sokoto 450 suspected, " \
-                       "41 confirmed, 47 deaths (period in the report: “from Epi week 40 2024, - week 13 2025”)." in a.text
+                       "41 confirmed, 47 deaths (totals since week 40 2024)." in a.text
     assert "81 weeks old, so it doesn't show the situation now" in a.text
     assert "please see a health worker" in a.text and "page 4" in a.text
     assert "Lassa" not in a.text                                      # only the disease asked
+
+
+@pytest.mark.parametrize("period, want", [
+    ("Epi-Week 19 2022 - Epi-Week 3 2026", "totals since week 19 2022"),           # diphtheria
+    ("Cumulative (Week 1 - 40 )", "totals for weeks 1-40 of 2026"),                 # Lassa
+    ("Jan to September 2026", "totals for Jan-September 2026"),                    # measles: a month's report
+    ("week 40", "week 40 only"),
+    ("2026 season", "period in the report: “2026 season”"),
+])
+def test_the_period_in_plain_words(period, want) -> None:
+    assert official.period_label("en", period, 2026) == want
+
+
+def test_a_blank_cell_is_not_reported_never_zero() -> None:
+    lassa = (2026, 40, date(2026, 10, 3), "Cumulative (Week 1 - 40 )", 1, None, None, True, 4, NOW)
+    a = official.outbreak_answer(Conn(outbreaks={"lassa": lassa}), "any lassa now?", "en", date(2026, 10, 30))
+    assert "Sokoto 1 suspected, confirmed not reported, deaths not reported (totals for weeks 1-40 of 2026)." in a.text
+    from app.hazards.advisories import _printed
+    assert not _printed(0, "23 Sokoto 1 - 0.0%") and _printed(0, "Sokoto | 1 | 0 | 0.0%")   # cholera 2025 wk 9
 
 
 def test_not_listed_and_never_read() -> None:

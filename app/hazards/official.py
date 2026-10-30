@@ -55,9 +55,13 @@ T = {
            "names": {"cholera": "Cholera", "csm": "Meningitis (CSM)", "lassa": "Lassa fever", "measles": "Measles",
                      "diphtheria": "Diphtheria"},
            "out_head": "🦠 *Disease outbreaks in Sokoto (NCDC situation reports)*",
-           "row": "*{name}*: NCDC report for epi week {week} {year} ({date}): Sokoto {figs} (period in the report: "
-                  "“{period}”).",
+           "row": "*{name}*: NCDC report for epi week {week} {year} ({date}): Sokoto {figs} ({period}).",
            "fig": {"suspected": "{n:,} suspected", "confirmed": "{n:,} confirmed", "deaths": "{n:,} deaths"},
+           "fig_none": {"suspected": "suspected not reported", "confirmed": "confirmed not reported",
+                        "deaths": "deaths not reported"},
+           "periods": {"since": "totals since week {w} {y}", "weeks": "totals for weeks {a}-{b} of {y}",
+                       "months": "totals for {m1}-{m2} {y}", "week": "week {w} only",
+                       "printed": "period in the report: “{p}”"},
            "no_figs": "listed, without figures",
            "not_listed": "*{name}*: Sokoto isn't listed in NCDC's report for epi week {week} {year} ({date}).",
            "none_read": "*{name}*: no NCDC report read yet.",
@@ -95,9 +99,13 @@ T = {
            "names": {"cholera": "Kwalara", "csm": "Sankarau (CSM)", "lassa": "Zazzaɓin Lassa", "measles": "Ƙyanda",
                      "diphtheria": "Mashaƙo (diphtheria)"},
            "out_head": "🦠 *Ɓarkewar cututtuka a Sokoto (rahotannin NCDC)*",
-           "row": "*{name}*: rahoton NCDC na makon epi {week} {year} ({date}): Sokoto {figs} (lokacin a rahoton: "
-                  "“{period}”).",
+           "row": "*{name}*: rahoton NCDC na makon epi {week} {year} ({date}): Sokoto {figs} ({period}).",
            "fig": {"suspected": "{n:,} da ake zargi", "confirmed": "{n:,} da aka tabbatar", "deaths": "{n:,} sun mutu"},
+           "fig_none": {"suspected": "ba a ba da adadin da ake zargi ba", "confirmed": "ba a ba da adadin da aka "
+                        "tabbatar ba", "deaths": "ba a ba da adadin mace-mace ba"},
+           "periods": {"since": "jimilla tun makon {w} {y}", "weeks": "jimilla na makonni {a}-{b} na {y}",
+                       "months": "jimilla na {m1}-{m2} {y}", "week": "makon {w} kawai",
+                       "printed": "lokacin a rahoton: “{p}”"},
            "no_figs": "an lissafa, ba alƙaluma",
            "not_listed": "*{name}*: ba a lissafa Sokoto a rahoton NCDC na makon epi {week} {year} ({date}) ba.",
            "none_read": "*{name}*: ba a karanta rahoton NCDC ba tukuna.",
@@ -259,6 +267,28 @@ def route(question: str, measures: list[str] | None = None) -> str:
     return f"outlook_{which}" if which else ""
 
 
+_SINCE = re.compile(r"(?i)(?:epi[- ]?week|week|wk)\s*(\d{1,2})\s*,?\s*(20\d\d)\s*,?\s*[-–]")
+_WEEKS = re.compile(r"(?i)(?:week|wk)s?\s*(\d{1,2})\s*[-–]\s*(?:week\s*)?(\d{1,2})\b")
+_MONTHS = re.compile(r"(?i)\b(jan\w*|feb\w*|mar\w*|apr\w*|may|jun\w*|jul\w*|aug\w*|sep\w*|oct\w*|nov\w*|dec\w*)\s+"
+                     r"(?:to|-|–)\s+(\w+)\s+(20\d\d)")
+_WEEK = re.compile(r"(?i)^\s*(?:epi[- ]?)?week\s*(\d{1,2})\s*$")
+
+
+def period_label(lang: str, period: str, year: int) -> str:
+    """What a report's figures cover, in plain words: 'totals since week 19 2022', 'totals for weeks 1-40 of 2026',
+    'totals for January-September 2026'; anything else quoted as printed."""
+    p, t = period or "", _t(lang)["periods"]
+    if m := _SINCE.search(p):
+        return t["since"].format(w=int(m.group(1)), y=m.group(2))
+    if m := _MONTHS.search(p):
+        return t["months"].format(m1=m.group(1).capitalize(), m2=m.group(2).capitalize(), y=m.group(3))
+    if m := _WEEKS.search(p):
+        return t["weeks"].format(a=int(m.group(1)), b=int(m.group(2)), y=year)
+    if m := _WEEK.match(p):
+        return t["week"].format(w=int(m.group(1)))
+    return t["printed"].format(p=p)
+
+
 def outbreak_answer(conn, question: str, lang: str, today: date) -> OfficialAnswer:
     t = _t(lang)
     out, sources, found = [t["out_head"]], [], False
@@ -276,10 +306,10 @@ def outbreak_answer(conn, question: str, lang: str, today: date) -> OfficialAnsw
         if not listed:
             out.append(t["not_listed"].format(name=name, week=week, year=year, date=when))
         else:
-            figs = [t["fig"][k].format(n=v) for k, v in (("suspected", sus), ("confirmed", conf), ("deaths", deaths))
-                    if v is not None]
-            out.append(t["row"].format(name=name, week=week, year=year, date=when, period=period,
-                                       figs=", ".join(figs) or t["no_figs"]))
+            figs = [t["fig"][k].format(n=v) if v is not None else t["fig_none"][k]   # a blank cell is never 0
+                    for k, v in (("suspected", sus), ("confirmed", conf), ("deaths", deaths))]
+            out.append(t["row"].format(name=name, week=week, year=year, date=when, period=period_label(lang, period, year),
+                                       figs=", ".join(figs)))
             sources.append(t["src_row"].format(name=name, week=week, year=year, page=page))
         if rdate and (weeks := (today - rdate).days // 7) >= 8:
             checked = last_checked(conn, "ncdc")
