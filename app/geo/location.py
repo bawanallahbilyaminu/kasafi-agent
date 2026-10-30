@@ -105,6 +105,24 @@ def pin_of(msg: dict[str, Any]) -> tuple[float, float] | None:
     return (lat, lon) if -90 <= lat <= 90 and -180 <= lon <= 180 else None
 
 
+async def place_from_text(settings, text: str) -> Spot | None:
+    """A Sokoto place a message names (gazetteer, in a thread), as a Spot; None if none or no database."""
+    import asyncio
+
+    import psycopg
+    if not settings.has_database:
+        return None
+
+    def run():
+        with psycopg.connect(settings.db_url(), connect_timeout=5) as conn:
+            found = area_from_text(conn, text)
+            return found[1] if found else None
+    try:
+        return await asyncio.to_thread(run)
+    except Exception:            # noqa: BLE001 - the gazetteer down: the message is handled as usual
+        return None
+
+
 def area_from_text(conn, text: str, last_lga: str | None = None):
     """The place a message means, as an Area (and a point when the gazetteer has one): a place it names (an LGA,
     ward, town or village, from our own gazetteer), else 'here' / 'a nan' with the LGA on file. None when neither."""

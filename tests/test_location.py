@@ -67,6 +67,24 @@ def test_share_my_location_sends_the_request_button() -> None:
     assert out[-1].location_request and out[-1].text.startswith("Tap the button below to share your location")
 
 
+def test_after_the_request_a_typed_place_is_the_location() -> None:
+    s, store = make_settings(), UserStore(":memory:")
+    key = consented(store, s)
+
+    async def gazetteer(settings, text):
+        return Spot(13.43, 5.66, "NG034006", "Goronyo", how="place") if "goronyo" in text.lower() else None
+    say = lambda body: asyncio.run(handle({"from": "2348000000001", "id": "w", "type": "text",       # noqa: E731
+                                           "text": {"body": body}}, None, store=store, settings=s,
+                                          locate_fn=located, place_fn=gazetteer, answer_fn=None))
+    say("share my location")
+    out = say("Goronyo")
+    assert out[-1].text.startswith("📍 Got it: you're in Goronyo LGA") and store.get_last_lga(key) == "NG034006"
+    assert memory.recall(key).how == "place"
+    out = say("Goronyo")                       # no request pending: an ordinary message, not a location
+    assert not out[-1].text.startswith("📍")
+    memory.forget(key)
+
+
 def test_before_consent_a_pin_gets_the_consent_notice_and_no_lookup() -> None:
     s, store = make_settings(), UserStore(":memory:")
     looked = []

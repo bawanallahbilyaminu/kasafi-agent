@@ -26,7 +26,7 @@ import httpx
 
 from app.config import Settings
 from app.data_rights import DELETED_REPLY, delete_user_data, is_delete_command
-from app.geo.location import SHARE, Spot, locate_point, pin_of
+from app.geo.location import SHARE, Spot, locate_point, pin_of, place_from_text
 from app.geo.location import memory as location_memory
 from app.guardrails import scope
 from app.guardrails.emergency import EMERGENCY_REPLY, is_medical_emergency
@@ -92,6 +92,7 @@ AnswerFn = Callable[..., Awaitable[str]]
 _DEFAULT = object()   # answer_fn default: answer from the documents when a database is configured
 NotifyFn = Callable[[Out], Awaitable[None]]
 LocateFn = Callable[..., Awaitable[Any]]          # (settings, lat, lon) -> app.geo.Area | None
+PlaceFn = Callable[..., Awaitable[Any]]           # (settings, text) -> app.geo.location.Spot | None
 
 
 async def _no_notify(out: Out) -> None:
@@ -101,7 +102,8 @@ async def _no_notify(out: Out) -> None:
 async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Settings,
                  voice_fn: VoiceFn = reply_for_voice, notify: NotifyFn = _no_notify,
                  resolve_fn: ResolveFn = resolve, guard_fn: GuardFn = scope.check,
-                 answer_fn: AnswerFn | None | object = _DEFAULT, locate_fn: LocateFn = locate_point) -> list[Out]:
+                 answer_fn: AnswerFn | None | object = _DEFAULT, locate_fn: LocateFn = locate_point,
+                 place_fn: PlaceFn = place_from_text) -> list[Out]:
     """Returns the replies to send. `notify` sends a message right away (the "listening" ack)."""
     sender, kind = msg.get("from", ""), msg.get("type")
     text = (msg.get("text") or {}).get("body", "") if kind == "text" else ""
@@ -151,6 +153,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     # a location pin, or "share my location": handled here (PostGIS, no model); the point stays in memory only
     if kind == "location" or (text and SHARE.search(text)):
         return await _location(msg, key, lang, store, settings, locate_fn)
+    # the reply to "share your location, or tell me your LGA or town": a typed place, from our own gazetteer
+    if text and location_memory.waiting_question(key) is not None:
+        if (typed := await place_fn(settings, text)) is not None:
+            return _located(key, lang, store, typed)
     if (images := IMAGE_COMMANDS.get(_norm(text))) is not None:     # "images off" / "kashe hotuna": no model needed
         store.set_images(key, images)
         return [Out(t("images_on" if images else "images_off", lang))]
@@ -344,6 +350,7 @@ async def _location(msg: dict[str, Any], key: str, lang: str, store: UserStore, 
     outs = [Out(t("location_notice", lang))] if store.location_notice_due(key) else []
     pin = pin_of(msg)
     if pin is None:
+        location_memory.wait_for_location(key, "")      # the next message may be a typed place
         return outs + [Out(t("location_request", lang), lang=lang, location_request=True)]
     try:
         area = await locate_fn(settings, *pin)
@@ -353,11 +360,16 @@ async def _location(msg: dict[str, Any], key: str, lang: str, store: UserStore, 
     if area is None:
         log.info("location: outside Sokoto (pin)")
         return outs + [Out(t("location_outside", lang))]
-    location_memory.remember(key, Spot(pin[0], pin[1], area.lga_pcode, area.lga, area.ward))
-    store.set_last_lga(key, area.lga_pcode)
-    log.info("location: %s LGA (pin)", area.lga)
-    ward = t("location_ward", lang, ward=area.ward) if area.ward else ""
-    return outs + [Out(t("location_got", lang, lga=area.lga, ward=ward))]
+    return outs + _located(key, lang, store, Spot(pin[0], pin[1], area.lga_pcode, area.lga, area.ward))
+
+
+def _located(key: str, lang: str, store: UserStore, spot: Spot) -> list[Out]:
+    """A place found (a pin or a typed place): the point in memory, the LGA on the user record and in the log."""
+    location_memory.remember(key, spot)
+    store.set_last_lga(key, spot.lga_pcode)
+    log.info("location: %s LGA (%s)", spot.lga, spot.how)
+    ward = t("location_ward", lang, ward=spot.ward) if spot.ward else ""
+    return [Out(t("location_got", lang, lga=spot.lga, ward=ward))]
 
 
 async def _guarded(texts: list[str], lang: str, guard_fn: GuardFn, settings: Settings) -> Out | None:
