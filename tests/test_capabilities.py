@@ -66,3 +66,53 @@ def test_a_state_idp_figure_is_answered_side_by_side_unless_dtm_is_named() -> No
     assert not ans.named_dtm(plan)
     plan = ans.Plan("How many IDPs are in Sokoto according to IOM?", ["IDPs"], [], original="IDPs according to IOM?")
     assert ans.named_dtm(plan)
+
+
+class _Conn:
+    """perf_items has 2026 up to Q2 only."""
+    def execute(self, sql, params=()):
+        q = 2 if "max(quarter)" in sql and params == (2026,) else None
+        return type("R", (), {"fetchone": lambda _s: (q,)})()
+
+
+def test_a_partial_structured_answer_names_each_missing_cell_with_what_exists() -> None:
+    sbs = Entity("sub_agency", "State Bureau of Statistics", "State Bureau of Statistics", "023800400100")
+    cells = [Cell("actual_ytd", sbs, "state", "personnel", 2026, 2, value=Decimal("22835577.27"), source="BIR Q2, p. 20"),
+             Cell("actual_ytd", sbs, "state", "personnel", 2026, 3),
+             Cell("approved", sbs, "state", "personnel", 2023)]
+    text, _ = ans.write_budget_cells(Need("q"), cells, "en", _Conn())
+    assert "• Personnel (salaries): spent so far (Q1–Q2) ₦22.84 million" in text
+    assert "Not in the documents:" in text
+    assert "State Bureau of Statistics Personnel (salaries) 2026 spent so far (Q1–Q3): the latest implementation " \
+           "report is Q2 2026" in text
+    assert "the 2023 budget isn't in the library (approved budgets: 2024–2026)" in text
+
+
+def test_the_structured_partial_is_kept_unless_the_text_paths_answer_fully() -> None:
+    held = ans.Answer("held", True, True, partial=True)
+    assert ans.keep_better(ans.Answer("text", True, True), held).text == "text"
+    assert ans.keep_better(ans.Answer("none", False, True), held).text == "held"
+    assert ans.keep_better(ans.Answer("half", True, True, partial=True), held).text == "held"
+    assert ans.keep_better(ans.Answer("none", False, True), None).text == "none"
+
+
+def test_a_level_nothing_reports_is_a_coverage_gap_not_not_found() -> None:
+    need = Need("q", measures=["idp_count"], geo_level="town", topics=["displacement_humanitarian"])
+    gap = ans.level_gap(need, "en")
+    assert gap.startswith("ℹ️ IDPs figures are published by LGA and statewide;") and "covers only Sokoto town" in gap
+    assert ans.level_gap(Need("q", measures=["idp_count"], geo_level="lga", topics=["displacement_humanitarian"]),
+                         "en") == ""
+
+
+def test_the_time_budget_keeps_what_was_verified(monkeypatch) -> None:
+    import asyncio
+    held = ans.Answer("held partial", True, True, partial=True)
+
+    async def slow(question, lang, conn, box=None, **kw):
+        plan = ans.Plan("q", ["q"], [])
+        plan.held = held
+        box["plan"] = plan
+        await asyncio.sleep(1)
+    monkeypatch.setattr(ans, "_answer_question", slow)
+    monkeypatch.setattr(ans, "LOOP_BUDGET_S", 0.05)
+    assert asyncio.run(ans.answer_question("q", "en", None)).text == "held partial"

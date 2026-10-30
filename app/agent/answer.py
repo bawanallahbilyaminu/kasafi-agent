@@ -363,6 +363,7 @@ class Plan:
     statistics: bool = False                            # asks for statistics on a topic, not budget money
     topic: str = ""                                     # the planner's registry topic (synonyms are tried first)
     need: Need | None = None                            # the information need, checked (app/agent/need.py)
+    held: "Answer | None" = None                        # a structured partial answer, kept if text does no better
     original: str = ""                                  # the message as sent (english_question is standalone)
 
     def assumption_for(self, lang: str) -> str:
@@ -881,19 +882,41 @@ REPHRASE = {
 }
 
 
+LOOP_BUDGET_S = 120.0       # the whole plan -> act -> check loop (a topic sweep has its own ~90 s inside it)
+
+TIMED_OUT = {
+    "ha": "Na ɗauki lokaci mai tsawo ina nema ban gama ba. Don Allah a sake tambaya nan gaba kaɗan.",
+    "en": "Looking this up took too long and I didn't finish. Please ask again in a little while.",
+}
+
+
 async def answer_question(question: str, lang: str, conn: psycopg.Connection, **kw) -> Answer:
-    """Never crash on a malformed model reply: after one retry, ask the user to rephrase."""
+    """The loop around the paths: never crash on a malformed model reply (after one retry, ask the user to
+    rephrase); keep a structured partial answer when the text paths do no better; say where a figure exists
+    when nothing answers at the asked level; stop at the time budget with whatever was verified."""
+    box: dict = {}
     try:
-        return await _answer_question(question, lang, conn, **kw)
+        a = await asyncio.wait_for(_answer_question(question, lang, conn, box=box, **kw), timeout=LOOP_BUDGET_S)
     except ReplyError:
         log.warning("no usable model reply for a question; asked to rephrase")
         return Answer(REPHRASE.get(lang, REPHRASE["en"]), False, True)
+    except asyncio.TimeoutError:
+        plan = box.get("plan")
+        log.warning("the answer loop ran out of its %.0f s budget", LOOP_BUDGET_S)
+        if plan is not None and plan.held is not None:
+            return plan.held
+        return Answer(TIMED_OUT.get(lang, TIMED_OUT["en"]), False, True, plan=plan)
+    plan = a.plan
+    a = keep_better(a, plan.held if plan is not None else None)
+    if not a.found and not a.clarify and plan is not None and (gap := level_gap(plan.need, lang)):
+        a.text = f"{a.text}\n\n{gap}"
+    return a
 
 
 async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *, settings: Settings | None = None,
                            client_factory: type[MetaClient] = MetaClient, notify: Notify | None = None,
                            acquire_fn=None, latest_fn=None, today: date | None = None,
-                           history: list[dict] | None = None) -> Answer:
+                           history: list[dict] | None = None, box: dict | None = None) -> Answer:
     settings = settings or get_settings()
     today = today or lagos_today()
     t: dict[str, float] = {}
@@ -905,6 +928,8 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         plan = await plan_question(question, load_catalog(conn), client, settings, today, history, lang,
                                    names_for(conn) if conn is not None else None)
         t["plan"] = time.perf_counter() - t0
+        if box is not None:
+            box["plan"] = plan            # the loop's budget can stop us; it keeps what was verified
         if plan.clarify and plan.followup == "none":          # two readings, both can't be shown: ask
             return Answer(plan.clarify["question"], False, True, plan=plan, timings=t,
                           clarify=plan.clarify["options"])
@@ -1171,10 +1196,69 @@ def _struct_money(x, lang: str) -> str:
     return readable_amounts(f"₦{Decimal(x):,.2f}", lang)
 
 
-def write_budget_cells(need: Need, cells: list, lang: str) -> tuple[str, str]:
+GAP_WORDS = {
+    "en": {"missing": "Not in the documents:", "latest_q": "the latest implementation report is Q{q} {y}",
+           "no_report": "no implementation report for {y} in the library yet",
+           "no_budget": "the {y} budget isn't in the library (approved budgets: {years})",
+           "no_line": "the budget prints no line by that name", "no_split": "the budget prints no {split} line for it",
+           "no_lga": "IOM DTM has no figure for {name} ({k} LGAs reported)",
+           "level": "ℹ️ {what} figures are published {levels}; {narrow} covers only {level}.",
+           "levels": {"lga": "by LGA", "state": "statewide", "town": "Sokoto town", "zone": "by zone"}},
+    "ha": {"missing": "Ba a cikin takardun ba:", "latest_q": "rahoton aiwatarwa mafi sabo shi ne Q{q} {y}",
+           "no_report": "babu rahoton aiwatarwa na {y} a ɗakin karatu tukuna",
+           "no_budget": "kasafin {y} ba ya cikin ɗakin karatu (kasafin da ke akwai: {years})",
+           "no_line": "kasafin bai buga layi da wannan suna ba", "no_split": "kasafin bai buga layin {split} nasa ba",
+           "no_lga": "IOM DTM ba ta da adadi na {name} (ƙananan hukumomi {k} ne a rahoton)",
+           "level": "ℹ️ Ana wallafa {what} {levels}; {narrow} ya shafi {level} kaɗai.",
+           "levels": {"lga": "ta ƙaramar hukuma", "state": "ta jiha", "town": "garin Sokoto", "zone": "ta shiyya"}},
+}
+
+
+def gap_reason(conn, c, lang: str, lga_count: int = 0) -> str:
+    """Why a cell is empty, as a coverage fact (the newest period or level that exists), never just 'not found'."""
+    g = GAP_WORDS.get(lang, GAP_WORDS["en"])
+    if c.measure == "idp_count":
+        return g["no_lga"].format(name=c.entity.resolved or c.entity.name, k=lga_count or "-")
+    if not c.entity.code:
+        return g["no_line"]
+    if c.measure == "approved":
+        if c.year not in APPROVED_YEARS:
+            return g["no_budget"].format(y=c.year, years=f"{min(APPROVED_YEARS)}–{max(APPROVED_YEARS)}")
+        return g["no_split"].format(split=STRUCT_WORDS.get(lang, STRUCT_WORDS["en"]).get(c.split or "total", c.split))
+    latest_q = conn.execute("SELECT max(quarter) FROM perf_items WHERE year = %s", (c.year,)).fetchone()[0] \
+        if conn is not None else None
+    if latest_q is None:
+        return g["no_report"].format(y=c.year)
+    if c.quarter and c.quarter > latest_q:
+        return g["latest_q"].format(q=latest_q, y=c.year)
+    return g["no_split"].format(split=STRUCT_WORDS.get(lang, STRUCT_WORDS["en"]).get(c.split or "total", c.split))
+
+
+def level_gap(need: Need, lang: str) -> str:
+    """A level nothing structured reports (IDPs for a town): where the figure is published instead, and which
+    source covers only the narrower area (registry publishers' levels)."""
+    g = GAP_WORDS.get(lang, GAP_WORDS["en"])
+    if not need or not need.measures or not need.topics:
+        return ""
+    struct = [c for c in catalog() if c.kind == "structured" and set(need.measures) & set(c.measures)]
+    levels = sorted({lv for c in struct for lv in c.geo_levels}, key=lambda lv: ("lga", "state").index(lv)
+                    if lv in ("lga", "state") else 9)
+    if not struct or need.geo_level in levels:
+        return ""
+    topic = registry().topics.get(need.topics[0])
+    narrow = [p for p in (topic.publishers if topic else ()) if p.level.startswith(need.geo_level)]
+    what = STRUCT_WORDS.get(lang, STRUCT_WORDS["en"]).get(need.measures[0], need.measures[0])
+    return g["level"].format(what=what, levels=" and ".join(g["levels"].get(lv, lv) for lv in levels),
+                             narrow=", ".join(short_pub(p) for p in narrow) or "-",
+                             level=g["levels"].get(need.geo_level, need.geo_level))
+
+
+def write_budget_cells(need: Need, cells: list, lang: str, conn=None) -> tuple[str, str]:
     """The reply and the exact working for budget_core cells: one line per entity and split, its measures by
-    year (a change between two years computed here, exactly)."""
+    year (a change between two years computed here, exactly); empty cells named with why (gap_reason)."""
     w = STRUCT_WORDS.get(lang, STRUCT_WORDS["en"])
+    missing = [c for c in cells if not c.filled]
+    cells = [c for c in cells if c.filled]
     out, exact = [], []
     for ent in dict.fromkeys(c.entity.resolved or c.entity.name for c in cells):
         mine = [c for c in cells if (c.entity.resolved or c.entity.name) == ent]
@@ -1201,6 +1285,15 @@ def write_budget_cells(need: Need, cells: list, lang: str) -> tuple[str, str]:
                              + f" ({w['calc']})")
                 exact.append(f"{ent} | {split} | change: {diff}")
             out.append(f"• {w.get(split, split)}: " + "; ".join(parts))
+    if missing:                       # partial answers name the missing cells, with the period or line that exists
+        g = GAP_WORDS.get(lang, GAP_WORDS["en"])
+        out.append(g["missing"])
+        for c in missing:
+            label = w.get(c.measure, c.measure).format(q=c.quarter or "")
+            what = " ".join(x for x in (c.entity.resolved or c.entity.name,
+                                        w.get(c.split, "") if c.split not in ("", "total") else "",
+                                        f"{c.year} {label}" if c.year else label) if x)
+            out.append(f"• {what}: {gap_reason(conn, c, lang)}")
     return "\n".join(out), "\n".join(exact)
 
 
@@ -1233,9 +1326,10 @@ def named_dtm(plan: Plan) -> bool:
 
 
 async def structured_answer(conn, plan: Plan, lang: str, settings: Settings, t: dict) -> Answer | None:
-    """When every cell of the question's need goes to one structured tool (budget_core, dtm_api) and the tool
-    fills them all, code answers from the data: no search, no model reading. Otherwise None: the other paths
-    answer (and, from step 3, the loop fills the cells they leave)."""
+    """The loop's first act (docs/question-planning.md §4): the structured tool the need's cells match fills
+    them. All filled: code answers from the data, and no search runs. Some filled: a partial answer naming the
+    empty cells and why is held in plan.held, and the text paths run for the rest. None filled: None."""
+    plan.held = None
     need = plan.need
     if conn is None or need is None or not need.measures or plan.followup == "recheck":
         return None
@@ -1256,22 +1350,36 @@ async def structured_answer(conn, plan: Plan, lang: str, settings: Settings, t: 
         async with httpx.AsyncClient(headers={"User-Agent": "KasafiBot/1.0 (+https://halalnumeriq.com.ng/kasafi)"}) as h:
             filled = await dtm_fill(h, settings, need, cov.cells)
     t["structured"] = time.perf_counter() - t0
-    if not all(c.filled for c in cov.cells):
-        log.info("%s filled %d of %d cells; other paths answer", cap,
-                 sum(c.filled for c in cov.cells), len(cov.cells))
+    n_filled = sum(c.filled for c in cov.cells)
+    if not n_filled:
         return None
     evidence = [Evidence(i, s.doc_id, s.title, None, s.page, "text", s.row_text)
                 for i, s in enumerate(filled.sources, 1)]
     if cap == "budget_core":
-        body, exact = write_budget_cells(need, cov.cells, lang)
+        body, exact = write_budget_cells(need, cov.cells, lang, conn)
         tail = sources_line(evidence, lang)
     else:
-        body = write_dtm_cells(need, cov.cells, filled.api, lang)
+        body = write_dtm_cells(need, [c for c in cov.cells if c.filled], filled.api, lang)
         exact = body
         tail = f"📄 *{ANALYSIS_WORDS.get(lang, ANALYSIS_WORDS['en'])['sources']}:* {filled.api}"
-    log.info("structured answer from %s: %d cells", cap, len(cov.cells))
-    return Answer(f"{body}\n\n{tail}", True, True, evidence, plan, t, exact=f"{body}\n{exact}",
-                  sources=cited_sources(conn, evidence), working=exact)
+    complete = n_filled == len(cov.cells)
+    a = Answer(f"{body}\n\n{tail}", True, True, evidence, plan, t, partial=not complete, exact=f"{body}\n{exact}",
+               sources=cited_sources(conn, evidence), working=exact)
+    log.info("structured %s from %s: %d of %d cells", "answer" if complete else "partial", cap, n_filled,
+             len(cov.cells))
+    if complete:
+        return a
+    plan.held = a                    # the text paths try the rest; this is kept if they do no better
+    return None
+
+
+def keep_better(a: Answer, held: Answer | None) -> Answer:
+    """After the text paths ran for a need the structured tools half filled: their answer if it is complete,
+    else the structured partial (exact values, and the empty cells named with why)."""
+    if held is None or (a.found and a.verified and not a.partial and not a.clarify):
+        return a
+    held.timings = {**held.timings, **a.timings, "kept_structured": 1.0}
+    return held
 
 
 STAT_MEASURES = {"idp_count", "returnee_count", "idp_households", "unemployment_rate", "underemployment_rate",
