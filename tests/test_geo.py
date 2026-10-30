@@ -42,7 +42,7 @@ def test_an_emonc_name_matches_only_on_its_own_place_words() -> None:
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     assert m.score("Binji Gh", "Binji General Hospital") == 1.0                     # the report's abbreviation
-    assert m.score("Margai Health Clinic", "Rara Health Clinic") < 0.5             # 'Health Clinic' alone: no match
+    assert m.score("Margai Health Clinic", "Rara Health Clinic") < m.BAR - 0.2     # 'Health Clinic' alone: no match
     assert m.score("Specialist Hospital", "Shiyar Marina Specialist Hospital") == 0.0   # no place word to match on
     assert m.BAR <= m.score("Maikulki Health Clinic", "Maikulki Health Post") < 1.0     # a kind apart: shown in score
 
