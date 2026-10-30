@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from app.guardrails import scope
-from app.guardrails.emergency import EMERGENCY_REPLY
 from app.providers.chat import ChatResult, ProviderError
 from app.users import UserStore
 from app.whatsapp.corrections import Resolution
@@ -84,7 +83,7 @@ def test_voice_refused_when_only_a_raw_hypothesis_has_the_words() -> None:
 
 def test_medical_emergency_beats_guardrail() -> None:
     outs, _ = run_handle(text(QUESTIONS["15"]["text_ha"]), store=consented())
-    assert outs[0].text == EMERGENCY_REPLY
+    assert outs[0].text.startswith("🚨")
 
 
 def test_non_emergency_medical_advice_is_refused() -> None:

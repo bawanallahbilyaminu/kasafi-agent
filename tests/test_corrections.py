@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.guardrails.emergency import EMERGENCY_REPLY
 from app.providers.chat import ChatResult, ProviderError
 from app.users import UserStore, user_key
 from app.whatsapp.corrections import Resolution, merge_with_model, quick_resolve
@@ -141,14 +140,14 @@ def test_corrected_question_still_passes_the_emergency_check() -> None:
     store = setup_pending()
     q = "Matata tana zubar da jini"
     outs, _ = run_handle(text("matata ce"), store=store, corrections={"matata ce": Resolution("correction", q)})
-    assert outs[0].text == EMERGENCY_REPLY
+    assert outs[0].text.startswith("🚨")
 
 
 def test_emergency_voice_is_not_left_pending() -> None:
     store = UserStore(":memory:")
     run_handle(text("Sannu"), store=store); run_handle(text("OK"), store=store)
     outs, _ = run_handle(voice(), store=store, spoken=heard("Matata tana zubar da jini", confirm=True))
-    assert outs[0].text == EMERGENCY_REPLY and pending_of(store) is None
+    assert outs[0].text.startswith("🚨") and pending_of(store) is None
 
 
 def test_delete_removes_pending_question() -> None:

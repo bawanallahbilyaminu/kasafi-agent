@@ -326,6 +326,40 @@ def location_payload(f: Facility, lang: str) -> dict:
     return {"latitude": f.lat, "longitude": f.lon, "name": f.name[:100], "address": address_of(f, lang)[:100]}
 
 
+def emergency_picks(conn, lat: float, lon: float, maternal: bool) -> list[tuple[str, Facility]]:
+    """For the emergency fast path: for pregnancy or labour, the nearest comprehensive EmONC hospital whose link a
+    person confirmed; otherwise (or when none is confirmed) the nearest general or specialist hospital; then the
+    nearest facility of any level when it is another one. (kind, facility): cemonc | hospital | any."""
+    picks: list[tuple[str, Facility]] = []
+    if maternal and (c := nearest_facilities(conn, lat, lon, Filters(emonc="cemonc", confirmed_only=True), k=1)):
+        picks.append(("cemonc", c[0]))
+    if not picks and (h := nearest_facilities(conn, lat, lon, Filters(levels=("Secondary", "Tertiary")), k=1)):
+        picks.append(("hospital", h[0]))
+    if (a := nearest_facilities(conn, lat, lon, k=1)) and (not picks or a[0].fid != picks[0][1].fid):
+        picks.append(("any", a[0]))
+    return picks
+
+
+def lga_point(conn, pcode: str) -> tuple[float, float] | None:
+    row = conn.execute("SELECT ST_Y(ST_PointOnSurface(geom)), ST_X(ST_PointOnSurface(geom)) FROM lga WHERE pcode = %s",
+                       (pcode,)).fetchone()
+    return (row[0], row[1]) if row else None
+
+
+async def emergency_lookup(settings, lat: float | None, lon: float | None, maternal: bool, lga_pcode: str = ""
+                           ) -> list[tuple[str, Facility]]:
+    """The fast path's picks from a point, or from the LGA's centre when only the LGA is known (no ORS: speed)."""
+    import asyncio
+
+    import psycopg
+
+    def run():
+        with psycopg.connect(settings.db_url(), connect_timeout=3) as conn:
+            point = (lat, lon) if lat is not None else lga_point(conn, lga_pcode)
+            return emergency_picks(conn, *point, maternal) if point else []
+    return await asyncio.to_thread(run)
+
+
 def _query(settings, lat: float, lon: float, filters: Filters, skip: int) -> list[Facility]:
     import psycopg
     with psycopg.connect(settings.db_url(), connect_timeout=5) as conn:

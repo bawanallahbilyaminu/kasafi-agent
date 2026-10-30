@@ -28,7 +28,8 @@ def test_emergency_beats_read_back_and_echo() -> None:
                      confidence="low", needs_confirmation=True)
     assert compose_reply(r) == EMERGENCY_REPLY
     outs, _ = run_handle({"type": "text", "from": "2340000000001", "text": {"body": "My wife is bleeding, what medicine?"}})
-    assert [o.text for o in outs] == [EMERGENCY_REPLY]  # even before consent: local check, no model
+    assert outs[0].text == "🚨 This sounds like an emergency. Get help now."   # before consent: local, no model
+    assert outs[-1].location_request and "medicine" not in " ".join(o.text for o in outs)
 
 
 def test_emergency_found_in_raw_hypothesis_even_if_merge_dropped_it() -> None:

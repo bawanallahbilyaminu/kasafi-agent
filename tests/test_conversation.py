@@ -71,8 +71,8 @@ def test_consent_with_unknown_language_asks_for_it() -> None:
 
 
 def test_emergency_and_delete_work_before_consent() -> None:
-    from app.guardrails.emergency import EMERGENCY_REPLY
-    assert run_handle(text("Matata tana zubar da jini"))[0][0].text == EMERGENCY_REPLY
+    outs = run_handle(text("Matata tana zubar da jini"))[0]
+    assert outs[0].text.startswith("🚨 Wannan yana kama da gaggawa") and outs[-1].location_request
     assert run_handle(text("GOGE BAYANAI NA"))[0][0].text == DELETED_REPLY
 
 

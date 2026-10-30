@@ -75,6 +75,12 @@ class LocationMemory:
         with self._lock:
             self._needs[key] = (question[:1000], time.monotonic())
 
+    def peek_question(self, key: str) -> str | None:
+        """The waiting question, left in place."""
+        with self._lock:
+            hit = self._needs.get(key)
+        return hit[0] if hit and time.monotonic() - hit[1] < self.ttl_s else None
+
     def is_waiting(self, key: str) -> bool:
         with self._lock:
             hit = self._needs.get(key)

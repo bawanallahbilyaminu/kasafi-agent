@@ -2,7 +2,6 @@
 
 import pytest
 
-from app.guardrails.emergency import EMERGENCY_REPLY
 from app.users import UserStore, user_key
 from app.whatsapp.corrections import Resolution
 from app.whatsapp.messages import NOTICE_BUTTONS, t
@@ -129,9 +128,9 @@ def test_out_of_scope_questions_are_never_answered(body: str) -> None:
 def test_emergency_is_never_answered_from_documents() -> None:
     calls = []
     outs, _ = run_handle(text("Matata tana zubar da jini"), store=consented(), answer_calls=calls)
-    assert calls == [] and outs[0].text == EMERGENCY_REPLY
+    assert calls == [] and outs[0].text.startswith("🚨")
     outs, _ = run_handle(voice(), store=consented(), spoken=heard("Matata tana zubar da jini"), answer_calls=calls)
-    assert calls == [] and outs[0].text == EMERGENCY_REPLY
+    assert calls == [] and outs[0].text.startswith("🚨")
 
 
 def test_nothing_is_answered_before_consent() -> None:
