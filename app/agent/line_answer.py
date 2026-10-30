@@ -451,11 +451,16 @@ async def read_lines(question: str, english: str, lang: str, lines: list[Line], 
     return res
 
 
+TOTAL_ASKED = re.compile(r"(?i)\b(?:total|overall|in all|altogether|jimill\w*|gaba ɗaya|gaba daya)\b")
+
+
 def prefer_total(res: LineResult, lines: list[Line], question: str) -> None:
-    """A question that names no kind of spending asks for the total: a reading that picked one kind's row (a
-    sector's capital) takes the same line's total row instead (same code, same column), when it is among the
-    lines. Re-checked by verify; the reading's sentence spoke of the other rows, so it goes."""
-    if names_a_kind(question) or not res.selections:
+    """A question that asks for a total ('jimillar kudin', 'in total') and names no kind of spending: a reading
+    that picked one kind's row (a sector's capital) takes the same line's total row instead (same code, same
+    column), when it is among the lines. A question about an item ('classroom construction for SUBEB') names no
+    kind either, but its capital row is the nearer one: it is left alone. Re-checked by verify; the reading's
+    sentence spoke of the other rows, so it goes."""
+    if names_a_kind(question) or not res.selections or not TOTAL_ASKED.search(question):
         return
     index = {x.id: i for i, x in enumerate(lines, 1)}
     picks, swapped = [], 0

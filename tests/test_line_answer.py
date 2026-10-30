@@ -383,6 +383,9 @@ def test_a_question_naming_no_kind_of_spending_gets_the_lines_total_row() -> Non
     res, _ = verify(_pick("L1"), lines)
     prefer_total(res, lines, "How much capital was allocated to ICT in 2026?")     # a kind asked: it stands
     assert [s.line.page for s in res.selections] == [46]
+    res, _ = verify(_pick("L1"), lines)                          # an item asked, no total: the nearer row stands
+    prefer_total(res, lines, "How much was allocated to ICT for classroom construction in 2026?")
+    assert [s.line.page for s in res.selections] == [46]
 
 
 def test_the_whole_of_a_share_is_one_printed_total() -> None:
