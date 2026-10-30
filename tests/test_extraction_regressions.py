@@ -95,6 +95,17 @@ def test_L12_picture_of_a_table_is_sent_to_ocr_cpi_p19() -> None:
     assert 19 in image_table_pages(path)
 
 
+def test_L31_vector_outlined_pages_and_maps_are_sent_to_ocr_afo_p6_scp() -> None:
+    afo = DATA / "advisories" / "nihsa-afo-2026.pdf"
+    if not afo.exists():
+        pytest.skip("NIHSA AFO not present (data/advisories, outside git)")
+    assert len(extract_pages(afo, 6, 6)[0]) < 60                       # only the running footer
+    assert {6, 14, 24}.issubset(image_table_pages(afo))               # outlines, then a big image, then both
+    budget = DATA / "budget-2026-approved.pdf"
+    if budget.exists():                                                # a dense text table page stays text
+        assert 20 not in image_table_pages(budget)
+
+
 def test_L15_code_and_quantity_never_land_in_value_cells_amended_p114() -> None:
     _, labelled = run("budget-2025-amended.pdf", 110, 114)
     text = labelled[-1]

@@ -168,7 +168,10 @@ def normalise(name: str) -> str:
 
 
 def find_local_file(doc: dict) -> Path | None:
-    """A local PDF may be named <id>.pdf or after its title (punctuation ignored)."""
+    """A local PDF is the manifest's `file` (relative to data/), or named <id>.pdf or after its title."""
+    if doc.get("file"):
+        named = DATA_DIR / doc["file"]
+        return named if named.exists() else None
     by_id = DATA_DIR / f"{doc['id']}.pdf"
     if by_id.exists():
         return by_id

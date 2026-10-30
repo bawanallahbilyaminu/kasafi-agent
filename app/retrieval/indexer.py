@@ -64,7 +64,11 @@ def normalise_name(name: str) -> str:
 
 
 def find_file(doc: dict, data_dir: Path) -> Path | None:
-    """<id>.pdf, or a local file named after the title (punctuation ignored), as in fetch_seed_docs.py."""
+    """The manifest's `file` (relative to data/, e.g. advisories/nihsa-afo-2026.pdf), <id>.pdf, or a local file
+    named after the title (punctuation ignored), as in fetch_seed_docs.py."""
+    if doc.get("file"):
+        named = data_dir / doc["file"]
+        return named if named.exists() else None
     by_id = data_dir / f"{doc['id']}.pdf"
     if by_id.exists():
         return by_id
@@ -118,6 +122,7 @@ def titles_first(page: pdfium.PdfPage, text: str) -> str:
 
 IMAGE_PAGE_CHARS = 400   # a page with less text than this...
 IMAGE_SHARE = 0.25       # ...and an image covering a quarter of it is a picture of a table: OCR it
+DRAWN_PATHS = 40         # ...or this many vector paths: text turned into outlines, a map or a chart (L31)
 
 
 def image_table_pages(path: Path) -> set[int]:
@@ -126,6 +131,9 @@ def image_table_pages(path: Path) -> set[int]:
     The NBS CPI prints its state tables as images under a text title ("Combined Urban and Rural State
     Consumer Price Index (Base Period: 2024 = 100)", 92 characters): more than MIN_PAGE_CHARS, so the
     page counted as text and the table, with Sokoto's published year-on-year rate, was never OCR'd.
+    NIHSA's 2026 Annual Flood Outlook draws its pages as vector outlines under a running footer ("NATIONAL
+    SEASONAL FLOOD FORECAST AND ADVISORY 04", 48 characters) with no image at all; NiMet's 2026 SCP draws its
+    state maps as paths. Many paths under a short text layer count as a picture too (L31).
     """
     pdf = pdfium.PdfDocument(str(path))
     out = set()
@@ -135,10 +143,16 @@ def image_table_pages(path: Path) -> set[int]:
             if len(page.get_textpage().get_text_range().strip()) >= IMAGE_PAGE_CHARS:
                 continue
             w, h = page.get_size()
-            for obj in page.get_objects():
+            paths = 0
+            for obj in page.get_objects(max_depth=3):
                 if obj.type == pdfium.raw.FPDF_PAGEOBJ_IMAGE:
                     left, bottom, right, top = obj.get_bounds()
                     if (right - left) * (top - bottom) >= IMAGE_SHARE * w * h:
+                        out.add(i + 1)
+                        break
+                elif obj.type == pdfium.raw.FPDF_PAGEOBJ_PATH:
+                    paths += 1
+                    if paths >= DRAWN_PATHS:
                         out.add(i + 1)
                         break
     finally:
