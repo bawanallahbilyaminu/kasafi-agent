@@ -191,12 +191,18 @@ if __name__ == "__main__":
     p.add_argument("--resume", action="store_true", help="continue the stopped run with this --out (same draw and "
                                                          "seed), running only the cases it hadn't finished")
     p.add_argument("--concurrency", type=int, default=1, choices=[1, 2])
+    p.add_argument("--hazards", type=int, metavar="N", help="draw N LGAs per hazard family (evals/generated/"
+                                                             "hazards.py: expected values from hazard_values now) "
+                                                             "and run them")
     a = p.parse_args()
     cases_path = CASES
     header = {"forms": a.forms, "seed": a.seed, "families": a.families}
     ckpt = Checkpoint(a.out.stem, header, resume=True) if a.resume else None
     if ckpt and ckpt.header.get("cases"):
         cases_path = Path(ckpt.header["cases"])      # a fresh draw is resumed from its own cases file
+    elif a.hazards:
+        from evals.generated.hazards import build as build_hazards
+        cases_path = build_hazards(a.hazards, random.randrange(10**6))
     elif a.fresh:
         from evals.generated.generate import build
         draw = random.randrange(10**6)

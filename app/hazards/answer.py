@@ -70,7 +70,7 @@ W = {
                          "Service heat index); up to {t:.0f} °C there. {n} of 23 LGAs at Danger or above.",
            "rain_line": "{day}: {mm:.1f} mm expected, heaviest {peak:.1f} mm/h (*{cls}*, WMO rainfall intensity "
                         "classes); chance of rain up to {p:.0f}%.",
-           "rain_none": "{day}: no rain expected (chance up to {p:.0f}%).",
+           "rain_none": "{day}: no rain expected (chance up to {p:.0f}%).", "rain_dry": "{day}: no rain expected.",
            "rain_state": "{day}: most rain in {lga}, {mm:.1f} mm; {n} of 23 LGAs expect rain.",
            "air_line": "{day}: PM10 averaging {pm10:.0f} µg/m³ (WHO 24-hour guideline: 45), PM2.5 {pm25:.0f} µg/m³ "
                        "(guideline: 15), dust {dust:.0f} µg/m³; US AQI up to {aqi:.0f}: *{cat}*.",
@@ -106,6 +106,7 @@ W = {
            "rain_line": "{day}: ana sa ran {mm:.1f} mm, mafi yawa {peak:.1f} mm a awa (*{cls}*, rabe-raben ruwan "
                         "sama na WMO); yiwuwar ruwan sama har zuwa {p:.0f}%.",
            "rain_none": "{day}: ba a sa ran ruwan sama ba (yiwuwa har zuwa {p:.0f}%).",
+           "rain_dry": "{day}: ba a sa ran ruwan sama ba.",
            "rain_state": "{day}: inda za a fi samun ruwa shi ne {lga}, {mm:.1f} mm; ƙananan hukumomi {n} cikin 23 "
                          "suna sa ran ruwa.",
            "air_line": "{day}: matsakaicin PM10 {pm10:.0f} µg/m³ (iyakar WHO ta awa 24: 45), PM2.5 {pm25:.0f} "
@@ -207,6 +208,10 @@ def hazard_answer(conn, question: str, lang: str, layers: list[str], where: read
     return HazardAnswer("\n".join(out), layers, where, found)
 
 
+def _dry(w: dict, label: str, prob: float) -> str:
+    return w["rain_none"].format(day=label, p=prob) if prob >= 1 else w["rain_dry"].format(day=label)
+
+
 def _layer_lines(conn, layer: str, lang: str, where: read.Where, pids: list, days: list[date], today: date) -> list[str]:
     w = W.get(lang, W["en"])
     out = []
@@ -226,7 +231,7 @@ def _layer_lines(conn, layer: str, lang: str, where: read.Where, pids: list, day
                     top = max(rows, key=lambda r: r.rain_mm)
                     n = sum(1 for r in rows if r.rain_mm >= 0.1)
                     out.append(w["rain_state"].format(day=label, lga=top.lga, mm=top.rain_mm, n=n)
-                               if top.rain_mm >= 0.1 else w["rain_none"].format(day=label, p=top.rain_prob_max))
+                               if top.rain_mm >= 0.1 else _dry(w, label, max(r.rain_prob_max for r in rows)))
                 continue
             r = rows[0]
             if layer == "heat":
@@ -237,7 +242,7 @@ def _layer_lines(conn, layer: str, lang: str, where: read.Where, pids: list, day
                 out.append(w["rain_line"].format(day=label, mm=r.rain_mm, peak=r.rain_peak_mm_h,
                                                  cls=cat.label(r.rain_class, lang), p=r.rain_prob_max))
             else:
-                out.append(w["rain_none"].format(day=label, p=r.rain_prob_max))
+                out.append(_dry(w, label, r.rain_prob_max))
     elif layer == "air":
         for d in days:
             rows = [r for pid, lga in pids if (r := read.air_day(conn, pid, lga, d))]

@@ -116,6 +116,35 @@ def test_the_users_point_reaches_the_answer_but_only_from_memory() -> None:
     assert got[-1] == {"lga_pcode": "NG034006"}
 
 
+def test_generated_hazard_cases_are_what_the_answer_gives() -> None:
+    """Drawn from the local hazard_values (skipped without them): each case's question, answered without the
+    planner (layer and LGA from the case), gives the case's expected figures and label."""
+    import random
+
+    import pytest
+    psycopg = pytest.importorskip("psycopg")
+    from app.config import get_settings
+    from evals.generated.hazards import generate
+    try:
+        conn = psycopg.connect(get_settings().db_url(), connect_timeout=3)
+    except Exception:
+        pytest.skip("no database")
+    with conn:
+        if not conn.execute("SELECT to_regclass('hazard_values') IS NOT NULL AND EXISTS (SELECT 1 FROM "
+                            "hazard_values)").fetchone()[0]:
+            pytest.skip("no hazard data fetched")
+        from app.agent.answer import lagos_today
+        from app.sources.lga_names import CANONICAL, pcode
+        layer = {"hazard_heat": "heat", "hazard_rain": "rain", "hazard_air": "air", "hazard_flood": "flood",
+                 "hazard_fires": "fires", "hazard_overview": "overview"}
+        for c in generate(conn, 4, random.Random(3)):
+            lga = max((n for n in CANONICAL if n in c["text"]), key=len)        # 'Sokoto South', 'Sabon Birni'
+            a = ha.hazard_answer(conn, c["text"], c["lang"], [layer[c["family"]]],
+                                 read.Where("lga", pcode(lga), lga), lagos_today(), get_settings())
+            for want in c["numbers"]:
+                assert want in a.text, (c["id"], want, a.text[:300])
+
+
 async def _ok():
     from app.guardrails.scope import Verdict
     return Verdict("ok", "test")
