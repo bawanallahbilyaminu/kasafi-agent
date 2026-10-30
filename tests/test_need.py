@@ -73,3 +73,22 @@ def test_a_time_keeps_only_its_kinds_fields() -> None:
     assert check_time({"kind": "range", "year": 2026, "from": 2025, "to": 2026}, p) == \
         {"kind": "range", "from": 2025, "to": 2026}
     assert check_time({"kind": "quarter", "year": 2026, "quarter": "2"}, p) == {"kind": "quarter", "year": 2026, "quarter": 2}
+
+
+def test_an_agency_never_resolves_to_its_parent_ministry() -> None:
+    from app.agent.need import Entity, Names, resolve, same_entity
+    names = Names(mdas=(("Ministry of Education", "051700000000"), ("State Agency for Normadic Education1", "051701100100"),
+                        ("Ministry of Health", "052100000000"),
+                        ("Sokoto State contributory health care mgt agency", "052100200100")))
+    e = resolve(Entity("sub_agency", "State Agency for Nomadic Education"), names)
+    assert (e.resolved, e.code) == ("State Agency for Normadic Education1", "051701100100")
+    assert resolve(Entity("mda", "Contributory Health Care Management Agency"), names).code == "052100200100"
+    assert not same_entity("State Agency for Nomadic Education", "Ministry of Education")
+    e = resolve(Entity("mda", "Agency for Adult Education"), names)        # not printed: not the ministry
+    assert e.code == "" and "Ministry of Education" not in e.candidates[:0]
+
+
+def test_two_printings_of_one_ministry_are_one_entity() -> None:
+    from app.agent.need import Entity, Names, resolve
+    names = Names(mdas=(("Min of Lands and Housing", "023500100100"), ("Ministry of Lands and Housing", "023500000000")))
+    assert resolve(Entity("mda", "Ministry of Lands and Housing"), names).code == "023500000000"

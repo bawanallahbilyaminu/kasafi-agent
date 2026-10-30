@@ -145,3 +145,27 @@ def test_one_tool_that_fills_every_cell_gets_them_all() -> None:
     need = Need("q", measures=["actual_ytd", "revised", "performance_pct"], entities=[bureau],
                 time={"kind": "quarter", "year": 2026, "quarter": 2}, operation="lookup")
     assert cover(need, available=ALL).all_by("budget_core")
+
+
+def test_an_unresolved_agency_with_near_names_is_asked_about() -> None:
+    import asyncio
+    plan = ans.Plan("How much for the Agency for Nomadic Educaton?", ["q"], [])
+    plan.need = Need("How much for the Agency for Nomadic Educaton?", measures=["approved"],
+                     entities=[Entity("sub_agency", "Agency for Nomadic Educaton",
+                                      candidates=["State Agency for Normadic Education1", "Adult Education Agency"])])
+    a = asyncio.run(ans.structured_answer(object(), plan, "en", None, {}))
+    assert a.clarify and "Do you mean one of these" in a.text and len(a.clarify) == 2
+
+
+def test_a_parent_ministry_row_for_an_agency_question_is_flagged() -> None:
+    from app.agent.line_answer import LineResult, Selection
+    from app.retrieval.line_search import Cell as LCell, Line
+    row = Line("b:18:1", "Sokoto State FY 2026 Budget", "budget-2026-approved", 18, "Total Expenditure by MDA",
+               "Ministry of Education", "Ministry of Education | 2026 Approved Budget: 68,950,000,000.00",
+               "administrative", "", "", 5.0, [], code="051700000000", spend_kind="total")
+    cell = LCell("2026 Approved Budget", 2026, "approved", "full_year", Decimal("68950000000.00"))
+    plan = ans.Plan("q", ["q"], [])
+    plan.need = Need("q", entities=[Entity("sub_agency", "Nomadic", "State Agency for Normadic Education1",
+                                           "051701100100")])
+    asked, got = ans.parent_rows(plan, LineResult(selections=[Selection(row, cell)]))
+    assert asked.code == "051701100100" and got == "Ministry of Education (051700000000)"

@@ -1303,7 +1303,8 @@ def write_budget_cells(need: Need, cells: list, lang: str, conn=None) -> tuple[s
     for ent in dict.fromkeys(c.entity.resolved or c.entity.name for c in cells):
         mine = [c for c in cells if (c.entity.resolved or c.entity.name) == ent]
         code = mine[0].entity.code
-        out.append(f"*{ent}*" + (f" (code {code})" if code else "") + ":")
+        shown = re.sub(r"(?<=[a-z])\d+\b", "", ent)          # a digit printed onto a word ('Education1')
+        out.append(f"*{shown}*" + (f" (code {code})" if code else "") + ":")
         for split in dict.fromkeys(c.split or "total" for c in mine):
             row = [c for c in mine if (c.split or "total") == split]
             parts = []
@@ -1372,6 +1373,12 @@ def named_dtm(plan: Plan) -> bool:
     return any("dtm_api" in p.discovery for p in named)
 
 
+WHICH_AGENCY = {
+    "en": "The budget doesn't print an agency named exactly \"{name}\". Do you mean one of these: {names}?",
+    "ha": "Kasafin bai buga wata hukuma mai suna \"{name}\" daidai ba. Ko kana nufin ɗaya daga cikin waɗannan: {names}?",
+}
+
+
 def not_yet_published(c, today: date) -> bool:
     """A budget cell no document can hold yet: spending for a quarter that hasn't ended, or an approved budget more
     than a year ahead. (A past quarter missing from the library may be online: that is fetched, not this.)"""
@@ -1393,6 +1400,16 @@ async def structured_answer(conn, plan: Plan, lang: str, settings: Settings, t: 
     need = plan.need
     if conn is None or need is None or not need.measures or plan.followup == "recheck":
         return None
+    # an agency that isn't the same entity as any printed name, but near a few: ask which (never its parent)
+    unsure = [e for e in need.entities if e.type in ("mda", "sub_agency", "sector") and not e.code and e.candidates]
+    if unsure:
+        e = unsure[0]
+        opts = [{"title": c[:20].strip(), "question": need.standalone_question.replace(e.name, c)
+                 if e.name in need.standalone_question else f"{need.standalone_question} ({c})"}
+                for c in e.candidates[:3]]
+        log.info("agency %r matches no printed name exactly: asking among %d", e.name, len(opts))
+        return Answer(WHICH_AGENCY.get(lang, WHICH_AGENCY["en"]).format(name=e.name, names="; ".join(e.candidates[:3])),
+                      False, True, plan=plan, timings=t, clarify=opts)
     latest = conn.execute("SELECT max(year) FROM perf_items").fetchone()[0] if "approved" not in need.measures \
         else max(APPROVED_YEARS)
     cov = cover(need, available=available_capabilities(settings), latest_year=latest)
@@ -1534,6 +1551,7 @@ LINE_WORDS = {
            "location": "⚠️ This is state spending located in {place} (the budget's table by location). It is not "
                        "money allocated to {place} Local Government; LGAs get their statutory allocations "
                        "separately.",
+           "parent": "⚠️ This row is {got}, the ministry with all its agencies, not {asked} on its own.",
            "uncertain": "Possibly relevant too, not counted (I wasn't sure on a second reading)",
            "no_sum": "Not added up: these lines are printed in different tables of one budget, which can show the "
                      "same money twice.",
@@ -1547,6 +1565,7 @@ LINE_WORDS = {
            "location": "⚠️ Wannan kuɗin jiha ne da ake kashewa a {place} (teburin kasafi bisa wuri). Ba kuɗin "
                        "da aka ware wa Ƙaramar Hukumar {place} ba ne; ƙananan hukumomi suna samun kasonsu na doka "
                        "daban.",
+           "parent": "⚠️ Wannan layin {got} ne, ma'aikatar tare da dukkan hukumominta, ba {asked} kaɗai ba.",
            "uncertain": "Watakila suna da alaƙa, ba a ƙidaya su ba (ban tabbata ba a karatu na biyu)",
            "no_sum": "Ba a haɗa su ba: an buga waɗannan layuka a teburori daban-daban na kasafi ɗaya, wanda zai iya "
                      "nuna kuɗi ɗaya sau biyu.",
@@ -1606,6 +1625,23 @@ LEVEL_HA = {"sector total": "jimillar ɓangare", "objective inside a sector": "m
             "overhead (running costs)": "kuɗin gudanarwa", "capital": "manyan ayyuka"}
 
 
+def parent_rows(plan: Plan, res: LineResult) -> tuple | None:
+    """A picked row that is the asked agency's parent ministry total (its code ends 00000000 and shares the
+    ministry part of the agency's own code), with the asked agency itself among no picked rows: (the asked
+    entity, the row's name and code)."""
+    need = plan.need
+    asked = [e for e in (need.entities if need else []) if e.code and not e.code.endswith("00000000")]
+    codes = {s.line.code for s in res.selections}
+    for e in asked:
+        if e.code in codes:
+            continue
+        for s in res.selections:
+            c = s.line.code or ""
+            if len(c) == 12 and c.endswith("00000000") and c[:4] == e.code[:4]:
+                return e, f"{short_name(s.line)} ({c})"
+    return None
+
+
 def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dict, acq) -> Answer:
     """The verified rows as an answer: summary, the rows used with citations, and the arithmetic."""
     w = LINE_WORDS.get(lang, LINE_WORDS["en"])
@@ -1645,6 +1681,9 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
         summary = ""
         places = ", ".join(dict.fromkeys(short_name(x).title() for x in located))
         notes.append(w["location"].format(place=places))
+    if parent := parent_rows(plan, res):      # the asked agency's ministry total is not the agency's own figure
+        asked, got = parent
+        notes.append(w["parent"].format(asked=f"{asked.resolved} ({asked.code})", got=got))
     working += notes
     calc_from = len(working)
     if res.total is not None:
@@ -1678,7 +1717,7 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
     shown = rows[:TOP_ROWS] + ([f"• … +{len(rows) - TOP_ROWS}"] if len(rows) > TOP_ROWS else [])
     body = (f"_{note}_\n\n" if note else "") + (plain(lead) + "\n\n" if lead.strip() else "")
     body += plain(readable_amounts("\n".join(shown + notes), lang))
-    partial = res.found == "partial" or res.aggregate_only or bool(res.missing) or bool(res.uncertain)
+    partial = res.found == "partial" or res.aggregate_only or bool(res.missing) or bool(res.uncertain) or bool(parent)
     sources = cited_sources(conn, evidence) if conn is not None else []
     log.info("line answer: %d rows, op=%s, aggregate_only=%s, partial=%s", len(res.selections), res.operation,
              res.aggregate_only, partial)

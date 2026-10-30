@@ -56,6 +56,7 @@ class Entity:
     name: str
     resolved: str = ""        # the name as the data prints it, when found
     code: str = ""
+    candidates: list[str] = field(default_factory=list)   # unresolved agency: the printed names it may be (to ask)
 
 
 @dataclass
@@ -147,8 +148,47 @@ SOKOTO_LGAS = ("Binji", "Bodinga", "Dange-Shuni", "Gada", "Goronyo", "Gudu", "Gw
 
 
 def _norm(s: str) -> str:
-    s = re.sub(r"(?i)\b(min(istry)?\.? of|the|state|sokoto|of|and|&)\b", " ", s.replace("'", ""))
-    return " ".join(re.findall(r"[a-z0-9]+", s.lower()))
+    """Words that tell agencies apart: no 'Ministry of', 'State', 'Sokoto', 'the', 'of', 'and', and no digits
+    stuck to a word by a misprint ('Normadic Education1' -> 'normadic education'), no bracketed acronym ('(Rtv)')."""
+    s = re.sub(r"\([^)]*\)", " ", s)
+    s = re.sub(r"(?i)\b(min(istry)?\.?( of)?|the|state|sokoto|of|for|and|&)\b", " ", s.replace("'", ""))
+    s = re.sub(r"(?<=[a-z])\d+\b", "", s.lower())
+    return " ".join(re.findall(r"[a-z0-9]+", s))
+
+
+def _word_near(w: str, x: str) -> bool:
+    """Two words of one name: equal, a misprint (normadic / nomadic), or an abbreviation (mgt / management)."""
+    if w == x:
+        return True
+    if len(w) > 3 and len(x) > 3 and difflib.SequenceMatcher(None, w, x).ratio() >= 0.8:
+        return True
+    short, long_ = sorted((w, x), key=len)
+    it = iter(long_)
+    return 2 <= len(short) < len(long_) and short[0] == long_[0] and all(ch in it for ch in short)
+
+
+def same_entity(asked: str, printed: str) -> bool:
+    """Every word of each name matches a word of the other: the printed row is the agency asked about, not its
+    parent ministry ('Agency for Nomadic Education' is not 'Ministry of Education') or a sibling."""
+    a, p = _norm(asked).split(), _norm(printed).split()
+    return bool(a and p) and all(any(_word_near(w, x) for x in p) for w in a) \
+        and all(any(_word_near(x, w) for w in a) for x in p)
+
+
+def _agency(name: str, choices: list[str]) -> tuple[str, list[str]]:
+    """The one printed agency name that is the same entity as `name`, or '' and the near candidates (to ask)."""
+    n = _norm(name)
+    if not n:
+        return "", []
+    hits = sorted({c for c in choices if same_entity(name, c)})
+    exact = [c for c in hits if _norm(c) == n]
+    if exact or len(hits) == 1:          # one entity, perhaps printed two ways ('Min of' / 'Ministry of')
+        return (exact or hits)[0], []
+    if hits:
+        return "", hits[:3]
+    # nothing is the same agency: the closest names, only to offer them as choices
+    by_norm = {_norm(c): c for c in choices}
+    return "", [by_norm[k] for k in difflib.get_close_matches(n, list(by_norm), n=3, cutoff=0.75)]
 
 
 def _best(name: str, choices: list[str], cutoff: float = 0.82) -> str:
@@ -158,32 +198,20 @@ def _best(name: str, choices: list[str], cutoff: float = 0.82) -> str:
     by_norm = {_norm(c): c for c in choices}
     if n in by_norm:
         return by_norm[n]
-    contains = [c for k, c in by_norm.items() if k and (n == k or (len(n) > 6 and (n in k or k in n)))]
+    contains = [c for k, c in by_norm.items() if k and len(n) > 6 and n in k]     # the asked name inside a longer one
     if len(contains) == 1:
         return contains[0]
     close = difflib.get_close_matches(n, list(by_norm), n=1, cutoff=cutoff)
-    if close:
-        return by_norm[close[0]]
-    # a short form of a long printed name, or a misprint in either ('Rima Television' -> 'Sokoto State Rima
-    # Televiosn (Rtv)'): every word close to a word of the name, and only one name like that
-    words = n.split()
-    if len(words) >= 2:
-        def near(w: str, k: str) -> bool:
-            return any(w == x or (len(w) > 3 and difflib.SequenceMatcher(None, w, x).ratio() >= 0.8)
-                       for x in k.split())
-        hits = {c for k, c in by_norm.items() if all(near(w, k) for w in words)}
-        if len(hits) == 1:
-            return hits.pop()
-    return ""
+    return by_norm[close[0]] if close else ""
 
 
 def resolve(e: Entity, names: Names) -> Entity:
     """The entity as the data prints it (or unresolved: the planner's name stays, for search)."""
     if e.type in ("mda", "sub_agency", "sector"):          # a sector total is an administrative line too
-        hit = _best(e.name, [m for m, _ in names.mdas])
+        hit, e.candidates = _agency(e.name, sorted({m for m, _ in names.mdas}))
         if hit:
             e.resolved = hit
-            codes = sorted({c for m, c in names.mdas if m == hit})
+            codes = sorted({c for m, c in names.mdas if _norm(m) == _norm(hit)})
             # a sub-agency's own row, not its ministry's "with its agencies" total (codes ending 00000000)
             own = [c for c in codes if not c.endswith("00000000")] if e.type == "sub_agency" else codes
             e.code = (own or codes)[0]
