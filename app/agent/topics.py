@@ -333,6 +333,35 @@ TOP_LGAS = 5
 _api_cache: dict[str, tuple[float, list, list]] = {}
 
 
+SAVED_MAX_DAYS = 30
+
+
+def _saved_path(settings: Settings, state: str) -> Path:
+    return Path(settings.kasafi_fetch_dir) / f"dtm-api-{state.lower()}.json"
+
+
+def _save(settings: Settings, state: str, rounds: list, lgas: list) -> None:
+    from dataclasses import asdict
+    try:
+        path = _saved_path(settings, state)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"pulled": date.today().isoformat(), "rounds": [asdict(r) for r in rounds],
+                                    "lgas": [asdict(x) for x in lgas]}), encoding="utf-8")
+    except OSError as e:
+        log.info("couldn't keep the DTM pull: %s", type(e).__name__)
+
+
+def _load_saved(settings: Settings, state: str) -> tuple[str, list, list] | None:
+    try:
+        d = json.loads(_saved_path(settings, state).read_text(encoding="utf-8"))
+        if (date.today() - date.fromisoformat(d["pulled"])).days > SAVED_MAX_DAYS:
+            return None
+        return (d["pulled"], [dtm_api.RoundFigure(**r) for r in d["rounds"]],
+                [dtm_api.RoundFigure(**x) for x in d["lgas"]])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 async def dtm_api_source(p: Publisher, http: httpx.AsyncClient, settings: Settings,
                          state: str = "Sokoto") -> SourceResult:
     """IOM DTM's displacement figures from its Baseline API (state and LGA, by round and reporting date), not
@@ -347,11 +376,21 @@ async def dtm_api_source(p: Publisher, http: httpx.AsyncClient, settings: Settin
             rounds = await dtm_api.state_rounds(http, settings, state) or []
             lgas = await dtm_api.lga_round(http, settings, state, rounds[0].round) if rounds else []
         except (dtm_api.DtmError, httpx.HTTPError) as e:
-            res.status, res.detail = "failed", type(e).__name__
-            return res
-        if hit and rounds and hit[1] and rounds[0].round != hit[1][0].round:
-            log.info("DTM API: new round %s for %s (was %s)", rounds[0].round, state, hit[1][0].round)
-        _api_cache[state] = (time.time(), rounds, lgas or [])
+            # an API outage (Oct 30: "No Country found" for every query for a while): the last good pull,
+            # up to a month old, with its date
+            saved = _load_saved(settings, state)
+            if not saved:
+                res.status, res.detail = "failed", f"{type(e).__name__}: {str(e)[:80]}"
+                return res
+            log.warning("DTM API failed (%s); using the pull of %s", type(e).__name__, saved[0])
+            res.title = f"IOM DTM API (Baseline), as pulled on {saved[0]}"
+            rounds, lgas = saved[1], saved[2]
+        else:
+            if hit and rounds and hit[1] and rounds[0].round != hit[1][0].round:
+                log.info("DTM API: new round %s for %s (was %s)", rounds[0].round, state, hit[1][0].round)
+            if rounds:
+                _api_cache[state] = (time.time(), rounds, lgas or [])
+                _save(settings, state, rounds, lgas or [])
     if not rounds:
         res.status, res.detail = "no_figure", "no rounds for the state"
         return res
@@ -432,9 +471,11 @@ async def fact_cards(conn: psycopg.Connection, src: SourceResult, topic: Topic, 
     p = src.publisher
     # a definition note names the figures that belong beside the headline one (NBS: underemployment,
     # informality, NEET beside the unemployment rate): those are asked for too, up to 5 figures in all
-    most = 5 if p.definition_note else 3
-    extra = (f"Also copy, if printed for Sokoto, up to {most} figures in all: "
-             f"{p.definition_note.split(';')[-1].strip()}. " if p.definition_note else "")
+    most = 6 if p.definition_note else 3
+    headline = re.search(r"so (\w+) is", p.definition_note)        # "so unemployment is low by design"
+    extra = (f"Copy first the {headline.group(1) if headline else 'headline'} rate itself, then, if printed for "
+             f"Sokoto, up to {most} figures in all: {p.definition_note.split(';')[-1].strip()}. "
+             if p.definition_note else "")
     body = "\n\n".join(f"--- page {n} ---\n{t[:PAGE_CHARS]}" for n, t in pages.items())
     messages = [{"role": "system", "content": CARD_SYSTEM.format(extra=extra)},
                 {"role": "user", "content": f"QUESTION: {question}\nDOCUMENT: {src.title}\n\n{body}"}]

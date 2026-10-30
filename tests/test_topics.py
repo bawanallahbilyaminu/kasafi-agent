@@ -7,6 +7,7 @@ import pytest
 from app.acquisition.registry import Publisher, registry
 from app.agent import topics as tp
 from app.agent.answer import Plan, topic_route
+from tests.helpers import make_settings
 
 DTM = Publisher("iom_dtm", "IOM Displacement Tracking Matrix (DTM)", ("dtm.iom.int",), level="lga", tier=1,
                 cadence="rounds every 4-6 months", latest_known="Round 18, December 2025", verified="2026-10-29")
@@ -81,6 +82,8 @@ def test_a_monthly_dashboard_must_be_this_months_and_a_report_its_newest_known_y
     ("employment statistics for Sokoto", {"statistics": True}, "labour_employment"),
     ("How much for health in 2026?", {"statistics": False}, ""),                       # budget money
     ("IDP budget lines in 2026", {"statistics": True, "line_search": {"terms": ["IDP"], "years": [2026]}}, ""),
+    ("How many IDPs are in Sokoto according to IOM?",                  # the planner added line_search: no money
+     {"line_search": {"terms": ["IDP"], "years": []}}, "displacement_humanitarian"),
     ("How do people in Sokoto cope?", {"statistics": True, "topic": "poverty_welfare"}, "poverty_welfare"),
 ])
 def test_statistics_questions_on_a_multi_source_topic_take_the_topic_path(q: str, plan_kw: dict, topic: str) -> None:
@@ -173,7 +176,7 @@ def test_a_publisher_that_just_failed_isnt_searched_again_for_12_hours(monkeypat
     tp._missed.clear()
 
 
-def test_dtm_figures_come_from_its_api_with_round_date_and_top_lgas(monkeypatch) -> None:
+def test_dtm_figures_come_from_its_api_with_round_date_and_top_lgas(monkeypatch, tmp_path) -> None:
     import asyncio
     from app.sources import dtm
     rounds = [dtm.RoundFigure("Sokoto", 18, "2025-10-31", 181526, {}), dtm.RoundFigure("Sokoto", 17, "2025-05-31", 88562, {})]
@@ -187,7 +190,7 @@ def test_dtm_figures_come_from_its_api_with_round_date_and_top_lgas(monkeypatch)
     monkeypatch.setattr(dtm, "state_rounds", state)
     monkeypatch.setattr(dtm, "lga_round", lga)
     tp._api_cache.clear()
-    src = asyncio.run(tp.dtm_api_source(DTM, None, None))
+    src = asyncio.run(tp.dtm_api_source(DTM, None, make_settings(kasafi_fetch_dir=str(tmp_path))))
     tp._api_cache.clear()
     assert [c.value for c in src.cards] == ["181,526", "40,729", "88,562"]
     assert src.cards[0].ref_date == "Round 18, reporting date 2025-10-31" and not src.cards[0].doc_id
@@ -211,3 +214,28 @@ def test_figures_that_are_dtm_counts_are_said_to_be_so_and_the_newest_leads() ->
             "Forcibly Displaced Populations Dashboard) / UNHCR Nigeria Forcibly Displaced Populations Dashboard "
             "(176,099, R19) are IOM Displacement Tracking Matrix counts, not separate counts") in text
     assert "These are separate counts" not in text and "IOM DTM API (Baseline)" in text.splitlines()[-1]
+
+
+def test_an_api_outage_uses_the_last_good_pull_with_its_date(monkeypatch, tmp_path) -> None:
+    import asyncio
+    from app.sources import dtm
+    s = make_settings(dtmapi_subscription_key="k", kasafi_fetch_dir=str(tmp_path))
+    good = [dtm.RoundFigure("Sokoto", 18, "2025-10-31", 181526, {"Conflict/violence": 173004})]
+
+    async def ok(http, st, state):
+        return good
+
+    async def lgas(http, st, state, r):
+        return []
+
+    async def down(http, st, state):
+        raise dtm.DtmError("API error: No Country found matching your query.")
+    monkeypatch.setattr(dtm, "lga_round", lgas)
+    monkeypatch.setattr(dtm, "state_rounds", ok)
+    tp._api_cache.clear()
+    asyncio.run(tp.dtm_api_source(DTM, None, s))                      # a good pull is kept on disk
+    monkeypatch.setattr(dtm, "state_rounds", down)
+    tp._api_cache.clear()
+    src = asyncio.run(tp.dtm_api_source(DTM, None, s))
+    tp._api_cache.clear()
+    assert src.status == "ok" and src.cards[0].value == "181,526" and "as pulled on" in src.cards[0].title

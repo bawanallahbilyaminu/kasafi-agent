@@ -1101,12 +1101,18 @@ def off_topic_note(conn, plan: Plan, question: str, cited: list[Evidence], lang:
         docs="; ".join(dict.fromkeys(docs.values())), primary=", ".join(short_pub(p) for p in primary[:4]))
 
 
+MONEY_WORDS = re.compile(r"(?i)\b(?:budget\w*|allocat\w*|kasafi\w*|naira|spen[dt]\w*|expenditure|funds?|funding|"
+                         r"cost\w*|revenue|IGR|appropriat\w*|ware|kashe|kuɗi|kudi)\b|₦")
+
+
 def topic_route(question: str, plan: Plan) -> str:
     """A statistics question on a multi-source topic (registry): its topic id, from the synonyms first and the
     planner's topic as the fallback; '' when the question is about budget money or no topic fits."""
-    if plan.line_search or plan.budget_query or plan.analysis or plan.category:
-        return ""
     text = f"{question} {plan.english_question}"
+    # budget money asked about: the budget tools answer. The planner sometimes adds them to a statistics
+    # question ("How many IDPs according to IOM?" got line_search): without money words, the topic path wins
+    if (plan.line_search or plan.budget_query or plan.analysis or plan.category) and MONEY_WORDS.search(text):
+        return ""
     tid = detect_topic(text) or plan.topic
     topic = registry().topics.get(tid)
     if not topic or topic.answer_pattern != "multi_source":
