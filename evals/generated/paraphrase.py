@@ -1,12 +1,13 @@
 """Paraphrase each generated case (evals/generated/cases.json) the way people ask on WhatsApp: Hausa, informal
 English, Hausa-English code-switched, with typos, and as a follow-up to an earlier question. The expected answer
-doesn't change: every name, number and period is kept. One model call per case.
+doesn't change: every name, number and period is kept. One model call per case, a few at a time.
 
-    uv run python evals/generated/paraphrase.py        -> adds "forms" to each case in cases.json
+    uv run python evals/generated/paraphrase.py [--cases evals/generated/cases.json]   -> adds "forms" to each case
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import sys
@@ -21,6 +22,7 @@ from app.providers.stt import parse_json_reply  # noqa: E402
 
 CASES = Path(__file__).with_name("cases.json")
 FORMS = ("hausa", "informal", "code_switched", "typo", "followup")
+AT_ONCE = 6
 
 SYSTEM = (
     "You write test questions for a Hausa / English WhatsApp assistant about Sokoto State budgets and displacement "
@@ -35,25 +37,28 @@ SYSTEM = (
 )
 
 
-async def main() -> None:
+async def paraphrase(path: Path = CASES, at_once: int = AT_ONCE) -> None:
     s = get_settings()
-    data = json.loads(CASES.read_text(encoding="utf-8"))
+    data = json.loads(path.read_text(encoding="utf-8"))
+    gate = asyncio.Semaphore(at_once)
     async with MetaClient(s) as client:
-        for c in data["cases"]:
-            if c.get("forms"):
-                continue
-            r = await client.chat([{"role": "system", "content": SYSTEM},
-                                   {"role": "user", "content": f"QUESTION: {c['text']}"}],
-                                  model=s.meta_model, reasoning_effort="low", max_tokens=3000)
+        async def one(c: dict) -> None:
+            async with gate:
+                r = await client.chat([{"role": "system", "content": SYSTEM},
+                                       {"role": "user", "content": f"QUESTION: {c['text']}"}],
+                                      model=s.meta_model, reasoning_effort="low", max_tokens=3000)
             try:
                 d = parse_json_reply(r.content)
             except ValueError:
                 print("no paraphrase for", c["id"])
-                continue
+                return
             c["forms"] = {k: d[k] for k in FORMS if d.get(k)}
-            print(c["id"], "->", ", ".join(c["forms"]))
-            CASES.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
+        await asyncio.gather(*(one(c) for c in data["cases"] if not c.get("forms")), return_exceptions=True)
+    path.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
+    print(sum(bool(c.get("forms")) for c in data["cases"]), "of", len(data["cases"]), "cases paraphrased ->", path)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    p = argparse.ArgumentParser()
+    p.add_argument("--cases", type=Path, default=CASES)
+    asyncio.run(paraphrase(p.parse_args().cases))

@@ -38,3 +38,6 @@ deploy/db.env
 deploy/private/
 deploy/backups/
 deploy/index.incoming.sql.gz
+
+# fresh generated-eval draws (each report names its seed, so a draw can be rebuilt)
+evals/generated/runs/

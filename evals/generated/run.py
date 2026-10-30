@@ -6,6 +6,8 @@ missing (exact, or in its readable form '₦42.00 million'), a false premise is 
 for a period that isn't published. Not found where the data has the answer counts as wrong too.
 
     uv run python evals/generated/run.py [--forms all|template|paraphrase] [--seed 1] [--families split lookup]
+    uv run python evals/generated/run.py --fresh 17      # new random entities and periods (17 per family, ~150
+                                                         # cases), paraphrased, then run; cases kept in runs/
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ from app.agent.answer import answer_question, readable_amounts  # noqa: E402
 from app.config import get_settings  # noqa: E402
 
 CASES = Path(__file__).with_name("cases.json")
+RUNS = Path(__file__).with_name("runs")          # fresh draws (not in git: the report names the seed)
 
 
 def accepted(number: str, lang: str) -> list[str]:
@@ -59,14 +62,15 @@ def wrong(case: dict, a, lang: str) -> str:
     return ""
 
 
-async def main(forms: str, seed: int, families: list[str] | None, out: Path) -> None:
+async def main(forms: str, seed: int, families: list[str] | None, out: Path, cases_path: Path = CASES) -> None:
     s = get_settings()
     rng = random.Random(seed)
-    cases = [c for c in json.loads(CASES.read_text(encoding="utf-8"))["cases"]
-             if not families or c["family"] in families]
+    data = json.loads(cases_path.read_text(encoding="utf-8"))
+    cases = [c for c in data["cases"] if not families or c["family"] in families]
     per_family: dict[str, list] = defaultdict(list)
     per_form: dict[str, list] = defaultdict(list)
-    times, report = [], ["# Generated coverage run\n"]
+    times, report = [], [f"# Generated coverage run\n\nCases: {cases_path.name} (draw seed {data.get('seed')}), "
+                         f"form seed {seed}\n"]
     with psycopg.connect(s.db_url()) as conn:
         for c in cases:
             options = ["template"] + list((c.get("forms") or {}).keys())
@@ -114,5 +118,14 @@ if __name__ == "__main__":
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--families", nargs="+")
     p.add_argument("--out", type=Path, default=Path(__file__).with_name("report.md"))
+    p.add_argument("--fresh", type=int, metavar="N", help="draw N new entities per family (a new seed), paraphrase "
+                                                          "them, then run")
     a = p.parse_args()
-    asyncio.run(main(a.forms, a.seed, a.families, a.out))
+    cases_path = CASES
+    if a.fresh:
+        from evals.generated.generate import build
+        from evals.generated.paraphrase import paraphrase
+        draw = random.randrange(10**6)
+        cases_path = build(a.fresh, draw, RUNS / f"cases-{draw}.json")
+        asyncio.run(paraphrase(cases_path))
+    asyncio.run(main(a.forms, a.seed, a.families, a.out, cases_path))
