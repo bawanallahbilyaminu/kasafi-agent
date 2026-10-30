@@ -40,7 +40,7 @@ discovery_channels:
   - id: reliefweb_api
     what: UN OCHA's library of humanitarian and development reports (UN agencies, NGOs, govt)
     endpoint: https://api.reliefweb.int/v2/reports
-    auth: appname (requested 28 Oct as halalnumeriq-kasafi-r7k2; pending)
+    auth: "appname from RELIEFWEB_APPNAME in .env (approved 30 Oct 2026; never commit the value)"
     use_for: [displacement_humanitarian, nutrition_food_security, health, education, wash]
     tip: filter country=Nigeria and query "Sokoto"; sort by date desc for "latest"
     verified: 2026-10-29

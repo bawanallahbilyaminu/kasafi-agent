@@ -39,7 +39,7 @@ from pathlib import Path
 import httpx
 import psycopg
 
-from app.acquisition.channels import catalog_candidates, hdx_datasets
+from app.acquisition.channels import catalog_candidates, from_publisher, hdx_datasets, reliefweb_reports
 from app.acquisition.find import Candidate, excluded, pick_candidate, search_web
 from app.acquisition.library import fetch_and_index, fetches_today, ocr_pages
 from app.acquisition.policy import USER_AGENT, Robots, host_allowed
@@ -217,6 +217,11 @@ async def find_candidates(http: httpx.AsyncClient, p: Publisher, topic: Topic, t
             cands, editions = await hdx_datasets(http, f"Nigeria {topic.synonyms_en[0] if topic.synonyms_en else ''}")
             return cands
         jobs.append(hdx())
+    if "reliefweb_api" in p.discovery and settings.reliefweb_appname:   # Nigeria, "Sokoto", newest first
+        async def reliefweb():
+            return [c for c in await reliefweb_reports(http, settings.reliefweb_appname, "", rows=20)
+                    if from_publisher(c, p.name)]
+        jobs.append(reliefweb())
     if settings.serper_api_key and p.domains:
         key = settings.serper_api_key.get_secret_value()
         sites = " OR ".join(f"site:{d}" for d in p.domains[:4])
@@ -229,8 +234,9 @@ async def find_candidates(http: httpx.AsyncClient, p: Publisher, topic: Topic, t
             continue
         for c in res:
             host = httpx.URL(c.url).host if c.url.startswith("https") else ""
-            if (c.url not in seen and host_allowed(c.url) and not excluded(c)
-                    and any(host == d or host.endswith("." + d) for d in p.domains)):
+            on_site = any(host == d or host.endswith("." + d) for d in p.domains) or \
+                (c.source == "reliefweb" and (host == "reliefweb.int" or host.endswith(".reliefweb.int")))
+            if c.url not in seen and host_allowed(c.url) and not excluded(c) and on_site:
                 seen.add(c.url)
                 out.append(c)
     return out[:12]

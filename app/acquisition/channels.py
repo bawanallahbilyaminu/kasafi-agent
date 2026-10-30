@@ -33,6 +33,9 @@ SBS_API = "https://sbs.sk.gov.ng/api/documents"
 NBS_LIBRARY = "https://nigerianstat.gov.ng/elibrary"
 HDX_SEARCH = "https://data.humdata.org/api/3/action/package_search"
 DTM_ADMIN1 = "https://dtmapi.iom.int/v3/displacement/admin1"     # dtmapi 0.2.1 config.IDP_ADMIN_1_API
+RELIEFWEB_REPORTS = "https://api.reliefweb.int/v2/reports"
+RELIEFWEB_TTL_S = 6 * 3600
+_rw_cache: dict[str, tuple[float, list]] = {}
 
 
 @dataclass
@@ -188,6 +191,47 @@ async def hdx_datasets(http: httpx.AsyncClient, query: str, rows: int = 5) -> tu
             if str(res.get("format", "")).upper() == "PDF" and res.get("url"):
                 cands.append(Candidate(res["url"], f"{p.get('title', '')}: {name}", org, "hdx", when))
     return cands, editions
+
+
+def reliefweb_params(appname: str, words: str, rows: int = 5) -> list[tuple[str, str]]:
+    """Reports about Nigeria that mention Sokoto (and the words), newest first."""
+    return [("appname", appname), ("query[value]", f"Sokoto {words}".strip()), ("query[operator]", "AND"),
+            ("filter[field]", "country.name"), ("filter[value]", "Nigeria"), ("sort[]", "date.created:desc"),
+            ("limit", str(rows)), ("fields[include][]", "title"), ("fields[include][]", "file.url"),
+            ("fields[include][]", "date.original"), ("fields[include][]", "source.shortname")]
+
+
+def parse_reliefweb(data: dict) -> list[Candidate]:
+    """Each report's first PDF, with its publishers' short names (UNICEF, IOM, OCHA) as the snippet."""
+    out = []
+    for item in data.get("data", []):
+        f = item.get("fields", {})
+        sources = ", ".join(s.get("shortname", "") for s in f.get("source", []))
+        for file in f.get("file", [])[:1]:
+            if file.get("url", "").lower().endswith(".pdf"):
+                out.append(Candidate(file["url"], f.get("title", ""), sources, "reliefweb",
+                                     (f.get("date", {}).get("original") or "")[:10]))
+    return out
+
+
+async def reliefweb_reports(http: httpx.AsyncClient, appname: str, words: str, rows: int = 5) -> list[Candidate]:
+    """ReliefWeb (UN OCHA's report library) for Nigeria / Sokoto. The appname is a query parameter, so the
+    request URL is never logged (httpx's request log is off in app/main.py). A sweep's publishers share one
+    call: results are kept RELIEFWEB_TTL_S."""
+    key = f"{words}|{rows}"
+    hit = _rw_cache.get(key)
+    if hit and time.time() - hit[0] < RELIEFWEB_TTL_S:
+        return hit[1]
+    r = await http.get(RELIEFWEB_REPORTS, params=reliefweb_params(appname, words, rows), timeout=TIMEOUT)
+    r.raise_for_status()
+    _rw_cache[key] = (time.time(), parse_reliefweb(r.json()))
+    return _rw_cache[key][1]
+
+
+def from_publisher(c: Candidate, p_name: str) -> bool:
+    """A ReliefWeb report is the publisher's when one of its sources' short names is a word of the name."""
+    words = set(re.findall(r"[a-z]+", p_name.lower()))
+    return any(s.strip().lower() in words for s in c.snippet.split(",") if s.strip())
 
 
 @dataclass
