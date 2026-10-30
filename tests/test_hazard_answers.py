@@ -29,6 +29,8 @@ def test_hazard_questions_route_here_and_budget_or_idp_questions_do_not() -> Non
     assert hazard_route("What should we watch out for this week in Goronyo?", plan("q")) == ["overview"]
     assert hazard_route("What is the budget for flood control?", plan("q", ["approved"])) == []
     assert hazard_route("How many IDPs were displaced by floods?", plan("q", ["idp_count"])) == []
+    # pre-deploy eval a05: a warning question the planner tagged flood_outlook stays a hazard question
+    assert hazard_route("Akwai gargaɗin ambaliya ga Goronyo?", plan("q", ["flood_outlook"])) == ["flood"]
 
 
 def test_the_day_asked() -> None:

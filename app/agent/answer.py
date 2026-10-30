@@ -1263,7 +1263,8 @@ MONEY_WORDS = re.compile(r"(?i)\b(?:budget\w*|allocat\w*|kasafi\w*|naira|spen[dt
                          r"cost\w*|revenue|IGR|appropriat\w*|ware|kashe|kuɗi|kudi)\b|₦")
 
 
-HAZARD_MEASURES = set(MEASURE_LAYERS)
+# the official sources' measures are hazard questions too ('akwai gargaɗin ambaliya?' tagged flood_outlook)
+HAZARD_MEASURES = set(MEASURE_LAYERS) | {"flood_outlook", "seasonal_outlook", "outbreak_cases"}
 
 
 def hazard_route(question: str, plan: Plan) -> list[str]:
