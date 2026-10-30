@@ -153,7 +153,8 @@ def _norm(s: str) -> str:
     """Words that tell agencies apart: no 'Ministry of', 'State', 'Sokoto', 'the', 'of', 'and', and no digits
     stuck to a word by a misprint ('Normadic Education1' -> 'normadic education'), no bracketed acronym ('(Rtv)')."""
     s = re.sub(r"\([^)]*\)", " ", s)
-    s = re.sub(r"(?i)\b(min(istry)?\.?( of)?|the|state|sokoto|of|for|and|affairs|&)\b", " ", s.replace("'", ""))
+    s = re.sub(r"(?i)\b(min(istry)?\.?( of)?|the|state|sokoto|of|for|and|affairs|sector|&)\b", " ",
+               s.replace("'", ""))
     s = re.sub(r"(?<=[a-z])\d+\b", "", s.lower())
     return " ".join(re.findall(r"[a-z0-9]+", s))
 

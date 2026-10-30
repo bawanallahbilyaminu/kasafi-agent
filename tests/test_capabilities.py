@@ -189,3 +189,17 @@ def test_a_false_premise_is_corrected_once_on_the_whole_budget() -> None:
     assert text.count("It didn't rise") == 1
     neutral = Need("Compare its approved budget in 2025 and 2026.", operation="compare")
     assert "didn't" not in ans.write_budget_cells(neutral, cells, "en")[0]
+
+
+def test_nearest_lines_never_offer_another_agencys_rows() -> None:
+    from app.retrieval.line_search import Line
+    unit = Line("b:51:1", "Sokoto State FY 2026 Budget", "budget-2026-approved", 51, "Capital Expenditure by Project",
+                "Office renovation", "Office renovation 016100100100 - SSG'S Office", "project", "", "", 5.0, [])
+    item = Line("b:30:2", "Sokoto State FY 2026 Budget", "budget-2026-approved", 30, "Capital by Economic Code",
+                "REHABILITATION / REPAIRS - OFFICE BUILDINGS", "23030121 REHABILITATION", "economic", "", "", 5.0, [],
+                code="23030121")
+    plan = ans.Plan("q", ["q"], [])
+    plan.need = Need("q", entities=[Entity("mda", "Office of the SSG", "Office of the SSG", "016100000000")])
+    assert ans.other_agency(plan, unit) and not ans.other_agency(plan, item)
+    plan.need = Need("q", entities=[Entity("project", "dams")])
+    assert not ans.other_agency(plan, unit)                  # not an agency question: related items may show

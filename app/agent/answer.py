@@ -1532,9 +1532,20 @@ async def _line_path(conn, plan: Plan, question: str, lang: str, client, second,
         return Answer(res.clarify_question, False, True, plan=plan, timings=t, clarify=res.clarify)
     if res.selections:
         return line_answer(conn, plan, res, hits, lang, t, acq)
+    res.nearest = [s for s in res.nearest if not other_agency(plan, s.line)]
     if res.nearest:                  # nothing is that item, but related lines exist: name them as the nearest
         return nearest_answer(conn, plan, res, lang, t, acq)
     return None
+
+
+def other_agency(plan: Plan, line) -> bool:
+    """For a question about an agency, a row that belongs to another one: 'nearest' is for items near the one
+    asked about, never another agency's figures (the asked agency unresolved: no agency row is offered)."""
+    agencies = [e for e in (plan.need.entities if plan.need else []) if e.type in ("mda", "sub_agency", "sector")]
+    if not agencies:
+        return False
+    codes = re.findall(r"\b\d{12}\b", f"{line.code} {line.row_text}")
+    return bool(codes) and not any(e.code and e.code in codes for e in agencies)
 
 
 NEAREST_WORDS = {
