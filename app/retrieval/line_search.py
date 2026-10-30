@@ -138,9 +138,9 @@ def asked_kind(text: str) -> str:
 def lift_kind(lines: list[Line], kind: str) -> list[Line]:
     """Each line of the asked kind moves up to where its name first ranks: one agency is printed in the total,
     personnel, overhead and capital tables with one name, and only a few copies per document are kept, so the
-    asked table's copy must not be the one dropped (m19: Government House's overhead row)."""
-    if not kind:
-        return lines
+    asked table's copy must not be the one dropped (m19: Government House's overhead row). No kind asked: the
+    total table's copy (all spending) moves up the same way."""
+    kind = kind or "total"
     first: dict[str, int] = {}
     for i, x in enumerate(lines):
         first.setdefault(name_key(x), i)
