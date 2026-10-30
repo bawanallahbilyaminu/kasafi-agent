@@ -137,3 +137,11 @@ def test_the_time_budget_keeps_what_was_verified(monkeypatch) -> None:
     monkeypatch.setattr(ans, "_answer_question", slow)
     monkeypatch.setattr(ans, "LOOP_BUDGET_S", 0.05)
     assert asyncio.run(ans.answer_question("q", "en", None)).text == "held partial"
+
+
+def test_one_tool_that_fills_every_cell_gets_them_all() -> None:
+    bureau = Entity("mda", "Bureau for Public Procurement", "Bureau for Public Procurement and Price Intelligence",
+                    "011101000100")
+    need = Need("q", measures=["actual_ytd", "revised", "performance_pct"], entities=[bureau],
+                time={"kind": "quarter", "year": 2026, "quarter": 2}, operation="lookup")
+    assert cover(need, available=ALL).all_by("budget_core")

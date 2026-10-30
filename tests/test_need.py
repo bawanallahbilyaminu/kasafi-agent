@@ -63,3 +63,13 @@ def test_short_forms_misprints_and_sectors_resolve_to_the_printed_name() -> None
     assert resolve(Entity("sector", "Social Sector"), names).code == "050000000000"
     assert resolve(Entity("mda", "Budjet and Economic Planing"), names).code == "023800000000"
     assert resolve(Entity("mda", "Rima"), names).code == ""                  # two Rima agencies: not guessed
+
+
+def test_a_time_keeps_only_its_kinds_fields() -> None:
+    from app.agent.need import check_time
+    p: list = []
+    assert check_time({"kind": "year", "year": 2026, "from": 2026, "to": 2026, "quarter": 1}, p) == \
+        {"kind": "year", "year": 2026}
+    assert check_time({"kind": "range", "year": 2026, "from": 2025, "to": 2026}, p) == \
+        {"kind": "range", "from": 2025, "to": 2026}
+    assert check_time({"kind": "quarter", "year": 2026, "quarter": "2"}, p) == {"kind": "quarter", "year": 2026, "quarter": 2}

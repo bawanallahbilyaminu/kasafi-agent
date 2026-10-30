@@ -115,10 +115,17 @@ class Coverage:
 
 
 def cover(need: Need, *, available: set[str], latest_year: int | None = None) -> Coverage:
-    """Cells, each assigned to its best capability; cells no capability can fill are gaps."""
+    """Cells, each assigned to its best capability; cells no capability can fill are gaps. When one capability
+    can fill every cell, all go to the best such one: a need isn't split over two tools for a tie-break (the
+    revised budget is in budget_core and in the analysis tools, spending to date only in budget_core)."""
     cov = Coverage(required_cells(need, latest_year=latest_year))
-    for cell in cov.cells:
-        caps = match(cell, need.operation, available=available)
+    per_cell = [match(cell, need.operation, available=available) for cell in cov.cells]
+    if per_cell and all(per_cell):
+        common = [c for c in per_cell[0] if all(any(c.id == x.id for x in caps) for caps in per_cell[1:])]
+        if common:
+            cov.plan[common[0].id] = list(cov.cells)
+            return cov
+    for cell, caps in zip(cov.cells, per_cell):
         if caps:
             cov.plan.setdefault(caps[0].id, []).append(cell)
         else:

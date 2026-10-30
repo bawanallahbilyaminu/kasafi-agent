@@ -115,7 +115,10 @@ def check_time(t, problems: list[str]) -> dict:
     if out["kind"] == "range" and not ("from" in out and "to" in out and out["from"] <= out["to"]):
         problems.append("a range without both ends; latest used")
         out = {"kind": "latest"}
-    return out
+    # each kind keeps only its own fields: the planner sometimes fills them all ('year' with quarter 1 and
+    # from/to), and a stray quarter turns an approved budget into a quarter's figure
+    keep = {"year": ("year",), "quarter": ("year", "quarter"), "range": ("from", "to")}.get(out["kind"], ())
+    return {"kind": out["kind"], **{k: out[k] for k in keep if k in out}}
 
 
 @dataclass(frozen=True)
