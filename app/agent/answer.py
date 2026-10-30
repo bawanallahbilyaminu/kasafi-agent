@@ -997,7 +997,8 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             t0 = time.perf_counter()
             where = where_for(plan.need.entities if plan.need else [], place)
             oa = (official.outbreak_answer(conn, f"{question} {plan.english_question}", lang, today)
-                  if kind == "outbreaks" else official.outlook_answer(conn, kind.removeprefix("outlook_"), lang, where))
+                  if kind == "outbreaks" else official.outlook_answer(conn, kind.removeprefix("outlook_"), lang, where,
+                                                                      question=f"{question} {plan.english_question}"))
             t["official"] = time.perf_counter() - t0
             if oa is not None:
                 log.info("official answer: %s, found=%s", kind, oa.found)

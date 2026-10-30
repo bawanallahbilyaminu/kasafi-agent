@@ -129,9 +129,9 @@ async def crawl_wordpress(conn, http: httpx.AsyncClient, per_term: int = 20) -> 
                 if (a := advisory_of(source, post)) is None:
                     continue
                 cur = conn.execute(
-                    "INSERT INTO advisories (source, title, kind, hazard, issued_at, lgas, state_wide, text, url) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (url) DO NOTHING",
-                    (a.source, a.title, a.kind, a.hazard, a.issued_at, a.lgas, a.state_wide, a.text, a.url))
+                    "INSERT INTO advisories (source, title, kind, hazard, issued_at, lgas, state_wide, text, url, key) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (key) DO NOTHING",
+                    (a.source, a.title, a.kind, a.hazard, a.issued_at, a.lgas, a.state_wide, a.text, a.url, a.url))
                 n += cur.rowcount
     return n
 

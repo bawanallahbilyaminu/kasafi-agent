@@ -32,7 +32,12 @@ def upgrade() -> None:
         lgas          TEXT[] NOT NULL DEFAULT '{}',  -- P-codes it names
         state_wide    BOOLEAN NOT NULL DEFAULT false,
         text          TEXT NOT NULL,                 -- verbatim excerpt
-        url           TEXT NOT NULL UNIQUE,
+        url           TEXT NOT NULL,
+        key           TEXT NOT NULL UNIQUE,          -- a post's URL; for a document: doc_id:page:item
+        doc_id        TEXT,                          -- an outlook from a library document (NIHSA AFO, NiMet SCP)
+        page          INT,
+        covers        TEXT,                          -- the months a statement is about ('October-November 2026')
+        issued_label  TEXT,                          -- the issue date as printed ('April 2026')
         language      TEXT NOT NULL DEFAULT 'en',
         fetched_at    TIMESTAMPTZ NOT NULL DEFAULT now()
     );

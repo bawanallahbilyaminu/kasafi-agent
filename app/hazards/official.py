@@ -24,7 +24,7 @@ SOURCE_NAMES = {"nema_alerts": "NEMA", "sokoto_sema": "Sokoto State Government (
                 "sokoto_moh": "Sokoto State Ministry of Health", "nihsa_afo": "NIHSA", "nimet_scp": "NiMet",
                 "ncdc_sitreps": "NCDC"}
 # the advisory hazards each forecast layer leads with
-LAYER_HAZARDS = {"heat": ("heat",), "rain": ("rain", "flood"), "air": ("dust",), "flood": ("flood",),
+LAYER_HAZARDS = {"heat": ("heat",), "rain": ("rain", "dry_spell", "flood"), "air": ("dust",), "flood": ("flood",),
                  "fires": ("fire",)}
 CURRENT = {"alert": timedelta(days=10), "notice": timedelta(days=21), "report": timedelta(days=14)}
 SHOW_EXPIRED = timedelta(days=90)
@@ -76,7 +76,15 @@ T = {
                                     "ask “Is the Rima high near Goronyo?”",
                            "climate": "Kasafi can give the rain forecast for the next 3 days instead (a model, not "
                                       "NiMet's prediction)."},
-           "outlook_head": {"flood": "🌊 *Official flood outlook*", "climate": "🌦️ *Official seasonal prediction*"}},
+           "outlook_head": {"flood": "🌊 *Official flood outlook*", "climate": "🌦️ *Official seasonal prediction*"},
+           "doc_line": "{src}, {title}, page {page} (about {covers}; issued {issued}){mark}: “{text}”",
+           "expired_mark": " (*expired*)",
+           "outlook_now": "📘 *Official outlooks for these months (seasonal, not warnings):*",
+           "issued": "issued", "item": "• {covers}, page {page}{table}: “{text}”",
+           "lga_more": "{n} more statements are for single LGAs (onset, season end, rainfall, dry spells): ask for "
+                       "your LGA.",
+           "outlook_note": "Quoted as printed; where the prediction's tables and its text differ, both are shown. "
+                           "A later update replaces the original only for the months it covers."},
     "ha": {"head": "⚠️ *Gargaɗin hukuma*", "model_head": "*Hasashen samfuri (ba na hukuma ba):*",
            "line": "{src}, an fitar {date}: “{text}”", "expired": "{src}, an fitar {date} (*wa'adinsa ya ƙare*): "
                                                                "“{text}”",
@@ -110,7 +118,15 @@ T = {
                            "climate": "Kasafi zai iya ba da hasashen ruwan sama na kwana uku maimakon haka (samfuri "
                                       "ne, ba hasashen NiMet ba)."},
            "outlook_head": {"flood": "🌊 *Hasashen ambaliya na hukuma*",
-                            "climate": "🌦️ *Hasashen damina na hukuma*"}},
+                            "climate": "🌦️ *Hasashen damina na hukuma*"},
+           "doc_line": "{src}, {title}, shafi {page} (game da {covers}; an fitar {issued}){mark}: “{text}”",
+           "expired_mark": " (*wa'adinsa ya ƙare*)",
+           "outlook_now": "📘 *Hasashen hukuma na waɗannan watanni (na lokaci, ba gargaɗi ba):*",
+           "issued": "an fitar", "item": "• {covers}, shafi {page}{table}: “{text}”",
+           "lga_more": "Akwai ƙarin bayanai {n} na ƙananan hukumomi ɗaya-ɗaya (farkon damina, ƙarshenta, yawan "
+                       "ruwa, lokutan fari): tambayi ƙaramar hukumarka.",
+           "outlook_note": "An kawo su yadda aka buga; inda teburorin hasashen da rubutunsa suka bambanta, an nuna "
+                           "duka biyun. Sabon bayani yana maye gurbin na farko ne kawai a watannin da ya shafa."},
 }
 
 
@@ -148,41 +164,78 @@ def current(kind: str, issued: datetime, valid_until: datetime | None, now: date
     return now - issued <= CURRENT.get(kind, CURRENT["alert"])
 
 
-def advisories_for(conn, hazards: tuple[str, ...] | list[str], where: read.Where, now: datetime | None = None
-                   ) -> tuple[list, tuple | None]:
+@dataclass
+class Adv:
+    source: str
+    kind: str
+    issued_at: datetime
+    valid_until: datetime | None
+    text: str
+    url: str
+    lgas: list
+    state_wide: bool
+    doc_id: str | None = None           # an outlook from a library document, cited by page and the months it covers
+    page: int | None = None
+    covers: str | None = None
+    issued_label: str | None = None
+    title: str = ""
+
+
+def advisories_for(conn, hazards: tuple[str, ...] | list[str], where: read.Where, now: datetime | None = None,
+                   undated_outlooks: bool = False) -> tuple[list[Adv], Adv | None]:
     """(current advisories, the newest expired one of the last 90 days or None) for these hazards and the place: an
-    LGA's own and the state-wide ones; for the state, all of them. Rows: (source, kind, issued_at, valid_until,
-    text, url)."""
+    LGA's own first, then the state-wide ones; for the state, all of them. A document's outlook counts as current
+    only within its stated months (valid_until); one without them only when `undated_outlooks` (the outlook answer:
+    'what did NiMet predict' asks about the whole season)."""
     now = now or datetime.now(timezone.utc)
-    rows = conn.execute(
-        "SELECT source, kind, issued_at, valid_until, text, url, lgas, state_wide FROM advisories "
-        "WHERE hazard = ANY(%s) AND issued_at >= %s ORDER BY issued_at DESC",
-        (list(hazards), now - timedelta(days=400))).fetchall()
-    here = [r for r in rows if where.kind == "state" or not where.lga_pcode or r[7] or where.lga_pcode in (r[6] or [])]
-    live = [r[:6] for r in here if current(r[1], r[2], r[3], now)]
-    gone = next((r[:6] for r in here if not current(r[1], r[2], r[3], now) and now - r[2] <= SHOW_EXPIRED), None)
+    rows = [Adv(*r) for r in conn.execute(
+        "SELECT source, kind, issued_at, valid_until, text, url, lgas, state_wide, doc_id, page, covers, "
+        "issued_label, title FROM advisories WHERE hazard = ANY(%s) AND issued_at >= %s ORDER BY issued_at DESC",
+        (list(hazards), now - timedelta(days=400))).fetchall()]
+    here = [a for a in rows if where.kind == "state" or not where.lga_pcode or a.state_wide
+            or where.lga_pcode in (a.lgas or [])]
+    here.sort(key=lambda a: not (where.lga_pcode and where.lga_pcode in (a.lgas or [])))     # stable: own LGA first
+    usable = [a for a in here if not (a.doc_id and a.valid_until is None and not undated_outlooks)]
+    live = [a for a in usable if current(a.kind, a.issued_at, a.valid_until, now)]
+    gone = next((a for a in usable if not current(a.kind, a.issued_at, a.valid_until, now)
+                 and now - (a.valid_until or a.issued_at) <= SHOW_EXPIRED), None)
     return live, gone
 
 
+def quote(lang: str, a: Adv, expired: bool = False) -> str:
+    """An advisory verbatim: a post with its issue date and link; a document's outlook with its title, page, the
+    months it covers and its issue date as printed."""
+    t = _t(lang)
+    src = SOURCE_NAMES.get(a.source, a.source)
+    if a.doc_id:
+        return t["doc_line"].format(src=src, title=a.title, page=a.page, covers=a.covers, issued=a.issued_label,
+                                    text=a.text, mark=t["expired_mark"] if expired else "")
+    return t["expired" if expired else "line"].format(src=src, date=_date(a.issued_at), text=a.text) + f"\n{a.url}"
+
+
 def official_lines(conn, lang: str, layers: list[str], where: read.Where, now: datetime | None = None) -> list[str]:
-    """The 'Official warnings' section that leads a hazard answer, or [] when it has nothing to add."""
+    """The 'Official warnings' section that leads a hazard answer (warnings, then the official outlooks for the
+    current months), or [] when the question has no hazard."""
     t = _t(lang)
     hazards = tuple(dict.fromkeys(h for x in layers for h in LAYER_HAZARDS.get(x, ())))
     if not hazards:
         return []
     checked = last_checked(conn)
-    if checked is None:
-        return [t["head"], t["unchecked"]]
     live, gone = advisories_for(conn, hazards, where, now)
+    warnings = [a for a in live if a.kind != "outlook"]
+    outlooks = [a for a in live if a.kind == "outlook"]
     out = [t["head"]]
-    out += [t["line"].format(src=SOURCE_NAMES.get(s, s), date=_date(i), text=x) + f"\n{u}"
-            for s, _k, i, _v, x, u in live[:3]]
-    if not live and gone:
-        s, _k, i, _v, x, u = gone
-        out.append(t["expired"].format(src=SOURCE_NAMES.get(s, s), date=_date(i), text=x) + f"\n{u}")
-    if not live:
-        out.append(t["none"].format(place=_place(lang, where),
-                                    when=checked.astimezone(read.LAGOS).strftime("%d %b %H:%M")))
+    if checked is None:
+        out.append(t["unchecked"])
+    else:
+        out += [quote(lang, a) for a in warnings[:3]]
+        if not warnings and gone and gone.kind != "outlook":
+            out.append(quote(lang, gone, expired=True))
+        if not warnings:
+            out.append(t["none"].format(place=_place(lang, where),
+                                        when=checked.astimezone(read.LAGOS).strftime("%d %b %H:%M")))
+    if outlooks:
+        out += ["", t["outlook_now"], *[quote(lang, a) for a in outlooks[:3]]]
     return out + ["", t["model_head"]]
 
 
@@ -232,8 +285,8 @@ def outbreak_answer(conn, question: str, lang: str, today: date) -> OfficialAnsw
             checked = last_checked(conn, "ncdc")
             out.append(t["old"].format(name=name, weeks=weeks, when=_date(checked) if checked else _date(today)))
         live, _ = advisories_for(conn, (d,), read.Where("state"))
-        out += [t["guidance"].format(src=SOURCE_NAMES.get(s, s), date=_date(i), text=x)
-                for s, _k, i, _v, x, _u in live[:1] if s in ("sokoto_moh", "ncdc_sitreps")]
+        out += [t["guidance"].format(src=SOURCE_NAMES.get(a.source, a.source), date=_date(a.issued_at), text=a.text)
+                for a in live[:1] if a.source in ("sokoto_moh", "ncdc_sitreps")]
     out += ["", t["health_worker"]]
     if sources:
         out.append(f"📄 *{t['sources']}:* " + "; ".join(sources))
@@ -254,17 +307,47 @@ def in_library(conn, which: str) -> bool:
                         (LIBRARY[which].removeprefix("(?i)"),)).fetchone() is not None
 
 
-def outlook_answer(conn, which: str, lang: str, where: read.Where, now: datetime | None = None
-                   ) -> OfficialAnswer | None:
-    """An official outlook from the advisories table; None when the document is in the library (the document path
-    answers it, with its pages); otherwise says it isn't available."""
+OUTLOOK_HAZARDS = {"flood": ("flood",), "climate": ("rain", "dry_spell", "heat", "dust")}
+MOST_LINES = 12
+
+
+HEAT_WORDS = re.compile(r"(?i)temperat|heat|\bhot\b|harmattan|dust|zafi|ɗumi|dumi|hunturu|ƙura|kura\b")
+
+
+def outlook_answer(conn, which: str, lang: str, where: read.Where, now: datetime | None = None,
+                   question: str = "") -> OfficialAnswer | None:
+    """This year's official outlooks for the place, every statement with its document, page and the months it
+    covers (an update covers other months than the original prediction), oldest document first; the months
+    already past are kept ('what did NiMet predict' asks about the season). For the state, statements about one
+    LGA are counted, not listed. None when nothing is loaded but the document is in the library (the document
+    path answers it); otherwise says it isn't available."""
     t = _t(lang)
-    hazards = ("flood",) if which == "flood" else ("rain", "heat", "dust")
-    live, _ = advisories_for(conn, hazards, where, now)
-    outlooks = [r for r in live if r[1] == "outlook"]
-    if outlooks:
-        out = [t["outlook_head"][which]] + [t["line"].format(src=SOURCE_NAMES.get(s, s), date=_date(i), text=x)
-                                            + f"\n{u}" for s, _k, i, _v, x, u in outlooks[:2]]
+    now = now or datetime.now(timezone.utc)
+    hazards = OUTLOOK_HAZARDS[which]
+    if which == "climate" and question:          # the rainy season unless temperature or dust is asked about too
+        hazards = tuple(h for h in hazards if h not in ("heat", "dust") or HEAT_WORDS.search(question))
+    rows = [Adv(*r) for r in conn.execute(
+        "SELECT source, kind, issued_at, valid_until, text, url, lgas, state_wide, doc_id, page, covers, "
+        "issued_label, title FROM advisories WHERE kind = 'outlook' AND hazard = ANY(%s) AND "
+        "extract(year FROM issued_at) = %s ORDER BY issued_at, page", (list(hazards), now.year)).fetchall()]
+    if where.kind == "state" or not where.lga_pcode:
+        own, single = [a for a in rows if a.state_wide or not a.lgas], [a for a in rows if a.lgas and not a.state_wide]
+    else:
+        own = [a for a in rows if where.lga_pcode in (a.lgas or [])] + [a for a in rows if a.state_wide]
+        single = []
+    if own:
+        out = [t["outlook_head"][which] + f" — {_place(lang, where)}"]
+        for doc in dict.fromkeys(a.doc_id or a.source for a in own):
+            items = [a for a in own if (a.doc_id or a.source) == doc][:MOST_LINES]
+            first = items[0]
+            out += ["", f"*{SOURCE_NAMES.get(first.source, first.source)}, {first.title.split(',')[0]}* "
+                        f"({t['issued']} {first.issued_label or _date(first.issued_at)})"]
+            out += [t["item"].format(covers=a.covers or "", page=a.page, text=a.text,
+                                     table=f" ({a.title.split(', ', 1)[1]})" if "Table" in a.title else "")
+                    for a in items]
+        if single:
+            out += ["", t["lga_more"].format(n=len(single))]
+        out += ["", t["outlook_note"]]
         return OfficialAnswer("\n".join(out), "outlook", True)
     if in_library(conn, which):
         return None

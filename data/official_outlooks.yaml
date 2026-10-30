@@ -1,0 +1,85 @@
+# Official outlooks for Sokoto from library documents (docs/hazard-and-services.md section 5), loaded into the
+# advisories table by scripts/official_outlooks.py, which checks every quote and table cell against the indexed
+# page text (whitespace aside) and refuses the file if one isn't there. Quotes are verbatim; `covers` is the months
+# a statement is about, `valid_until` its end (a hazard answer shows it as current only until then; the outlook
+# answer always shows it, with its months). Pages are PDF pages. Drafted Oct 30 2026 for Bilyaminu to check.
+#
+# NIHSA's 2026 AFO lists no LGA risk classes for Sokoto: its Appendix A ("High-risk states and local government
+# areas") stops after the introduction (p81) and Appendix B is a "[DATA TABLE PLACEHOLDER]" (p84). The LGA classes
+# exist only as colours on the national maps (p32, p37, p42), which are not read as official figures.
+
+documents:
+  nihsa-afo-2026: {source: nihsa_afo, issued_at: 2026-04-01, issued_label: April 2026,
+                   url: "https://nihsa.gov.ng/products/1"}
+  nimet-scp-2026: {source: nimet_scp, issued_at: 2026-02-01, issued_label: February 2026, url: ""}
+  nimet-scp-update-2026: {source: nimet_scp, issued_at: 2026-08-01, issued_label: "August 2026 (from its title; no date printed)",
+                          url: "https://nimet.gov.ng/publication_detail?id=92"}
+
+quotes:
+  # --- NIHSA 2026 Annual Flood Outlook -------------------------------------------------------------------------
+  - {doc: nihsa-afo-2026, page: 32, hazard: flood, covers: April-June 2026, valid_until: 2026-06-30,
+     title: "2026 Annual Flood Outlook, Hydrological Area I (Niger North), April-June",
+     text: "In the AMJ period, flood risk is concentrated along the Rima River and its tributaries, particularly in low-lying farming communities near river channels in Kebbi, Sokoto, and Niger states."}
+  - {doc: nihsa-afo-2026, page: 37, hazard: flood, covers: July-September 2026, valid_until: 2026-09-30,
+     title: "2026 Annual Flood Outlook, Hydrological Area I (Niger North), July-September",
+     text: "In the JAS period, Hydrological Area I (Niger North), reaches peak flood levels. The Rima, Sokoto, and Kebbi rivers burst their banks, inundating vast areas of fadama farmland and riverside communities in Kebbi, Sokoto, Zamfara, and the portion of Niger State falling within this hydrological area."}
+  - {doc: nihsa-afo-2026, page: 42, hazard: flood, covers: October-November 2026, valid_until: 2026-11-30,
+     title: "2026 Annual Flood Outlook, Hydrological Area I (Niger North), October-November",
+     text: "In the ON period, Hydrological Area I (Niger North), maintains elevated flood risk as recession waters drain through the river systems. Kebbi, Niger, Sokoto, and Zamfara states remain under High Flood Risk, while Katsina re-enters Medium Flood Risk as late-period rains extend the flood window."}
+  - {doc: nihsa-afo-2026, page: 53, hazard: flood, covers: all of 2026, valid_until: 2026-12-31,
+     title: "2026 Annual Flood Outlook, Table 4.26: Road Sections at Flood Risk - By State, Full Year 2026",
+     text: "Sokoto | 91"}
+
+  # --- NiMet 2026 Seasonal Climate Prediction (February 2026) ---------------------------------------------------
+  - {doc: nimet-scp-2026, page: 12, hazard: rain, covers: the 2026 rainy season (onset),
+     title: "2026 Seasonal Climate Prediction, onset of the rainy season",
+     text: "while the rainy season in most of the northern states is predicted to commence between 18th and 23rd June 2026."}
+  - {doc: nimet-scp-2026, page: 13, hazard: rain, covers: the 2026 rainy season (cessation),
+     title: "2026 Seasonal Climate Prediction, cessation of the rainy season",
+     text: "As shown in Figure 4 (b), the cessation of the 2026 rainy season is predicted to occur around 6th October over the northernmost parts of Sokoto, Katsina, Jigawa, and Yobe states. This is expected to be followed by cessations over most Northern States between 14th and 30th October."}
+  - {doc: nimet-scp-2026, page: 14, hazard: rain, covers: the 2026 rainy season (length),
+     title: "2026 Seasonal Climate Prediction, length of the rainy season",
+     text: "In the northern states of Sokoto, Katsina, Zamfara, Kano, Jigawa, Yobe, and Borno, the lengths of the rainy season are projected to range from 110 to 160 days."}
+  - {doc: nimet-scp-2026, page: 15, hazard: rain, covers: the 2026 rainy season (total rainfall),
+     title: "2026 Seasonal Climate Prediction, annual rainfall",
+     text: "In contrast, above-normal rainfall is predicted for parts of Borno, Sokoto, Kebbi, Kaduna, Enugu, Cross River, Abia, Ebonyi, and Akwa Ibom states, as well as the Federal Capital Territory (FCT)."}
+  - {doc: nimet-scp-2026, page: 16, hazard: dry_spell, covers: June-August 2026, valid_until: 2026-08-31,
+     title: "2026 Seasonal Climate Prediction, dry spells",
+     text: "June - August season: A severe dry spell that may last up to 21 days is predicted for the northern and central states of Nigeria during the June-July-August season."}
+  - {doc: nimet-scp-2026, page: 17, hazard: dry_spell, covers: June-August 2026, valid_until: 2026-08-31,
+     lgas: [Binji, Bodinga, Dange-Shuni, Gada, Gwadabawa, Illela, Isa, Rabah, Shagari, Silame, Tambuwal, Yabo],
+     title: "2026 Seasonal Climate Prediction, Table 1: Severe Dry Spell Prediction June - August 2026 (LGA likely to be impacted by a severe dry spell (21 days and above))",
+     text: "Sokoto | Binji, Bodinga, Dange-Shuni, Gada, Gwadabawa, Illela, Isa, Rabah, Shagari, Silame, Tambuwal, Yabo"}
+  - {doc: nimet-scp-2026, page: 21, hazard: heat, covers: February 2026, valid_until: 2026-02-28,
+     title: "2026 Seasonal Climate Prediction, daytime temperatures for February 2026",
+     text: "A temperature range of 34°C to 37°C is anticipated over Sokoto, Zamfara, Borno, Yobe, Gombe, and the southern states of the country."}
+  - {doc: nimet-scp-2026, page: 25, hazard: heat, covers: April 2026, valid_until: 2026-04-30,
+     title: "2026 Seasonal Climate Prediction, daytime temperatures for April 2026",
+     text: "The predicted highest daytime temperatures in the country during the period, which is in the range of 40°C to 43°C, is anticipated across Borno and parts of Adamawa, Yobe, Jigawa, and Sokoto states."}
+  - {doc: nimet-scp-2026, page: 26, hazard: heat, covers: April 2026, valid_until: 2026-04-30,
+     title: "2026 Seasonal Climate Prediction, nighttime temperatures for April 2026",
+     text: "However, Jigawa, Sokoto, Zamfara, Yobe, Borno, Katsina, Kano, Kaduna, Bauchi, parts of Gombe, Adamawa, and Benue states are expected to be warmer than normal."}
+
+  # --- NiMet SCP Update: August 2026 and August-September-October 2026 ------------------------------------------
+  - {doc: nimet-scp-update-2026, page: 3, hazard: rain, covers: August-October 2026, valid_until: 2026-10-31,
+     title: "NiMet SCP Update, August-September-October 2026",
+     text: "During the August- September- October season, wetter-than-normal conditions are expected across the north, especially Sokoto, Kebbi, Zamfara, Katsina, Kano, Yobe, Borno, Bauchi and Jigawa states."}
+  - {doc: nimet-scp-update-2026, page: 4, hazard: flood, covers: August-October 2026, valid_until: 2026-10-31,
+     title: "NiMet SCP Update, August-September-October 2026, agriculture",
+     text: "e. Keep drainage channels clear to reduce flood damage in areas expecting above-normal rainfall (Jigawa, Kano, Katsina, Zamfara, Kebbi and Sokoto states)"}
+  - {doc: nimet-scp-update-2026, page: 3, hazard: heat, covers: August-October 2026, valid_until: 2026-10-31,
+     state_wide: true,
+     title: "NiMet SCP Update, August-September-October 2026",
+     text: "The August-September-October season is expected to bring: Normal to above-average temperatures across Nigeria"}
+
+# Tables read row by row (Sokoto's rows), each cell labelled with its column and checked on the page
+tables:
+  - {doc: nimet-scp-2026, pages: [105, 106], state: Sokoto, hazard: rain, covers: the 2026 rainy season,
+     title: "2026 Seasonal Climate Prediction, Table 7: Summary of Predicted Onset Date, Cessation Date, Length of Season and Annual Rainfall Amounts",
+     columns: [Onset date, Season end, Season Length Days, Annual Rainfall mm]}
+  - {doc: nimet-scp-2026, pages: [87], state: Sokoto, hazard: heat, covers: January-May 2026, valid_until: 2026-05-31,
+     title: "2026 Seasonal Climate Prediction, Table 5: Predicted 2026 Daytime Temperatures (°C)",
+     columns: [January, February, March, April, May]}
+  - {doc: nimet-scp-2026, pages: [91], state: Sokoto, hazard: heat, covers: January-May 2026, valid_until: 2026-05-31,
+     title: "2026 Seasonal Climate Prediction, Table 6: Predicted 2026 Nighttime Temperatures (°C)",
+     columns: [January, February, March, April, May]}

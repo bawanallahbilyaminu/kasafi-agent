@@ -22,8 +22,8 @@ class Conn:
         if sql.startswith("SELECT max(started_at)"):
             rows = [(self.checked,)]
         elif "FROM advisories" in sql:
-            rows = [r for r in self.advisories if r[8] in args[0]]
-            rows = [r[:8] for r in rows]
+            rows = [r[:13] for r in self.advisories if r[13] in args[0]
+                    and ("kind = 'outlook'" not in sql or r[1] == "outlook")]
         elif "FROM outbreak_cases" in sql:
             rows = [self.outbreaks[args[0]]] if args[0] in self.outbreaks else []
         elif "FROM documents" in sql:
@@ -34,9 +34,26 @@ class Conn:
 
 
 def adv(days_ago, text, lgas=("NG034006",), kind="alert", hazard="flood", source="nema_alerts", until=None,
-        state_wide=False):
+        state_wide=False, doc=None, page=None, covers=None, label=None, title=""):
     return (source, kind, NOW - timedelta(days=days_ago), until, text, f"https://nema.gov.ng/{days_ago}/",
-            list(lgas), state_wide, hazard)
+            list(lgas), state_wide, doc, page, covers, label, title, hazard)
+
+
+ON = adv(212, "In the ON period, Hydrological Area I (Niger North), maintains elevated flood risk.", lgas=(),
+         kind="outlook", source="nihsa_afo", until=NOW + timedelta(days=31), state_wide=True, doc="nihsa-afo-2026",
+         page=42, covers="October-November 2026", label="April 2026",
+         title="2026 Annual Flood Outlook, Hydrological Area I (Niger North), October-November")
+ONSET = adv(271, "while the rainy season in most of the northern states is predicted to commence between 18th and "
+                 "23rd June 2026.", lgas=(), kind="outlook", hazard="rain", source="nimet_scp", state_wide=True,
+            doc="nimet-scp-2026", page=12, covers="the 2026 rainy season (onset)", label="February 2026",
+            title="2026 Seasonal Climate Prediction, onset of the rainy season")
+GORONYO_ROW = adv(271, "Goronyo: Onset date: 11-Jul; Season end: 16-Sept; Season Length Days: 67; Annual Rainfall "
+                       "mm: 611", kind="outlook", hazard="rain", source="nimet_scp", doc="nimet-scp-2026", page=106,
+                  covers="the 2026 rainy season", label="February 2026",
+                  title="2026 Seasonal Climate Prediction, Table 7: Summary of Predicted Onset Date")
+APRIL_HEAT = adv(271, "warmer than normal", lgas=(), kind="outlook", hazard="heat", source="nimet_scp",
+                 until=NOW - timedelta(days=180), state_wide=True, doc="nimet-scp-2026", page=26,
+                 covers="April 2026", label="February 2026", title="2026 Seasonal Climate Prediction, nights")
 
 
 def test_current_rules() -> None:
@@ -68,8 +85,20 @@ def test_state_wide_warnings_reach_every_lga_and_unchecked_says_so() -> None:
     conn = Conn([adv(1, "Sokoto State residents should expect heavy rainfall.", lgas=(), state_wide=True,
                      hazard="rain")])
     assert "heavy rainfall" in "\n".join(official.official_lines(conn, "en", ["rain"], GORONYO, NOW))
-    assert official.official_lines(Conn(checked=None), "ha", ["heat"], GORONYO, NOW) == \
+    assert official.official_lines(Conn(checked=None), "ha", ["heat"], GORONYO, NOW)[:2] == \
         ["⚠️ *Gargaɗin hukuma*", "Ba a duba gargaɗin hukuma ba tukuna."]
+
+
+def test_a_current_outlook_follows_the_warnings_with_document_page_and_months() -> None:
+    text = "\n".join(official.official_lines(Conn([ON, APRIL_HEAT]), "en", ["flood"], GORONYO, NOW))
+    assert "No current official warning for Goronyo LGA" in text            # an outlook is not a warning
+    assert "📘 *Official outlooks for these months (seasonal, not warnings):*\nNIHSA, 2026 Annual Flood Outlook, " \
+           "Hydrological Area I (Niger North), October-November, page 42 (about October-November 2026; issued " \
+           "April 2026): “In the ON period" in text
+    heat = "\n".join(official.official_lines(Conn([APRIL_HEAT, ONSET]), "en", ["heat"], GORONYO, NOW))
+    assert "warmer than normal" not in heat and "📘" not in heat              # its months are past
+    rain = "\n".join(official.official_lines(Conn([ONSET]), "en", ["rain"], GORONYO, NOW))
+    assert "18th and 23rd June" not in rain                                  # a season statement without an end date
 
 
 @pytest.mark.parametrize("q, want", [
@@ -128,9 +157,22 @@ def test_an_official_outlook_is_never_replaced_by_a_forecast() -> None:
     a = official.outlook_answer(Conn(), "climate", "en", Where("state"), NOW)
     assert not a.found and "isn't available to Kasafi yet" in a.text and "not NiMet's prediction" in a.text
     assert official.outlook_answer(Conn(library=True), "flood", "en", GORONYO, NOW) is None   # the document path
-    afo = adv(198, "Goronyo: High flood risk.", kind="outlook", source="nihsa_afo")
-    b = official.outlook_answer(Conn([afo]), "flood", "en", GORONYO, NOW)
-    assert b.found and "NIHSA, issued 15 Apr 2026: “Goronyo: High flood risk.”" in b.text
+    b = official.outlook_answer(Conn([ON]), "flood", "en", GORONYO, NOW)
+    assert b.found and "*NIHSA, 2026 Annual Flood Outlook* (issued April 2026)\n• October-November 2026, page 42: " \
+                       "“In the ON period" in b.text
+
+
+def test_the_seasonal_prediction_by_place_with_its_months() -> None:
+    rows = [ONSET, GORONYO_ROW, APRIL_HEAT]
+    a = official.outlook_answer(Conn(rows), "climate", "en", GORONYO, NOW, "What did NiMet predict for the rains?")
+    lines = a.text.splitlines()
+    assert lines[0] == "🌦️ *Official seasonal prediction* — Goronyo LGA"
+    assert lines[3] == "• the 2026 rainy season, page 106 (Table 7: Summary of Predicted Onset Date): “Goronyo: Onset " \
+                       "date: 11-Jul; Season end: 16-Sept; Season Length Days: 67; Annual Rainfall mm: 611”"
+    assert "page 12: “while the rainy season" in a.text and "warmer than normal" not in a.text   # not asked
+    s = official.outlook_answer(Conn(rows), "climate", "en", Where("state"), NOW, "rainy season and temperatures?")
+    assert "Goronyo:" not in s.text and "1 more statements are for single LGAs" in s.text
+    assert "• April 2026, page 26: “warmer than normal”" in s.text            # past months kept, said as such
 
 
 def test_the_eval_checks_hold_on_the_code_built_answers() -> None:
@@ -145,7 +187,12 @@ def test_the_eval_checks_hold_on_the_code_built_answers() -> None:
     for cid, q, lang in [("a02", "Any meningitis in Sokoto now?", "en"), ("a04", "Akwai sankarau a Sokoto yanzu?", "ha")]:
         text = official.outbreak_answer(conn, q, lang, date(2026, 10, 30)).text
         assert wrong(checks[cid], SimpleNamespace(text=text, exact=text)) == "", cid
-    text = official.outlook_answer(conn, "climate", "en", Where("state"), NOW).text
+    length = adv(271, "In the northern states of Sokoto, the lengths are projected to range from 110 to 160 days.",
+                 lgas=(), kind="outlook", hazard="rain", source="nimet_scp", state_wide=True, doc="nimet-scp-2026",
+                 page=14, covers="the 2026 rainy season (length)", label="February 2026",
+                 title="2026 Seasonal Climate Prediction, length")
+    text = official.outlook_answer(Conn([ONSET, length]), "climate", "en", Where("state"), NOW,
+                                   "What did NiMet predict for Sokoto's rainy season?").text
     assert wrong(checks["a03"], SimpleNamespace(text=text, exact=text)) == ""
     for cid, lang in [("a01", "en"), ("a05", "ha")]:
         text = "\n".join(official.official_lines(conn, lang, ["flood"], GORONYO, NOW)) + "\nRima near Goronyo"
