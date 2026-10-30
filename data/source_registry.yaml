@@ -611,6 +611,62 @@ topics:
         tier: 2
         verified: "no"
 
+  # Official warnings and advisories (docs/hazard-and-services.md section 5): crawled on a schedule into the
+  # advisories table (app/hazards/advisories.py); answers quote the current ones verbatim with their issue date,
+  # before any model forecast. Probed Oct 30 2026 (scripts/probe_advisories.py).
+  hazards_and_advisories:
+    synonyms_en: [flood warning, flood alert, flood outlook, advisory, early warning, outbreak, situation report, meningitis, cholera, lassa, measles, diphtheria, seasonal climate prediction, rainy season onset]
+    synonyms_ha: ["gargaɗin ambaliya", "sanarwar gaggawa", "ɓarkewar cuta", "sankarau", "kwalara", "zazzaɓin lassa", "kyanda", "hasashen damina"]
+    answer_pattern: advisories
+    publishers:
+      - id: ncdc_sitreps
+        name: NCDC (Nigeria Centre for Disease Control) disease situation reports
+        domains: [ncdc.gov.ng]
+        urls:
+          - https://ncdc.gov.ng/diseases/sitreps/
+        doc_types: [weekly situation reports by state and epi week (Lassa fever, CSM/meningitis, cholera, measles, diphtheria)]
+        level: state
+        tier: 1
+        cadence: weekly in an outbreak; the listing per disease is /diseases/sitreps/?cat=<n> (Lassa 5, CSM 6, cholera 7, measles 11, diphtheria 18)
+        verified: 2026-10-30
+      - id: nema_alerts
+        name: NEMA (National Emergency Management Agency) flood alerts and early warnings
+        domains: [nema.gov.ng]
+        doc_types: [news and alerts (WordPress posts API)]
+        level: state
+        tier: 1
+        verified: 2026-10-30
+      - id: nihsa_afo
+        name: NIHSA (Nigeria Hydrological Services Agency) Annual Flood Outlook 2026 and flood alerts
+        domains: [nihsa.gov.ng]
+        doc_types: [Annual Flood Outlook (LGA risk classes), flood alerts]
+        level: lga
+        tier: 1
+        latest_known: "2026 AFO, presented April 2026 (the site builds its lists in the browser: no PDF link reached yet)"
+        verified: 2026-10-30
+      - id: nimet_scp
+        name: NiMet (Nigerian Meteorological Agency) Seasonal Climate Prediction 2026 and advisories
+        domains: [scp.nimet.gov.ng]
+        doc_types: [Seasonal Climate Prediction (onset, cessation, rainfall, dry spells by state), heatwave and dust advisories]
+        level: state
+        tier: 1
+        note: nimet.gov.ng serves a JavaScript bot check to automated fetchers (not reachable); scp.nimet.gov.ng answers but its 2026 files returned 404 on Oct 30
+        verified: "no"
+      - id: sokoto_sema
+        name: Sokoto State Emergency Management Agency (SEMA), via the state government portal
+        domains: [sokotostate.gov.ng]
+        doc_types: [state government news and announcements (WordPress posts API); SEMA has no site of its own]
+        level: lga
+        tier: 1
+        verified: 2026-10-30
+      - id: sokoto_moh
+        name: Sokoto State Ministry of Health
+        domains: [moh.sk.gov.ng]
+        doc_types: [announcements and outbreak notices (WordPress posts API)]
+        level: lga
+        tier: 1
+        verified: 2026-10-30
+
   aid_flows_partners:
     synonyms_en: [partners, NGOs, donors, who works on, development partners, projects in LGA]
     synonyms_ha: ["abokan hulda", "kungiyoyi", "masu tallafi", "ayyukan kungiyoyi"]
@@ -662,6 +718,8 @@ domain_checks:
   naerls.gov.ng: 2026-10-30
   nihsa.gov.ng: 2026-10-30
   nimet.gov.ng: 2026-10-30       # answered HTTP 307; its robots.txt was unreadable, so fetches are refused until it reads
+  scp.nimet.gov.ng: 2026-10-30   # NiMet's Seasonal Climate Prediction site: answers 200, no robots.txt (404); 2026 links dead
+  moh.sk.gov.ng: 2026-10-30      # Sokoto State Ministry of Health (WordPress; robots allows us)
   ifad.org: 2026-10-30
   grid3.org: 2026-10-30
   data.grid3.org: 2026-10-30
