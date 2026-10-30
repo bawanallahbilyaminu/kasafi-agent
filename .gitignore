@@ -43,3 +43,4 @@ deploy/index.incoming.sql.gz
 evals/generated/runs/
 # per-case results of eval runs in progress (evals/runtime.py, for --resume)
 evals/.checkpoints/
+evals/progress.log

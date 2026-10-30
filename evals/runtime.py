@@ -54,6 +54,31 @@ class Checkpoint:
             os.fsync(f.fileno())
 
 
+PROGRESS = Path(__file__).with_name("progress.log")         # not in git; started fresh by each run
+
+
+class Progress:
+    """One line per finished case, printed and appended to evals/progress.log:
+    [12/39] m12 ok 11.2s | wrong so far 0 | spent $0.41 | ~6 min left"""
+
+    def __init__(self, name: str, total: int, settings, done: int = 0, wrong: int = 0) -> None:
+        self.total, self.settings, self.done, self.wrong = total, settings, done, wrong
+        self.times: list[float] = []
+        PROGRESS.write_text(f"{name}: {total} cases" + (f", {done} done before --resume" if done else "") + "\n",
+                            encoding="utf-8")
+
+    def case(self, label: str, why: str, dt: float) -> None:
+        self.done += 1
+        self.wrong += bool(why)
+        self.times.append(dt)
+        left = (self.total - self.done) * sum(self.times) / len(self.times) / 60
+        line = (f"[{self.done}/{self.total}] {label} {'WRONG ' + why[:60] if why else 'ok'} {dt:.1f}s | wrong so far "
+                f"{self.wrong} | spent ${usage.total_dollars(self.settings):.2f} | ~{left:.0f} min left")
+        print(line, flush=True)
+        with PROGRESS.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+
+
 def warm() -> None:
     from app.retrieval.line_meaning import embed_queries
     embed_queries(["warm up"])        # loads the model once; it's cached for the process (line_meaning._model)

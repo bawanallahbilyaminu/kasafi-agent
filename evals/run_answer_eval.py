@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT))
 from app.agent.answer import answer_question  # noqa: E402
 from app import usage  # noqa: E402
 from app.config import get_settings  # noqa: E402
-from evals.runtime import Checkpoint, memory_line, run_each, warm  # noqa: E402
+from evals.runtime import Checkpoint, Progress, memory_line, run_each, warm  # noqa: E402
 
 
 def check(case: dict, a) -> list[str]:
@@ -80,6 +80,8 @@ async def main(ids: list[str] | None, runs: int, plan_reasoning: str | None = No
                                                              "plan": s.kasafi_plan_reasoning}, resume=resume)
     resumed = len(ckpt.done)
     warm()
+    prog = Progress(f"answers-{suite}", len(cases) * runs, s, resumed,
+                    sum(bool(r["fails"]) for r in ckpt.done.values()))
 
     async def one(job: tuple[int, dict], conn) -> None:
         run, c = job
@@ -97,6 +99,7 @@ async def main(ids: list[str] | None, runs: int, plan_reasoning: str | None = No
               + (f"  [fetch: {a.acquired.status} {a.acquired.doc_id or ''}]" if a.acquired else ""))
         if fails:
             print("      " + a.text.replace("\n", "\n      "))
+        prog.case(c["id"], "; ".join(fails), dt)
         ckpt.add(f"{run}:{c['id']}", {"fails": fails, "dt": dt, "plan": a.timings.get("plan", 0),
                                       "answer": a.timings.get("answer", 0)})
 

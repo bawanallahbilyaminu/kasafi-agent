@@ -33,7 +33,7 @@ sys.path.insert(0, str(ROOT))
 from app.agent.answer import answer_question, readable_amounts  # noqa: E402
 from app import usage  # noqa: E402
 from app.config import get_settings  # noqa: E402
-from evals.runtime import Checkpoint, memory_line, run_each, warm  # noqa: E402
+from evals.runtime import Checkpoint, Progress, memory_line, run_each, warm  # noqa: E402
 
 CASES = Path(__file__).with_name("cases.json")
 RUNS = Path(__file__).with_name("runs")          # fresh draws (not in git: the report names the seed)
@@ -125,6 +125,7 @@ async def main(forms: str, seed: int, families: list[str] | None, out: Path, cas
                                          "families": families}, resume=False)
     resumed = len(ckpt.done)
     warm()
+    prog = Progress(out.stem, len(cases), s, resumed, sum(bool(r["why"]) for r in ckpt.done.values()))
 
     async def one(c: dict, conn) -> None:
         form = pick_form(c, forms, seed)
@@ -146,6 +147,7 @@ async def main(forms: str, seed: int, families: list[str] | None, out: Path, cas
             why, text = f"error {type(e).__name__}", "-"
         dt = time.perf_counter() - t0
         print(f"{c['id']:18} {form:13} {'WRONG ' + why if why else 'ok':60.60} {dt:5.1f}s")
+        prog.case(c["id"], why, dt)
         ckpt.add(c["id"], {"family": c["family"], "form": form, "q": q, "why": why, "dt": dt, "text": text})
 
     if not await run_each([c for c in cases if c["id"] not in ckpt.done], one, s.db_url(), concurrency, s):

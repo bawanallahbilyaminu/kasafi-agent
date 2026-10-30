@@ -82,6 +82,20 @@ def test_about_50_fresh_cases_in_development_155_before_a_deploy() -> None:
     assert (per_family(50), per_family(155)) == (6, 19)
 
 
+def test_each_case_prints_and_logs_a_progress_line(tmp_path, monkeypatch, capsys) -> None:
+    from tests.helpers import make_settings
+    monkeypatch.setattr(runtime, "PROGRESS", tmp_path / "progress.log")
+    usage.reset()
+    p = runtime.Progress("plan11", 39, make_settings(), done=11, wrong=0)
+    p.case("m12", "", 11.2)
+    p.case("m13", "missing ['2.69']", 8.8)
+    lines = (tmp_path / "progress.log").read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "plan11: 39 cases, 11 done before --resume"
+    assert lines[1] == "[12/39] m12 ok 11.2s | wrong so far 0 | spent $0.00 | ~5 min left"
+    assert lines[2].startswith("[13/39] m13 WRONG missing ['2.69'] 8.8s | wrong so far 1")
+    assert "[12/39] m12 ok" in capsys.readouterr().out
+
+
 def test_the_run_reports_its_peak_memory() -> None:
     assert runtime.peak_mb() > 1
     assert runtime.memory_line(4).startswith("peak memory: ") and "4 cases were done before --resume" in \

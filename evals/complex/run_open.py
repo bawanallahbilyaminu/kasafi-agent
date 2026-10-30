@@ -26,7 +26,7 @@ sys.path.insert(0, str(ROOT))
 from app.agent.answer import UNVERIFIED, answer_question  # noqa: E402
 from app import usage  # noqa: E402
 from app.config import get_settings  # noqa: E402
-from evals.runtime import Checkpoint, memory_line, run_each, warm  # noqa: E402
+from evals.runtime import Checkpoint, Progress, memory_line, run_each, warm  # noqa: E402
 
 
 STAGES = ("plan", "acquire", "line_search", "read", "read1", "read2", "reread", "page_search", "compose",
@@ -68,6 +68,7 @@ async def main(path: Path, ids: list[str] | None, out: Path, resume: bool = Fals
     ckpt = Checkpoint(out.stem, {"file": str(path), "ids": ids}, resume=resume)
     resumed = len(ckpt.done)
     warm()
+    prog = Progress(out.stem, len(qs), s, resumed, sum(bool(r.get("why")) for r in ckpt.done.values()))
 
     async def one(q: dict, conn) -> None:
         t0 = time.perf_counter()
@@ -79,6 +80,7 @@ async def main(path: Path, ids: list[str] | None, out: Path, resume: bool = Fals
         except Exception as e:      # one bad question must not stop the run
             conn.rollback()
             print(f"{q['id']:>4} ERROR {type(e).__name__}")
+            prog.case(q["id"], f"error {type(e).__name__}", time.perf_counter() - t0)
             ckpt.add(q["id"], {"row": [q["id"], "error", False, 0, False, "-", time.perf_counter() - t0],
                                "error": type(e).__name__})
             return
@@ -94,6 +96,7 @@ async def main(path: Path, ids: list[str] | None, out: Path, resume: bool = Fals
         parts = " ".join(f"{k}={v:.1f}" for k, v in a.timings.items() if k in STAGES)
         print(f"{q['id']:>4} {res[1]:<10} {'WRONG ' if why else ''}cites={res[3]} {path_taken:<22} "
               f"{dt:5.1f}s  [{parts}]" + (f"  {why}" if why else ""))
+        prog.case(q["id"], why, dt)
         ckpt.add(q["id"], {"row": res, "timings": dict(a.timings), "why": why, "text": a.text})
 
     if not await run_each([q for q in qs if q["id"] not in ckpt.done], one, s.db_url(), concurrency, s):
