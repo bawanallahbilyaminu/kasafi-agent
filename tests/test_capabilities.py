@@ -169,3 +169,9 @@ def test_a_parent_ministry_row_for_an_agency_question_is_flagged() -> None:
                                            "051701100100")])
     asked, got = ans.parent_rows(plan, LineResult(selections=[Selection(row, cell)]))
     assert asked.code == "051701100100" and got == "Ministry of Education (051700000000)"
+
+
+def test_a_share_of_a_split_is_computed_from_its_cells() -> None:
+    need = Need("q", measures=["approved", "share_of_budget"], entities=[SBS], splits=["capital", "total"],
+                time={"kind": "year", "year": 2026}, operation="share")
+    assert {c.measure for c in required_cells(need)} == {"approved"} and cover(need, available=ALL).all_by("budget_core")

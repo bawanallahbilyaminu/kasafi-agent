@@ -103,12 +103,17 @@ def generate(conn, n: int, rng: random.Random) -> list[dict]:
     for name, code in rng.sample(mdas, min(n, len(mdas))):
         add("compare", f"Compare the {name}'s approved budget in 2025 and 2026.",
             numbers=[money(approved(conn, code, 2025)), money(approved(conn, code, 2026))], code=code)
+    def share_forms(c) -> list[list[str]]:
+        cap, tot = approved(conn, c, 2026, "capital"), approved(conn, c, 2026)
+        if not (cap is not None and tot):
+            return []
+        pct = (Decimal(cap) / Decimal(tot) * 100).quantize(Decimal("0.1"), ROUND_HALF_UP)
+        return [[f"{pct}%"], [f"{pct} %"], [money(cap), money(tot)]]
+
     for name, code in rng.sample(split_subs, min(n, len(split_subs))):
-        cap, tot = approved(conn, code, 2026, "capital"), approved(conn, code, 2026)
-        if tot:
-            pct = (Decimal(cap) / Decimal(tot) * 100).quantize(Decimal("0.1"), ROUND_HALF_UP)
-            add("share", f"What share of the {name}'s 2026 approved budget is capital?",
-                numbers_any=[[f"{pct}%"], [f"{pct} %"], [money(cap), money(tot)]], code=code)
+        forms = share_forms(code) + share_forms(ministry[name]) if name in ministry else share_forms(code)
+        if forms:                          # a unit printed with its ministry's name: either share counts
+            add("share", f"What share of the {name}'s 2026 approved budget is capital?", numbers_any=forms, code=code)
     for name, code in rng.sample(mdas, min(n, len(mdas))):        # the premise is the wrong way round
         a25, a26 = approved(conn, code, 2025), approved(conn, code, 2026)
         wrong = "fell" if a26 > a25 else "rose"

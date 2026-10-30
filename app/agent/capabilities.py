@@ -84,10 +84,14 @@ def required_cells(need: Need, *, latest_year: int | None = None) -> list[Cell]:
             and splits != [""] and "total" not in splits:
         splits = [*splits, "total"]          # a part is read against its whole ('how much of it is capital?')
     quarter = need.time.get("quarter")
+    measures = need.measures or ["other"]
+    if "share_of_budget" in measures and len(measures) > 1 and splits != [""]:
+        # the share of a split is computed from its cells (the part and its total), not a figure of its own
+        measures = [m for m in measures if m != "share_of_budget"]
     cells = []
     for e in entities:
         level = "lga" if e.type == "lga" else need.geo_level if e.type == "state" else "state"
-        for m in need.measures or ["other"]:
+        for m in measures:
             for s in splits:
                 for y in years:
                     cells.append(Cell(m, e, level, s, y, quarter))
