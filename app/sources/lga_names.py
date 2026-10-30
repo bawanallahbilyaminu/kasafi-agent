@@ -4,7 +4,11 @@ The budget prints capitals and spaces ("WAMAKKO", "DANGE SHUNI"), IOM DTM uses i
 "Dange-Shuni"), and people type others ("Wamako", "Sabon-Birni", "Ilela", "Sokoto ta Arewa"). Every name is
 matched through canonical(), so a question, a budget location and a DTM place meet on one key.
 
-An interim table: hazard step 1 replaces it with a full crosswalk joined by OCHA P-codes.
+The crosswalk (hazard step 1): every LGA's identity is its OCHA COD-AB P-code (NG034001 ...), the join key for
+IOM DTM and HDX data. Each canonical name maps to its P-code and to GRID3's own code (601 ...); every spelling
+(COD-AB's 'Wamako' and 'Dange-Shuni', GRID3's 'Wamakko' and 'Dange Shuni', the facility file's, the budgets',
+DTM's, typed ones) goes through canonical(), then pcode(). The same crosswalk is stored on the lga table
+(scripts/import_geo.py) with the boundaries; tests/test_geo.py checks it against the COD-AB and GRID3 files.
 """
 
 from __future__ import annotations
@@ -57,3 +61,26 @@ def canonical(name: str) -> str:
     """The LGA's canonical name for any known spelling (spaces optional), or '' if it isn't a Sokoto LGA."""
     k = _key(name)
     return _BY_KEY.get(k) or _BY_KEY.get(k.replace(" ", ""), "")
+
+
+# OCHA COD-AB (HDX, valid from 22 Feb 2017) P-codes and GRID3 operational-ward LGA codes, by canonical name
+PCODES = {"Binji": "NG034001", "Bodinga": "NG034002", "Dange Shuni": "NG034003", "Gada": "NG034004",
+          "Gwadabawa": "NG034005", "Goronyo": "NG034006", "Gudu": "NG034007", "Illela": "NG034008", "Isa": "NG034009",
+          "Kebbe": "NG034010", "Kware": "NG034011", "Rabah": "NG034012", "Sabon Birni": "NG034013",
+          "Shagari": "NG034014", "Silame": "NG034015", "Sokoto North": "NG034016", "Sokoto South": "NG034017",
+          "Tambuwal": "NG034018", "Tangaza": "NG034019", "Tureta": "NG034020", "Wamakko": "NG034021",
+          "Wurno": "NG034022", "Yabo": "NG034023"}
+GRID3_CODES = {name: str(601 + i) for i, name in enumerate(CANONICAL)}      # Binji 601 ... Yabo 623
+_BY_PCODE = {p: n for n, p in PCODES.items()}
+
+
+def pcode(name: str) -> str:
+    """The LGA's P-code for any spelling of its name (or its P-code itself), or ''."""
+    if name in _BY_PCODE:
+        return name
+    return PCODES.get(canonical(name), "")
+
+
+def name_of(code: str) -> str:
+    """The canonical name for a P-code."""
+    return _BY_PCODE.get(code, "")

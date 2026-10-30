@@ -45,6 +45,7 @@ class RoundFigure:
     idps: int                  # summed over displacement reasons
     reasons: dict[str, int]
     operation: str = ""
+    pcode: str = ""            # the place's P-code (admin2Pcode / admin1Pcode): the join key with our LGAs
 
 
 def _unwrap(body):
@@ -80,7 +81,9 @@ async def _get(http: httpx.AsyncClient, url: str, key, params: dict | None = Non
 
 def by_round(rows: list[dict], level: str = "admin1Name") -> list[RoundFigure]:
     """Rows -> one figure per place and round (displacement reasons summed), newest round first."""
-    sums: dict[tuple, dict] = defaultdict(lambda: {"idps": 0, "reasons": defaultdict(int), "date": "", "op": ""})
+    sums: dict[tuple, dict] = defaultdict(lambda: {"idps": 0, "reasons": defaultdict(int), "date": "", "op": "",
+                                                   "pcode": ""})
+    code = level.replace("Name", "Pcode")                   # admin2Name -> admin2Pcode
     for x in rows:
         try:
             rnd, n = int(x.get("roundNumber") or 0), int(float(x.get("numPresentIdpInd") or 0))
@@ -92,7 +95,9 @@ def by_round(rows: list[dict], level: str = "admin1Name") -> list[RoundFigure]:
         s["reasons"][str(x.get("displacementReason") or "-")] += n
         s["date"] = max(s["date"], str(x.get("reportingDate") or "")[:10])
         s["op"] = s["op"] or str(x.get("operation") or "")
-    out = [RoundFigure(place, rnd, s["date"], s["idps"], dict(s["reasons"]), s["op"]) for (place, rnd), s in sums.items()]
+        s["pcode"] = s["pcode"] or str(x.get(code) or "")
+    out = [RoundFigure(place, rnd, s["date"], s["idps"], dict(s["reasons"]), s["op"], s["pcode"])
+           for (place, rnd), s in sums.items()]
     return sorted(out, key=lambda f: (f.date, f.round, f.idps), reverse=True)
 
 

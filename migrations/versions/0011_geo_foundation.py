@@ -65,7 +65,8 @@ def upgrade() -> None:
     CREATE INDEX place_geom ON place USING gist (geom);
 
     CREATE TABLE facility (
-        nhfr_uid        BIGINT PRIMARY KEY,
+        fid             TEXT PRIMARY KEY,                -- nhfr_uid, or GRID3's globalid for a facility not in NHFR
+        nhfr_uid        BIGINT,
         nhfr_code       TEXT,
         name            TEXT NOT NULL,
         lga_attr        TEXT,                            -- the file's own lga / ward
@@ -87,14 +88,14 @@ def upgrade() -> None:
     CREATE INDEX facility_geom ON facility USING gist (geom);
 
     CREATE TABLE facility_capability (
-        nhfr_uid        BIGINT NOT NULL REFERENCES facility (nhfr_uid) ON DELETE CASCADE,
+        fid             TEXT NOT NULL REFERENCES facility (fid) ON DELETE CASCADE,
         capability      TEXT NOT NULL,                   -- bemonc | cemonc
         doc_id          TEXT NOT NULL,
         page            INT,
         matched_name    TEXT NOT NULL,                   -- the name as the report prints it
         score           REAL NOT NULL,
         confirmed       BOOLEAN NOT NULL DEFAULT false,  -- a person confirmed the match
-        PRIMARY KEY (nhfr_uid, capability)
+        PRIMARY KEY (fid, capability)
     );
     """)
 

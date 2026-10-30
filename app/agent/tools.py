@@ -17,7 +17,7 @@ import httpx
 from app.agent.capabilities import Cell
 from app.agent.need import Need
 from app.sources import dtm as dtm_api
-from app.sources.lga_names import canonical
+from app.sources.lga_names import pcode
 
 log = logging.getLogger(__name__)
 
@@ -115,13 +115,15 @@ async def dtm_fill(http: httpx.AsyncClient, settings, need: Need, cells: list[Ce
     if not rounds:
         return out
     top = rounds[0]
-    by_lga = {(canonical(f.place) or f.place).lower(): f for f in lgas or []}     # DTM's 'Wamako' = 'Wamakko'
+    # joined by P-code (DTM's own admin2Pcode; from its name by the crosswalk when a row has none): 'Wamako' is
+    # NG034021 whatever the spelling
+    by_lga = {(f.pcode or pcode(f.place) or f.place.lower()): f for f in lgas or []}
     out.api = (f"IOM DTM API (Baseline), Round {top.round}, reporting date {top.date}"
                + (f", as pulled on {pulled}" if pulled else ""))
     for c in cells:
         if c.measure != "idp_count":
             continue
-        lga = (canonical(c.entity.resolved or c.entity.name) or c.entity.resolved).lower()
+        lga = pcode(c.entity.resolved or c.entity.name) or (c.entity.resolved or "").lower()
         if c.entity.type == "lga" and lga in by_lga:
             f = by_lga[lga]
             c.value, c.year = f.idps, None
