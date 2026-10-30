@@ -74,8 +74,8 @@ def test_user_agent_identifies_kasafi() -> None:
     assert USER_AGENT.startswith("KasafiBot/1.0 ") and "halalnumeriq.com.ng/kasafi" in USER_AGENT
 
 
-def test_disallowing_site_is_skipped_before_the_pick(monkeypatch) -> None:
-    agents, offered = [], []
+def test_disallowing_site_is_skipped_before_any_fetch(monkeypatch) -> None:
+    agents, fetched = [], []
 
     def handler(req: httpx.Request) -> httpx.Response:
         agents.append(req.headers.get("user-agent", ""))
@@ -86,14 +86,19 @@ def test_disallowing_site_is_skipped_before_the_pick(monkeypatch) -> None:
     async def candidates(http, description, settings):
         return [Candidate("https://mof.sk.gov.ng/q3.pdf", "Q3 (mof)"), Candidate("https://sokotostate.gov.ng/q3.pdf", "Q3")]
 
-    async def pick(description, cands, client, settings):
-        offered.extend(c.url for c in cands)
-        return None
+    async def rank(description, cands, client, settings):
+        return cands                                                   # both could be it
+
+    async def fetch(conn, url, description, **kw):
+        fetched.append(url)
+        return library.Acquired("failed", url=url, detail="not the wanted document")
 
     monkeypatch.setattr(library, "find_local", lambda conn, d: None)
     monkeypatch.setattr(library, "fetches_today", lambda conn: 0)
     monkeypatch.setattr(library, "search_candidates", candidates)
-    monkeypatch.setattr(library, "pick_candidate", pick)
+    monkeypatch.setattr(library, "rank_candidates", rank)
+    monkeypatch.setattr(library, "fetch_and_index", fetch)
+    monkeypatch.setattr(library, "registry_urls", lambda d: [])
 
     async def go():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler),
@@ -101,6 +106,6 @@ def test_disallowing_site_is_skipped_before_the_pick(monkeypatch) -> None:
             return await library.find_and_fetch(None, "Q3 2025", settings=make_settings(), client=None, http=http)
 
     acq = asyncio.run(go())
-    assert offered == ["https://sokotostate.gov.ng/q3.pdf"]           # mof.sk.gov.ng never offered
-    assert acq.status == "not_found" and "local-only sites skipped: mof.sk.gov.ng" in acq.detail
+    assert fetched == ["https://sokotostate.gov.ng/q3.pdf"]           # mof.sk.gov.ng never fetched
+    assert acq.status == "not_found" and "mof.sk.gov.ng: disallowed by robots.txt" in acq.detail
     assert agents and all(a == USER_AGENT for a in agents)

@@ -52,8 +52,8 @@ def _run(monkeypatch, found: Candidate, fetched: list) -> library.Acquired:
     async def web(*a, **k):
         return [found]
 
-    async def pick(description, cands, client, settings):
-        return cands[0] if cands else None
+    async def rank(description, cands, client, settings):
+        return cands
 
     async def fetch(conn, url, description, **kw):
         fetched.append((url, kw["allowed"]))
@@ -63,7 +63,8 @@ def _run(monkeypatch, found: Candidate, fetched: list) -> library.Acquired:
         return True, ""
     monkeypatch.setattr(library, "search_candidates", none)
     monkeypatch.setattr(library, "open_web_candidates", web)
-    monkeypatch.setattr(library, "pick_candidate", pick)
+    monkeypatch.setattr(library, "rank_candidates", rank)
+    monkeypatch.setattr(library, "registry_urls", lambda d: [])
     monkeypatch.setattr(library, "fetch_and_index", fetch)
     monkeypatch.setattr(library.Robots, "allowed", robots_ok)
     s = Settings(serper_api_key="k", kasafi_fetches_per_day=10)
@@ -95,3 +96,27 @@ def test_the_user_is_told_the_site_awaits_approval() -> None:
     plan.missing_document = "SP final report"
     a = ans._not_found(None, plan, "en", library.Acquired("awaiting", detail="some-ngo.org"), {})
     assert "hasn't approved yet (some-ngo.org)" in a.text and not a.found
+
+
+def test_the_registry_address_is_tried_before_any_search_and_judged_by_content(monkeypatch) -> None:
+    order: list = []
+
+    async def search(*a, **k):
+        order.append("search")
+        return []
+
+    async def fetch(conn, url, description, **kw):
+        order.append(url)
+        return library.Acquired("indexed", "un-jp-eval", url=url)
+
+    async def robots_ok(self, url):
+        return True, ""
+    monkeypatch.setattr(library, "search_candidates", search)
+    monkeypatch.setattr(library, "fetch_and_index", fetch)
+    monkeypatch.setattr(library.Robots, "allowed", robots_ok)
+    got = asyncio.run(library.find_and_fetch(
+        _Conn(), "Final Evaluation of the UN Joint Programme on Social Protection in Nigeria", settings=Settings(),
+        client=None, check_local=False))
+    assert got.doc_id == "un-jp-eval" and order == [
+        "https://mptf.undp.org/sites/default/files/documents/2023-05/nigeria_final_evaluation_report.pdf"]
+    assert library.registry_urls("NBS CPI September 2026") == []          # a shared year or month is no match

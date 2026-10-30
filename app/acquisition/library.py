@@ -24,8 +24,9 @@ from pathlib import Path
 import httpx
 import psycopg
 
+from app import usage
 from app.acquisition.fetch import FetchError, download_pdf
-from app.acquisition.find import find_local, pick_candidate, search_candidates
+from app.acquisition.find import find_local, rank_candidates, search_candidates
 from app.acquisition.policy import USER_AGENT, Robots, host_allowed
 from app.acquisition.review import open_web_candidates, open_web_trusted, queue_domain
 from app.acquisition.editions import SERIES, valid_edition
@@ -50,7 +51,7 @@ CATEGORIES = ("budget", "budget_performance", "fiscal", "accountability", "plan"
 
 @dataclass
 class Acquired:
-    status: str                # local | known | indexed | not_found | failed | limit | awaiting (domain queued)
+    status: str                # local | known | indexed | not_found | failed | limit | awaiting (domain queued) | off
     doc_id: str | None = None
     title: str = ""
     url: str = ""
@@ -134,11 +135,14 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
     t: dict[str, float] = {}
     if known := _known(conn, url=url):
         return Acquired("known", known, url=url)
+    if not settings.kasafi_fetch_enabled:
+        return Acquired("failed", url=url, detail="fetching is off for this run")
     fetch_dir = Path(settings.kasafi_fetch_dir)
     tag = secrets.token_hex(8)
     incoming, unzipped = fetch_dir / f"incoming-{tag}.download", fetch_dir / f"incoming-{tag}.pdf"
     try:
         t0 = time.perf_counter()
+        usage.count("fetch_attempts")
         dl = await download_pdf(url, incoming, http, robots or Robots(http), allowed=allowed,
                                 **({"timeout": download_timeout} if download_timeout else {}))
         t["download"] = time.perf_counter() - t0
@@ -181,12 +185,42 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
         scanned = [i for i, p in enumerate(pages, 1) if needs_ocr(i, p, image_pages)]
         if scanned:
             schedule_ocr(doc_id, path, scanned[:BACKGROUND_OCR_PAGES], settings)
+        usage.count("documents_fetched")
         return Acquired("indexed", doc_id, doc["title"], url, timings=t)
     except (FetchError, ParseError) as e:
         return Acquired("failed", url=url, detail=str(e)[:300], timings=t)
     finally:
         incoming.unlink(missing_ok=True)
         unzipped.unlink(missing_ok=True)
+
+
+_WORD = re.compile(r"[a-z0-9]+")
+_STOP = {"the", "of", "and", "in", "for", "on", "a", "an", "to", "with", "state", "sokoto", "nigeria", "report",
+         "pdf", "sites", "default", "files", "documents", "www", "https", "org", "int", "gov", "ng"}
+
+
+_MONTHS = {"january", "february", "march", "april", "may", "june", "july", "august", "september", "october",
+           "november", "december"}
+
+
+def _words(text: str) -> set[str]:
+    """Words that name a document's publisher or kind: no years or months (any document can share those)."""
+    return {w for w in _WORD.findall(text.lower()) if w not in _STOP and w not in _MONTHS and len(w) > 2
+            and not w.isdigit()}
+
+
+def registry_urls(description: str) -> list[str]:
+    """Addresses the registry already knows for the wanted document: a publisher's `urls` whose own words (its
+    name, document types and the address) share at least two with the description, the most shared first."""
+    want = _words(description)
+    scored = []
+    for t in registry().topics.values():
+        for p in t.publishers:
+            for url in p.urls:
+                have = _words(" ".join([p.name, *p.doc_types, url]))
+                if len(want & have) >= 2:
+                    scored.append((len(want & have), url))
+    return [u for _, u in sorted(dict.fromkeys(scored), reverse=True)]
 
 
 async def find_and_fetch(conn: psycopg.Connection, description: str, *, settings: Settings, client: ChatClient,
@@ -196,6 +230,9 @@ async def find_and_fetch(conn: psycopg.Connection, description: str, *, settings
     with a domain awaiting approval."""
     if check_local and (local := find_local(conn, description)):
         return Acquired("local", local)
+    if not settings.kasafi_fetch_enabled:           # an eval run that doesn't need fetching (not a failed search,
+        return Acquired("off", detail="fetching is off for this run")      # so not counted in fetches_today)
+    open_web = open_web and settings.kasafi_open_web
     if fetches_today(conn) >= settings.kasafi_fetches_per_day:
         log.warning("daily document fetch limit reached")
         return Acquired("limit", detail="daily fetch limit")
@@ -204,40 +241,44 @@ async def find_and_fetch(conn: psycopg.Connection, description: str, *, settings
     try:
         t0 = time.perf_counter()
         robots = Robots(http)
-        candidates, local_only = [], set()
-        for c in await search_candidates(http, description, settings):
-            ok, why = await robots.allowed(c.url)
-            if ok:
-                candidates.append(c)
-            else:     # the site doesn't allow us: "local only" (a person adds its documents by hand)
-                local_only.add(f"{httpx.URL(c.url).host}: {why}")
-        if local_only:
-            log.info("skipped sites that disallow KasafiBot: %s", sorted(local_only))
-        chosen = await pick_candidate(description, candidates, client, settings)
-        allowed = host_allowed
-        if chosen is None and open_web and settings.serper_api_key:
-            # the registry's channels and allowlisted search failed: the open web, trusted patterns only
-            web = await open_web_candidates(http, description, settings.serper_api_key.get_secret_value())
-            chosen = await pick_candidate(description, [c for c in web if c.url not in {x.url for x in candidates}],
-                                          client, settings)
-            if chosen is not None and not open_web_trusted(chosen.url):
-                domain = queue_domain(conn, chosen, question or description)
-                return Acquired("awaiting", url=chosen.url, title=chosen.title, detail=domain,
+        tried: list[str] = []
+
+        async def first_confirmed(urls: list[str], allowed) -> Acquired | None:
+            """Each candidate is downloaded and judged by its first pages (confirm_document), not its title."""
+            for url in urls:
+                ok, why = await robots.allowed(url)
+                if not ok:
+                    tried.append(f"{httpx.URL(url).host}: {why}")
+                    continue
+                res = await fetch_and_index(conn, url, description, settings=settings, client=client, http=http,
+                                            robots=robots, series=series, edition=edition, allowed=allowed)
+                if res.doc_id:
+                    res.timings = {"find": time.perf_counter() - t0, **res.timings}
+                    return res
+                tried.append(f"{url}: {res.detail[:120]}")
+            return None
+
+        # 1. the registry's own address for this document, before any search
+        if got := await first_confirmed(registry_urls(description)[:2], host_allowed):
+            return got
+        # 2. the publishers' listings, partner APIs and allowlisted web search, ranked; each confirmed by content
+        candidates = await search_candidates(http, description, settings)
+        ranked = await rank_candidates(description, candidates, client, settings)
+        if got := await first_confirmed([c.url for c in ranked if c.url not in "".join(tried)], host_allowed):
+            return got
+        # 3. the open web: trusted patterns are fetched the same way; another site is queued for a person
+        if open_web and settings.serper_api_key:
+            web = [c for c in await open_web_candidates(http, description, settings.serper_api_key.get_secret_value())
+                   if c.url not in {x.url for x in candidates}]
+            ranked = await rank_candidates(description, web, client, settings)
+            if got := await first_confirmed([c.url for c in ranked if open_web_trusted(c.url)], open_web_trusted):
+                return got
+            if other := next((c for c in ranked if not open_web_trusted(c.url)), None):
+                domain = queue_domain(conn, other, question or description)
+                return Acquired("awaiting", url=other.url, title=other.title, detail=domain,
                                 timings={"find": time.perf_counter() - t0})
-            allowed = open_web_trusted
-        found_s = time.perf_counter() - t0
-        if chosen is None:
-            detail = f"{len(candidates)} fetchable candidates, none matched"
-            if local_only:
-                detail += f"; local-only sites skipped: {', '.join(sorted(local_only))}"
-            return Acquired("not_found", detail=detail, timings={"find": found_s})
-        ok, why = await robots.allowed(chosen.url)
-        if not ok:
-            return Acquired("failed", url=chosen.url, detail=why, timings={"find": found_s})
-        result = await fetch_and_index(conn, chosen.url, description, settings=settings, client=client, http=http,
-                                       robots=robots, series=series, edition=edition, allowed=allowed)
-        result.timings = {"find": found_s, **result.timings}
-        return result
+        detail = f"{len(candidates)} candidates; tried: {'; '.join(tried)[:400] or 'none ranked as the document'}"
+        return Acquired("not_found", detail=detail, timings={"find": time.perf_counter() - t0})
     finally:
         if own:
             await http.aclose()
