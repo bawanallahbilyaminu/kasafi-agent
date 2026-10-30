@@ -80,8 +80,9 @@ W = {
                        "(guideline: 15), dust {dust:.0f} µg/m³; US AQI up to {aqi:.0f}: *{cat}*.",
            "air_state": "{day}: dustiest in {lga}, PM10 averaging {pm10:.0f} µg/m³ (WHO 24-hour guideline: 45); "
                         "US AQI up to {aqi:.0f}: *{cat}*.",
-           "river_line": "{point} ({lga} LGA), {day}: {q:.0f} m³/s, *{level}* for {period} (higher than {rank:.0f}% "
-                         "of {period} days since {since}).",
+           "river_line": "{point} ({lga} LGA), {day}: {q:.0f} m³/s, *{level}* for {period} ({where_in}).",
+           "rank_mid": "higher than {rank:.0f}% of {period} days since {since}",
+           "rank_low": "the lowest for {period} since {since}", "rank_high": "the highest for {period} since {since}",
            "levels": {"low": "low", "normal": "normal", "high": "high", "very_high": "very high"},
            "parts": {"early": "early", "mid": "mid", "late": "late"},
            "months": ("January", "February", "March", "April", "May", "June", "July", "August", "September",
@@ -127,8 +128,9 @@ W = {
                        "µg/m³ (iyaka: 15), ƙura {dust:.0f} µg/m³; US AQI har zuwa {aqi:.0f}: *{cat}*.",
            "air_state": "{day}: inda ƙura ta fi yawa shi ne {lga}, matsakaicin PM10 {pm10:.0f} µg/m³ (iyakar WHO "
                         "ta awa 24: 45); US AQI har zuwa {aqi:.0f}: *{cat}*.",
-           "river_line": "{point} (Ƙaramar Hukumar {lga}), {day}: {q:.0f} m³/s, *{level}* a {period} (sama da kashi "
-                         "{rank:.0f}% na kwanakin {period} tun {since}).",
+           "river_line": "{point} (Ƙaramar Hukumar {lga}), {day}: {q:.0f} m³/s, *{level}* a {period} ({where_in}).",
+           "rank_mid": "sama da kashi {rank:.0f}% na kwanakin {period} tun {since}",
+           "rank_low": "mafi ƙaranci a {period} tun {since}", "rank_high": "mafi yawa a {period} tun {since}",
            "levels": {"low": "ƙasa da yadda aka saba", "normal": "kamar yadda aka saba", "high": "sama da yadda "
                       "aka saba", "very_high": "sama sosai da yadda aka saba"},
            "parts": {"early": "farkon", "mid": "tsakiyar", "late": "ƙarshen"},
@@ -313,10 +315,13 @@ def _layer_lines(conn, layer: str, lang: str, where: read.Where, pids: list, day
         lga = where.lga_pcode if where.kind == "lga" else ""
         for d in days:
             rows = read.river_days(conn, d, lga) or (read.river_days(conn, d) if lga else [])
-            out += [w["river_line"].format(point=r.point, lga=r.lga, day=_day_label(d, today, lang), q=r.discharge,
-                                           rank=r.rank, since=r.since.year, level=w["levels"][r.level],
-                                           period=f"{w['parts'][r.period[0]]} {w['months'][r.period[1] - 1]}")
-                    for r in rows]
+            for r in rows:
+                period = f"{w['parts'][r.period[0]]} {w['months'][r.period[1] - 1]}"
+                key = "rank_low" if r.rank < 0.5 else "rank_high" if r.rank > 99.5 else "rank_mid"
+                out.append(w["river_line"].format(point=r.point, lga=r.lga, day=_day_label(d, today, lang),
+                                                  q=r.discharge, level=w["levels"][r.level], period=period,
+                                                  where_in=w[key].format(rank=r.rank, period=period,
+                                                                         since=r.since.year)))
     elif layer == "fires":
         lga = where.lga_pcode if where.kind == "lga" else ""
         counts = read.fire_counts(conn, 24, lga)

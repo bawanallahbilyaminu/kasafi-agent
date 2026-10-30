@@ -59,7 +59,7 @@ def expected(conn, family: str, pid: int, lga: str, pcode: str, day, lang: str) 
         return [f"{r.pm10_mean:.0f} µg/m³", f"*{cat.label(r.category, lang)}*"] if r else None
     if family == "hazard_flood":
         rows = read.river_days(conn, day, pcode)
-        return [f"{rows[0].discharge:.0f} m³/s", f"{rows[0].rank:.0f}%"] if rows else None
+        return [f"{rows[0].discharge:.0f} m³/s", f"*{W[lang]['levels'][rows[0].level]}*"] if rows else None
     if family == "hazard_fires":
         n = sum(c.count for c in read.fire_counts(conn, 24, pcode))
         return [f": {n} {'in' if lang == 'en' else 'a'} {lga}"] if n else \
