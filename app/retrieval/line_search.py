@@ -136,6 +136,13 @@ def asked_kind(text: str) -> str:
     return kinds[0] if len(kinds) == 1 else ""
 
 
+def names_a_kind(text: str) -> bool:
+    """The question names any kind of spending (overhead, personnel, capital). Broader than asked_kind: a bare
+    'capital' counts (not 'the capital city'), and the Hausa words, since a kind wrongly seen only keeps a row."""
+    return any(re.search(pat, text, re.I) for _, pat in _KINDS) or bool(re.search(
+        r"(?i)\bcapital\b(?!\s+(?:city|town|of)\b)|manyan ayyuka|albashi|kuɗin gudanarwa|kudin gudanarwa", text))
+
+
 def lift_kind(lines: list[Line], kind: str) -> list[Line]:
     """Each line of the asked kind moves up to where its name first ranks: one agency is printed in the total,
     personnel, overhead and capital tables with one name, and only a few copies per document are kept, so the

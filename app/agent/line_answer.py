@@ -23,7 +23,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from app import usage
 from app.config import Settings
 from app.providers.chat import ChatClient
-from app.retrieval.line_search import MAX_LINES, Cell, Line, groups, ministry_of
+from app.retrieval.line_search import MAX_LINES, Cell, Line, groups, ministry_of, names_a_kind
 
 log = logging.getLogger(__name__)
 
@@ -43,8 +43,9 @@ SELECT_SYSTEM = (
     "true: the app then says the item isn't shown separately. If the question asks whether a line exists and no "
     "line is that thing, say no such line is shown, select nothing and set found \"none\"; never offer a "
     "broader line just because its amount or name is close.\n"
-    "1a. Pick the LEVEL the question names (each line shows its 'level' and 'spending'). A sector is the "
-    "'sector total' line, not a programme inside it, and a programme is not its sector; a unit inside a ministry "
+    "1a. Pick the LEVEL the question names (each line shows its 'level' and 'spending'). A sector (Hausa 'fanni', "
+    "'ɓangare') is the 'sector total' line, not a programme inside it nor the ministry of that name, and a "
+    "programme is not its sector; a unit inside a ministry "
     "(e.g. Government House, a department or board) is its own 'one agency or unit' line, not the 'ministry total "
     "including its agencies'; a kind of spending (overhead / running costs, personnel / salaries, capital) is the "
     "line from that kind's table, never the 'all spending (total)' line of the same agency; a question that names "
@@ -53,7 +54,9 @@ SELECT_SYSTEM = (
     "line exists, pick it and set aggregate_only true. Say in the summary which level you used (e.g. 'the ICT "
     "sector total', 'Government House's overhead').\n"
     "2. Choose the column for the year and measure asked. An allocation for year Y is 'Y Approved Budget' (in "
-    "implementation reports 'Y Original Budget' or 'Y Final Budget'); spending is a 'Performance' column for the "
+    "implementation reports 'Y Original Budget' or 'Y Final Budget'), from year Y's own budget when it is among the "
+    "lines; a later budget's 'Y Revised Budget' column is a revision, not Y's allocation, unless revised is "
+    "asked; spending is a 'Performance' column for the "
     "period; never use out-year estimates or projections unless asked. You may pick approved and revised of the "
     "same line as two selections when both matter.\n"
     "3. The same project can be printed in two tables of one budget: pick it once. When several lines ARE the "
@@ -437,6 +440,7 @@ async def read_lines(question: str, english: str, lang: str, lines: list[Line], 
                                   settings.kasafi_read_reasoning)),
         timed("read2", _second_reading(messages, lines, client, second, settings, extra_numbers, chat_json)))
     for r in (r1, r2):
+        prefer_total(r, lines, f"{question} {english}")
         budget_whole(r, lines, english)
     res = reconcile(r1, d1, r2, lines, extra_numbers, question, lang)
     if not res.selections:           # both readings' nearest lines, once each (each was checked against the rows)
@@ -445,6 +449,32 @@ async def read_lines(question: str, english: str, lang: str, lines: list[Line], 
     res.picks = [[pick_text(s) for s in r.selections] for r in (r1, r2)]
     res.timings = {**took, "calls1": r1.timings.get("calls", 1), "calls2": r2.timings.get("calls", 1)}
     return res
+
+
+def prefer_total(res: LineResult, lines: list[Line], question: str) -> None:
+    """A question that names no kind of spending asks for the total: a reading that picked one kind's row (a
+    sector's capital) takes the same line's total row instead (same code, same column), when it is among the
+    lines. Re-checked by verify; the reading's sentence spoke of the other rows, so it goes."""
+    if names_a_kind(question) or not res.selections:
+        return
+    index = {x.id: i for i, x in enumerate(lines, 1)}
+    picks, swapped = [], 0
+    for s in res.selections:
+        twin = None
+        if s.line.spend_kind in ("capital", "personnel", "overhead") and s.line.code:
+            twin = next((x for x in lines if x.code == s.line.code and x.spend_kind == "total" and x.doc_id ==
+                         s.line.doc_id and x.cell(s.cell.column)), None)
+        swapped += twin is not None
+        picks.append({"line": f"L{index[(twin or s.line).id]}", "column": s.cell.column, "part": s.part})
+    if not swapped:
+        return
+    new, _ = verify({"selected": picks, "operation": res.operation, "found": res.found,
+                     "aggregate_only": res.aggregate_only, "missing": res.missing}, lines)
+    log.info("no kind of spending asked: %d row(s) moved to the line's total row", swapped)
+    res.selections, res.total, res.difference, res.change_pct = new.selections, new.total, new.difference, \
+        new.change_pct
+    res.share_pct, res.ratio, res.spent_pct, res.compared = new.share_pct, new.ratio, new.spent_pct, new.compared
+    res.summary = ""
 
 
 # 'what share of the overall 2026 Sokoto State budget ...': the whole is the state's printed Total Expenditure

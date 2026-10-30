@@ -368,6 +368,23 @@ def test_a_share_of_the_whole_budget_takes_the_printed_total_expenditure() -> No
     assert res.share_pct is None and len(res.selections) == 1
 
 
+def test_a_question_naming_no_kind_of_spending_gets_the_lines_total_row() -> None:
+    from dataclasses import replace
+
+    from app.agent.line_answer import prefer_total
+    cap = replace(L(11, "Information Communication and Technology", 46, [("2026 Approved Budget", "3700000000.00")],
+                    table="Capital Expenditure by Programme"), code="11", spend_kind="capital")
+    tot = replace(L(12, "Information Communication and Technology", 41, [("2026 Approved Budget", "7150000000.00")],
+                    table="Total Expenditure by Programme"), code="11", spend_kind="total")
+    lines = [cap, tot]
+    res, _ = verify(_pick("L1"), lines)
+    prefer_total(res, lines, "Jimillar kudin da aka ware wa bangaren ICT a 2026")
+    assert [s.line.page for s in res.selections] == [41] and res.summary == ""
+    res, _ = verify(_pick("L1"), lines)
+    prefer_total(res, lines, "How much capital was allocated to ICT in 2026?")     # a kind asked: it stands
+    assert [s.line.page for s in res.selections] == [46]
+
+
 def test_the_whole_of_a_share_is_one_printed_total() -> None:
     rec = L(8, "Recurrent Expenditure", 1, [("2026 Approved Budget", "205356934434.43")], table="Budget Summary")
     res, problems = verify(_share(("L1", "top"), ("L2", "bottom"), ("L3", "bottom")), [HEALTH, TOTAL_EXP, rec])
