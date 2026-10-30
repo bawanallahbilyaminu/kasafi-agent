@@ -26,6 +26,9 @@ import httpx
 
 from app.config import Settings
 from app.data_rights import DELETED_REPLY, delete_user_data, is_delete_command
+from app.geo.facilities import WORDS as FAC_WORDS
+from app.geo.facilities import (FacilitySearch, filters_from, follow_up, is_facility_query, profile_from,
+                                search_replies)
 from app.geo.location import SHARE, Spot, locate_point, pin_of, place_from_text
 from app.geo.location import memory as location_memory
 from app.guardrails import scope
@@ -68,6 +71,7 @@ class Out:
     crops: list | None = None          # evidence images to send after this message (app/evidence/crops.py)
     lang: str = "ha"
     location_request: bool = False     # sent as WhatsApp's location request message ("Share location" button)
+    location: dict | None = None       # sent as a location message (a facility's pin): latitude, longitude, name...
 
 
 def _norm(text: str) -> str:
@@ -93,6 +97,7 @@ _DEFAULT = object()   # answer_fn default: answer from the documents when a data
 NotifyFn = Callable[[Out], Awaitable[None]]
 LocateFn = Callable[..., Awaitable[Any]]          # (settings, lat, lon) -> app.geo.Area | None
 PlaceFn = Callable[..., Awaitable[Any]]           # (settings, text) -> app.geo.location.Spot | None
+FacilityFn = Callable[..., Awaitable[list]]       # app.geo.facilities.search_replies
 
 
 async def _no_notify(out: Out) -> None:
@@ -103,7 +108,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                  voice_fn: VoiceFn = reply_for_voice, notify: NotifyFn = _no_notify,
                  resolve_fn: ResolveFn = resolve, guard_fn: GuardFn = scope.check,
                  answer_fn: AnswerFn | None | object = _DEFAULT, locate_fn: LocateFn = locate_point,
-                 place_fn: PlaceFn = place_from_text) -> list[Out]:
+                 place_fn: PlaceFn = place_from_text, facility_fn: FacilityFn = search_replies) -> list[Out]:
     """Returns the replies to send. `notify` sends a message right away (the "listening" ack)."""
     sender, kind = msg.get("from", ""), msg.get("type")
     text = (msg.get("text") or {}).get("body", "") if kind == "text" else ""
@@ -152,11 +157,19 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     lang = user.lang or "ha"
     # a location pin, or "share my location": handled here (PostGIS, no model); the point stays in memory only
     if kind == "location" or (text and SHARE.search(text)):
-        return await _location(msg, key, lang, store, settings, locate_fn)
+        outs = await _location(msg, key, lang, store, settings, locate_fn)
+        if pin_of(msg) and (spot := location_memory.recall(key)) and (q := location_memory.waiting_question(key)):
+            outs += await _facility_search(q, key, lang, settings, facility_fn, spot)   # the question that asked
+        return outs
     # the reply to "share your location, or tell me your LGA or town": a typed place, from our own gazetteer
-    if text and location_memory.waiting_question(key) is not None:
+    if text and (waiting := location_memory.waiting_question(key)) is not None:
         if (typed := await place_fn(settings, text)) is not None:
-            return _located(key, lang, store, typed)
+            return _located(key, lang, store, typed) + await _facility_search(waiting, key, lang, settings,
+                                                                              facility_fn, typed)
+    # "nearest hospital?" and its follow-ups ("next", "route?", "only government hospitals"): PostGIS and ORS, no model
+    if text and settings.has_database and (outs := await _facilities(text, key, lang, store, settings, place_fn,
+                                                                         facility_fn)) is not None:
+        return outs
     if (images := IMAGE_COMMANDS.get(_norm(text))) is not None:     # "images off" / "kashe hotuna": no model needed
         store.set_images(key, images)
         return [Out(t("images_on" if images else "images_off", lang))]
@@ -354,7 +367,8 @@ async def _location(msg: dict[str, Any], key: str, lang: str, store: UserStore, 
     outs = [Out(t("location_notice", lang))] if store.location_notice_due(key) else []
     pin = pin_of(msg)
     if pin is None:
-        location_memory.wait_for_location(key, "")      # the next message may be a typed place
+        if not location_memory.is_waiting(key):        # keep a question already waiting ("nearest hospital?")
+            location_memory.wait_for_location(key, "")  # the next message may be a typed place
         return outs + [Out(t("location_request", lang), lang=lang, location_request=True)]
     try:
         area = await locate_fn(settings, *pin)
@@ -374,6 +388,52 @@ def _located(key: str, lang: str, store: UserStore, spot: Spot) -> list[Out]:
     log.info("location: %s LGA (%s)", spot.lga, spot.how)
     ward = t("location_ward", lang, ward=spot.ward) if spot.ward else ""
     return [Out(t("location_got", lang, lga=spot.lga, ward=ward))]
+
+
+async def _facilities(text: str, key: str, lang: str, store: UserStore, settings: Settings, place_fn: PlaceFn,
+                      facility_fn: FacilityFn) -> list[Out] | None:
+    """A facility question or a follow-up to one; None when the message is neither. Without a point: a place the
+    question names ("nearest clinic in Gwadabawa"), else the location request, the question kept for the pin."""
+    spot, search = location_memory.recall(key), location_memory.last_search(key)
+    if spot is not None and search is not None and (step := follow_up(text)):
+        if step == "next":
+            search.skip += len(search.shown) or 3
+        elif step == "filter":
+            search.filters, search.skip = filters_from(text, search.filters), 0
+        search.profile = profile_from(text, search.profile)
+        log.info("facility follow-up: %s", step)
+        return await _facility_replies(spot, search, lang, settings, facility_fn, "route" if step == "route" else "list")
+    if not is_facility_query(text):
+        return None
+    if (typed := await place_fn(settings, text)) is not None:      # a place named wins over the point in memory
+        location_memory.remember(key, typed)
+        store.set_last_lga(key, typed.lga_pcode)
+        spot = typed
+    if spot is None:
+        location_memory.wait_for_location(key, text)
+        return [Out(FAC_WORDS.get(lang, FAC_WORDS["en"])["need_location"], lang=lang, location_request=True)]
+    return await _facility_search(text, key, lang, settings, facility_fn, spot)
+
+
+async def _facility_search(question: str, key: str, lang: str, settings: Settings, facility_fn: FacilityFn,
+                           spot: Spot) -> list[Out]:
+    """A new search for the question (its filters and travel mode) from the point; [] when it isn't one."""
+    if not is_facility_query(question):
+        return []
+    search = FacilitySearch(filters_from(question), profile=profile_from(question))
+    location_memory.remember_search(key, search)
+    return await _facility_replies(spot, search, lang, settings, facility_fn, "list")
+
+
+async def _facility_replies(spot: Spot, search: FacilitySearch, lang: str, settings: Settings,
+                            facility_fn: FacilityFn, mode: str) -> list[Out]:
+    try:
+        pairs = await facility_fn(settings, spot.lat, spot.lon, search, lang, mode=mode)
+    except Exception as e:      # noqa: BLE001 - PostGIS down: ask for the LGA rather than go silent
+        log.warning("facility search failed: %s", type(e).__name__)
+        return [Out(t("location_unavailable", lang))]
+    log.info("facility search: %s LGA, %d shown, %s", spot.lga, len(search.shown), mode)
+    return [Out(text, lang=lang, location=loc) for text, loc in pairs]
 
 
 async def _guarded(texts: list[str], lang: str, guard_fn: GuardFn, settings: Settings) -> Out | None:

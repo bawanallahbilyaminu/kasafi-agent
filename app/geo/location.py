@@ -41,7 +41,20 @@ class LocationMemory:
         self.ttl_s = ttl_s
         self._spots: dict[str, tuple[Spot, float]] = {}
         self._needs: dict[str, tuple[str, float]] = {}       # a question waiting for a location
+        self._searches: dict[str, tuple[Any, float]] = {}    # the last facility search, for "next" / "route?"
         self._lock = threading.Lock()
+
+    def remember_search(self, key: str, search: Any) -> None:
+        with self._lock:
+            self._searches[key] = (search, time.monotonic())
+
+    def last_search(self, key: str) -> Any:
+        with self._lock:
+            hit = self._searches.get(key)
+            if hit and time.monotonic() - hit[1] < self.ttl_s:
+                return hit[0]
+            self._searches.pop(key, None)
+            return None
 
     def remember(self, key: str, spot: Spot) -> None:
         with self._lock:
@@ -62,6 +75,11 @@ class LocationMemory:
         with self._lock:
             self._needs[key] = (question[:1000], time.monotonic())
 
+    def is_waiting(self, key: str) -> bool:
+        with self._lock:
+            hit = self._needs.get(key)
+        return bool(hit and time.monotonic() - hit[1] < self.ttl_s)
+
     def waiting_question(self, key: str) -> str | None:
         """The question that asked for a location, once (it is taken)."""
         with self._lock:
@@ -72,6 +90,7 @@ class LocationMemory:
         with self._lock:
             self._spots.pop(key, None)
             self._needs.pop(key, None)
+            self._searches.pop(key, None)
 
 
 memory = LocationMemory()

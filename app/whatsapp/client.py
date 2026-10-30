@@ -136,6 +136,22 @@ class WhatsAppClient:
             resp.raise_for_status()
         return resp.json()
 
+    async def send_location(self, to: str, latitude: float, longitude: float, name: str = "",
+                            address: str = "") -> dict:
+        """A location message (a facility's pin): tapping it opens the phone's maps app."""
+        resp = await self._http.post(f"/{self.phone_number_id}/messages", json={
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "location",
+            "location": {"latitude": latitude, "longitude": longitude, "name": name[:100], "address": address[:100]},
+        })
+        if not resp.is_success:
+            log.warning("WhatsApp location to %s failed: HTTP %s, Graph error code %s",
+                        mask_phone(to), resp.status_code, _graph_code(resp))
+            resp.raise_for_status()
+        return resp.json()
+
     async def upload_media(self, data: bytes, mime: str = "image/jpeg", filename: str = "evidence.jpg") -> str:
         resp = await self._http.post(f"/{self.phone_number_id}/media",
                                      data={"messaging_product": "whatsapp", "type": mime},

@@ -296,8 +296,11 @@ class FacilitySearch:
 
 
 def follow_up(text: str) -> str:
-    """'next' | 'route' | 'filter' | '' for a reply to a facility answer."""
+    """'next' | 'route' | 'filter' | '' for a reply to a facility answer: a short message (up to 7 words), never a
+    budget or count question ('what did the state government spend on health?' is a new question)."""
     t = text or ""
+    if len(t.split()) > 7 or MONEY.search(t):
+        return ""
     if NEXT.match(t):
         return "next"
     if ROUTE.search(t):
@@ -321,3 +324,30 @@ def route_text(lang: str, f: Facility, profile: str, routed: bool) -> str:
 def location_payload(f: Facility, lang: str) -> dict:
     """A WhatsApp location message's fields for a facility (name and address set)."""
     return {"latitude": f.lat, "longitude": f.lon, "name": f.name[:100], "address": address_of(f, lang)[:100]}
+
+
+def _query(settings, lat: float, lon: float, filters: Filters, skip: int) -> list[Facility]:
+    import psycopg
+    with psycopg.connect(settings.db_url(), connect_timeout=5) as conn:
+        return nearest_facilities(conn, lat, lon, filters, skip=skip)
+
+
+async def search_replies(settings, lat: float, lon: float, search: FacilitySearch, lang: str, *, mode: str = "list",
+                         where: str = "spot", lga: str = "", route: bool = True) -> list[tuple[str, dict | None]]:
+    """The messages to send, as (text, location message or None): the list with the nearest one's directions link,
+    then its location pin; or ('route') the route to the facility shown first. `search.shown` is updated.
+    `route=False` skips ORS (the emergency fast path answers in under 3 seconds)."""
+    import asyncio
+    w = WORDS[lang]
+    if mode == "route" and search.shown:
+        f = search.shown[0]
+        routed = route and await add_routes(settings, lat, lon, [f], search.profile)
+        return [(route_text(lang, f, search.profile, routed), None), ("", location_payload(f, lang))]
+    found = await asyncio.to_thread(_query, settings, lat, lon, search.filters, search.skip)
+    if not found:
+        return [(w["next_none"] if search.skip else w["none"].format(what=search.filters.describe(lang) or "-"), None)]
+    routed = route and await add_routes(settings, lat, lon, found, search.profile)
+    search.shown = found
+    text = facilities_text(lang, found, search.filters, search.profile, routed, where, lga, start=search.skip + 1)
+    return [(f"{text}\n\n{link_line(lang, found[0], search.profile)}\n\n{w['follow']}", None),
+            ("", location_payload(found[0], lang))]

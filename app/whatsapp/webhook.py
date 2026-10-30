@@ -78,7 +78,9 @@ async def _reply(messages: list[dict[str, Any]]) -> None:
     try:
         for msg in messages:
             async def send(out, to=msg["from"]) -> None:
-                if getattr(out, "location_request", False):
+                if getattr(out, "location", None):
+                    await client.send_location(to, **out.location)
+                elif getattr(out, "location_request", False):
                     await client.send_location_request(to, out.text)
                 elif out.buttons:
                     await client.send_buttons(to, out.text, out.buttons)

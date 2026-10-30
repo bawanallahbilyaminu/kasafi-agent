@@ -108,6 +108,62 @@ def test_memory_forgets_after_30_minutes_and_on_delete() -> None:
     assert memory.recall(key) is None
 
 
+def _db_settings():
+    return make_settings(database_url="postgresql://x:y@127.0.0.1:1/none")      # has_database; never connected
+
+
+def _text(body, sender="2348000000001"):
+    return {"from": sender, "id": "w", "type": "text", "text": {"body": body}}
+
+
+class FakeSearch:
+    """search_replies without PostGIS or ORS: records the searches, answers with numbered facilities."""
+
+    def __init__(self):
+        self.calls = []
+
+    async def __call__(self, settings, lat, lon, search, lang, *, mode="list", **kw):
+        self.calls.append((round(lat, 2), search.filters, search.skip, search.profile, mode))
+        search.shown = [f"F{search.skip + i}" for i in (1, 2, 3)]
+        return [(f"{mode} from {search.skip + 1}", None),
+                ("", {"latitude": 13.1, "longitude": 5.2, "name": f"F{search.skip + 1}", "address": "x"})]
+
+
+def test_nearest_facility_asks_for_a_location_then_answers_from_the_pin() -> None:
+    s, store, fake = _db_settings(), UserStore(":memory:"), FakeSearch()
+    key = consented(store, s)
+    out = run(_text("Where is the nearest hospital?"), store, s, facility_fn=fake)
+    assert out[-1].location_request and "share your location" in out[-1].text and not fake.calls
+    out = run(pin(), store, s, facility_fn=fake)                       # the pin answers the waiting question
+    assert out[-2].text == "list from 1" and out[-1].location["name"] == "F1" and out[-1].text == ""
+    assert fake.calls[-1][0] == 13.06
+    out = run(_text("the next one"), store, s, facility_fn=fake)       # follow-ups reuse the point in memory
+    assert out[0].text == "list from 4"
+    out = run(_text("route?"), store, s, facility_fn=fake)
+    assert out[0].text == "route from 4"
+    out = run(_text("only government hospitals"), store, s, facility_fn=fake)
+    _, filters, skip, profile, _ = fake.calls[-1]
+    assert filters.ownership == "Public" and filters.levels == ("Secondary", "Tertiary") and skip == 0
+    run(_text("on foot"), store, s, facility_fn=fake)
+    assert fake.calls[-1][3] == "foot"
+    n = len(fake.calls)
+    run(_text("What did the state government spend on health in 2025?"), store, s, facility_fn=fake)
+    assert len(fake.calls) == n                                        # a new question, not a filter
+    memory.forget(key)
+
+
+def test_a_facility_question_naming_a_place_needs_no_pin() -> None:
+    s, store, fake = _db_settings(), UserStore(":memory:"), FakeSearch()
+    key = consented(store, s, lang="ha")
+
+    async def gazetteer(settings, text):
+        return Spot(13.43, 5.66, "NG034006", "Goronyo", how="place") if "goronyo" in text.lower() else None
+    out = run(_text("Ina asibiti mafi kusa a Goronyo?"), store, s, facility_fn=fake, place_fn=gazetteer)
+    assert out[0].text == "list from 1" and fake.calls[0][0] == 13.43
+    assert store.get_last_lga(key) == "NG034006"
+    memory.forget(key)
+
+
 def test_pin_of_reads_only_a_valid_location_message() -> None:
     assert pin_of(pin()) == (LAT, LON)
     assert pin_of({"type": "location", "location": {"latitude": "x"}}) is None
