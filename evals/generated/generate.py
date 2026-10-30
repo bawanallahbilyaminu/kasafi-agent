@@ -118,12 +118,18 @@ def generate(conn, n: int, rng: random.Random) -> list[dict]:
         a25, a26 = approved(conn, code, 2025), approved(conn, code, 2026)
         wrong = "fell" if a26 > a25 else "rose"
         add("false_premise", f"Why did the {name}'s approved budget {'fall' if wrong == 'fell' else 'rise'} from "
-            f"2025 to 2026?", numbers=[money(a25), money(a26)], premise_false=True, code=code)
+            f"2025 to 2026?", numbers=[money(a25), money(a26)], premise_false=True,
+            premise="fall" if wrong == "fell" else "rise", code=code)
     for name, code in rng.sample(subs, min(n, len(subs))):         # a period no document can hold yet
         kind = rng.choice(["q4", "next_q", "budget"])
-        if kind == "budget":
-            add("not_in_data", f"How much is the {name}'s approved budget for {max(BUDGET_YEARS) + 2}?",
-                expect_gap=f"{min(BUDGET_YEARS)}–{max(BUDGET_YEARS)}", numbers=[], code=code)
+        if kind == "budget":           # no approved budget yet; the newest budget's out-year estimate, labelled, counts
+            y = max(BUDGET_YEARS) + 2
+            r = conn.execute(f"SELECT estimate_{y} FROM budget_items WHERE doc_id = %s AND code = %s AND spend_kind = "
+                             f"'total' AND estimate_{y} IS NOT NULL ORDER BY seq LIMIT 1",
+                             (f"budget-{max(BUDGET_YEARS)}-approved", code)).fetchone()
+            add("not_in_data", f"How much is the {name}'s approved budget for {y}?",
+                expect_gap=f"{min(BUDGET_YEARS)}–{max(BUDGET_YEARS)}", numbers=[], code=code,
+                **({"estimate": money(r[0])} if r else {}))
         else:
             when = "Q4 2026" if kind == "q4" else "Q1 2027"
             add("not_in_data", f"How much did the {name} spend in {when}?", expect_gap=f"Q{latest_q} 2026",

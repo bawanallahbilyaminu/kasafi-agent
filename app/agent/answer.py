@@ -767,6 +767,13 @@ DOC_NOT_FOUND = {
     "en": "I couldn't find the document needed on the trusted sites ({doc}). I've logged it for our team to review.",
 }
 
+FETCH_LIMIT = {
+    "ha": "Na kai iyakar yau ta ɗauko sababbin takardu ({doc} ba ya cikin ɗakin karatu tukuna). Da fatan a sake "
+          "gwadawa gobe.",
+    "en": "I've reached today's limit for fetching new documents ({doc} isn't in the library yet); try again "
+          "tomorrow.",
+}
+
 DOC_AWAITING = {
     "ha": "Na samo takardar da ake buƙata ({doc}) a wani shafi da Kasafi bai riga ya amince da shi ba ({site}), don "
           "haka ban buɗe ta ba. Na aika shafin domin ma'aikatanmu su duba; idan suka amince, zan iya amsawa daga gare ta.",
@@ -810,8 +817,8 @@ async def acquire_missing(conn: psycopg.Connection, plan: Plan, lang: str, clien
     if acq.doc_id:
         plan.doc_ids = [acq.doc_id] + [d for d in plan.doc_ids if d != acq.doc_id][:MAX_DOCS - 1]
     else:
-        reason = {"not_found": "not_found", "limit": "limit", "awaiting": "awaiting_domain"}.get(acq.status,
-                                                                                                "fetch_failed")
+        reason = {"not_found": "not_found", "limit": "limit", "awaiting": "awaiting_domain",
+                  "off": "fetch_off"}.get(acq.status, "fetch_failed")
         log_gap(conn, plan.english_question, plan.missing_document, reason, {"detail": acq.detail, "url": acq.url})
     return acq
 
@@ -1238,14 +1245,14 @@ def _struct_money(x, lang: str) -> str:
 
 GAP_WORDS = {
     "en": {"missing": "Not in the documents:", "latest_q": "the latest implementation report is Q{q} {y}",
-           "no_report": "no implementation report for {y} in the library yet",
+           "no_report": "no implementation report for {y} in the library yet; the newest is Q{lq} {ly}",
            "no_budget": "the {y} budget isn't in the library (approved budgets: {years})",
            "no_line": "the budget prints no line by that name", "no_split": "the budget prints no {split} line for it",
            "no_lga": "IOM DTM has no figure for {name} ({k} LGAs reported)",
            "level": "ℹ️ {what} figures are published {levels}; {narrow} covers only {level}.",
            "levels": {"lga": "by LGA", "state": "statewide", "town": "Sokoto town", "zone": "by zone"}},
     "ha": {"missing": "Ba a cikin takardun ba:", "latest_q": "rahoton aiwatarwa mafi sabo shi ne Q{q} {y}",
-           "no_report": "babu rahoton aiwatarwa na {y} a ɗakin karatu tukuna",
+           "no_report": "babu rahoton aiwatarwa na {y} a ɗakin karatu tukuna; mafi sabo shi ne Q{lq} {ly}",
            "no_budget": "kasafin {y} ba ya cikin ɗakin karatu (kasafin da ke akwai: {years})",
            "no_line": "kasafin bai buga layi da wannan suna ba", "no_split": "kasafin bai buga layin {split} nasa ba",
            "no_lga": "IOM DTM ba ta da adadi na {name} (ƙananan hukumomi {k} ne a rahoton)",
@@ -1267,8 +1274,11 @@ def gap_reason(conn, c, lang: str, lga_count: int = 0) -> str:
         return g["no_split"].format(split=STRUCT_WORDS.get(lang, STRUCT_WORDS["en"]).get(c.split or "total", c.split))
     latest_q = conn.execute("SELECT max(quarter) FROM perf_items WHERE year = %s", (c.year,)).fetchone()[0] \
         if conn is not None else None
-    if latest_q is None:
-        return g["no_report"].format(y=c.year)
+    if latest_q is None:             # no report for that year: say which is the newest there is
+        row = conn.execute("SELECT year, max(quarter) FROM perf_items WHERE year = (SELECT max(year) FROM "
+                           "perf_items) GROUP BY year").fetchone() if conn is not None else None
+        ly, lq = row if row and len(row) == 2 else (None, None)
+        return g["no_report"].format(y=c.year, ly=ly or "-", lq=lq or "-")
     if c.quarter and c.quarter > latest_q:
         return g["latest_q"].format(q=latest_q, y=c.year)
     return g["no_split"].format(split=STRUCT_WORDS.get(lang, STRUCT_WORDS["en"]).get(c.split or "total", c.split))
@@ -2211,7 +2221,9 @@ def _not_found(conn: psycopg.Connection, plan: Plan, lang: str, acq: Acquired | 
                gap: bool = True) -> Answer:
     """Nothing to answer from. If a missing document wasn't found, say so (its gap is already logged). gap=False:
     the line search running alongside may still answer, so the caller logs the gap if neither does."""
-    if acq and acq.status == "awaiting":
+    if acq and acq.status == "limit":       # not a search that failed: today's fetches are used up
+        text = FETCH_LIMIT.get(lang, FETCH_LIMIT["en"]).format(doc=plan.missing_document)
+    elif acq and acq.status == "awaiting":
         text = DOC_AWAITING.get(lang, DOC_AWAITING["en"]).format(doc=plan.missing_document, site=acq.detail)
     elif acq and not acq.doc_id:
         text = DOC_NOT_FOUND.get(lang, DOC_NOT_FOUND["en"]).format(doc=plan.missing_document)
