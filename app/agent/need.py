@@ -153,20 +153,21 @@ def _norm(s: str) -> str:
     """Words that tell agencies apart: no 'Ministry of', 'State', 'Sokoto', 'the', 'of', 'and', and no digits
     stuck to a word by a misprint ('Normadic Education1' -> 'normadic education'), no bracketed acronym ('(Rtv)')."""
     s = re.sub(r"\([^)]*\)", " ", s)
-    s = re.sub(r"(?i)\b(min(istry)?\.?( of)?|the|state|sokoto|of|for|and|&)\b", " ", s.replace("'", ""))
+    s = re.sub(r"(?i)\b(min(istry)?\.?( of)?|the|state|sokoto|of|for|and|affairs|&)\b", " ", s.replace("'", ""))
     s = re.sub(r"(?<=[a-z])\d+\b", "", s.lower())
     return " ".join(re.findall(r"[a-z0-9]+", s))
 
 
 def _word_near(w: str, x: str) -> bool:
-    """Two words of one name: equal, a misprint (normadic / nomadic), or an abbreviation (mgt / management)."""
+    """Two words of one name: equal, a misprint (normadic / nomadic), or an abbreviation (mgt / management, and a
+    printed initial: 'W& Child.' / 'Women and Children')."""
     if w == x:
         return True
     if len(w) > 3 and len(x) > 3 and difflib.SequenceMatcher(None, w, x).ratio() >= 0.8:
         return True
     short, long_ = sorted((w, x), key=len)
     it = iter(long_)
-    return 2 <= len(short) < len(long_) and short[0] == long_[0] and all(ch in it for ch in short)
+    return 1 <= len(short) < len(long_) and short[0] == long_[0] and all(ch in it for ch in short)
 
 
 def same_entity(asked: str, printed: str) -> bool:
@@ -209,8 +210,13 @@ def _best(name: str, choices: list[str], cutoff: float = 0.82) -> str:
 
 def resolve(e: Entity, names: Names) -> Entity:
     """The entity as the data prints it (or unresolved: the planner's name stays, for search)."""
-    if e.type in ("mda", "sub_agency", "sector"):          # a sector total is an administrative line too
+    # a sector total is an administrative line too; a 'publisher' (UNDP) may be a budget unit: the strict
+    # same-entity match decides
+    if e.type in ("mda", "sub_agency", "sector") or (e.type == "publisher" and names.mdas):
         hit, e.candidates = _agency(e.name, sorted({m for m, _ in names.mdas}))
+        if e.type == "publisher":
+            e.candidates = []                # not asked about: a publisher that isn't a budget unit stays one
+            e.type = "mda" if hit else e.type
         if hit:
             e.resolved = hit
             codes = sorted({c for m, c in names.mdas if _norm(m) == _norm(hit)})

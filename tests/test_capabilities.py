@@ -175,3 +175,17 @@ def test_a_share_of_a_split_is_computed_from_its_cells() -> None:
     need = Need("q", measures=["approved", "share_of_budget"], entities=[SBS], splits=["capital", "total"],
                 time={"kind": "year", "year": 2026}, operation="share")
     assert {c.measure for c in required_cells(need)} == {"approved"} and cover(need, available=ALL).all_by("budget_core")
+
+
+def test_a_false_premise_is_corrected_once_on_the_whole_budget() -> None:
+    siec = Entity("mda", "SIEC", "Sokoto State Independent Electoral Commission", "014800000000")
+    cells = [Cell("approved", siec, "state", s, y, value=Decimal(v), source="p")
+             for s, y, v in (("personnel", 2025, "102430000"), ("personnel", 2026, "128760000"),
+                             ("total", 2025, "529140000"), ("total", 2026, "460480000"))]
+    need = Need("Why did its approved budget rise from 2025 to 2026?", operation="compare",
+                premises=["the approved budget rose from 2025 to 2026"])
+    text, _ = ans.write_budget_cells(need, cells, "en")
+    assert text.splitlines()[0] == "It didn't rise: the approved budget fell from 2025 to 2026, so there is no rise to explain."
+    assert text.count("It didn't rise") == 1
+    neutral = Need("Compare its approved budget in 2025 and 2026.", operation="compare")
+    assert "didn't" not in ans.write_budget_cells(neutral, cells, "en")[0]

@@ -73,13 +73,21 @@ def generate(conn, n: int, rng: random.Random) -> list[dict]:
         cases.append({"id": f"{family}-{sum(c['family'] == family for c in cases) + 1:02d}", "family": family,
                       "lang": "en", "text": text, **check})
 
-    for name, code in rng.sample(mdas, min(n, len(mdas))):         # a random budget year it has a figure for
-        year = rng.choice([y for y in BUDGET_YEARS if approved(conn, code, y) is not None])
-        add("lookup", f"How much was approved for the {name} in the {year} budget?",
-            numbers=[money(approved(conn, code, year))], code=code)
     # a ministry's own unit is often printed with the ministry's name ('Ministry of Water Resources' 025200100100
     # and the ministry with its agencies 025200000000): the question reads either way, so either answer counts
-    ministry = dict(mdas)
+    ministry, unit = dict(mdas), dict(subs)
+
+    def readings(name: str, code: str, figures) -> dict:
+        """The ministry's figures and, if a unit is printed with the same name, the unit's too."""
+        codes = [code] + ([unit[name]] if name in unit and unit[name] != code else [])
+        sets = [f for c in codes if (f := figures(c))]
+        return ({"numbers_any": sets} if len(sets) > 1 else {"numbers": sets[0]}) | {"codes": codes[:len(sets)]
+                                                                                    if len(sets) > 1 else [code]}
+
+    for name, code in rng.sample(mdas, min(n, len(mdas))):         # a random budget year it has a figure for
+        year = rng.choice([y for y in BUDGET_YEARS if approved(conn, code, y) is not None])
+        add("lookup", f"How much was approved for the {name} in the {year} budget?", code=code,
+            **readings(name, code, lambda c: [money(v)] if (v := approved(conn, c, year)) is not None else None))
 
     def either(name: str, figures) -> dict:
         codes = [c for c in (dict(subs)[name], ministry.get(name)) if c]
@@ -102,8 +110,10 @@ def generate(conn, n: int, rng: random.Random) -> list[dict]:
         add("spend_quarter", f"How much had the {name} spent by the end of Q{q} {y}, against its revised budget?",
             code=code, **either(name, lambda c: spent(c, y, q) or ["-"]))
     for name, code in rng.sample(mdas, min(n, len(mdas))):
-        add("compare", f"Compare the {name}'s approved budget in 2025 and 2026.",
-            numbers=[money(approved(conn, code, 2025)), money(approved(conn, code, 2026))], code=code)
+        add("compare", f"Compare the {name}'s approved budget in 2025 and 2026.", code=code,
+            **readings(name, code, lambda c: [money(x), money(y)]
+                       if (x := approved(conn, c, 2025)) is not None and (y := approved(conn, c, 2026)) is not None
+                       else None))
     def share_forms(c) -> list[list[str]]:
         cap, tot = approved(conn, c, 2026, "capital"), approved(conn, c, 2026)
         if not (cap is not None and tot):
@@ -119,9 +129,13 @@ def generate(conn, n: int, rng: random.Random) -> list[dict]:
     for name, code in rng.sample(mdas, min(n, len(mdas))):        # the premise is the wrong way round
         a25, a26 = approved(conn, code, 2025), approved(conn, code, 2026)
         wrong = "fell" if a26 > a25 else "rose"
+
+        def same_way(c):               # the unit's reading counts if its change goes the same way as the ministry's
+            x, y = approved(conn, c, 2025), approved(conn, c, 2026)
+            return [money(x), money(y)] if x is not None and y is not None and (y > x) == (a26 > a25) else None
         add("false_premise", f"Why did the {name}'s approved budget {'fall' if wrong == 'fell' else 'rise'} from "
-            f"2025 to 2026?", numbers=[money(a25), money(a26)], premise_false=True,
-            premise="fall" if wrong == "fell" else "rise", code=code)
+            f"2025 to 2026?", premise_false=True, premise="fall" if wrong == "fell" else "rise", code=code,
+            **readings(name, code, same_way))
     for name, code in rng.sample(subs, min(n, len(subs))):         # a period no document can hold yet
         kind = rng.choice(["q4", "next_q", "budget"])
         if kind == "budget":           # no approved budget yet; the newest budget's out-year estimate, labelled, counts

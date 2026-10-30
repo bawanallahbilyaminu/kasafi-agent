@@ -1223,6 +1223,9 @@ STRUCT_WORDS = {
            "performance_pct": "share of the revised budget spent", "idp_count": "IDPs",
            "personnel": "Personnel (salaries)", "overhead": "Overhead (running costs)", "capital": "Capital",
            "total": "Total", "calc": "Kasafi's calculation", "change": "change", "of_total": "of its total",
+           "claim_rise": "rise", "claim_fall": "fall",
+           "premise_fell": "It didn't {claim}: the {m} fell from {a} to {b}, so there is no rise to explain.",
+           "premise_rose": "It didn't {claim}: the {m} rose from {a} to {b}, so there is no fall to explain.",
            "dtm_state": "IOM DTM counts *{n}* IDPs in Sokoto State ({when}).",
            "dtm_lga_head": "By LGA ({k} LGAs), the most:", "dtm_lga_list": "By LGA ({k} LGAs), most first:",
            "dtm_trend_head": "Sokoto State, by round:",
@@ -1232,6 +1235,9 @@ STRUCT_WORDS = {
            "performance_pct": "kason kasafin da aka sabunta da aka kashe", "idp_count": "'yan gudun hijira",
            "personnel": "Albashi", "overhead": "Kuɗin gudanarwa", "capital": "Manyan ayyuka", "total": "Jimilla",
            "calc": "lissafin Kasafi", "change": "bambanci", "of_total": "na jimillarsa",
+           "claim_rise": "karu", "claim_fall": "ragu",
+           "premise_fell": "Bai {claim} ba: {m} ya ragu daga {a} zuwa {b}, don haka babu ƙari da za a bayyana.",
+           "premise_rose": "Bai {claim} ba: {m} ya karu daga {a} zuwa {b}, don haka babu raguwa da za a bayyana.",
            "dtm_state": "IOM DTM ta ƙidaya *{n}* 'yan gudun hijira a Jihar Sokoto ({when}).",
            "dtm_lga_head": "Ta ƙaramar hukuma ({k}), mafi yawa:", "dtm_lga_list": "Ta ƙaramar hukuma ({k}), "
            "daga mafi yawa:", "dtm_trend_head": "Jihar Sokoto, ta zagaye:",
@@ -1303,13 +1309,29 @@ def level_gap(need: Need, lang: str) -> str:
                              level=g["levels"].get(need.geo_level, need.geo_level))
 
 
+_RISE = re.compile(r"(?i)\b(?:ris(?:e|en)|rose|increas\w*|go(?:ne)? up|went up|grow\w*|grew|higher|"
+                   r"ya karu|ya ƙaru|karu|ƙaru)\b")
+_FALL = re.compile(r"(?i)\b(?:fall\w*|fell|decreas\w*|drop\w*|go(?:ne)? down|went down|declin\w*|lower|"
+                   r"reduc\w*|ya ragu|ragu)\b")
+
+
+def claimed_direction(need: Need) -> str:
+    """The change the question takes for granted ('why did it rise?'): its premises, else its wording; '' if none
+    or both."""
+    for text in (" ".join(need.premises), need.standalone_question):
+        rise, fall = bool(_RISE.search(text)), bool(_FALL.search(text))
+        if rise != fall:
+            return "rise" if rise else "fall"
+    return ""
+
+
 def write_budget_cells(need: Need, cells: list, lang: str, conn=None) -> tuple[str, str]:
     """The reply and the exact working for budget_core cells: one line per entity and split, its measures by
     year (a change between two years computed here, exactly); empty cells named with why (gap_reason)."""
     w = STRUCT_WORDS.get(lang, STRUCT_WORDS["en"])
     missing = [c for c in cells if not c.filled]
     cells = [c for c in cells if c.filled]
-    out, exact = [], []
+    out, exact, changes = [], [], []
     for ent in dict.fromkeys(c.entity.resolved or c.entity.name for c in cells):
         mine = [c for c in cells if (c.entity.resolved or c.entity.name) == ent]
         code = mine[0].entity.code
@@ -1336,6 +1358,8 @@ def write_budget_cells(need: Need, cells: list, lang: str, conn=None) -> tuple[s
                              + (f" ({'+' if pct and pct > 0 else ''}{pct}%)" if pct is not None else "")
                              + f" ({w['calc']})")
                 exact.append(f"{ent} | {split} | change: {fmt(diff)}")
+                if split == "total" or len({c.split or "total" for c in mine}) == 1:
+                    changes.append((a, b, diff))      # the premise is judged on the whole budget, once
             whole = [x for x in mine if (x.split or "total") == "total" and len(row) == 1 and split != "total"
                      and x.measure == row[0].measure and x.year == row[0].year and x.value]
             if whole and row[0].measure != "performance_pct":
@@ -1343,6 +1367,12 @@ def write_budget_cells(need: Need, cells: list, lang: str, conn=None) -> tuple[s
                 parts.append(f"{pct}% {w['of_total']} ({w['calc']})")
                 exact.append(f"{ent} | {split} share of total: {pct}%")
             out.append(f"• {w.get(split, split)}: " + "; ".join(parts))
+    claim = claimed_direction(need)
+    if claim and len(changes) == 1 and changes[0][2] and (claim == "rise") != (changes[0][2] > 0):
+        # a false premise is checked like any other cell: the figures say the opposite, and that is said first
+        a, b, diff = changes[0]
+        out.insert(0, w["premise_" + ("fell" if diff < 0 else "rose")].format(
+            a=a.year, b=b.year, claim=w["claim_" + claim], m=w.get(a.measure, a.measure).format(q="")))
     if missing:                       # partial answers name the missing cells, with the period or line that exists
         g = GAP_WORDS.get(lang, GAP_WORDS["en"])
         out.append(g["missing"])
