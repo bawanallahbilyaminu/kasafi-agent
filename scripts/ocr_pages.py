@@ -43,6 +43,8 @@ async def main() -> int:
     ap.add_argument("--only", nargs="+", metavar="ID")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--concurrency", type=int, default=4)
+    ap.add_argument("--pdf-dir", type=Path, default=ROOT / "data",
+                    help="where the PDFs are (the server: /data/pdfs, named <id>.pdf)")
     args = ap.parse_args()
     s = get_settings()
     manifest = {d["id"]: d for d in json.loads((ROOT / "data/manifest.json").read_text(encoding="utf-8"))["documents"]}
@@ -62,7 +64,7 @@ async def main() -> int:
             async def one(doc_id: str, page: int) -> None:
                 nonlocal done, failed, blank
                 if doc_id not in pdfs:
-                    path = find_file(manifest[doc_id], ROOT / "data")
+                    path = find_file(manifest[doc_id], args.pdf_dir)
                     pdfs[doc_id] = pdfium.PdfDocument(str(path))
                 jpeg = render_page(pdfs[doc_id], page - 1)
                 async with sem:

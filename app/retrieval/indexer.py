@@ -67,10 +67,9 @@ def normalise_name(name: str) -> str:
 def find_file(doc: dict, data_dir: Path) -> Path | None:
     """The manifest's `file` (relative to data/, e.g. advisories/nihsa-afo-2026.pdf), <id>.pdf, or a local file
     named after the title (punctuation ignored), as in fetch_seed_docs.py."""
-    if doc.get("file"):
-        named = data_dir / doc["file"]
-        return named if named.exists() else None
-    by_id = data_dir / f"{doc['id']}.pdf"
+    if doc.get("file") and (named := data_dir / doc["file"]).exists():
+        return named
+    by_id = data_dir / f"{doc['id']}.pdf"                 # the server's /data/pdfs holds them by id
     if by_id.exists():
         return by_id
     wanted = normalise_name(doc["title"])
@@ -571,13 +570,14 @@ def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bo
 
 
 def index_manifest(conn: psycopg.Connection, manifest_path: Path, *, only: list[str] | None = None,
-                   force: bool = False) -> list[IndexResult]:
+                   force: bool = False, pdf_dir: Path | None = None) -> list[IndexResult]:
+    """`pdf_dir`: where the PDFs are, when not next to the manifest (the server's /data/pdfs, by doc id)."""
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     results = []
     for doc in manifest["documents"]:
         if only and doc["id"] not in only:
             continue
-        path = find_file(doc, manifest_path.parent)
+        path = find_file(doc, pdf_dir or manifest_path.parent)
         if path is None:
             results.append(IndexResult(doc["id"], "missing", detail="no local PDF"))
             continue

@@ -8,6 +8,8 @@
 #   deploy/deploy.sh --sync-pdfs   copy the source PDFs (public documents) to the server, for evidence crops
 #   deploy/deploy.sh --sync-geo    copy data/geo/*.geojson (not in git) to /data/geo on the server and run the geo
 #                                  import there (LGAs, wards, facilities, places into PostGIS)
+#   deploy/deploy.sh --sync-advisories  copy data/advisories/*.pdf (NIHSA AFO, NiMet SCP: not in git) to /data/pdfs,
+#                                  index and OCR them there (Muse Spark vision, ~$1.4) and load data/official_outlooks.yaml
 #   deploy/deploy.sh --sync-hints  copy data/private/partners_hints.json (not in git) to deploy/private/ on the
 #                                  server, mounted read-only into the app; takes effect on the next deploy/restart
 #
@@ -21,6 +23,7 @@ REMOTE_ENV=/opt/kasafi-agent/deploy/.env.incoming
 REMOTE_INDEX=/opt/kasafi-agent/deploy/index.incoming.sql.gz
 REMOTE_PDFS=/opt/kasafi-agent/deploy/pdfs.incoming.tar
 REMOTE_GEO=/opt/kasafi-agent/deploy/geo.incoming.tar
+REMOTE_ADVISORIES=/opt/kasafi-agent/deploy/advisories.incoming.tar
 # Keys the server may receive. DATABASE_URL is left out until the production database exists
 # (the local one points at dev Postgres).
 ALLOWED_KEYS='ADMIN_USER|ADMIN_PASSWORD|KASAFI_OPEN_READER|KASAFI_OPEN_READ_TIMEOUT_S|KASAFI_OPEN_STAGES|KASAFI_OPEN_STAGE_TIMEOUT_S|FIREWORKS_API_KEY|ORS_API_KEY|FIRMS_MAP_KEY|KASAFI_HAZARD_FETCH|KASAFI_ADVISORIES_FETCH|KASAFI_OPEN_ACCESS|KASAFI_ALLOW_SECURITY_BUDGET|KASAFI_PILOT_NUMBERS|KASAFI_EXEMPT_NUMBERS|KASAFI_HASH_KEY|KASAFI_VOICE_PER_DAY|KASAFI_QUESTIONS_PER_DAY|KASAFI_DAILY_SPEND_CAP_USD|KASAFI_COST_PER_VOICE_USD|KASAFI_COST_PER_QUESTION_USD|KASAFI_FETCHES_PER_DAY|META_API_KEY|BASETEN_API_KEY|SERPER_API_KEY|RELIEFWEB_APPNAME|DTMAPI_SUBSCRIPTION_KEY|DTMHNA_SUBSCRIPTION_KEY|KASAFI_TOPIC_BUDGET_S|WHATSAPP_TOKEN|WHATSAPP_PHONE_NUMBER_ID|WHATSAPP_VERIFY_TOKEN|WHATSAPP_APP_SECRET|WHATSAPP_BUSINESS_ACCOUNT_ID|WHATSAPP_WABA_ID|WABA_ID'
@@ -113,6 +116,15 @@ case "${1:-}" in
     echo "→ uploading $(du -h "$tmp" | cut -f1) to $HOST"
     "$SSH" "$HOST" "umask 077; cat > $REMOTE_PDFS" < "$tmp"; rm -f "$tmp"
     remote_and_report sync-pdfs
+    ;;
+  --sync-advisories)
+    # the local official documents (NIHSA AFO, NiMet SCP and its update: not in git), named <doc id>.pdf
+    ls data/advisories/*.pdf > /dev/null 2>&1 || die "no data/advisories/*.pdf here"
+    tmp=$(mktemp)
+    tar -c -f "$tmp" -C data/advisories $(cd data/advisories && ls *.pdf) || { rm -f "$tmp"; die "packing failed"; }
+    echo "→ uploading $(du -h "$tmp" | cut -f1) of data/advisories to $HOST"
+    "$SSH" "$HOST" "umask 077; cat > $REMOTE_ADVISORIES" < "$tmp"; rm -f "$tmp"
+    remote_and_report sync-advisories
     ;;
   --sync-index)
     echo "→ dumping documents/pages/chunks from the dev database (public documents only)"

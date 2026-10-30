@@ -6,6 +6,8 @@ data/
 !data/source_registry.yaml
 !data/catalog.yaml
 !data/emergency_contacts.yaml
+!data/manifest.json
+!data/official_outlooks.yaml
 .git/
 .venv/
 __pycache__/
@@ -19,4 +21,9 @@ scripts/
 # ... except the topic prefetch, run on the server (docker compose exec api python scripts/prefetch_topics.py)
 !scripts/prefetch_topics.py
 !scripts/import_geo.py
+# ... and the local documents' indexing (deploy.sh --sync-advisories) and a manual hazard fetch
+!scripts/index_docs.py
+!scripts/ocr_pages.py
+!scripts/official_outlooks.py
+!scripts/fetch_hazards.py
 *.log

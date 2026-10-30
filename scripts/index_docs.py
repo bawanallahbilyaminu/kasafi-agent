@@ -22,10 +22,12 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", nargs="+", metavar="ID")
     ap.add_argument("--force", action="store_true", help="re-index even if the file is unchanged")
+    ap.add_argument("--pdf-dir", type=Path, help="where the PDFs are (the server: /data/pdfs, named <id>.pdf)")
     args = ap.parse_args()
     t0 = time.perf_counter()
     with psycopg.connect(get_settings().db_url(), connect_timeout=10) as conn:
-        results = index_manifest(conn, ROOT / "data/manifest.json", only=args.only, force=args.force)
+        results = index_manifest(conn, ROOT / "data/manifest.json", only=args.only, force=args.force,
+                                 pdf_dir=args.pdf_dir)
         totals = conn.execute("SELECT count(*), (SELECT count(*) FROM pages), (SELECT count(*) FROM chunks), "
                               "(SELECT count(*) FROM pages WHERE source = 'none') FROM documents").fetchone()
     print(f"{'document':<34} {'status':<10} {'pages':>5} {'empty':>5} {'chunks':>6}  detail")

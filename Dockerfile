@@ -28,6 +28,10 @@ COPY data/source_registry.yaml data/catalog.yaml data/emergency_contacts.yaml ./
 COPY scripts/prefetch_topics.py ./scripts/prefetch_topics.py
 # the geo import, run on the server against data/geo files copied into the data volume (not in git or the image)
 COPY scripts/import_geo.py ./scripts/import_geo.py
+# local documents (NIHSA AFO, NiMet SCP) indexed on the server from /data/pdfs, and their official outlooks
+# (deploy.sh --sync-advisories); a manual hazard fetch
+COPY data/manifest.json data/official_outlooks.yaml ./data/
+COPY scripts/index_docs.py scripts/ocr_pages.py scripts/official_outlooks.py scripts/fetch_hazards.py ./scripts/
 # Migrations run on deploy (deploy/remote.sh) once DATABASE_URL is set on the server.
 COPY alembic.ini ./
 COPY migrations ./migrations

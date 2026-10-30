@@ -204,6 +204,30 @@ sync-geo)
   echo "RESULT=failed COMMIT=none"
   exit 1
   ;;
+
+sync-advisories)
+  # deploy.sh uploads a tar of data/advisories/*.pdf (official documents Bilyaminu downloaded: not in git), named by
+  # document id. They join the source PDFs in /data/pdfs; the three are indexed and OCR'd there, then the official
+  # outlooks (data/official_outlooks.yaml, every quote checked on its page) are loaded.
+  INCOMING=$APP/deploy/advisories.incoming.tar
+  DOCS="nihsa-afo-2026 nimet-scp-2026 nimet-scp-update-2026"
+  [ -s "$INCOMING" ] || { say "no $INCOMING uploaded"; exit 1; }
+  if dc exec -T api sh -c 'mkdir -p /data/pdfs && tar -x -m -C /data/pdfs' < "$INCOMING" \
+     && dc exec -T api python scripts/index_docs.py --only $DOCS --pdf-dir /data/pdfs \
+     && dc exec -T api python scripts/ocr_pages.py --only $DOCS --pdf-dir /data/pdfs | tail -1 \
+     && dc exec -T api python scripts/official_outlooks.py | tail -1; then
+    rm -f "$INCOMING"
+    n=$(dc exec -T db psql -At -U kasafi -d kasafi -c "SELECT (SELECT count(*) FROM pages WHERE doc_id IN ('nihsa-afo-2026','nimet-scp-2026','nimet-scp-update-2026'))||' pages, '||(SELECT count(*) FROM pages WHERE source = 'none' AND doc_id IN ('nihsa-afo-2026','nimet-scp-2026','nimet-scp-update-2026'))||' without text, '||(SELECT count(*) FROM advisories WHERE doc_id IS NOT NULL)||' outlook rows'")
+    say "advisory documents: $n"
+    log "sync-advisories ok: $n"
+    echo "RESULT=ok COMMIT=$(git rev-parse HEAD)"
+    exit 0
+  fi
+  rm -f "$INCOMING"
+  log "sync-advisories FAILED"
+  echo "RESULT=failed COMMIT=none"
+  exit 1
+  ;;
 sync-pdfs)
   # deploy.sh uploads a tar of the source PDFs (public documents, named <doc id>.pdf). They go into the
   # app's data volume at /data/pdfs, where the evidence crops read them. Files are replaced, never deleted.
