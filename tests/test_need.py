@@ -92,3 +92,32 @@ def test_two_printings_of_one_ministry_are_one_entity() -> None:
     from app.agent.need import Entity, Names, resolve
     names = Names(mdas=(("Min of Lands and Housing", "023500100100"), ("Ministry of Lands and Housing", "023500000000")))
     assert resolve(Entity("mda", "Ministry of Lands and Housing"), names).code == "023500000000"
+
+
+def test_a_spelled_out_name_matches_the_acronym_the_budget_prints() -> None:
+    names = Names(mdas=(("Office of the SSG", "016100000000"), ("SSG'S Office", "016100100100"),
+                        ("Ministry of Health", "052100000000")))
+    # the words in another order are one name printed two ways, not two agencies to ask between
+    e = resolve(Entity("mda", "Office of the Secretary to the State Government"), names)
+    assert (e.resolved, e.code, e.candidates) == ("Office of the SSG", "016100000000", [])
+    assert resolve(Entity("sub_agency", "Office of the Secretary to the State Government"), names).code == \
+        "016100100100"
+    assert resolve(Entity("mda", "Secretary to the State Government"), names).code == "016100000000"   # 'Office'
+    assert resolve(Entity("mda", "Ministry of Higher Education"), names).code == ""                   # tells none apart
+
+
+def test_a_programme_printed_as_a_budget_unit_resolves_to_its_code() -> None:
+    names = Names(mdas=(("Livestock Development Programme", "026800200100"),), programmes=("Rural Water Supply",))
+    e = resolve(Entity("programme", "Livestock Development Programme"), names)
+    assert (e.type, e.code) == ("sub_agency", "026800200100")
+    e = resolve(Entity("programme", "Rural Water Supply"), names)         # a printed programme stays one
+    assert (e.type, e.resolved) == ("programme", "Rural Water Supply")
+
+
+def test_an_agency_the_user_named_settles_one_the_planner_renamed() -> None:
+    names = Names(mdas=(("Ministry for Basic Education", "051700100100"), ("Ministry of Health", "052100000000")))
+    d = {"measures": ["approved"], "entities": [{"type": "mda", "name": "Ministry of Basic and Secondary Education"}],
+         "time": {"kind": "year", "year": 2026}}
+    asked = "Ministry for Basic Education 2026 approved budget din, what share ne capital?"
+    assert parse_need(d, "q", names, asked=asked).entities[0].code == "051700100100"
+    assert parse_need(d, "q", names).entities[0].code == ""            # without the user's words: ask

@@ -153,10 +153,29 @@ def _norm(s: str) -> str:
     """Words that tell agencies apart: no 'Ministry of', 'State', 'Sokoto', 'the', 'of', 'and', and no digits
     stuck to a word by a misprint ('Normadic Education1' -> 'normadic education'), no bracketed acronym ('(Rtv)')."""
     s = re.sub(r"\([^)]*\)", " ", s)
-    s = re.sub(r"(?i)\b(min(istry)?\.?( of)?|the|state|sokoto|of|for|and|affairs|sector|&)\b", " ",
-               s.replace("'", ""))
+    s = re.sub(r"(?i)\b(min(istry)?\.?( of)?|the|state|sokoto|of|for|and|affairs|sector|office|&)\b", " ",
+               re.sub(r"(?i)['’]s\b", "", s).replace("'", ""))         # a possessive: "SSG'S Office"
     s = re.sub(r"(?<=[a-z])\d+\b", "", s.lower())
     return " ".join(re.findall(r"[a-z0-9]+", s))
+
+
+def _key(s: str) -> tuple[str, ...]:
+    """One entity's words in any order: 'Office of the SSG' and "SSG'S Office" are one name printed two ways."""
+    return tuple(sorted(_norm(s).split()))
+
+
+_MINOR = {"of", "the", "to", "for", "and", "on", "in"}
+
+
+def _contracted(asked: str, printed: str) -> str:
+    """`asked` with a spelled-out run written as the acronym the printed name uses ('Office of the Secretary to the
+    State Government' -> 'Office SSG' against "SSG'S Office"), or `asked` as it was."""
+    keep = [w for w in re.findall(r"[A-Za-z]+", asked) if w.lower() not in _MINOR]
+    ini = "".join(w[0] for w in keep).upper()
+    for tok in re.findall(r"\b[A-Z]{3,6}\b", re.sub(r"(?i)['’]s\b", "", printed)):
+        if tok.lower() not in asked.lower() and (i := ini.find(tok)) >= 0:
+            return " ".join(keep[:i] + [tok] + keep[i + len(tok):])
+    return asked
 
 
 def _word_near(w: str, x: str) -> bool:
@@ -174,9 +193,11 @@ def _word_near(w: str, x: str) -> bool:
 def same_entity(asked: str, printed: str) -> bool:
     """Every word of each name matches a word of the other: the printed row is the agency asked about, not its
     parent ministry ('Agency for Nomadic Education' is not 'Ministry of Education') or a sibling."""
-    a, p = _norm(asked).split(), _norm(printed).split()
-    return bool(a and p) and all(any(_word_near(w, x) for x in p) for w in a) \
-        and all(any(_word_near(x, w) for w in a) for x in p)
+    def same(asked: str) -> bool:
+        a, p = _norm(asked).split(), _norm(printed).split()
+        return bool(a and p) and all(any(_word_near(w, x) for x in p) for w in a) \
+            and all(any(_word_near(x, w) for w in a) for x in p)
+    return same(asked) or ((c := _contracted(asked, printed)) != asked and same(c))
 
 
 def _agency(name: str, choices: list[str]) -> tuple[str, list[str]]:
@@ -186,8 +207,8 @@ def _agency(name: str, choices: list[str]) -> tuple[str, list[str]]:
         return "", []
     hits = sorted({c for c in choices if same_entity(name, c)})
     exact = [c for c in hits if _norm(c) == n]
-    if exact or len(hits) == 1:          # one entity, perhaps printed two ways ('Min of' / 'Ministry of')
-        return (exact or hits)[0], []
+    if exact or len({_key(c) for c in hits}) == 1:     # one entity, perhaps printed two ways ('Min of' / 'Ministry
+        return (exact or hits)[0], []                  # of', 'Office of the SSG' / "SSG'S Office")
     if hits:
         return "", hits[:3]
     # nothing is the same agency: the closest names, only to offer them as choices
@@ -220,20 +241,34 @@ def resolve(e: Entity, names: Names) -> Entity:
             e.type = "mda" if hit else e.type
         if hit:
             e.resolved = hit
-            codes = sorted({c for m, c in names.mdas if _norm(m) == _norm(hit)})
+            codes = sorted({c for m, c in names.mdas if _key(m) == _key(hit)})
             # a sub-agency's own row, not its ministry's "with its agencies" total (codes ending 00000000)
             own = [c for c in codes if not c.endswith("00000000")] if e.type == "sub_agency" else codes
             e.code = (own or codes)[0]
     elif e.type == "programme":
         e.resolved = _best(e.name, list(names.programmes))
+        if not e.resolved and names.mdas:    # a 'programme' printed as a budget unit with its own code
+            hit, _ = _agency(e.name, sorted({m for m, _ in names.mdas}))
+            if hit:
+                return resolve(Entity("sub_agency", e.name), names)
     elif e.type == "lga":          # a known spelling first (Wamako, Sabon-Birni, Sokoto ta Arewa), then fuzzy
         e.resolved = canonical(e.name) or canonical(_best(e.name, list(names.lgas), cutoff=0.75)) \
             or _best(e.name, list(names.lgas), cutoff=0.75)
     return e
 
 
-def parse_need(d, standalone: str, names: Names | None = None, topics: tuple[str, ...] = ()) -> Need:
-    """The planner's `need`, checked: unknown names dropped (and noted), entities resolved, time validated."""
+def _named_in(asked: str, candidates: list[str]) -> str:
+    """The one candidate the user's own words print, word for word (the planner's English may have renamed it:
+    'Ministry for Basic Education' asked, 'Ministry of Basic and Secondary Education' planned)."""
+    words = f" {_norm(asked)} "
+    hits = [c for c in candidates if _norm(c) and f" {_norm(c)} " in words]
+    return hits[0] if len(hits) == 1 else ""
+
+
+def parse_need(d, standalone: str, names: Names | None = None, topics: tuple[str, ...] = (),
+               asked: str = "") -> Need:
+    """The planner's `need`, checked: unknown names dropped (and noted), entities resolved, time validated.
+    `asked` is the user's own message: an agency name it prints settles one the planner renamed."""
     problems: list[str] = []
     if not isinstance(d, dict):
         return Need(standalone, problems=["no need given"] if d else [])
@@ -250,7 +285,10 @@ def parse_need(d, standalone: str, names: Names | None = None, topics: tuple[str
         if isinstance(e, dict) and str(e.get("name") or "").strip():
             t = e.get("type") if e.get("type") in ENTITY_TYPES else "other"
             ent = Entity(t, str(e["name"]).strip()[:120])
-            entities.append(resolve(ent, names) if names else ent)
+            ent = resolve(ent, names) if names else ent
+            if names and ent.candidates and (hit := _named_in(asked, ent.candidates)):
+                ent = resolve(Entity(t, hit), names)
+            entities.append(ent)
     geo = d.get("geo_level") if d.get("geo_level") in GEO_LEVELS else "state"
     # "Sokoto State LGAs", "all LGAs", "local governments": every LGA of the state, not one LGA
     collective = [e for e in entities if e.type == "lga" and not e.resolved and COLLECTIVE_LGA.search(e.name)]

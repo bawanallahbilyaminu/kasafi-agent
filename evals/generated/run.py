@@ -64,8 +64,10 @@ def wrong(case: dict, a, lang: str) -> str:
     if wrong_agency(case, a):
         return "WRONG AGENCY " + ", ".join(sorted(set(AGENCY_CODE.findall(text))))
     if case.get("expect_gap"):                       # nothing published: no figure for that period, say what exists
-        est = case.get("estimate")                   # ... or the budget's own out-year estimate, labelled as one
-        if est and any(f in text for f in accepted(est, lang)) and re.search(r"(?i)estimate|kiyasi|hasashe", a.text):
+        est = case.get("estimate") or []             # ... or the budget's own out-year estimate, labelled as one
+        est = [est] if isinstance(est, str) else est
+        if any(f in text for e in est for f in accepted(e, lang)) and re.search(r"(?i)estimate|[kƙ]iyasi|hasashe",
+                                                                                 a.text):
             return ""
         if case["expect_gap"] not in a.text and "newest" not in a.text.lower() and "latest" not in a.text.lower() \
                 and "mafi sabo" not in a.text:
@@ -84,11 +86,12 @@ def wrong(case: dict, a, lang: str) -> str:
 
 # a reply corrects a false premise when it says the change didn't happen ("did not go up", "there was no rise",
 # Hausa "bai karu ba") or names the real direction, the opposite of the premise's; a "because" is no sign either way
-DENIES = re.compile(r"(?i)\b(?:did not|didn't|does not|not (?:go|rise|fall|increase|decrease|drop)|"
+DENIES = re.compile(r"(?i)\b(?:did not|didn't|does not|not (?:an? )?(?:go|rise|fall|increase|decrease|drop)|"
                     r"no (?:rise|fall|increase|decrease|drop)|actually|in fact|instead|rather|"
                     r"bai (?:karu|ƙaru|ragu)|ba (?:ta|ya) (?:karu|ƙaru|ragu))\b")
-DIRECTION = {"rise": re.compile(r"(?i)\b(?:rose|increased|went up|grew|ya karu|ya ƙaru)\b"),
-             "fall": re.compile(r"(?i)\b(?:fell|decreased|dropped|went down|declined|ya ragu)\b")}
+DIRECTION = {"rise": re.compile(r"(?i)\b(?:rose|increased|went up|grew|an increase|a rise|ya karu|ya ƙaru)\b"),
+             "fall": re.compile(r"(?i)\b(?:fell|decreased|dropped|went down|declined|a decrease|a drop|a fall|"
+                                r"ya ragu)\b")}
 
 
 def corrects(text: str, premise: str) -> bool:

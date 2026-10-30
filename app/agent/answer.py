@@ -29,7 +29,7 @@ import time
 from collections import Counter
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from functools import partial
@@ -470,7 +470,7 @@ async def plan_question(question: str, catalog: list[dict], client: ChatClient, 
         statistics=d.get("statistics") is True,
         topic=d.get("topic") if d.get("topic") in registry().topics else "",
         need=parse_need(d.get("need"), str(d.get("english_question", question)), names,
-                        tuple(registry().topics)),
+                        tuple(registry().topics), asked=question),
         original=question,
     )
 
@@ -1317,12 +1317,30 @@ _FALL = re.compile(r"(?i)\b(?:fall\w*|fell|decreas\w*|drop\w*|go(?:ne)? down|wen
 
 def claimed_direction(need: Need) -> str:
     """The change the question takes for granted ('why did it rise?'): its premises, else its wording; '' if none
-    or both."""
+    or both. The entities' names don't count ('Ministry for Higher Education', 'Lower Rima Basin')."""
+    names = sorted({x for e in need.entities for x in (e.name, e.resolved) if x}, key=len, reverse=True)
     for text in (" ".join(need.premises), need.standalone_question):
+        for x in names:
+            text = re.sub(re.escape(x), " ", text, flags=re.I)
         rise, fall = bool(_RISE.search(text)), bool(_FALL.search(text))
         if rise != fall:
             return "rise" if rise else "fall"
     return ""
+
+
+def premise_contradicted(need: Need, cells: list) -> bool:
+    """The whole budget of the one entity moved the other way from the change the question takes for granted."""
+    claim = claimed_direction(need)
+    money = [c for c in cells if c.filled and (c.split or "total") == "total" and c.measure != "performance_pct"]
+    if not claim or len({c.entity.code for c in money}) != 1:
+        return False
+    for m in dict.fromkeys(c.measure for c in money):
+        by_year = {c.year: c for c in money if c.measure == m}
+        if len(by_year) == 2:
+            a, b = (by_year[y] for y in sorted(by_year))
+            diff = Decimal(b.value) - Decimal(a.value)
+            return bool(diff) and (claim == "rise") != (diff > 0)
+    return False
 
 
 def write_budget_cells(need: Need, cells: list, lang: str, conn=None) -> tuple[str, str]:
@@ -1450,6 +1468,11 @@ async def structured_answer(conn, plan: Plan, lang: str, settings: Settings, t: 
         log.info("agency %r matches no printed name exactly: asking among %d", e.name, len(opts))
         return Answer(WHICH_AGENCY.get(lang, WHICH_AGENCY["en"]).format(name=e.name, names="; ".join(e.candidates[:3])),
                       False, True, plan=plan, timings=t, clarify=opts)
+    # 'why did it rise from 2025 to 2026?': the rise itself is two figures code can check; a false premise is
+    # answered from them here, a true one goes on to the text paths for its reasons
+    checking = need.operation == "explain" and bool(claimed_direction(need)) and len(need.years()) == 2
+    if checking:
+        need = replace(need, operation="compare")
     latest = conn.execute("SELECT max(year) FROM perf_items").fetchone()[0] if "approved" not in need.measures \
         else max(APPROVED_YEARS)
     cov = cover(need, available=available_capabilities(settings), latest_year=latest)
@@ -1473,7 +1496,7 @@ async def structured_answer(conn, plan: Plan, lang: str, settings: Settings, t: 
         body, _ = write_budget_cells(need, cov.cells, lang, conn)
         log.info("structured: all %d cells are for periods not published yet", len(cov.cells))
         return Answer(body, False, True, plan=plan, timings=t, partial=True)
-    if not n_filled:
+    if not n_filled or (checking and not premise_contradicted(need, cov.cells)):
         return None
     evidence = [Evidence(i, s.doc_id, s.title, None, s.page, "text", s.row_text)
                 for i, s in enumerate(filled.sources, 1)]

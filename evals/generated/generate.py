@@ -23,6 +23,7 @@ sys.path.insert(0, str(ROOT))
 
 import psycopg  # noqa: E402
 
+from app.agent.need import same_entity  # noqa: E402
 from app.config import get_settings  # noqa: E402
 
 OUT = Path(__file__).with_name("cases.json")
@@ -74,12 +75,23 @@ def generate(conn, n: int, rng: random.Random) -> list[dict]:
                       "lang": "en", "text": text, **check})
 
     # a ministry's own unit is often printed with the ministry's name ('Ministry of Water Resources' 025200100100
-    # and the ministry with its agencies 025200000000): the question reads either way, so either answer counts
-    ministry, unit = dict(mdas), dict(subs)
+    # and the ministry with its agencies 025200000000; 'Min of Lands and Housing' / 'Ministry of Lands and
+    # Housing'): the question reads either way, so either answer counts
+    by_code = {c: nm for nm, c in mdas + subs}
+
+    def twin(code: str) -> str:
+        """The ministry for its own unit, or the unit for its ministry, when the two print one name; else ''."""
+        if code.endswith("00000000"):
+            other = sorted(c for c in by_code if c[:4] == code[:4] and c != code
+                           and same_entity(by_code[c], by_code[code]))
+        else:
+            m = code[:4] + "00000000"
+            other = [m] if m in by_code and same_entity(by_code[m], by_code[code]) else []
+        return other[0] if other else ""
 
     def readings(name: str, code: str, figures) -> dict:
         """The ministry's figures and, if a unit is printed with the same name, the unit's too."""
-        codes = [code] + ([unit[name]] if name in unit and unit[name] != code else [])
+        codes = [code] + ([t] if (t := twin(code)) else [])
         sets = [f for c in codes if (f := figures(c))]
         return ({"numbers_any": sets} if len(sets) > 1 else {"numbers": sets[0]}) | {"codes": codes[:len(sets)]
                                                                                     if len(sets) > 1 else [code]}
@@ -89,8 +101,8 @@ def generate(conn, n: int, rng: random.Random) -> list[dict]:
         add("lookup", f"How much was approved for the {name} in the {year} budget?", code=code,
             **readings(name, code, lambda c: [money(v)] if (v := approved(conn, c, year)) is not None else None))
 
-    def either(name: str, figures) -> dict:
-        codes = [c for c in (dict(subs)[name], ministry.get(name)) if c]
+    def either(code: str, figures) -> dict:
+        codes = [c for c in (code, twin(code)) if c]
         both = [figures(code) for code in codes]
         return ({"numbers_any": both} if len(both) > 1 else {"numbers": both[0]}) | {"codes": codes}
 
@@ -98,7 +110,7 @@ def generate(conn, n: int, rng: random.Random) -> list[dict]:
     for name, code in rng.sample(split_subs, min(n, len(split_subs))):
         year = rng.choice([y for y in BUDGET_YEARS if all(approved(conn, code, y, k) is not None for k in SPLITS)])
         add("split", f"What are the personnel, overhead and capital allocations of the {name} in {year}?",
-            code=code, **either(name, lambda c: [money(approved(conn, c, year, k)) for k in SPLITS]
+            code=code, **either(code, lambda c: [money(approved(conn, c, year, k)) for k in SPLITS]
                                 if all(approved(conn, c, year, k) is not None for k in SPLITS) else ["-"]))
     spend_subs = [(nm, c) for nm, c in subs if perf(conn, c, 2026, latest_q)]
     def spent(c, y, q):               # (spent to date, revised) where the report prints both
@@ -108,7 +120,7 @@ def generate(conn, n: int, rng: random.Random) -> list[dict]:
     for name, code in rng.sample(spend_subs, min(n, len(spend_subs))):     # a random published quarter it has
         y, q = rng.choice([p for p in periods if spent(code, *p)] or [(2026, latest_q)])
         add("spend_quarter", f"How much had the {name} spent by the end of Q{q} {y}, against its revised budget?",
-            code=code, **either(name, lambda c: spent(c, y, q) or ["-"]))
+            code=code, **either(code, lambda c: spent(c, y, q) or ["-"]))
     for name, code in rng.sample(mdas, min(n, len(mdas))):
         add("compare", f"Compare the {name}'s approved budget in 2025 and 2026.", code=code,
             **readings(name, code, lambda c: [money(x), money(y)]
@@ -122,10 +134,11 @@ def generate(conn, n: int, rng: random.Random) -> list[dict]:
         return [[f"{pct}%"], [f"{pct} %"], [money(cap), money(tot)]]
 
     for name, code in rng.sample(split_subs, min(n, len(split_subs))):
-        forms = share_forms(code) + share_forms(ministry[name]) if name in ministry else share_forms(code)
+        other = twin(code)
+        forms = share_forms(code) + (share_forms(other) if other else [])
         if forms:                          # a unit printed with its ministry's name: either share counts
             add("share", f"What share of the {name}'s 2026 approved budget is capital?", numbers_any=forms, code=code,
-                codes=[code] + ([ministry[name]] if name in ministry else []))
+                codes=[code] + ([other] if other else []))
     for name, code in rng.sample(mdas, min(n, len(mdas))):        # the premise is the wrong way round
         a25, a26 = approved(conn, code, 2025), approved(conn, code, 2026)
         wrong = "fell" if a26 > a25 else "rose"
@@ -138,18 +151,20 @@ def generate(conn, n: int, rng: random.Random) -> list[dict]:
             **readings(name, code, same_way))
     for name, code in rng.sample(subs, min(n, len(subs))):         # a period no document can hold yet
         kind = rng.choice(["q4", "next_q", "budget"])
+        codes = [c for c in (code, twin(code)) if c]
         if kind == "budget":           # no approved budget yet; the newest budget's out-year estimate, labelled, counts
             y = max(BUDGET_YEARS) + 2
-            r = conn.execute(f"SELECT estimate_{y} FROM budget_items WHERE doc_id = %s AND code = %s AND spend_kind = "
-                             f"'total' AND estimate_{y} IS NOT NULL ORDER BY seq LIMIT 1",
-                             (f"budget-{max(BUDGET_YEARS)}-approved", code)).fetchone()
+            est = [money(r[0]) for c in codes if (r := conn.execute(
+                f"SELECT estimate_{y} FROM budget_items WHERE doc_id = %s AND code = %s AND spend_kind = 'total' "
+                f"AND estimate_{y} IS NOT NULL ORDER BY seq LIMIT 1",
+                (f"budget-{max(BUDGET_YEARS)}-approved", c)).fetchone())]
             add("not_in_data", f"How much is the {name}'s approved budget for {y}?",
-                expect_gap=f"{min(BUDGET_YEARS)}–{max(BUDGET_YEARS)}", numbers=[], code=code,
-                **({"estimate": money(r[0])} if r else {}))
+                expect_gap=f"{min(BUDGET_YEARS)}–{max(BUDGET_YEARS)}", numbers=[], code=code, codes=codes,
+                **({"estimate": est} if est else {}))
         else:
             when = "Q4 2026" if kind == "q4" else "Q1 2027"
             add("not_in_data", f"How much did the {name} spend in {when}?", expect_gap=f"Q{latest_q} 2026",
-                numbers=[], code=code)
+                numbers=[], code=code, codes=codes)
     pull = dtm_pull()
     if pull:
         lgas = sorted(pull["lgas"], key=lambda x: -x["idps"])

@@ -191,6 +191,19 @@ def test_a_false_premise_is_corrected_once_on_the_whole_budget() -> None:
     assert "didn't" not in ans.write_budget_cells(neutral, cells, "en")[0]
 
 
+def test_a_why_question_with_a_false_premise_is_checked_on_the_figures() -> None:
+    hed = Entity("mda", "Ministry for Higher Education", "Ministry for Higher Education", "056900000000")
+    cells = [Cell("approved", hed, "state", "", y, value=Decimal(v), source="p")
+             for y, v in ((2025, "19154879215.06"), (2026, "33986201399.04"))]
+    fall = Need("Why did the Ministry for Higher Education's approved budget fall from 2025 to 2026?",
+                entities=[hed], operation="explain", time={"kind": "range", "from": 2025, "to": 2026},
+                premises=["Ministry for Higher Education approved budget fell from 2025 to 2026"])
+    assert ans.claimed_direction(fall) == "fall"            # 'Higher' is the ministry's name, not a claim
+    assert ans.premise_contradicted(fall, cells)
+    rise = Need("Why did it rise?", entities=[hed], premises=["its approved budget rose from 2025 to 2026"])
+    assert not ans.premise_contradicted(rise, cells)        # a true premise: its reasons are for the text paths
+
+
 def test_nearest_lines_never_offer_another_agencys_rows() -> None:
     from app.retrieval.line_search import Line
     unit = Line("b:51:1", "Sokoto State FY 2026 Budget", "budget-2026-approved", 51, "Capital Expenditure by Project",
