@@ -38,24 +38,29 @@ def _ts(d) -> datetime | None:
     return datetime.combine(d, time(23, 59), tzinfo=timezone.utc)
 
 
-def table_rows(page_texts: list[str], state: str) -> list[tuple[str, list[str]]]:
-    """(location, cells) for the state's block of a 'State | Location | ...' table spread over pages: the line
-    starting with the state, then the '| Location | ...' lines under it, until the next state's line."""
+def table_rows(page_texts: list[str], state: str, n: int) -> list[tuple[str, list[str]]]:
+    """(location, n cells) for the state's block of a 'State | Location | n columns' table spread over pages: the
+    row whose first cell is the state, then the rows under it, until the next state's row. Rows are told apart by
+    their cell count, not their pipes, since OCR prints them either way: 'Sokoto | Gudu North | ...' and
+    '| Bodinga | ...' (no state cell), or '| Sokoto | Gudu North | ...' and '| | Illela | ...' (an empty one)."""
     rows, inside = [], False
     for text in page_texts:
         for line in text.splitlines():
-            cells = [c.strip() for c in line.strip().strip("|").split("|")]
-            if len(cells) < 3:
+            line = line.strip()
+            if "|" not in line:
                 continue
-            first = line.strip()
-            if first.startswith("|"):
-                if inside:
-                    rows.append((cells[0], cells[1:]))
-            elif cells[0].lower() == state.lower():
-                inside = True
+            body = line[1:] if line.startswith("|") else line
+            cells = [c.strip() for c in (body[:-1] if body.endswith("|") else body).split("|")]
+            if len(cells) == n + 2 and cells[0]:                    # a state's first row
+                if cells[0].lower() == state.lower():
+                    inside = True
+                    rows.append((cells[1], cells[2:]))
+                elif inside:
+                    return rows
+            elif inside and len(cells) == n + 2:                    # under the state, its cell left empty
                 rows.append((cells[1], cells[2:]))
-            elif inside:
-                return rows
+            elif inside and len(cells) == n + 1:                    # under the state, no state cell
+                rows.append((cells[0], cells[1:]))
     return rows
 
 
@@ -86,7 +91,7 @@ def build(conn, spec: dict) -> tuple[list[dict], list[str]]:
 
     for t in spec.get("tables", []):
         texts = [page.get((t["doc"], p), "") for p in t["pages"]]
-        found = table_rows(texts, t["state"])
+        found = table_rows(texts, t["state"], len(t["columns"]))
         if not found:
             problems.append(f"{t['doc']} p{t['pages']}: no {t['state']} rows")
         for location, cells in found:
