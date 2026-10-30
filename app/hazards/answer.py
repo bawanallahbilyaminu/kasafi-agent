@@ -64,6 +64,7 @@ W = {
     "en": {"heat": "🌡️ *Heat*", "rain": "🌧️ *Rain*", "air": "🌫️ *Dust and air*", "flood": "🌊 *Rivers*",
            "fires": "🔥 *Fires*",
            "where_state": "Sokoto State", "where_lga": "{lga} LGA", "today": "today", "tomorrow": "tomorrow",
+           "pin_fallback": "Forecast for {lga} LGA (none for your exact spot yet):",
            "heat_line": "{day}: up to {t:.0f} °C, feels like {f:.0f} °C, heat index up to {hi:.0f} °C: *{cat}* "
                         "(US National Weather Service heat index categories, by the {basis}). UV index up to {uv:.0f}. "
                         "Wind up to {w:.0f} km/h, gusts {g:.0f} km/h.",
@@ -109,6 +110,7 @@ W = {
     "ha": {"heat": "🌡️ *Zafin rana*", "rain": "🌧️ *Ruwan sama*", "air": "🌫️ *Ƙura da iska*", "flood": "🌊 *Koguna*",
            "fires": "🔥 *Gobara*",
            "where_state": "Jihar Sokoto", "where_lga": "Ƙaramar Hukumar {lga}", "today": "yau", "tomorrow": "gobe",
+           "pin_fallback": "Hasashen Ƙaramar Hukumar {lga} (babu na daidai inda kake tukuna):",
            "heat_line": "{day}: har zuwa {t:.0f} °C, ana jin kamar {f:.0f} °C, ma'aunin zafi har zuwa {hi:.0f} °C: "
                         "*{cat}* (matakan ma'aunin zafi na US National Weather Service, bisa {basis}). Ma'aunin UV "
                         "har zuwa {uv:.0f}. Iska har zuwa {w:.0f} km/h, guguwa {g:.0f} km/h.",
@@ -216,6 +218,11 @@ def hazard_answer(conn, question: str, lang: str, layers: list[str], where: read
             out += ["", w[layer], w["unavailable"].format(what=w["what"][layer])]
             continue
         lines = _layer_lines(conn, layer, lang, where, pids, days, today)
+        if not lines and where.kind == "point" and where.lga_pcode:
+            # the pin's own spot has no data yet (the grid fetch hasn't run): its LGA's forecast, said as such
+            lga = read.Where("lga", where.lga_pcode, where.lga or name_of(where.lga_pcode))
+            if lines := _layer_lines(conn, layer, lang, lga, read.point_ids(conn, lga), days, today):
+                lines = [w["pin_fallback"].format(lga=lga.lga), *lines]
         if not lines:
             out += ["", w[layer], w["no_day"].format(what=w["what"][layer], day=_day_label(days[0], today, lang))]
             continue

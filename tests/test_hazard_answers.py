@@ -98,6 +98,17 @@ def test_dry_heat_takes_its_category_from_the_air_temperature_and_says_so(monkey
                                                                      read.Where("state"), TODAY).text
 
 
+def test_a_pin_without_grid_data_gets_its_lgas_forecast_said_as_such(monkeypatch) -> None:
+    _patch(monkeypatch, _fresh())
+    monkeypatch.setattr(read, "point_ids", lambda conn, where: [(7 if where.kind == "point" else 1, "Wamakko")])
+    day = read.HeatDay("Wamakko", TODAY, 41.2, 43.0, 44.6, "danger", 11, 18, 35, 0.0, 0.0, "none", 10, None)
+    monkeypatch.setattr(read, "heat_day", lambda conn, pid, lga, d: day if pid == 1 else None)   # the grid point: none
+    pin = read.Where("point", "NG034021", "Wamakko", 13.08, 5.21)
+    a = ha.hazard_answer(None, "how hot here", "en", ["heat"], pin, TODAY)
+    assert "Forecast for Wamakko LGA (none for your exact spot yet):\nToday: up to 41 °C" in a.text and a.found
+    assert "no forecast for" not in a.text
+
+
 def test_a_river_is_compared_with_the_same_time_of_year() -> None:
     from datetime import date as d
     history = [(100.0, d(y, 8, 30)) for y in range(1997, 2026)] + [(5.0 + y % 3, d(y, 10, 28)) for y in
