@@ -39,6 +39,8 @@ OUTLOOK = {"flood": re.compile(r"(?i)flood outlook|\bafo\b|annual flood|flood ri
            "climate": re.compile(r"(?i)seasonal climate|\bscp\b|nimet.{0,40}(?:predict|season|outlook)|"
                                  r"rainy season|onset|cessation|hasashen damina|farkon damina|ƙarshen damina|"
                                  r"karshen damina")}
+# a warning asked about: the hazard answer (official warnings first, then the outlook for these months)
+WARNING = re.compile(r"(?i)\b(?:warn\w*|alerts?|advisor\w*|gargaɗ\w*|gargad\w*|faɗakarw\w*|fadakarw\w*|sanarw\w*)\b")
 # a disease named with these words asks about cases ('any meningitis now?'), not coverage or budgets
 CASE_WORDS = re.compile(r"(?i)\b(?:cases?|outbreaks?|now|currently|this (?:week|month|year)|any|deaths?|died|"
                         r"suspected|confirmed|spread|yanzu|akwai|ɓarke|barke|bulla|mutu)\b")
@@ -262,6 +264,8 @@ def route(question: str, measures: list[str] | None = None) -> str:
         return ""
     if "outbreak_cases" in measures or (diseases_asked(q) and (CASE_WORDS.search(q) or OUTBREAK.search(q))):
         return "outbreaks"
+    if WARNING.search(q) and not outlook_asked(q):   # 'is there a flood warning?': warnings first, outlook after
+        return ""
     which = outlook_asked(q) or ("flood" if "flood_outlook" in measures else
                                  "climate" if "seasonal_outlook" in measures else "")
     return f"outlook_{which}" if which else ""

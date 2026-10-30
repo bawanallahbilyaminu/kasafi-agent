@@ -119,6 +119,10 @@ def test_route(q, want) -> None:
 def test_route_by_the_planner_measure() -> None:
     assert official.route("Yaya lamarin yake?", ["outbreak_cases"]) == "outbreaks"
     assert official.route("Yaya lamarin yake?", ["seasonal_outlook"]) == "outlook_climate"
+    # pre-deploy eval a01/a05: the planner tagged a warning question flood_outlook
+    assert official.route("Is there a flood warning for Goronyo?", ["flood_outlook"]) == ""
+    assert official.route("Akwai gargaɗin ambaliya ga Goronyo?", ["flood_outlook"]) == ""
+    assert official.route("What does the NIHSA flood outlook warn about?", ["flood_outlook"]) == "outlook_flood"
 
 
 CSM = (2025, 14, date(2025, 4, 5), "from Epi week 40 2024, - week 13 2025", 450, 41, 47, True, 4, NOW)
