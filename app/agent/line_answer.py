@@ -90,13 +90,16 @@ SELECT_SYSTEM = (
     "side by side, e.g. '{SHARE_PCT} of the 2026 approved budget goes to health; the Abuja Declaration target is "
     "15%.', and never say it meets, exceeds or falls short of it.\n"
     "7. found: \"full\", \"partial\" (some of it, or only a broader total) or \"none\" (no line answers it; "
-    "select nothing).\n"
+    "select nothing). With found \"none\", list in 'nearest' up to 3 lines that are the closest the documents "
+    "print (a broader line the item would belong to, or a related item), each with the column for the year and "
+    "measure asked; the app shows them as the nearest, not as the answer. Empty if nothing is related.\n"
     "8. Only if the lines show several clearly different things the question could mean and you can't tell which, "
     "select nothing and set clarify: a short question in the reply language and 2-3 options, each a title of at "
     "most 20 characters and the full question for that reading. Otherwise clarify is null.\n"
     'Reply with JSON only: {"selected": [{"line": "L1", "column": "<column label exactly as shown>", '
     '"part": "top|bottom|both (share and ratio only)"}], "operation": "list|sum|compare|share|ratio", '
-    '"aggregate_only": false, "summary": "...", "missing": "", "missing_terms": [], "found": "full|partial|none", "clarify": null}'
+    '"aggregate_only": false, "summary": "...", "missing": "", "missing_terms": [], "found": "full|partial|none", '
+    '"nearest": [{"line": "L2", "column": "<column label>"}], "clarify": null}'
 )
 
 
@@ -127,6 +130,7 @@ class LineResult:
     clarify: list[dict] = field(default_factory=list)
     clarify_question: str = ""
     uncertain: list[str] = field(default_factory=list)   # lines only one of the two readings chose: not counted
+    nearest: list[Selection] = field(default_factory=list)   # nothing answers: the closest lines printed (shown as such)
     disputed: bool = False      # the readings disagreed on which rows a total takes: no arithmetic was done
     readers: list[str] = field(default_factory=list)     # the model behind each reading
     picks: list[list[str]] = field(default_factory=list)  # what each reading chose, for the admin trace
@@ -259,6 +263,14 @@ def verify(d: dict, lines: list[Line]) -> tuple[LineResult, list[str]]:
         seen.add(key)
         part = s.get("part") if s.get("part") in ("top", "bottom", "both") else ""
         res.selections.append(Selection(line, cell, part))
+    for s in (d.get("nearest") or [])[:3] if isinstance(d.get("nearest"), list) else []:
+        # checked like a pick (a real line and column, the amount from the stored cell); a bad one is just dropped
+        m = re.fullmatch(r"L(\d+)", str(s.get("line", "")).strip()) if isinstance(s, dict) else None
+        if m and 1 <= int(m.group(1)) <= len(lines):
+            line = lines[int(m.group(1)) - 1]
+            col = str(s.get("column", "")).strip()
+            if cell := line.cell(col) or next((c for c in line.cells if c.column.lower() == col.lower()), None):
+                res.nearest.append(Selection(line, cell))
     if res.operation in ("share", "ratio"):
         problems += _match_sides(res)
     amounts = [s.cell.amount for s in res.selections]
@@ -384,6 +396,8 @@ async def read_lines(question: str, english: str, lang: str, lines: list[Line], 
                                   settings.kasafi_read_reasoning)),
         timed("read2", _second_reading(messages, lines, client, second, settings, extra_numbers, chat_json)))
     res = reconcile(r1, d1, r2, lines, extra_numbers, question, lang)
+    if not res.selections:           # both readings' nearest lines, once each (each was checked against the rows)
+        res.nearest = list({_sig(s): s for s in r1.nearest + r2.nearest}.values())[:3]
     res.readers = [settings.meta_model, reader2]
     res.picks = [[pick_text(s) for s in r.selections] for r in (r1, r2)]
     res.timings = {**took, "calls1": r1.timings.get("calls", 1), "calls2": r2.timings.get("calls", 1)}

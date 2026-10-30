@@ -1475,7 +1475,43 @@ async def _line_path(conn, plan: Plan, question: str, lang: str, client, second,
         return Answer(res.clarify_question, False, True, plan=plan, timings=t, clarify=res.clarify)
     if res.selections:
         return line_answer(conn, plan, res, hits, lang, t, acq)
+    if res.nearest:                  # nothing is that item, but related lines exist: name them as the nearest
+        return nearest_answer(conn, plan, res, lang, t, acq)
     return None
+
+
+NEAREST_WORDS = {
+    "en": {"head": "No line in the documents is exactly that{what}. The nearest lines they print (related, not the "
+                   "item itself):", "what": " ({m})"},
+    "ha": {"head": "Babu layi a takardun da yake daidai wannan{what}. Layukan da suka fi kusa da shi (masu alaƙa, "
+                   "ba shi kansa ba):", "what": " ({m})"},
+}
+
+
+def nearest_answer(conn, plan: Plan, res: LineResult, lang: str, t: dict, acq) -> Answer:
+    """The coverage-gap rule for budget lines: when no line is the item asked about but related ones exist, a
+    partial answer naming them as the nearest (each a checked row with its citation), never a bare 'not found'."""
+    w = NEAREST_WORDS.get(lang, NEAREST_WORDS["en"])
+    pages = list(dict.fromkeys((s.line.doc_id, s.line.page) for s in res.nearest))
+    evidence = [Evidence(n, d, next(s.line.title for s in res.nearest if (s.line.doc_id, s.line.page) == (d, p)),
+                         None, p, "text", "\n".join(f"[Table: {s.line.table_title}]\n{s.line.row_text}"
+                                                    for s in res.nearest if (s.line.doc_id, s.line.page) == (d, p)))
+                for n, (d, p) in enumerate(pages, 1)]
+    names = Counter(short_name(s.line) for s in res.nearest)
+
+    def label(x) -> str:     # its level, kind and code; a name printed in two tables also says which table
+        tags = [v for v in (level(x), kind_of(x)) if v] + ([f"code {x.code}"] if x.code else [])
+        if names[short_name(x)] > 1 and x.table_title:
+            tags.append(x.table_title.rsplit(" - ", 1)[-1])
+        return short_name(x) + (f" ({', '.join(tags)})" if tags else "")
+    rows = [f"• {label(s.line)}, {s.cell.column}: {fmt(s.cell.amount)} [{pages.index((s.line.doc_id, s.line.page)) + 1}]"
+            for s in res.nearest]
+    what = w["what"].format(m=res.missing) if res.missing else ""
+    body = "\n".join([w["head"].format(what=what), *rows])
+    log.info("no line answers; %d nearest lines named", len(rows))
+    return Answer(f"{readable_amounts(body, lang)}\n\n{sources_line(evidence, lang)}", True, True, evidence, plan, t,
+                  partial=True, exact=body, acquired=acq, sources=cited_sources(conn, evidence), lines=res,
+                  working=body)
 
 
 def fallback_line_search(plan: Plan, question: str) -> dict:

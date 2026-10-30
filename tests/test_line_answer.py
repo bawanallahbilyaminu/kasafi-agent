@@ -341,3 +341,18 @@ def test_the_same_figure_from_another_document_counts_as_the_same_pick() -> None
     r2, _ = verify({"selected": [{"line": "L2", "column": "2025 Original Budget"}], "found": "full"}, lines)
     res = reconcile(r1, d1, r2, lines, [], "q", "en")
     assert [s.line.id for s in res.selections] == [bud.id] and not res.uncertain and not res.clarify
+
+
+def test_nothing_is_the_item_but_related_lines_are_named_as_the_nearest() -> None:
+    rmnh = L(7, "Reproductive, maternal and neonatal health", 45, [("2026 Approved Budget", "170000000.00")])
+    phc = L(8, "Primary Healthcare Expenditure", 43, [("2026 Approved Budget", "1220000000.00")])
+    res, problems = verify({"selected": [], "found": "none", "summary": "", "missing": "rural maternal centres",
+                            "nearest": [{"line": "L1", "column": "2026 Approved Budget"},
+                                        {"line": "L2", "column": "no such column"}, {"line": "L9", "column": "x"}]},
+                           [rmnh, phc])
+    assert not res.selections and not problems
+    assert [s.line.name for s in res.nearest] == ["Reproductive, maternal and neonatal health"]   # bad ones dropped
+    plan = ans.Plan("q", ["q"], [])
+    a = ans.nearest_answer(None, plan, res, "en", {}, None)
+    assert a.found and a.partial and "No line in the documents is exactly that (rural maternal centres)" in a.text
+    assert "170,000,000.00" in a.exact and "p. 45" in a.text
