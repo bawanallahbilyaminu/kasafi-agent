@@ -23,6 +23,7 @@ from decimal import Decimal
 import psycopg
 
 from app.retrieval.line_meaning import embed_queries
+from app.sources.lga_names import city_terms
 
 MAX_TERMS = 10
 MAX_LINES = 40          # what the model reads in one go
@@ -299,6 +300,8 @@ def search_lines(conn: psycopg.Connection, terms: list[str], *, year: int | None
     """
     terms = list(dict.fromkeys(t for t in (_clean(t) for t in terms) if len(t) >= 3))
     terms = expand_acronyms(conn, terms)
+    have = " ".join(terms).lower()                 # 'Sokoto city' is printed 'Sokoto Metropolis' / 'Township'
+    terms += [t for t in city_terms(" ".join([question or "", *terms])) if t.lower() not in have]
     if not terms:
         return []
     years = list(years or []) + ([year] if year else [])

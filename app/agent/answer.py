@@ -1630,7 +1630,8 @@ LINE_WORDS = {
            "no_sum": "Not added up: these lines are printed in different tables of one budget, which can show the "
                      "same money twice.",
            "no_sum_disputed": "Not added up: on a second reading I wasn't sure which lines belong in the total, "
-                              "so a total of these alone could mislead."},
+                              "so a total of these alone could mislead.",
+           "two_totals": "The budget prints two totals for this, in different tables; the share of each:"},
     "ha": {"head": "🧮 *Yadda aka lissafa* (layukan da aka yi amfani da su):", "total": "Jimilla",
            "difference": "Bambanci", "share": "Kaso", "ratio": "Rabo", "spent": "Abin da aka kashe, a kason kasafin", "calc": "lissafin Kasafi",
            "missing": "Ba a samu ba",
@@ -1644,7 +1645,8 @@ LINE_WORDS = {
            "no_sum": "Ba a haɗa su ba: an buga waɗannan layuka a teburori daban-daban na kasafi ɗaya, wanda zai iya "
                      "nuna kuɗi ɗaya sau biyu.",
            "no_sum_disputed": "Ba a haɗa su ba: a karatu na biyu ban tabbata waɗanne layuka ne ke cikin jimillar ba, "
-                              "don haka jimillar waɗannan kaɗai za ta iya ɓatarwa."},
+                              "don haka jimillar waɗannan kaɗai za ta iya ɓatarwa.",
+           "two_totals": "Kasafin ya buga jimilloli biyu na wannan, a teburori daban-daban; kason kowanne:"},
 }
 
 
@@ -1773,6 +1775,11 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
         working.append(f"• {w['spent']}: {res.spent_pct}% ({w['calc']})")
     if res.share_pct is not None:
         working.append(f"• {w['share']} (↑ ÷ ↓): {res.share_pct}% ({w['calc']})")
+    if res.shares:
+        working.append(w["two_totals"])
+        for s, pct in res.shares:
+            table = s.line.table_title.rsplit(" - ", 1)[-1] if s.line.table_title else ""
+            working.append(f"• {label(s.line)}{f' [{table}]' if table else ''}: {pct}% ({w['calc']})")
     if res.ratio is not None:
         working.append(f"• {w['ratio']} (↑ ÷ ↓): {res.ratio} : 1 ({w['calc']})")
     calc = working[calc_from:]

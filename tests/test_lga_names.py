@@ -43,3 +43,10 @@ def test_dtm_places_are_matched_through_the_canonical_name(monkeypatch) -> None:
     s = type("S", (), {"dtmapi_subscription_key": "k", "kasafi_fetch_dir": "."})()
     asyncio.run(tools.dtm_fill(None, s, Need("q", measures=["idp_count"]), [cell]))
     assert cell.value == 4026
+
+
+def test_sokoto_city_is_searched_by_the_names_the_budget_prints() -> None:
+    from app.sources.lga_names import city_terms
+    assert city_terms("funds for piped water in Sokoto city in 2026?") == ["Sokoto Metropolis", "Township"]
+    assert city_terms("ruwan famfo a cikin birnin Sokoto") == ["Sokoto Metropolis", "Township"]
+    assert city_terms("Sokoto State budget for water") == [] and canonical("Sokoto city") == ""

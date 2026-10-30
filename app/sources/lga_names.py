@@ -41,6 +41,18 @@ _SPELLINGS = [(c, c) for c in CANONICAL] + list(ALIASES.items())
 _BY_KEY = {k: c for s, c in _SPELLINGS for k in (_key(s), _key(s).replace(" ", ""))}
 
 
+# Sokoto city, the state capital, is no LGA (it spans Sokoto North and South and parts of Wamakko and Dange
+# Shuni): people say 'Sokoto city', 'birnin Sokoto', 'cikin garin Sokoto'; the budgets print 'Sokoto Metropolis'
+# and 'Sokoto Township'
+CITY = re.compile(r"(?i)\b(?:sokoto\s+(?:city|metropolis|township|town)|birnin\s+sokoto|garin\s+sokoto)\b")
+CITY_PRINTED = ("Sokoto Metropolis", "Township")
+
+
+def city_terms(text: str) -> list[str]:
+    """The city's printed names when `text` names Sokoto city, else []."""
+    return list(CITY_PRINTED) if CITY.search(text or "") else []
+
+
 def canonical(name: str) -> str:
     """The LGA's canonical name for any known spelling (spaces optional), or '' if it isn't a Sokoto LGA."""
     k = _key(name)

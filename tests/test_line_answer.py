@@ -317,6 +317,72 @@ def test_two_readings_with_nothing_in_common_ask_which_one() -> None:
     assert res.clarify[1]["question"].startswith("How much for counterpart funds? (Ministry of Health")
 
 
+HEALTH = L(5, "HEALTH", 32, [("2026 Approved Budget", "120127992994.59")], table="Expenditure by Function")
+TOTAL_EXP = L(6, "Total Expenditure", 1, [("2026 Approved Budget", "758700526537.89")], table="Budget Summary")
+TOTAL_REV = L(7, "Total Revenue (including OB)", 1, [("2026 Approved Budget", "760000000000.00")],
+              table="Budget Summary")
+SHARE_LINES = [HEALTH, TOTAL_EXP, TOTAL_REV]
+
+
+def _share(*picks):
+    return {"selected": [{"line": l, "column": "2026 Approved Budget", "part": p} for l, p in picks],
+            "operation": "share", "found": "full", "summary": ""}
+
+
+def test_a_share_of_spending_is_never_of_revenue() -> None:
+    res, problems = verify(_share(("L1", "top"), ("L2", "bottom"), ("L3", "bottom")), SHARE_LINES)
+    assert [s.line.name for s in res.selections] == ["HEALTH", "Total Expenditure"] and res.share_pct == Decimal("15.8")
+    assert any("not revenue" in p for p in problems)          # the reader is told, and retries
+    _, problems = verify(_share(("L1", "top")), SHARE_LINES)
+    assert any("a share needs its whole" in p for p in problems)
+
+
+def test_a_share_stands_on_the_printed_whole_only_one_reading_found() -> None:
+    from app.agent.line_answer import reconcile
+    d1 = _share(("L1", "top"))
+    r1, _ = verify(d1, SHARE_LINES)
+    r2, _ = verify(_share(("L1", "top"), ("L2", "bottom")), SHARE_LINES)
+    res = reconcile(r1, d1, r2, SHARE_LINES, [], "q", "en")
+    assert res is r2 and res.share_pct == Decimal("15.8")
+    listed = {**d1, "operation": "list"}                  # the other reading only listed the part
+    assert reconcile(verify(listed, SHARE_LINES)[0], listed, r2, SHARE_LINES, [], "q", "en") is r2
+    r3, _ = verify(_share(("L1", "top"), ("L2", "bottom"), ("L3", "both")), SHARE_LINES)   # two wholes: disputed
+    assert reconcile(r1, d1, r3, SHARE_LINES, [], "q", "en").share_pct is None
+
+
+def test_a_share_of_the_whole_budget_takes_the_printed_total_expenditure() -> None:
+    from app.agent.line_answer import budget_whole
+    q = "What percentage of the overall 2026 Sokoto State budget is allocated to the health sector?"
+    res, _ = verify(_share(("L1", "top")), SHARE_LINES)
+    budget_whole(res, SHARE_LINES, q)
+    assert [s.line.name for s in res.selections] == ["HEALTH", "Total Expenditure"] and res.share_pct == Decimal("15.8")
+    res, _ = verify(_share(("L1", "top")), SHARE_LINES)           # a ministry's share: no whole is guessed
+    budget_whole(res, SHARE_LINES, "What share of the Ministry of Health's 2026 budget is capital?")
+    assert res.share_pct is None and len(res.selections) == 1
+
+
+def test_the_whole_of_a_share_is_one_printed_total() -> None:
+    rec = L(8, "Recurrent Expenditure", 1, [("2026 Approved Budget", "205356934434.43")], table="Budget Summary")
+    res, problems = verify(_share(("L1", "top"), ("L2", "bottom"), ("L3", "bottom")), [HEALTH, TOTAL_EXP, rec])
+    assert [s.line.name for s in res.selections] == ["HEALTH", "Total Expenditure"] and res.share_pct == Decimal("15.8")
+    assert any("one printed total" in p for p in problems)
+
+
+def test_two_printed_totals_of_one_thing_give_both_shares() -> None:
+    from app.agent.line_answer import reconcile
+    sector = L(9, "Health", 40, [("2026 Approved Budget", "118827792994.59")],
+               table="Sokoto State Government 2026 Approved Budget - Total Expenditure by Programme (Sector)")
+    lines = [HEALTH, TOTAL_EXP, sector]
+    d1 = _share(("L1", "top"), ("L2", "bottom"))
+    r1, _ = verify(d1, lines)
+    r2, _ = verify(_share(("L3", "top"), ("L2", "bottom")), lines)
+    res = reconcile(r1, d1, r2, lines, [], "q", "en")
+    assert [p for _, p in res.shares] == [Decimal("15.8"), Decimal("15.7")] and res.found == "partial"
+    a = ans.line_answer(None, ans.Plan("q", [], []), res, lines, "en", {}, None)
+    assert "two totals for this" in a.text and "15.8%" in a.text and "15.7%" in a.text and a.partial
+    assert "Total Expenditure by Programme (Sector)" in a.text
+
+
 def test_missing_terms_split_on_and_or_and_hausa_da() -> None:
     assert ans.missing_terms("orphanages and destitute homes")[:2] == ["orphanages", "destitute homes"]
     assert ans.missing_terms("gidajen ma'aikata da gidaje")[:2] == ["gidajen ma'aikata", "gidaje"]

@@ -135,6 +135,9 @@ class LineResult:
     uncertain: list[str] = field(default_factory=list)   # lines only one of the two readings chose: not counted
     nearest: list[Selection] = field(default_factory=list)   # nothing answers: the closest lines printed (shown as such)
     disputed: bool = False      # the readings disagreed on which rows a total takes: no arithmetic was done
+    # two readings took two printed totals of one thing ('707 HEALTH' by function, '04 Health' by sector) as the
+    # part of one agreed whole: each one's share, both shown
+    shares: list = field(default_factory=list)
     readers: list[str] = field(default_factory=list)     # the model behind each reading
     picks: list[list[str]] = field(default_factory=list)  # what each reading chose, for the admin trace
     timings: dict[str, float] = field(default_factory=dict)  # each reading's seconds and model calls
@@ -276,6 +279,8 @@ def verify(d: dict, lines: list[Line]) -> tuple[LineResult, list[str]]:
                 res.nearest.append(Selection(line, cell))
     if res.operation in ("share", "ratio"):
         problems += _match_sides(res)
+    if res.operation == "share":
+        problems += _spending_whole(res)
     amounts = [s.cell.amount for s in res.selections]
     if res.operation == "sum" and amounts:
         # one document's tables overlap (a programme line holds its projects): add only within one table
@@ -327,6 +332,37 @@ def verify(d: dict, lines: list[Line]) -> tuple[LineResult, list[str]]:
         if len(opts) >= 2:
             res.clarify, res.clarify_question = opts, str(c["question"])[:900]
     return res, problems
+
+
+_REVENUE = re.compile(r"(?i)\b(revenues?|receipts?|faac|aid and grants|opening balance)\b")
+
+
+def _is_revenue(s: Selection) -> bool:
+    return s.line.spend_kind == "revenue" or bool(_REVENUE.search(short_name(s.line)))
+
+
+def _spending_whole(res: LineResult) -> list[str]:
+    """A share's whole, checked: it must have one (the reader is asked for it); a share of spending is of
+    spending (a revenue line in the whole is dropped: Total Expenditure, never Total Revenue); the whole is one
+    printed total (lines beside it are its parts, dropped). The reader is told, and retries."""
+    top = [s for s in res.selections if s.part in ("top", "both")]
+    if top and not any(s.part in ("bottom", "both") for s in res.selections):
+        return ["a share needs its whole: also select the line it is a share of, marked \"bottom\" (for 'the "
+                "budget', its Total Expenditure line)"]
+    problems = []
+
+    def drop(odd: list[Selection], why: str) -> None:
+        res.selections = [s for s in res.selections if s not in odd]
+        problems.append(f"{why}; left out " + "; ".join(f"{short_name(s.line)} ({s.cell.column})" for s in odd))
+    if top and not any(_is_revenue(s) for s in top) and (odd := [s for s in res.selections
+                                                                 if s.part == "bottom" and _is_revenue(s)]):
+        drop(odd, "a share of spending is of spending (Total Expenditure), not revenue")
+    bottom = [s for s in res.selections if s.part == "bottom"]
+    totals = [s for s in bottom if short_name(s.line).lower().startswith("total")]
+    if top and totals and len(bottom) > 1:      # 'Total Expenditure' already holds 'Recurrent Expenditure'
+        drop([s for s in bottom if s is not totals[0]],
+             f"the whole of a share is one printed total ({short_name(totals[0].line)}), which already holds its parts")
+    return problems
 
 
 def _match_sides(res: LineResult) -> list[str]:
@@ -398,6 +434,8 @@ async def read_lines(question: str, english: str, lang: str, lines: list[Line], 
         timed("read1", _read_once(messages, lines, client, settings.meta_model, extra_numbers, chat_json,
                                   settings.kasafi_read_reasoning)),
         timed("read2", _second_reading(messages, lines, client, second, settings, extra_numbers, chat_json)))
+    for r in (r1, r2):
+        budget_whole(r, lines, english)
     res = reconcile(r1, d1, r2, lines, extra_numbers, question, lang)
     if not res.selections:           # both readings' nearest lines, once each (each was checked against the rows)
         res.nearest = list({_sig(s): s for s in r1.nearest + r2.nearest}.values())[:3]
@@ -405,6 +443,36 @@ async def read_lines(question: str, english: str, lang: str, lines: list[Line], 
     res.picks = [[pick_text(s) for s in r.selections] for r in (r1, r2)]
     res.timings = {**took, "calls1": r1.timings.get("calls", 1), "calls2": r2.timings.get("calls", 1)}
     return res
+
+
+# 'what share of the overall 2026 Sokoto State budget ...': the whole is the state's printed Total Expenditure
+WHOLE_BUDGET = re.compile(r"(?i)\b(?:of|in) the (?:overall |whole |entire |total )?(?:\d{4} )?(?:sokoto )?"
+                          r"(?:state(?:'s)? )?(?:\d{4} )?(?:approved )?budget\b")
+
+
+def budget_whole(res: LineResult, lines: list[Line], english: str) -> None:
+    """A share of the whole state budget that a reading left without its whole (even after the retry): the
+    printed Total Expenditure line among the lines, for the part's year, is the whole. Code takes the printed
+    total, never a sum, and never guesses a whole for any other share (a ministry's, a sector's)."""
+    top = [s for s in res.selections if s.part in ("top", "both")]
+    if res.operation != "share" or not top or any(s.part in ("bottom", "both") for s in res.selections) \
+            or not WHOLE_BUDGET.search(english or ""):
+        return
+    t = top[0]
+    totals = [x for x in lines if short_name(x).lower() == "total expenditure"]
+    pick = None
+    for x in sorted(totals, key=lambda x: (x.doc_id != t.line.doc_id, x.page)):
+        pick = pick or next(((x, c) for c in x.cells if c.column == t.cell.column), None) or \
+            next(((x, c) for c in x.cells if c.year == t.cell.year and c.measure == t.cell.measure), None)
+    if pick is None:
+        return
+    res.selections.append(Selection(pick[0], pick[1], "bottom"))
+    res.summary = ""                 # it was written without the whole ('the total is not among the lines')
+    part = sum((s.cell.amount for s in top), Decimal(0))
+    if pick[1].amount:
+        res.share_pct = (part / pick[1].amount * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+    log.info("share of the whole budget: the printed Total Expenditure (%s p%d) is its whole", pick[0].doc_id,
+             pick[0].page)
 
 
 def pick_text(s: Selection) -> str:
@@ -454,6 +522,23 @@ def reconcile(r1: LineResult, d1: dict, r2: LineResult, lines: list[Line], extra
             res.found = "partial"
         return res
     common = a & b
+    if a < b or b < a:
+        # both readings agree on the parts and one also found the one printed whole the other missed (Total
+        # Expenditure; the other may have only listed the part): nothing contradicts it, so the share stands
+        big, small = (r2, r1) if a < b else (r1, r2)
+        extra = [s for s in big.selections if _sig(s) not in _key(small)]
+        if big.operation == "share" and big.share_pct is not None and all(s.part == "bottom" for s in extra) \
+                and sum(s.part in ("bottom", "both") for s in big.selections) == 1:
+            log.info("two readings: one found the share's printed whole the other missed; kept it")
+            return big
+    if r1.operation == r2.operation == "share" and r1.share_pct is not None and r2.share_pct is not None:
+        tops = [[s for s in r.selections if s.part == "top"] for r in (r1, r2)]
+        wholes = [{_sig(s) for s in r.selections if s.part == "bottom"} for r in (r1, r2)]
+        if wholes[0] == wholes[1] and all(len(t) == 1 for t in tops) and len(a) == len(b) == 2:
+            log.info("two readings: two printed totals of one thing over one whole; both shares shown")
+            return LineResult(operation="share", found="partial",
+                              selections=[tops[0][0], tops[1][0]] + [s for s in r1.selections if s.part == "bottom"],
+                              shares=[(tops[0][0], r1.share_pct), (tops[1][0], r2.share_pct)])
     if not common:                       # two different readings: ask, don't pick one
         opts = []
         for r in (r1, r2):
