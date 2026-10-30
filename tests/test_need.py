@@ -53,3 +53,13 @@ def test_the_lgas_named_together_mean_every_lga_of_the_state() -> None:
     assert [(e.type, e.resolved) for e in n.entities] == [("state", "Sokoto")] and n.geo_level == "lga"
     one = parse_need({"measures": ["idp_count"], "entities": [{"type": "lga", "name": "Tambuwal"}]}, "q", NAMES)
     assert one.entities[0].resolved == "Tambuwal" and one.geo_level == "state"
+
+
+def test_short_forms_misprints_and_sectors_resolve_to_the_printed_name() -> None:
+    from app.agent.need import Entity, Names, resolve
+    names = Names(mdas=(("Sokoto State Rima Televiosn (Rtv)", "012300300100"), ("Sokoto State Rima Radio", "012300200100"),
+                        ("Social Sector", "050000000000"), ("Ministry of Budget and Economic Planning", "023800000000")))
+    assert resolve(Entity("mda", "Rima Television"), names).code == "012300300100"
+    assert resolve(Entity("sector", "Social Sector"), names).code == "050000000000"
+    assert resolve(Entity("mda", "Budjet and Economic Planing"), names).code == "023800000000"
+    assert resolve(Entity("mda", "Rima"), names).code == ""                  # two Rima agencies: not guessed

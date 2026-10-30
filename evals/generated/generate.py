@@ -73,15 +73,24 @@ def generate(conn, n: int, rng: random.Random) -> list[dict]:
     for name, code in rng.sample(mdas, min(n, len(mdas))):
         add("lookup", f"How much was approved for the {name} in the 2026 budget?",
             numbers=[money(approved(conn, code, 2026))], code=code)
+    # a ministry's own unit is often printed with the ministry's name ('Ministry of Water Resources' 025200100100
+    # and the ministry with its agencies 025200000000): the question reads either way, so either answer counts
+    ministry = dict(mdas)
+
+    def either(name: str, figures) -> dict:
+        both = [figures(code) for code in (dict(subs)[name], ministry.get(name)) if code]
+        return {"numbers_any": both} if len(both) > 1 else {"numbers": both[0]}
+
     split_subs = [(nm, c) for nm, c in subs if all(approved(conn, c, 2026, k) is not None for k in SPLITS)]
     for name, code in rng.sample(split_subs, min(n, len(split_subs))):
         add("split", f"What are the personnel, overhead and capital allocations of the {name} in 2026?",
-            numbers=[money(approved(conn, code, 2026, k)) for k in SPLITS], code=code)
+            code=code, **either(name, lambda c: [money(approved(conn, c, 2026, k)) for k in SPLITS]
+                                if all(approved(conn, c, 2026, k) is not None for k in SPLITS) else ["-"]))
     spend_subs = [(nm, c) for nm, c in subs if perf(conn, c, 2026, latest_q)]
     for name, code in rng.sample(spend_subs, min(n, len(spend_subs))):
-        r = perf(conn, code, 2026, latest_q)
         add("spend_quarter", f"How much had the {name} spent by the end of Q{latest_q} 2026, against its revised budget?",
-            numbers=[money(r[2]), money(r[0])], code=code)
+            code=code, **either(name, lambda c: [money(r[2]), money(r[0])] if (r := perf(conn, c, 2026, latest_q))
+                                else ["-"]))
     for name, code in rng.sample(mdas, min(n, len(mdas))):
         add("compare", f"Compare the {name}'s approved budget in 2025 and 2026.",
             numbers=[money(approved(conn, code, 2025)), money(approved(conn, code, 2026))], code=code)
@@ -120,6 +129,11 @@ def main() -> None:
     a = p.parse_args()
     with psycopg.connect(get_settings().db_url()) as conn:
         cases = generate(conn, a.n, random.Random(a.seed))
+    if OUT.exists():                  # an unchanged question keeps its paraphrases (paraphrase.py costs a call each)
+        old = {(c["id"], c["text"]): c.get("forms") for c in json.loads(OUT.read_text(encoding="utf-8"))["cases"]}
+        for c in cases:
+            if old.get((c["id"], c["text"])):
+                c["forms"] = old[(c["id"], c["text"])]
     OUT.write_text(json.dumps({"_about": __doc__.splitlines()[0], "seed": a.seed, "cases": cases}, indent=1,
                               ensure_ascii=False), encoding="utf-8")
     from collections import Counter

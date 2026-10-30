@@ -947,7 +947,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
                           clarify=plan.clarify["options"])
         prev = history[-1] if history else None
         # every cell of the need fillable by one structured tool (budget_core, dtm_api): answered from the data
-        if (a := await structured_answer(conn, plan, lang, settings, t)) is not None:
+        if (a := await structured_answer(conn, plan, lang, settings, t, today)) is not None:
             return a
         # a follow-up is planned as its standalone question ("which LGA have the most IDPs living there?" ->
         # "Which LGAs in Sokoto State have the most IDPs?"), so it takes the topic path too; a recheck doesn't
@@ -1215,7 +1215,7 @@ STRUCT_WORDS = {
            "quarter_spent": "spent in Q{q}", "actual_ytd": "spent so far (Q1–Q{q})",
            "performance_pct": "share of the revised budget spent", "idp_count": "IDPs",
            "personnel": "Personnel (salaries)", "overhead": "Overhead (running costs)", "capital": "Capital",
-           "total": "Total", "calc": "Kasafi's calculation", "change": "change",
+           "total": "Total", "calc": "Kasafi's calculation", "change": "change", "of_total": "of its total",
            "dtm_state": "IOM DTM counts *{n}* IDPs in Sokoto State ({when}).",
            "dtm_lga_head": "By LGA ({k} LGAs), the most:", "dtm_lga_list": "By LGA ({k} LGAs), most first:",
            "dtm_trend_head": "Sokoto State, by round:",
@@ -1224,7 +1224,7 @@ STRUCT_WORDS = {
            "quarter_spent": "abin da aka kashe a Q{q}", "actual_ytd": "abin da aka kashe zuwa yanzu (Q1–Q{q})",
            "performance_pct": "kason kasafin da aka sabunta da aka kashe", "idp_count": "'yan gudun hijira",
            "personnel": "Albashi", "overhead": "Kuɗin gudanarwa", "capital": "Manyan ayyuka", "total": "Jimilla",
-           "calc": "lissafin Kasafi", "change": "bambanci",
+           "calc": "lissafin Kasafi", "change": "bambanci", "of_total": "na jimillarsa",
            "dtm_state": "IOM DTM ta ƙidaya *{n}* 'yan gudun hijira a Jihar Sokoto ({when}).",
            "dtm_lga_head": "Ta ƙaramar hukuma ({k}), mafi yawa:", "dtm_lga_list": "Ta ƙaramar hukuma ({k}), "
            "daga mafi yawa:", "dtm_trend_head": "Jihar Sokoto, ta zagaye:",
@@ -1325,6 +1325,12 @@ def write_budget_cells(need: Need, cells: list, lang: str, conn=None) -> tuple[s
                              + (f" ({'+' if pct and pct > 0 else ''}{pct}%)" if pct is not None else "")
                              + f" ({w['calc']})")
                 exact.append(f"{ent} | {split} | change: {fmt(diff)}")
+            whole = [x for x in mine if (x.split or "total") == "total" and len(row) == 1 and split != "total"
+                     and x.measure == row[0].measure and x.year == row[0].year and x.value]
+            if whole and row[0].measure != "performance_pct":
+                pct = (Decimal(row[0].value) / Decimal(whole[0].value) * 100).quantize(Decimal("0.1"), ROUND_HALF_UP)
+                parts.append(f"{pct}% {w['of_total']} ({w['calc']})")
+                exact.append(f"{ent} | {split} share of total: {pct}%")
             out.append(f"• {w.get(split, split)}: " + "; ".join(parts))
     if missing:                       # partial answers name the missing cells, with the period or line that exists
         g = GAP_WORDS.get(lang, GAP_WORDS["en"])
@@ -1366,11 +1372,24 @@ def named_dtm(plan: Plan) -> bool:
     return any("dtm_api" in p.discovery for p in named)
 
 
-async def structured_answer(conn, plan: Plan, lang: str, settings: Settings, t: dict) -> Answer | None:
+def not_yet_published(c, today: date) -> bool:
+    """A budget cell no document can hold yet: spending for a quarter that hasn't ended, or an approved budget more
+    than a year ahead. (A past quarter missing from the library may be online: that is fetched, not this.)"""
+    if not c.year or not c.entity.code:
+        return False
+    if c.measure == "approved":
+        return c.year > today.year + 1
+    q = c.quarter or 4
+    return (c.year, q) > (today.year, (today.month - 1) // 3)        # the last quarter that has ended
+
+
+async def structured_answer(conn, plan: Plan, lang: str, settings: Settings, t: dict,
+                            today: date | None = None) -> Answer | None:
     """The loop's first act (docs/question-planning.md §4): the structured tool the need's cells match fills
     them. All filled: code answers from the data, and no search runs. Some filled: a partial answer naming the
     empty cells and why is held in plan.held, and the text paths run for the rest. None filled: None."""
     plan.held = None
+    today = today or lagos_today()
     need = plan.need
     if conn is None or need is None or not need.measures or plan.followup == "recheck":
         return None
@@ -1392,6 +1411,11 @@ async def structured_answer(conn, plan: Plan, lang: str, settings: Settings, t: 
             filled = await dtm_fill(h, settings, need, cov.cells)
     t["structured"] = time.perf_counter() - t0
     n_filled = sum(c.filled for c in cov.cells)
+    if not n_filled and cap == "budget_core" and all(not_yet_published(c, today) for c in cov.cells):
+        # every cell is for a period that can't be published yet (a quarter not over): say what exists, no search
+        body, _ = write_budget_cells(need, cov.cells, lang, conn)
+        log.info("structured: all %d cells are for periods not published yet", len(cov.cells))
+        return Answer(body, False, True, plan=plan, timings=t, partial=True)
     if not n_filled:
         return None
     evidence = [Evidence(i, s.doc_id, s.title, None, s.page, "text", s.row_text)

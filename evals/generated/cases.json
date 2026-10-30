@@ -107,12 +107,12 @@
    "family": "split",
    "lang": "en",
    "text": "What are the personnel, overhead and capital allocations of the Department for Rural Roads in 2026?",
+   "code": "023405700100",
    "numbers": [
     "28,586,247.86",
     "133,950,000.00",
     "15,467,942,818.77"
    ],
-   "code": "023405700100",
    "forms": {
     "hausa": "Menene personnel, overhead da capital allocations na Department for Rural Roads a 2026?",
     "informal": "What's the personnel, overhead and capital for Department for Rural Roads in 2026?",
@@ -129,12 +129,19 @@
    "family": "split",
    "lang": "en",
    "text": "What are the personnel, overhead and capital allocations of the Sokoto State Independent Electoral Commission in 2026?",
-   "numbers": [
-    "128,764,612.92",
-    "106,000,000.00",
-    "225,711,564.00"
-   ],
    "code": "014800100100",
+   "numbers_any": [
+    [
+     "128,764,612.92",
+     "106,000,000.00",
+     "225,711,564.00"
+    ],
+    [
+     "128,764,612.92",
+     "106,000,000.00",
+     "225,711,564.00"
+    ]
+   ],
    "forms": {
     "hausa": "Menene kudin personnel, overhead da capital da aka ware wa Sokoto State Independent Electoral Commission a 2026?",
     "informal": "How much did Sokoto State Independent Electoral Commission get for personnel, overhead & capital in 2026?",
@@ -151,12 +158,12 @@
    "family": "split",
    "lang": "en",
    "text": "What are the personnel, overhead and capital allocations of the Female Education Board in 2026?",
+   "code": "051705700100",
    "numbers": [
     "47,446,073.60",
     "462,050,000.00",
     "650,000,000.00"
    ],
-   "code": "051705700100",
    "forms": {
     "hausa": "Menene allocation na personnel, overhead da capital na Female Education Board a 2026?",
     "informal": "What's Female Education Board getting for personnel, overhead, capital in 2026?",
@@ -173,12 +180,19 @@
    "family": "split",
    "lang": "en",
    "text": "What are the personnel, overhead and capital allocations of the Ministry of Water Resources in 2026?",
-   "numbers": [
-    "236,462,921.80",
-    "745,500,000.00",
-    "8,607,283,643.50"
-   ],
    "code": "025200100100",
+   "numbers_any": [
+    [
+     "236,462,921.80",
+     "745,500,000.00",
+     "8,607,283,643.50"
+    ],
+    [
+     "1,026,195,159.68",
+     "3,105,948,605.73",
+     "40,858,283,643.50"
+    ]
+   ],
    "forms": {
     "hausa": "Menene kason personnel, overhead da capital na Ministry of Water Resources a 2026?",
     "informal": "What’s personnel, overhead and capital for Ministry of Water Resources in 2026?",
@@ -195,12 +209,12 @@
    "family": "split",
    "lang": "en",
    "text": "What are the personnel, overhead and capital allocations of the Sokoto Urban & Reg. Planning Department in 2026?",
+   "code": "025300500100",
    "numbers": [
     "79,944,390.00",
     "100,500,000.00",
     "926,000,000.00"
    ],
-   "code": "025300500100",
    "forms": {
     "hausa": "Menene allocation na personnel, overhead da capital na Sokoto Urban & Reg. Planning Department a 2026?",
     "informal": "What’s personnel, overhead and capital for Sokoto Urban & Reg. Planning Department in 2026?",
@@ -217,11 +231,11 @@
    "family": "spend_quarter",
    "lang": "en",
    "text": "How much had the Commodity Board spent by the end of Q2 2026, against its revised budget?",
+   "code": "022200200100",
    "numbers": [
     "4,967,584.64",
     "673,970,200.00"
    ],
-   "code": "022200200100",
    "forms": {
     "hausa": "Nawa Commodity Board ta kashe har zuwa karshen Q2 2026, idan aka kwatanta da revised budget dinta?",
     "informal": "How much did Commodity Board spend by end of Q2 2026 vs its revised budget?",
@@ -238,11 +252,11 @@
    "family": "spend_quarter",
    "lang": "en",
    "text": "How much had the SUSTAINABLE DEVELOPMENT GOALS (SDG) spent by the end of Q2 2026, against its revised budget?",
+   "code": "023800600200",
    "numbers": [
     "1,000,000.00",
     "42,000,000.00"
    ],
-   "code": "023800600200",
    "forms": {
     "hausa": "Nawa SUSTAINABLE DEVELOPMENT GOALS (SDG) ta kashe har zuwa karshen Q2 2026, idan aka kwatanta da revised budget dinta?",
     "informal": "How much did SUSTAINABLE DEVELOPMENT GOALS (SDG) spend by end of Q2 2026 vs its revised budget?",
@@ -259,11 +273,17 @@
    "family": "spend_quarter",
    "lang": "en",
    "text": "How much had the Ministry of Budget and Economic Planning spent by the end of Q2 2026, against its revised budget?",
-   "numbers": [
-    "420,116,810.00",
-    "2,541,605,200.00"
-   ],
    "code": "023800100100",
+   "numbers_any": [
+    [
+     "420,116,810.00",
+     "2,541,605,200.00"
+    ],
+    [
+     "541,382,387.28",
+     "5,315,605,200.00"
+    ]
+   ],
    "forms": {
     "hausa": "Nawa Ministry of Budget and Economic Planning ta kashe har zuwa karshen Q2 2026, idan aka kwatanta da revised budget dinta?",
     "informal": "how much had Ministry of Budget and Economic Planning spent by end of Q2 2026 vs its revised budget?",
@@ -280,11 +300,11 @@
    "family": "spend_quarter",
    "lang": "en",
    "text": "How much had the Bureau for Public Procurement and Price Intelligence spent by the end of Q2 2026, against its revised budget?",
+   "code": "011101000100",
    "numbers": [
     "4,859,011.52",
     "81,758,005.00"
    ],
-   "code": "011101000100",
    "forms": {
     "hausa": "Nawa Bureau for Public Procurement and Price Intelligence ta kashe har zuwa karshen Q2 2026, idan aka kwatanta da revised budget dinta?",
     "informal": "How much did Bureau for Public Procurement and Price Intelligence spend by end of Q2 2026 vs its revised budget?",
@@ -301,11 +321,11 @@
    "family": "spend_quarter",
    "lang": "en",
    "text": "How much had the Department for Security Matters spent by the end of Q2 2026, against its revised budget?",
+   "code": "017000100200",
    "numbers": [
     "7,612,786,073.92",
     "37,151,867,627.25"
    ],
-   "code": "017000100200",
    "forms": {
     "hausa": "Nawa Department for Security Matters ta kashe har zuwa ƙarshen Q2 2026, idan aka kwatanta da revised budget ɗinta?",
     "informal": "How much had Department for Security Matters spent by end of Q2 2026 vs its revised budget?",

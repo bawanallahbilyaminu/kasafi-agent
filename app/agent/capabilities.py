@@ -80,6 +80,9 @@ def required_cells(need: Need, *, latest_year: int | None = None) -> list[Cell]:
     entities = need.entities or [Entity("state", "Sokoto", "Sokoto")]
     years = need.years() or [latest_year]
     splits = need.splits or [""]
+    if (need.operation == "share" or (need.operation == "lookup" and len(splits) == 1)) \
+            and splits != [""] and "total" not in splits:
+        splits = [*splits, "total"]          # a part is read against its whole ('how much of it is capital?')
     quarter = need.time.get("quarter")
     cells = []
     for e in entities:

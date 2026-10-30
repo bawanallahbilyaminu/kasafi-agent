@@ -159,12 +159,24 @@ def _best(name: str, choices: list[str], cutoff: float = 0.82) -> str:
     if len(contains) == 1:
         return contains[0]
     close = difflib.get_close_matches(n, list(by_norm), n=1, cutoff=cutoff)
-    return by_norm[close[0]] if close else ""
+    if close:
+        return by_norm[close[0]]
+    # a short form of a long printed name, or a misprint in either ('Rima Television' -> 'Sokoto State Rima
+    # Televiosn (Rtv)'): every word close to a word of the name, and only one name like that
+    words = n.split()
+    if len(words) >= 2:
+        def near(w: str, k: str) -> bool:
+            return any(w == x or (len(w) > 3 and difflib.SequenceMatcher(None, w, x).ratio() >= 0.8)
+                       for x in k.split())
+        hits = {c for k, c in by_norm.items() if all(near(w, k) for w in words)}
+        if len(hits) == 1:
+            return hits.pop()
+    return ""
 
 
 def resolve(e: Entity, names: Names) -> Entity:
     """The entity as the data prints it (or unresolved: the planner's name stays, for search)."""
-    if e.type in ("mda", "sub_agency"):
+    if e.type in ("mda", "sub_agency", "sector"):          # a sector total is an administrative line too
         hit = _best(e.name, [m for m, _ in names.mdas])
         if hit:
             e.resolved = hit

@@ -39,8 +39,29 @@ def test_lgas_ranked_by_idps_are_dtm_cells_and_a_town_level_measure_is_a_gap() -
 def test_cells_cover_every_measure_split_and_year() -> None:
     need = Need("q", measures=["approved"], entities=[SBS], splits=["overhead"], time={"kind": "range", "from": 2025,
                                                                                        "to": 2026})
+    need.operation = "compare"
     assert [(c.measure, c.split, c.year) for c in required_cells(need)] == [("approved", "overhead", 2025),
                                                                             ("approved", "overhead", 2026)]
+
+
+def test_a_part_is_read_against_its_whole() -> None:
+    need = Need("How much of its 2026 budget is capital?", measures=["approved"], entities=[SBS], splits=["capital"],
+                time={"kind": "year", "year": 2026}, operation="lookup")
+    assert [c.split for c in required_cells(need)] == ["capital", "total"]
+    cells = [Cell("approved", SBS, "state", "capital", 2026, value=Decimal("30000000.00"), source="p. 25"),
+             Cell("approved", SBS, "state", "total", 2026, value=Decimal("150000000.00"), source="p. 17")]
+    text, exact = ans.write_budget_cells(need, cells, "en")
+    assert "20.0% of its total (Kasafi's calculation)" in text and "share of total: 20.0%" in exact
+
+
+def test_a_quarter_not_over_yet_is_answered_with_what_exists() -> None:
+    from datetime import date
+    q4 = Cell("actual_ytd", SBS, "state", "", 2026, 4)
+    assert ans.not_yet_published(q4, date(2026, 10, 30))
+    assert not ans.not_yet_published(Cell("actual_ytd", SBS, "state", "", 2026, 3), date(2026, 10, 30))  # may be out
+    assert not ans.not_yet_published(Cell("approved", SBS, "state", "", 2027), date(2026, 10, 30))
+    text, _ = ans.write_budget_cells(Need("q"), [q4], "en", _Conn())
+    assert "the latest implementation report is Q2 2026" in text
 
 
 def test_budget_cells_are_written_by_code_with_the_change_computed() -> None:
