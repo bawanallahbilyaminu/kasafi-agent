@@ -291,9 +291,24 @@ _background: set[asyncio.Task] = set()
 
 
 def schedule_ocr(doc_id: str, path: Path, pages: list[int], settings: Settings) -> None:
-    task = asyncio.get_running_loop().create_task(ocr_pages(doc_id, path, pages, settings))
+    task = asyncio.get_running_loop().create_task(ocr_pages(doc_id, path, pages, settings), name=f"ocr:{doc_id}")
     _background.add(task)               # keep a reference until it's done
     task.add_done_callback(_background.discard)
+
+
+async def ocr_finished(conn: psycopg.Connection, doc_id: str, settings: Settings) -> int:
+    """Wait for a document's background OCR, or run it now when none is running (it was cut short); returns the
+    pages still without text."""
+    running = [t for t in _background if t.get_name() == f"ocr:{doc_id}"]
+    if running:
+        await asyncio.gather(*running, return_exceptions=True)
+    else:
+        waiting = [r[0] for r in conn.execute("SELECT page FROM pages WHERE doc_id = %s AND source = 'none' "
+                                              "ORDER BY page", (doc_id,))]
+        if waiting:
+            await ocr_pages(doc_id, Path(settings.kasafi_fetch_dir) / f"{doc_id}.pdf",
+                            waiting[:BACKGROUND_OCR_PAGES], settings)
+    return conn.execute("SELECT count(*) FROM pages WHERE doc_id = %s AND source = 'none'", (doc_id,)).fetchone()[0]
 
 
 async def ocr_pages(doc_id: str, path: Path, pages: list[int], settings: Settings) -> int:

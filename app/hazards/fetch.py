@@ -300,6 +300,9 @@ def start_scheduler(settings) -> None:
                 with psycopg.connect(settings.db_url(), autocommit=True) as conn:
                     ensure_points(conn)
                     log.info("hazard fetch round: %s", asyncio.run(run_due(conn, settings)))
+                    if settings.kasafi_advisories_fetch:        # official advisories and NCDC reports
+                        from app.hazards import advisories
+                        log.info("advisories round: %s", asyncio.run(advisories.run_due(conn, settings)))
             except Exception as e:      # noqa: BLE001 - the loop must outlive any one failure
                 log.warning("hazard fetch round failed: %s", type(e).__name__)
             time.sleep(CHECK_EVERY_S)
