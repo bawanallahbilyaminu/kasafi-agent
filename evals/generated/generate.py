@@ -82,8 +82,9 @@ def generate(conn, n: int, rng: random.Random) -> list[dict]:
     ministry = dict(mdas)
 
     def either(name: str, figures) -> dict:
-        both = [figures(code) for code in (dict(subs)[name], ministry.get(name)) if code]
-        return {"numbers_any": both} if len(both) > 1 else {"numbers": both[0]}
+        codes = [c for c in (dict(subs)[name], ministry.get(name)) if c]
+        both = [figures(code) for code in codes]
+        return ({"numbers_any": both} if len(both) > 1 else {"numbers": both[0]}) | {"codes": codes}
 
     split_subs = [(nm, c) for nm, c in subs if all(approved(conn, c, 2026, k) is not None for k in SPLITS)]
     for name, code in rng.sample(split_subs, min(n, len(split_subs))):
@@ -113,7 +114,8 @@ def generate(conn, n: int, rng: random.Random) -> list[dict]:
     for name, code in rng.sample(split_subs, min(n, len(split_subs))):
         forms = share_forms(code) + share_forms(ministry[name]) if name in ministry else share_forms(code)
         if forms:                          # a unit printed with its ministry's name: either share counts
-            add("share", f"What share of the {name}'s 2026 approved budget is capital?", numbers_any=forms, code=code)
+            add("share", f"What share of the {name}'s 2026 approved budget is capital?", numbers_any=forms, code=code,
+                codes=[code] + ([ministry[name]] if name in ministry else []))
     for name, code in rng.sample(mdas, min(n, len(mdas))):        # the premise is the wrong way round
         a25, a26 = approved(conn, code, 2025), approved(conn, code, 2026)
         wrong = "fell" if a26 > a25 else "rose"

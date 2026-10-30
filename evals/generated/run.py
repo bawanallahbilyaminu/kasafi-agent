@@ -46,8 +46,21 @@ def accepted(number: str, lang: str) -> list[str]:
     return out
 
 
+AGENCY_CODE = re.compile(r"\bcode (\d{12})\b")
+
+
+def wrong_agency(case: dict, a) -> bool:
+    """The reply's agency rows are another agency's: it prints 12-digit codes, none of them the case's own (or,
+    for a unit printed with its ministry's name, the ministry's)."""
+    want = set(case.get("codes") or ([case["code"]] if case.get("code") else []))
+    got = set(AGENCY_CODE.findall(f"{a.exact}\n{a.text}"))
+    return bool(want and got and not want & got)
+
+
 def wrong(case: dict, a, lang: str) -> str:
     text = f"{a.exact}\n{a.text}"
+    if wrong_agency(case, a):
+        return "WRONG AGENCY " + ", ".join(sorted(set(AGENCY_CODE.findall(text))))
     if case.get("expect_gap"):                       # nothing published: no figure for that period, say what exists
         est = case.get("estimate")                   # ... or the budget's own out-year estimate, labelled as one
         if est and any(f in text for f in accepted(est, lang)) and re.search(r"(?i)estimate|kiyasi|hasashe", a.text):
@@ -126,7 +139,9 @@ async def main(forms: str, seed: int, families: list[str] | None, out: Path, cas
     lines += ["", "| form | wrong | of |", "|---|---|---|"]
     lines += [f"| {f} | {sum(v)} | {len(v)} |" for f, v in sorted(per_form.items())]
     total = sum(sum(v) for v in per_family.values())
-    summary = f"{len(cases)} cases: wrong {total} | median {statistics.median(times):.1f}s"
+    agency = sum(r.startswith("## ") and "WRONG: WRONG AGENCY" in r for r in report)
+    summary = (f"{len(cases)} cases: wrong {total} ({100 * total / max(len(cases), 1):.1f}%), of them wrong agency "
+               f"{agency} | median {statistics.median(times):.1f}s")
     print("\n" + summary + "\n" + "\n".join(lines))
     cost = usage.summary(s)
     print(cost)
