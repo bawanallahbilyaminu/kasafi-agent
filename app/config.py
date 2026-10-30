@@ -91,6 +91,8 @@ class Settings(BaseSettings):
     # straight-line distance) and NASA FIRMS fire detections (without it, no fires layer)
     ors_api_key: SecretStr | None = None
     firms_map_key: SecretStr | None = None
+    # the hazard fetchers' schedule (app/hazards/fetch.py) runs in the app only when this is on
+    kasafi_hazard_fetch: bool = False
     # Fireworks serves Muse Spark Open too: the fallback host when Baseten fails (app/providers/fireworks.py)
     fireworks_api_key: SecretStr | None = None
     fireworks_base_url: str = "https://api.fireworks.ai/inference/v1"

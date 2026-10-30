@@ -44,6 +44,15 @@ async def _warm_line_model() -> None:
     asyncio.get_running_loop().run_in_executor(None, _build_missing_entities)
 
 
+@app.on_event("startup")
+async def _hazard_fetchers() -> None:
+    # Hazard layers (docs/hazard-and-services.md section 4): fetched on a schedule in their own thread, when
+    # KASAFI_HAZARD_FETCH=true
+    from app.config import get_settings
+    from app.hazards.fetch import start_scheduler
+    start_scheduler(get_settings())
+
+
 _crawler: set = set()
 
 

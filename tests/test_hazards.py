@@ -104,6 +104,15 @@ def test_a_failed_fetch_is_logged_and_never_raises() -> None:
     assert asyncio.run(fetch.run_layer(conn, "fires", s)) == 0              # no FIRMS key: the layer is off
 
 
+def test_the_scheduler_is_off_unless_asked(monkeypatch) -> None:
+    import threading
+    started = []
+    monkeypatch.setattr(threading, "Thread", lambda **kw: started.append(kw) or type("T", (), {"start": lambda s: 0})())
+    from tests.helpers import make_settings
+    fetch.start_scheduler(make_settings())                                    # off by default
+    assert started == []
+
+
 def test_freshness_says_how_old_the_data_is_or_that_there_is_none() -> None:
     now = datetime(2026, 10, 30, 12, tzinfo=timezone.utc)
     fresh = freshness(FakeConn(now - timedelta(hours=2)), "forecast", now)

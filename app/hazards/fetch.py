@@ -214,8 +214,11 @@ def due(conn, layer: str, now: datetime | None = None) -> bool:
     return row[0] is None or (now or datetime.now(timezone.utc)) - row[0] >= INTERVALS[layer]
 
 
+KEEP_DAYS = 3                    # values whose time has passed by more than this are dropped
+
+
 async def run_due(conn, settings) -> dict[str, int]:
-    """Every layer that is due, in turn (river history first, once)."""
+    """Every layer that is due, in turn (river history first, once), then old values pruned."""
     out = {}
     async with httpx.AsyncClient(headers=HEADERS) as http:
         if not conn.execute("SELECT 1 FROM river_history LIMIT 1").fetchone():
@@ -223,4 +226,33 @@ async def run_due(conn, settings) -> dict[str, int]:
         for layer in INTERVALS:
             if due(conn, layer):
                 out[layer] = await run_layer(conn, layer, settings, http)
+    conn.execute("DELETE FROM hazard_values WHERE valid_time < now() - make_interval(days => %s)", (KEEP_DAYS,))
+    conn.execute("DELETE FROM fire_detection WHERE detected_at < now() - interval '30 days'")
+    conn.execute("DELETE FROM hazard_fetch WHERE started_at < now() - interval '30 days'")
     return out
+
+
+CHECK_EVERY_S = 600
+
+
+def start_scheduler(settings) -> None:
+    """The fetch loop in its own thread and event loop (its database writes never hold up a WhatsApp reply):
+    every 10 minutes, the layers that are due. On only with KASAFI_HAZARD_FETCH=true and a database."""
+    import threading
+    import time
+
+    from app.hazards.points import ensure_points
+    if not (settings.kasafi_hazard_fetch and settings.has_database):
+        return
+
+    def loop() -> None:
+        while True:
+            try:
+                with psycopg.connect(settings.db_url(), autocommit=True) as conn:
+                    ensure_points(conn)
+                    log.info("hazard fetch round: %s", asyncio.run(run_due(conn, settings)))
+            except Exception as e:      # noqa: BLE001 - the loop must outlive any one failure
+                log.warning("hazard fetch round failed: %s", type(e).__name__)
+            time.sleep(CHECK_EVERY_S)
+    threading.Thread(target=loop, name="hazard-fetch", daemon=True).start()
+    log.info("hazard fetch scheduler started")
