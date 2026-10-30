@@ -15,6 +15,7 @@ from datetime import date, timedelta
 
 from app.hazards import categories as cat
 from app.hazards import read
+from app.hazards.official import official_lines
 from app.sources.lga_names import name_of, pcode
 
 LAYERS = ("heat", "rain", "air", "flood", "fires")
@@ -203,6 +204,8 @@ def hazard_answer(conn, question: str, lang: str, layers: list[str], where: read
         intro = []
     place = w["where_state"] if where.kind == "state" else w["where_lga"].format(lga=where.lga)
     out, found, used = [f"📍 {place}"] + intro, False, {}
+    if conn is not None and (official := official_lines(conn, lang, layers, where)):
+        out += ["", *official]                  # official warnings first, verbatim; the model forecasts follow
     for layer in [x for x in layers if x in LAYERS]:
         src = LAYER_OF_SOURCE[layer]
         fresh = read.freshness(conn, src)

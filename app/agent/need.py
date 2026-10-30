@@ -26,6 +26,8 @@ MEASURES = (
     # hazards (docs/hazard-and-services.md section 4): forecasts and detections, answered from hazard_values
     "heat", "temperature", "humidity", "uv_index", "wind", "rain", "air_quality", "dust", "river_discharge",
     "fire_detections", "hazard_overview",
+    # official sources (section 5): NCDC outbreak figures, NIHSA's flood outlook, NiMet's seasonal prediction
+    "outbreak_cases", "flood_outlook", "seasonal_outlook",
     "other",
 )
 OPERATIONS = ("lookup", "breakdown", "compare", "rank", "share", "trend", "list", "explain", "verify_claim")
@@ -49,7 +51,9 @@ NEED_PROMPT = (
     "ids>]}. A unit inside a ministry (a board, bureau, agency, department, Government House) is a "
     "sub_agency. Weather and hazards now or in the next days (heat, harmattan dust and air quality, rain, rivers "
     "and floods, fires; 'what should we watch out for' is hazard_overview) use those measures, with the LGA or "
-    "the state as the entity and time kind none (the day is read from the question). "
+    "the state as the entity and time kind none (the day is read from the question). Disease cases and outbreaks "
+    "now (cholera, meningitis, Lassa, measles, diphtheria) are outbreak_cases; NIHSA's Annual Flood Outlook is "
+    "flood_outlook; NiMet's Seasonal Climate Prediction (rainy season onset, cessation) is seasonal_outlook. "
 )
 
 

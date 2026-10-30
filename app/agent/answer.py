@@ -47,6 +47,7 @@ from app.agent.need import NEED_PROMPT, Names, Need, names_for, parse_need
 from app.agent.capabilities import available_capabilities, catalog, cover
 from app.agent.tools import APPROVED_YEARS, budget_fill, dtm_fill
 from app.agent.topics import TopicResult, topic_answer
+from app.hazards import official
 from app.hazards.answer import MEASURE_LAYERS, hazard_answer, layers_asked, where_for
 from app.agent.topics import note_of as topic_note
 from app.agent.topics import local_documents as topics_local
@@ -989,6 +990,18 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             return Answer(plan.clarify["question"], False, True, plan=plan, timings=t,
                           clarify=plan.clarify["options"])
         prev = history[-1] if history else None
+        # NCDC outbreak figures and official outlooks (NIHSA, NiMet): answered in code from the crawled tables; an
+        # outlook in the library goes on to the document path
+        if conn is not None and (kind := official.route(f"{question} {plan.english_question}",
+                                                         list(plan.need.measures) if plan.need else [])):
+            t0 = time.perf_counter()
+            where = where_for(plan.need.entities if plan.need else [], place)
+            oa = (official.outbreak_answer(conn, f"{question} {plan.english_question}", lang, today)
+                  if kind == "outbreaks" else official.outlook_answer(conn, kind.removeprefix("outlook_"), lang, where))
+            t["official"] = time.perf_counter() - t0
+            if oa is not None:
+                log.info("official answer: %s, found=%s", kind, oa.found)
+                return Answer(oa.text, True, True, plan=plan, timings=t, exact=oa.text, partial=not oa.found)
         # weather and hazards (heat, dust, rain, rivers, fires): answered in code from the fetched layers
         if conn is not None and (layers := hazard_route(question, plan)):
             t0 = time.perf_counter()
