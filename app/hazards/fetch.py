@@ -1,15 +1,18 @@
 """The hazard fetchers (docs/hazard-and-services.md section 4). Each writes hazard_values (or fire_detection /
 river_history) and logs one hazard_fetch row, ok or not, so answers know how old their data is.
 
-| layer   | source                                         | every | points                  |
-| forecast| Open-Meteo forecast API                        | 3 h   | LGA centroids + grid    |
-| air     | Open-Meteo Air Quality API (CAMS global)       | 6 h   | LGA centroids + grid    |
-| flood   | Open-Meteo Flood API (GloFAS v4)               | 24 h  | river points            |
-| flood_history | the same, 1984-01-01 to yesterday, once  | once  | river points            |
-| fires   | NASA FIRMS area API, VIIRS (SNPP, NOAA-20)     | 3 h   | Sokoto's bounding box   |
+| layer         | source                                   | every | points                         |
+| forecast      | Open-Meteo forecast API                  | 3 h   | the 23 LGA centroids           |
+| forecast_grid | the same                                 | 6 h   | the map grid (269 points)      |
+| air           | Open-Meteo Air Quality API (CAMS global) | 6 h   | LGA centroids + grid           |
+| flood         | Open-Meteo Flood API (GloFAS v4)         | 24 h  | river points                   |
+| flood_history | the same, from 1984 (GloFAS gives 1997 on), once | once | river points          |
+| fires         | NASA FIRMS area API, VIIRS (SNPP, NOAA-20) | 3 h | Sokoto's bounding box          |
 
-Open-Meteo's free tier is for non-commercial use within its daily call limit (each location counts): ~3,500 calls a
-day here. Requests are batched (50 locations), paced, and back off on 429. FIRMS is skipped without FIRMS_MAP_KEY.
+Open-Meteo's free tier is for non-commercial use within 10,000 calls a day (each location counts; long ranges count
+more): ~2,400 calls a day here, logged per fetch (hazard_fetch.calls) and capped (KASAFI_OPENMETEO_DAILY_CAP, 5,000).
+The river history is ~3,100 calls once. Requests are batched (50 locations), paced, and back off on 429. FIRMS is
+skipped without FIRMS_MAP_KEY.
 """
 
 from __future__ import annotations
@@ -43,17 +46,34 @@ SOURCES = {"forecast": "Open-Meteo forecast (best-match weather models)",
            "air": "Open-Meteo Air Quality (Copernicus CAMS global)",
            "flood": "Open-Meteo Flood API (GloFAS v4, Copernicus)",
            "fires": "NASA FIRMS VIIRS active fire detections"}
+# the LGA centroids every 3 h; the map grid every 6 h (to stay well under Open-Meteo's free daily limit)
 INTERVALS = {"forecast": timedelta(hours=3), "air": timedelta(hours=6), "flood": timedelta(hours=24),
-             "fires": timedelta(hours=3)}
+             "fires": timedelta(hours=3), "forecast_grid": timedelta(hours=6)}
+OPEN_METEO = ("forecast", "forecast_grid", "air", "flood", "flood_history")
+# Open-Meteo counts a request as one call per location, more for a long range or many variables
+# (each 14 days or 10 variables beyond the first counts again)
+
+
+def calls_for(locations: int, days: int, variables: int) -> int:
+    return locations * -(-days // 14) * -(-variables // 10)
+
+
+def calls_today(conn) -> int:
+    """Open-Meteo calls made since midnight UTC (their daily limit's day), from the fetch log."""
+    return conn.execute("SELECT coalesce(sum(calls), 0) FROM hazard_fetch WHERE layer = ANY(%s) AND started_at >= "
+                        "date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'", (list(OPEN_METEO),)
+                        ).fetchone()[0]
 FIRMS_SOURCES = ("VIIRS_SNPP_NRT", "VIIRS_NOAA20_NRT")
 BATCH = 50
 TZ = "Africa/Lagos"
 HEADERS = {"User-Agent": "KasafiBot/1.0 (+https://halalnumeriq.com.ng/kasafi)"}
 
 
-async def _get(http: httpx.AsyncClient, url: str, params: dict | None = None, tries: int = 4) -> httpx.Response:
+async def _get(http: httpx.AsyncClient, url: str, params: dict | None = None, tries: int = 4,
+               calls: int = 0) -> httpx.Response:
     for attempt in range(tries):
         r = await http.get(url, params=params, timeout=120)
+        _calls[0] += calls               # a refused (429) request counts too
         if r.status_code != 429 or attempt == tries - 1:
             r.raise_for_status()
             return r
@@ -61,9 +81,12 @@ async def _get(http: httpx.AsyncClient, url: str, params: dict | None = None, tr
     raise AssertionError("unreachable")
 
 
-def _log(conn, layer: str, started: datetime, ok: bool, rows: int, error: str = "") -> None:
-    conn.execute("INSERT INTO hazard_fetch (layer, started_at, ok, rows, error) VALUES (%s, %s, %s, %s, %s)",
-                 (layer, started, ok, rows, error[:300]))
+def _log(conn, layer: str, started: datetime, ok: bool, rows: int, error: str = "", calls: int = 0) -> None:
+    conn.execute("INSERT INTO hazard_fetch (layer, started_at, ok, rows, calls, error) VALUES (%s, %s, %s, %s, %s, %s)",
+                 (layer, started, ok, rows, calls, error[:300]))
+
+
+_calls: list[int] = [0]                  # Open-Meteo calls made by the current fetch (counted in _get)
 
 
 def _local(t: str) -> datetime:
@@ -89,7 +112,8 @@ async def _hourly(http, url: str, pts: list, variables: tuple, extra: dict) -> l
         chunk = pts[i:i + BATCH]
         r = await _get(http, url, {"latitude": ",".join(f"{p[2]:.4f}" for p in chunk),
                                    "longitude": ",".join(f"{p[3]:.4f}" for p in chunk),
-                                   "hourly": ",".join(variables), "timezone": TZ, **extra})
+                                   "hourly": ",".join(variables), "timezone": TZ, **extra},
+                       calls=calls_for(len(chunk), extra.get("forecast_days", 7), len(variables)))
         data = r.json()
         for (pid, *_), d in zip(chunk, data if isinstance(data, list) else [data]):
             hours = d.get("hourly") or {}
@@ -100,9 +124,14 @@ async def _hourly(http, url: str, pts: list, variables: tuple, extra: dict) -> l
     return out
 
 
-async def fetch_forecast(conn, http) -> int:
-    rows = await _hourly(http, FORECAST_URL, points(conn, ("lga", "grid")), FORECAST_VARS, {"forecast_days": 4})
+async def fetch_forecast(conn, http, kinds: tuple[str, ...] = ("lga",)) -> int:
+    rows = await _hourly(http, FORECAST_URL, points(conn, kinds), FORECAST_VARS, {"forecast_days": 4})
     return _store(conn, "forecast", rows, datetime.now(timezone.utc))
+
+
+async def fetch_forecast_grid(conn, http) -> int:
+    """The map grid's forecast (stored with the forecast layer; refreshed less often than the LGA centroids)."""
+    return await fetch_forecast(conn, http, ("grid",))
 
 
 async def fetch_air(conn, http) -> int:
@@ -116,7 +145,7 @@ async def fetch_flood(conn, http) -> int:
     r = await _get(http, FLOOD_URL, {"latitude": ",".join(f"{p[2]:.3f}" for p in pts),
                                      "longitude": ",".join(f"{p[3]:.3f}" for p in pts),
                                      "daily": "river_discharge,river_discharge_max", "forecast_days": 7,
-                                     "past_days": 3})
+                                     "past_days": 3}, calls=calls_for(len(pts), 10, 2))
     data = r.json()
     rows = []
     for (pid, *_), d in zip(pts, data if isinstance(data, list) else [data]):
@@ -134,9 +163,10 @@ async def fetch_flood_history(conn, http, start: str = "1984-01-01") -> int:
     for pid, name, lat, lon in points(conn, ("river",)):
         if conn.execute("SELECT 1 FROM river_history WHERE point_id = %s LIMIT 1", (pid,)).fetchone():
             continue
+        end = date.today() - timedelta(days=1)
         r = await _get(http, FLOOD_URL, {"latitude": f"{lat:.3f}", "longitude": f"{lon:.3f}",
-                                         "daily": "river_discharge", "start_date": start,
-                                         "end_date": (date.today() - timedelta(days=1)).isoformat()})
+                                         "daily": "river_discharge", "start_date": start, "end_date": end.isoformat()},
+                       calls=calls_for(1, (end - date.fromisoformat(start)).days, 1))
         days = r.json().get("daily") or {}
         rows = [(pid, t, q) for t, q in zip(days.get("time") or [], days.get("river_discharge") or []) if q is not None]
         with conn.cursor() as cur:
@@ -187,20 +217,21 @@ async def run_layer(conn, layer: str, settings, http: httpx.AsyncClient | None =
     started = datetime.now(timezone.utc)
     own = http is None
     http = http or httpx.AsyncClient(headers=HEADERS)
+    _calls[0] = 0
     try:
         if layer == "fires":
             if settings.firms_map_key is None:
                 return 0                              # no key: the layer is off, nothing logged as a failure
             n = await fetch_fires(conn, http, settings.firms_map_key.get_secret_value())
         else:
-            n = await {"forecast": fetch_forecast, "air": fetch_air, "flood": fetch_flood,
-                       "flood_history": fetch_flood_history}[layer](conn, http)
-        _log(conn, layer, started, True, n)
-        log.info("hazard fetch %s: %d rows", layer, n)
+            n = await {"forecast": fetch_forecast, "forecast_grid": fetch_forecast_grid, "air": fetch_air,
+                       "flood": fetch_flood, "flood_history": fetch_flood_history}[layer](conn, http)
+        _log(conn, layer, started, True, n, calls=_calls[0])
+        log.info("hazard fetch %s: %d rows, %d Open-Meteo calls", layer, n, _calls[0])
         return n
     except (httpx.HTTPError, ValueError, KeyError, psycopg.Error) as e:
         conn.rollback()
-        _log(conn, layer, started, False, 0, f"{type(e).__name__}: {str(e)[:200]}")
+        _log(conn, layer, started, False, 0, f"{type(e).__name__}: {str(e)[:200]}", calls=_calls[0])
         log.warning("hazard fetch %s failed: %s", layer, type(e).__name__)
         return -1
     finally:
@@ -217,15 +248,33 @@ def due(conn, layer: str, now: datetime | None = None) -> bool:
 KEEP_DAYS = 3                    # values whose time has passed by more than this are dropped
 
 
+def estimate(conn, layer: str) -> int:
+    """The Open-Meteo calls a layer's next fetch will make (0 for FIRMS)."""
+    kinds = {"forecast": ("lga",), "forecast_grid": ("grid",), "air": ("lga", "grid"), "flood": ("river",)}
+    if layer not in kinds:
+        return 0
+    n = conn.execute("SELECT count(*) FROM hazard_point WHERE kind = ANY(%s)", (list(kinds[layer]),)).fetchone()[0]
+    return n if layer != "flood" else calls_for(n, 10, 2)
+
+
 async def run_due(conn, settings) -> dict[str, int]:
-    """Every layer that is due, in turn (river history first, once), then old values pruned."""
+    """Every layer that is due, in turn (river history first, once; the map grid last), while today's Open-Meteo
+    calls stay under KASAFI_OPENMETEO_DAILY_CAP (a layer that would pass it waits for tomorrow); then old values
+    are pruned and the day's call count logged."""
     out = {}
+    cap = settings.kasafi_openmeteo_daily_cap
     async with httpx.AsyncClient(headers=HEADERS) as http:
         if not conn.execute("SELECT 1 FROM river_history LIMIT 1").fetchone():
             out["flood_history"] = await run_layer(conn, "flood_history", settings, http)
-        for layer in INTERVALS:
-            if due(conn, layer):
-                out[layer] = await run_layer(conn, layer, settings, http)
+        for layer in INTERVALS:                       # dict order: forecast, air, flood, fires, forecast_grid
+            if not due(conn, layer):
+                continue
+            if layer in OPEN_METEO and calls_today(conn) + estimate(conn, layer) > cap:
+                log.warning("hazard fetch %s skipped: Open-Meteo calls today %d, cap %d", layer, calls_today(conn), cap)
+                out[layer] = 0
+                continue
+            out[layer] = await run_layer(conn, layer, settings, http)
+    log.info("Open-Meteo calls today: %d (cap %d; the free tier allows 10,000 a day)", calls_today(conn), cap)
     conn.execute("DELETE FROM hazard_values WHERE valid_time < now() - make_interval(days => %s)", (KEEP_DAYS,))
     conn.execute("DELETE FROM fire_detection WHERE detected_at < now() - interval '30 days'")
     conn.execute("DELETE FROM hazard_fetch WHERE started_at < now() - interval '30 days'")

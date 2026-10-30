@@ -100,8 +100,30 @@ def test_a_failed_fetch_is_logged_and_never_raises() -> None:
     s = type("S", (), {"firms_map_key": None})()
     n = asyncio.run(fetch.run_layer(conn, "air", s, httpx.AsyncClient(
         transport=httpx.MockTransport(lambda r: httpx.Response(500)))))
-    assert n == -1 and conn.fetch_log[-1][2] is False and "HTTPStatusError" in conn.fetch_log[-1][4]
+    layer, started, ok, rows, calls, error = conn.fetch_log[-1]
+    assert n == -1 and ok is False and "HTTPStatusError" in error and calls == 2        # a refused call counts too
     assert asyncio.run(fetch.run_layer(conn, "fires", s)) == 0              # no FIRMS key: the layer is off
+
+
+def test_open_meteo_calls_are_counted_as_billed_and_capped(monkeypatch) -> None:
+    assert fetch.calls_for(50, 4, 8) == 50 and fetch.calls_for(1, 10_894, 1) == 779 and fetch.calls_for(4, 10, 2) == 4
+    ran = []
+
+    async def fake_run(conn, layer, settings, http=None):
+        ran.append(layer)
+        return 1
+    monkeypatch.setattr(fetch, "run_layer", fake_run)
+    monkeypatch.setattr(fetch, "due", lambda conn, layer, now=None: True)
+    monkeypatch.setattr(fetch, "calls_today", lambda conn: 4_900)
+    monkeypatch.setattr(fetch, "estimate", lambda conn, layer: {"forecast": 23, "forecast_grid": 269, "air": 292,
+                                                               "flood": 4}.get(layer, 0))
+
+    class Conn:
+        def execute(self, *a):
+            return type("R", (), {"fetchone": lambda _: (1,)})()
+    s = type("S", (), {"kasafi_openmeteo_daily_cap": 5000, "firms_map_key": None})()
+    out = asyncio.run(fetch.run_due(Conn(), s))
+    assert ran == ["forecast", "flood", "fires"] and out["air"] == 0 and out["forecast_grid"] == 0   # over the cap
 
 
 def test_the_scheduler_is_off_unless_asked(monkeypatch) -> None:

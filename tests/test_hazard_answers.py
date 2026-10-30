@@ -62,7 +62,8 @@ def test_a_heat_answer_names_the_scale_its_category_and_its_source(monkeypatch) 
     _patch(monkeypatch, _fresh())
     a = ha.hazard_answer(None, "How hot is it in Wamakko today?", "en", ["heat"],
                          read.Where("lga", "NG034021", "Wamakko"), TODAY)
-    assert "heat index up to 45 °C: *Danger* (US National Weather Service heat index)" in a.text
+    assert "heat index up to 45 °C: *Danger* (US National Weather Service heat index categories, by the heat " \
+           "index)" in a.text
     assert "Open-Meteo forecast" in a.text and "not official warnings" in a.text and a.found
     a = ha.hazard_answer(None, "Yaya zafin rana yake?", "ha", ["heat"], read.Where("lga", "NG034021", "Wamakko"),
                          TODAY)
@@ -81,14 +82,46 @@ def test_old_data_says_how_old_and_missing_data_says_so(monkeypatch) -> None:
     assert "no forecast for Tomorrow yet" in a.text and not a.found
 
 
+def test_dry_heat_takes_its_category_from_the_air_temperature_and_says_so(monkeypatch) -> None:
+    _patch(monkeypatch, _fresh())
+    dry = read.HeatDay("Wamakko", TODAY, 41.0, 39.0, 38.0, "danger", 9, 15, 30, 0.0, 0.0, "none", 0, None,
+                       "air_temperature")
+    monkeypatch.setattr(read, "heat_day", lambda conn, pid, lga, d: dry)
+    a = ha.hazard_answer(None, "how hot", "en", ["heat"], read.Where("lga", "NG034021", "Wamakko"), TODAY)
+    assert "*Danger* (US National Weather Service heat index categories, by the air temperature, which in dry " \
+           "air is above the heat index)" in a.text
+    a = ha.hazard_answer(None, "how hot", "en", ["heat"], read.Where("state"), TODAY)
+    assert "1 LGA is at Danger level or above." in a.text
+    calm = read.HeatDay("Wamakko", TODAY, 30.0, 30.0, 29.0, "caution", 9, 15, 30, 0.0, 0.0, "none", 0, None)
+    monkeypatch.setattr(read, "heat_day", lambda conn, pid, lga, d: calm)
+    assert "No LGA is at Danger level or above." in ha.hazard_answer(None, "how hot", "en", ["heat"],
+                                                                     read.Where("state"), TODAY).text
+
+
+def test_a_river_is_compared_with_the_same_time_of_year() -> None:
+    from datetime import date as d
+    history = [(100.0, d(y, 8, 30)) for y in range(1997, 2026)] + [(5.0 + y % 3, d(y, 10, 28)) for y in
+                                                                     range(1997, 2026)]
+    season = read.same_time_of_year(history, d(2026, 10, 30))
+    assert len(season) == 29 and max(season) < 10                # August's floods aren't late October
+    assert read.same_time_of_year([(1.0, d(2000, 1, 5))], d(2026, 12, 28)) == [1.0]     # across the year end
+    assert [read.river_level(x) for x in (10, 50, 80, 97)] == ["low", "normal", "high", "very_high"]
+    r = read.RiverDay("Rima near Goronyo", "Goronyo", d(2026, 10, 30), 2.0, 20.0, d(1997, 1, 1), None, "low")
+    assert r.period == ("late", 10)
+
+
 def test_what_to_watch_out_for_leads_with_what_is_in_season(monkeypatch) -> None:
     _patch(monkeypatch, _fresh())
     monkeypatch.setattr(read, "air_day", lambda *a: None)
     monkeypatch.setattr(read, "river_days", lambda *a: [])
     monkeypatch.setattr(read, "fire_counts", lambda *a: [])
     a = ha.hazard_answer(None, "what should we watch out for?", "en", ["overview"], read.Where("state"), TODAY)
-    assert a.text.splitlines()[1] == "In season now: river floods, rain."          # October
-    assert a.text.index("*Rivers*") < a.text.index("*Heat*")
+    assert a.text.splitlines()[1:3] == ["Most severe now first (each on its own scale).",
+                                        "In season now: river floods, rain."]          # October
+    # heat is at Danger (3); rain (none) and fires (no detections) are 0; rivers and dust have no data: the most
+    # severe leads, and the season (October: rivers, rain) breaks ties
+    order = [a.text.index(x) for x in ("*Heat*", "*Rain*", "*Fires*", "*Rivers*", "*Dust")]
+    assert order == sorted(order)
     jan = ha.hazard_answer(None, "what should we watch out for?", "en", ["overview"], read.Where("state"),
                            date(2027, 1, 10))
     assert "In season now: harmattan dust, heat." in jan.text

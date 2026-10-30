@@ -93,6 +93,8 @@ class Settings(BaseSettings):
     firms_map_key: SecretStr | None = None
     # the hazard fetchers' schedule (app/hazards/fetch.py) runs in the app only when this is on
     kasafi_hazard_fetch: bool = False
+    # the hazard fetchers stop for the day (UTC) at this many Open-Meteo calls, well under the free 10,000
+    kasafi_openmeteo_daily_cap: int = 5000
     # Fireworks serves Muse Spark Open too: the fallback host when Baseten fails (app/providers/fireworks.py)
     fireworks_api_key: SecretStr | None = None
     fireworks_base_url: str = "https://api.fireworks.ai/inference/v1"

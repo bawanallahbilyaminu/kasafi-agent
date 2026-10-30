@@ -76,6 +76,7 @@ def upgrade() -> None:
         started_at  TIMESTAMPTZ NOT NULL,
         ok          BOOLEAN NOT NULL,
         rows        INT NOT NULL DEFAULT 0,
+        calls       INT NOT NULL DEFAULT 0,         -- API calls as Open-Meteo counts them (locations, long ranges)
         error       TEXT NOT NULL DEFAULT ''
     );
     CREATE INDEX hazard_fetch_layer ON hazard_fetch (layer, started_at DESC);
