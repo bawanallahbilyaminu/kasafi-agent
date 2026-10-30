@@ -131,3 +131,22 @@ def test_an_official_outlook_is_never_replaced_by_a_forecast() -> None:
     afo = adv(198, "Goronyo: High flood risk.", kind="outlook", source="nihsa_afo")
     b = official.outlook_answer(Conn([afo]), "flood", "en", GORONYO, NOW)
     assert b.found and "NIHSA, issued 15 Apr 2026: “Goronyo: High flood risk.”" in b.text
+
+
+def test_the_eval_checks_hold_on_the_code_built_answers() -> None:
+    """evals/topics/advisories_checks.json against the answers built from the crawled rows (no planner, no model)."""
+    import json
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from evals.complex.run_open import wrong
+    checks = json.loads((Path(__file__).parents[1] / "evals/topics/advisories_checks.json").read_text("utf-8"))["checks"]
+    conn = Conn(outbreaks={"csm": CSM})
+    for cid, q, lang in [("a02", "Any meningitis in Sokoto now?", "en"), ("a04", "Akwai sankarau a Sokoto yanzu?", "ha")]:
+        text = official.outbreak_answer(conn, q, lang, date(2026, 10, 30)).text
+        assert wrong(checks[cid], SimpleNamespace(text=text, exact=text)) == "", cid
+    text = official.outlook_answer(conn, "climate", "en", Where("state"), NOW).text
+    assert wrong(checks["a03"], SimpleNamespace(text=text, exact=text)) == ""
+    for cid, lang in [("a01", "en"), ("a05", "ha")]:
+        text = "\n".join(official.official_lines(conn, lang, ["flood"], GORONYO, NOW)) + "\nRima near Goronyo"
+        assert wrong(checks[cid], SimpleNamespace(text=text, exact=text)) == "", cid

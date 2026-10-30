@@ -74,6 +74,40 @@ capabilities:
     needs_key: FIRMS_MAP_KEY
     cites: NASA FIRMS, fetch time
 
+  # Official sources (docs/hazard-and-services.md section 5): crawled into the advisories and outbreak_cases tables
+  # (app/hazards/advisories.py, KASAFI_ADVISORIES_FETCH); answered in code (app/hazards/official.py)
+  - id: advisories
+    what: "current official warnings for Sokoto or an LGA (NEMA, the Sokoto State portal for SEMA, the Sokoto Ministry of Health), quoted verbatim with issue date; they lead every hazard answer, before the model forecasts"
+    kind: structured
+    measures: [heat, rain, dust, river_discharge, fire_detections, hazard_overview, outbreak_cases]
+    entity_types: [state, lga]
+    geo_levels: [state, lga]
+    operations: [lookup, list]
+    time: current (a stated end date, else 10 days for an alert, 21 for a notice); an expired one is marked; crawled every 12 h
+    cites: publisher, issue date, URL
+
+  - id: flood_outlook_official
+    what: "NIHSA Annual Flood Outlook (LGA flood-risk classes) and NiMet Seasonal Climate Prediction (onset, cessation, rainfall, dry spells): from the advisories table or the document library; never replaced by a model forecast"
+    kind: structured
+    measures: [flood_outlook, seasonal_outlook]
+    entity_types: [state, lga]
+    geo_levels: [state, lga]
+    operations: [lookup]
+    time: the current year's outlook
+    cites: publisher, issue date (or document and page)
+    note: on Oct 30 2026 neither 2026 file is reachable (NIHSA builds its lists in the browser; nimet.gov.ng blocks automated fetchers); the answer says so
+
+  - id: outbreaks_ncdc
+    what: "Sokoto's suspected and confirmed cases and deaths per disease (cholera, CSM/meningitis, Lassa fever, measles, diphtheria) from NCDC's newest situation report, image tables read with Muse Spark vision, every figure printed on its page"
+    kind: structured
+    measures: [outbreak_cases]
+    entity_types: [state]
+    geo_levels: [state]
+    operations: [lookup, list]
+    time: the epi week of NCDC's newest report and the period it states; a report 8 or more weeks old says it doesn't show the situation now; crawled daily
+    cites: NCDC report, epi week, page
+    note: official guidance only (a current Ministry of Health or NCDC notice, verbatim); no other health advice
+
   - id: analysis_tools
     what: counts and sums in SQL over projects and budget lines (project status, LGA projects, rankings, ministry and function profiles, revenue)
     kind: structured

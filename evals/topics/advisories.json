@@ -1,0 +1,13 @@
+{
+ "_about": "Official sources (docs/hazard-and-services.md section 5): official warnings lead hazard answers, NCDC outbreak figures with their epi week, official outlooks never replaced by a forecast. Run before deploys only, after the advisories crawl has run: uv run python evals/complex/run_open.py --file evals/topics/advisories.json --out evals/topics/advisories-report.md",
+ "questions": [
+  {"id": "a01", "lang": "en", "text": "Is there a flood warning for Goronyo?",
+   "note": "official warnings first (none current on Oct 30 2026: says so, with the check time), then the GloFAS river forecast labelled as a model"},
+  {"id": "a02", "lang": "en", "text": "Any meningitis in Sokoto now?",
+   "note": "NCDC's newest CSM report (epi week 14 2025, 5 Apr 2025): Sokoto 450 suspected, 41 confirmed, 47 deaths; too old to show the situation now; no health advice beyond 'see a health worker'"},
+  {"id": "a03", "lang": "en", "text": "What did NiMet predict for Sokoto's rainy season?",
+   "note": "NiMet's 2026 Seasonal Climate Prediction isn't reachable on Oct 30 2026: says so, offers the model rain forecast as a different thing, invents no onset or cessation date"},
+  {"id": "a04", "lang": "ha", "text": "Akwai sankarau a Sokoto yanzu?", "note": "a02 in Hausa"},
+  {"id": "a05", "lang": "ha", "text": "Akwai gargaɗin ambaliya ga Goronyo?", "note": "a01 in Hausa"}
+ ]
+}

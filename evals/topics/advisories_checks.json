@@ -1,0 +1,19 @@
+{
+ "_about": "Checked facts for evals/topics/advisories.json (drafted Oct 30 2026 from the local crawl; for Bilyaminu to check). any: one group's figures all in the reply; all_re: patterns that must match; must_not: a pattern that must not. Figures change as NCDC publishes: recheck against outbreak_cases before a run.",
+ "checks": {
+  "a01": {"all_re": ["Official warnings", "No current official warning for Goronyo LGA|issued \\d\\d \\w+ 20\\d\\d", "Model forecasts \\(not official\\)", "Rima near Goronyo"],
+          "must_not": "(?i)there is (?:a|an official) flood warning for Goronyo",
+          "source": "advisories table (NEMA, Sokoto portal, Ministry of Health WordPress posts, crawled Oct 30 2026): no current Sokoto flood warning; GloFAS discharge at NG034006 'low for late October'"},
+  "a02": {"any": [["450", "41", "47"]], "all_re": ["epi week 14 2025", "doesn't show the situation now", "health worker"],
+          "must_not": "(?i)antibiotic|take (?:\\w+ )?(?:tablets|drugs|medicine)|you should (?:get|take)",
+          "source": "NCDC CSM situation report for week 14 2025 (ncdc-csm-2025-14) PDF p4: 'Sokoto 450 47 59 41 10 69' (suspected, deaths, samples, lab confirmed, CFR %, positivity %), period 'from Epi week 40 2024, - week 13 2025'"},
+  "a03": {"all_re": ["isn't available", "not NiMet's prediction"],
+          "must_not": "(?i)(?:onset|cessation|start|end)\\w* (?:is|was|will be|on|around|by) [^.\\n]{0,25}\\b(?:April|May|June|July|August|September|October)\\b",
+          "source": "probe Oct 30 2026: nimet.gov.ng serves a JavaScript bot check; scp.nimet.gov.ng's 2026 files return 404"},
+  "a04": {"any": [["450", "41", "47"]], "all_re": ["makon epi 14 2025", "ma'aikacin lafiya"],
+          "must_not": "(?i)antibiotic|maganin rigakafi ka sha",
+          "source": "as a02"},
+  "a05": {"all_re": ["Gargaɗin hukuma", "Babu gargaɗin hukuma na yanzu ga Ƙaramar Hukumar Goronyo|an fitar", "Rima near Goronyo"],
+          "source": "as a01"}
+ }
+}
