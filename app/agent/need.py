@@ -23,6 +23,9 @@ MEASURES = (
     "idp_count", "returnee_count", "idp_households",
     # other statistics (registry topics)
     "unemployment_rate", "underemployment_rate", "poverty_rate", "malnutrition_rate", "population",
+    # hazards (docs/hazard-and-services.md section 4): forecasts and detections, answered from hazard_values
+    "heat", "temperature", "humidity", "uv_index", "wind", "rain", "air_quality", "dust", "river_discharge",
+    "fire_detections", "hazard_overview",
     "other",
 )
 OPERATIONS = ("lookup", "breakdown", "compare", "rank", "share", "trend", "list", "explain", "verify_claim")
@@ -44,7 +47,9 @@ NEED_PROMPT = (
     "\"output_shape\": \"<" + "|".join(SHAPES) + ">\", \"top_n\": N, \"premises\": [\"<claims the question "
     "takes for granted, to check, e.g. 'health got more in 2026 than 2025'>\"], \"topics\": [<registry topic "
     "ids>]}. A unit inside a ministry (a board, bureau, agency, department, Government House) is a "
-    "sub_agency. "
+    "sub_agency. Weather and hazards now or in the next days (heat, harmattan dust and air quality, rain, rivers "
+    "and floods, fires; 'what should we watch out for' is hazard_overview) use those measures, with the LGA or "
+    "the state as the entity and time kind none (the day is read from the question). "
 )
 
 

@@ -47,6 +47,7 @@ from app.agent.need import NEED_PROMPT, Names, Need, names_for, parse_need
 from app.agent.capabilities import available_capabilities, catalog, cover
 from app.agent.tools import APPROVED_YEARS, budget_fill, dtm_fill
 from app.agent.topics import TopicResult, topic_answer
+from app.hazards.answer import MEASURE_LAYERS, hazard_answer, layers_asked, where_for
 from app.agent.topics import note_of as topic_note
 from app.agent.topics import local_documents as topics_local
 from app.agent.topics import named_publishers
@@ -967,7 +968,10 @@ async def answer_question(question: str, lang: str, conn: psycopg.Connection, **
 async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *, settings: Settings | None = None,
                            client_factory: type[MetaClient] = MetaClient, notify: Notify | None = None,
                            acquire_fn=None, latest_fn=None, today: date | None = None,
-                           history: list[dict] | None = None, box: dict | None = None) -> Answer:
+                           history: list[dict] | None = None, box: dict | None = None,
+                           place: dict | None = None) -> Answer:
+    """`place`: the user's point or LGA on file, in memory only (app/geo/location.py), for 'here' and hazard
+    answers; never logged or traced."""
     settings = settings or get_settings()
     today = today or lagos_today()
     t: dict[str, float] = {}
@@ -985,6 +989,15 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             return Answer(plan.clarify["question"], False, True, plan=plan, timings=t,
                           clarify=plan.clarify["options"])
         prev = history[-1] if history else None
+        # weather and hazards (heat, dust, rain, rivers, fires): answered in code from the fetched layers
+        if conn is not None and (layers := hazard_route(question, plan)):
+            t0 = time.perf_counter()
+            ha = hazard_answer(conn, f"{question} {plan.english_question}", lang, layers,
+                               where_for(plan.need.entities if plan.need else [], place), today, settings)
+            t["hazard"] = time.perf_counter() - t0
+            log.info("hazard answer: layers %s, %s, found=%s", ",".join(layers), ha.where.kind, ha.found)
+            # no data for the day asked is still an answer ("not available now"), only partial
+            return Answer(ha.text, True, True, plan=plan, timings=t, exact=ha.text, partial=not ha.found)
         # every cell of the need fillable by one structured tool (budget_core, dtm_api): answered from the data
         if (a := await structured_answer(conn, plan, lang, settings, t, today)) is not None:
             return a
@@ -1234,6 +1247,22 @@ def off_topic_note(conn, plan: Plan, question: str, cited: list[Evidence], lang:
 
 MONEY_WORDS = re.compile(r"(?i)\b(?:budget\w*|allocat\w*|kasafi\w*|naira|spen[dt]\w*|expenditure|funds?|funding|"
                          r"cost\w*|revenue|IGR|appropriat\w*|ware|kashe|kuɗi|kudi)\b|₦")
+
+
+HAZARD_MEASURES = set(MEASURE_LAYERS)
+
+
+def hazard_route(question: str, plan: Plan) -> list[str]:
+    """The hazard layers to answer: the planner chose a hazard measure, or the words name a hazard and no other
+    measure was asked ('how many IDPs after the floods?' stays a displacement question; 'the budget for flood
+    control' a budget one)."""
+    measures = list(plan.need.measures) if plan.need else []
+    others = [m for m in measures if m not in HAZARD_MEASURES and m != "other"]
+    text = f"{question} {plan.english_question}"
+    layers = layers_asked(text, measures)
+    if not layers or MONEY_WORDS.search(text) or (others and not set(measures) & HAZARD_MEASURES):
+        return []
+    return layers
 
 
 def names_source(topic_id: str, text: str) -> bool:
@@ -2408,7 +2437,7 @@ def _found(d: dict) -> str:
 
 
 async def answer_from_documents(question: str, lang: str, *, settings: Settings, notify: Notify | None = None,
-                                history: list[dict] | None = None) -> Answer:
+                                history: list[dict] | None = None, place: dict | None = None) -> Answer:
     """Entry point for the WhatsApp flow: one DB connection per question (the DB is on the same host).
 
     `notify` sends a message right away (the two-step reply while a missing document is fetched).
@@ -2416,7 +2445,8 @@ async def answer_from_documents(question: str, lang: str, *, settings: Settings,
     """
     with psycopg.connect(settings.db_url(), connect_timeout=5) as conn:
         t0 = time.perf_counter()
-        a = await answer_question(question, lang, conn, settings=settings, notify=notify, history=history)
+        a = await answer_question(question, lang, conn, settings=settings, notify=notify, history=history,
+                                  place=place)
         trace.save(conn, a, lang, time.perf_counter() - t0)
     tm = a.timings
     # No question text in logs: only what was searched where, and how it went.

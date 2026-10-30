@@ -196,9 +196,13 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             async def send_now(text: str) -> None:   # e.g. "Ina neman takardar…" while a document is fetched
                 sent.append(text)
                 await notify(Out(text))
+            # the user's point (memory, 30 min) or LGA on file, for 'here' and hazards; only when there is one
+            spot, last = location_memory.recall(key), store.get_last_lga(key)
+            place = ({"lat": spot.lat, "lon": spot.lon, "lga_pcode": spot.lga_pcode, "lga": spot.lga} if spot else
+                     {"lga_pcode": last} if last else None)
             try:
                 result = await answer(question, lang, settings=settings, notify=send_now,
-                                      history=store.recent_turns(key))
+                                      history=store.recent_turns(key), **({"place": place} if place else {}))
             finally:
                 slow.cancel()
             body = result if isinstance(result, str) else result.text

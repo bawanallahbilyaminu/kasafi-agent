@@ -30,6 +30,50 @@ capabilities:
     needs_key: DTMAPI_SUBSCRIPTION_KEY
     cites: API round and reporting date
 
+  # Hazard information (docs/hazard-and-services.md section 4): scheduled fetchers fill hazard_values; answers
+  # are written in code (app/hazards/answer.py) for an LGA (its centroid), a point (the nearest of a 0.1 degree
+  # grid) or the state, for today, tomorrow or the next 3 days, each figure with its scale, source and fetch time
+  - id: weather_forecast
+    what: Open-Meteo forecast (temperature, feels-like, humidity, UV, wind, rain); the NWS heat index in C computed from it
+    kind: structured
+    measures: [heat, temperature, humidity, uv_index, wind, rain, hazard_overview]
+    entity_types: [state, lga]
+    geo_levels: [state, lga, point]
+    operations: [lookup, compare, rank]
+    time: today, tomorrow and the next 3 days; refreshed every 3 h (an older fetch is said, never passed off as current)
+    cites: Open-Meteo forecast, fetch time
+
+  - id: air_quality
+    what: "Open-Meteo Air Quality (Copernicus CAMS global): dust, PM10, PM2.5, aerosol optical depth, US AQI; the WHO 24-h guideline as reference"
+    kind: structured
+    measures: [air_quality, dust, hazard_overview]
+    entity_types: [state, lga]
+    geo_levels: [state, lga, point]
+    operations: [lookup, compare, rank]
+    time: today, tomorrow and the next 3 days; refreshed every 6 h
+    cites: Open-Meteo / CAMS, fetch time
+
+  - id: river_flood
+    what: Open-Meteo Flood API (GloFAS v4) river discharge at 4 river points against each point's own history since 1997 (a model forecast, not an official flood warning)
+    kind: structured
+    measures: [river_discharge, hazard_overview]
+    entity_types: [state, lga]
+    geo_levels: [state, lga]
+    operations: [lookup, compare, trend]
+    time: the next 7 days; refreshed daily
+    cites: GloFAS via Open-Meteo, fetch time
+
+  - id: fire_detections
+    what: NASA FIRMS VIIRS satellite heat detections (could be bush, farm or other fires) in Sokoto, by LGA
+    kind: structured
+    measures: [fire_detections, hazard_overview]
+    entity_types: [state, lga]
+    geo_levels: [state, lga]
+    operations: [lookup, rank, list]
+    time: the last 24 hours; refreshed every 3 h
+    needs_key: FIRMS_MAP_KEY
+    cites: NASA FIRMS, fetch time
+
   - id: analysis_tools
     what: counts and sums in SQL over projects and budget lines (project status, LGA projects, rankings, ministry and function profiles, revenue)
     kind: structured
