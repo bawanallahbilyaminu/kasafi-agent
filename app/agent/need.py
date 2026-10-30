@@ -13,6 +13,8 @@ import difflib
 import re
 from dataclasses import dataclass, field
 
+from app.sources.lga_names import canonical
+
 MEASURES = (
     # budget core (approved / revised budgets, spending from the implementation reports)
     "approved", "revised", "original", "actual", "actual_ytd", "quarter_spent", "performance_pct",
@@ -217,8 +219,9 @@ def resolve(e: Entity, names: Names) -> Entity:
             e.code = (own or codes)[0]
     elif e.type == "programme":
         e.resolved = _best(e.name, list(names.programmes))
-    elif e.type == "lga":
-        e.resolved = _best(e.name, list(names.lgas), cutoff=0.75)
+    elif e.type == "lga":          # a known spelling first (Wamako, Sabon-Birni, Sokoto ta Arewa), then fuzzy
+        e.resolved = canonical(e.name) or canonical(_best(e.name, list(names.lgas), cutoff=0.75)) \
+            or _best(e.name, list(names.lgas), cutoff=0.75)
     return e
 
 
