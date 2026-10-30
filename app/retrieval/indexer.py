@@ -16,6 +16,7 @@ import hashlib
 import json
 import logging
 import re
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -123,6 +124,7 @@ def titles_first(page: pdfium.PdfPage, text: str) -> str:
 IMAGE_PAGE_CHARS = 400   # a page with less text than this...
 IMAGE_SHARE = 0.25       # ...and an image covering a quarter of it is a picture of a table: OCR it
 DRAWN_PATHS = 40         # ...or this many vector paths: text turned into outlines, a map or a chart (L31)
+FOOTER_ONLY_PATHS = 10   # ...or, when its only text is the running footer, this many
 
 
 def image_table_pages(path: Path) -> set[int]:
@@ -133,15 +135,22 @@ def image_table_pages(path: Path) -> set[int]:
     page counted as text and the table, with Sokoto's published year-on-year rate, was never OCR'd.
     NIHSA's 2026 Annual Flood Outlook draws its pages as vector outlines under a running footer ("NATIONAL
     SEASONAL FLOOD FORECAST AND ADVISORY 04", 48 characters) with no image at all; NiMet's 2026 SCP draws its
-    state maps as paths. Many paths under a short text layer count as a picture too (L31).
+    state maps as paths. Many paths under a short text layer count as a picture too (L31). A page whose only
+    text is the running footer (the same words, page number aside, on a fifth or more of the pages) has no text
+    of its own: a few drawn lines are enough there (the AFO's "April 2026" closing page has 23 paths).
     """
     pdf = pdfium.PdfDocument(str(path))
     out = set()
     try:
-        for i in range(len(pdf)):
-            page = pdf[i]
-            if len(page.get_textpage().get_text_range().strip()) >= IMAGE_PAGE_CHARS:
+        texts = [pdf[i].get_textpage().get_text_range().strip() for i in range(len(pdf))]
+        shape = Counter(re.sub(r"[\d\s|]+", " ", t).strip() for t in texts if t)
+        running = {s for s, n in shape.items() if s and n >= max(5, len(texts) // 5)}
+        for i, text in enumerate(texts):
+            if len(text) >= IMAGE_PAGE_CHARS:
                 continue
+            page = pdf[i]
+            footer_only = not text or re.sub(r"[\d\s|]+", " ", text).strip() in running
+            enough = FOOTER_ONLY_PATHS if footer_only else DRAWN_PATHS
             w, h = page.get_size()
             paths = 0
             for obj in page.get_objects(max_depth=3):
@@ -152,7 +161,7 @@ def image_table_pages(path: Path) -> set[int]:
                         break
                 elif obj.type == pdfium.raw.FPDF_PAGEOBJ_PATH:
                     paths += 1
-                    if paths >= DRAWN_PATHS:
+                    if paths >= enough:
                         out.add(i + 1)
                         break
     finally:
