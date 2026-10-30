@@ -377,7 +377,8 @@ def outlook_answer(conn, which: str, lang: str, where: read.Where, now: datetime
                     for a in items]
         if single:
             out += ["", t["lga_more"].format(n=len(single))]
-        out += ["", t["outlook_note"]]
+        if any("Table" in a.title for a in own) and any("Table" not in a.title for a in own):
+            out += ["", t["outlook_note"]]       # a table row next to the text's own figures: both shown
         return OfficialAnswer("\n".join(out), "outlook", True)
     if in_library(conn, which):
         return None
