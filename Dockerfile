@@ -26,6 +26,8 @@ COPY app ./app
 # hints are not baked in: they are mounted read-only from the server (deploy/docker-compose.yml).
 COPY data/source_registry.yaml data/catalog.yaml data/emergency_contacts.yaml ./data/
 COPY scripts/prefetch_topics.py ./scripts/prefetch_topics.py
+# the geo import, run on the server against data/geo files copied into the data volume (not in git or the image)
+COPY scripts/import_geo.py ./scripts/import_geo.py
 # Migrations run on deploy (deploy/remote.sh) once DATABASE_URL is set on the server.
 COPY alembic.ini ./
 COPY migrations ./migrations

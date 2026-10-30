@@ -11,6 +11,7 @@ The LGA crosswalk (app/sources/lga_names.py) gives every layer's spelling one P-
 facility's LGA; its ward is kept only when the ward's own LGA agrees. Re-running replaces the tables' rows.
 
     uv run python scripts/import_geo.py            -> tables filled, report at data/geo/quality_report.md
+    python scripts/import_geo.py --geo /data/geo   (on the server: the files copied into the data volume)
 """
 
 from __future__ import annotations
@@ -207,6 +208,10 @@ def quality_report(conn, national: int, places: Counter) -> str:
 
 
 def main() -> None:
+    global GEO, REPORT
+    if "--geo" in sys.argv:                      # the folder with the files (default data/geo/)
+        GEO = Path(sys.argv[sys.argv.index("--geo") + 1])
+        REPORT = GEO / "quality_report.md"
     codab, wards = load("sokoto_lga_codab.geojson"), load("sokoto_wards_grid3.geojson")
     national = load("health_facilities_nga.geojson")
     if not codab or not wards:

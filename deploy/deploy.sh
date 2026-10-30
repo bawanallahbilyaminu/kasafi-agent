@@ -6,6 +6,8 @@
 #   deploy/deploy.sh --sync-index  copy the document index (documents/pages/chunks/budget_lines/budget_rows and the
 #                                  structured core: budget_items/projects/perf_items/entity_builds) from the dev DB
 #   deploy/deploy.sh --sync-pdfs   copy the source PDFs (public documents) to the server, for evidence crops
+#   deploy/deploy.sh --sync-geo    copy data/geo/*.geojson (not in git) to /data/geo on the server and run the geo
+#                                  import there (LGAs, wards, facilities, places into PostGIS)
 #   deploy/deploy.sh --sync-hints  copy data/private/partners_hints.json (not in git) to deploy/private/ on the
 #                                  server, mounted read-only into the app; takes effect on the next deploy/restart
 #
@@ -18,6 +20,7 @@ PUBLIC_URL=${KASAFI_PUBLIC_URL:-https://kasafi-api.halalnumeriq.com.ng}
 REMOTE_ENV=/opt/kasafi-agent/deploy/.env.incoming
 REMOTE_INDEX=/opt/kasafi-agent/deploy/index.incoming.sql.gz
 REMOTE_PDFS=/opt/kasafi-agent/deploy/pdfs.incoming.tar
+REMOTE_GEO=/opt/kasafi-agent/deploy/geo.incoming.tar
 # Keys the server may receive. DATABASE_URL is left out until the production database exists
 # (the local one points at dev Postgres).
 ALLOWED_KEYS='ADMIN_USER|ADMIN_PASSWORD|KASAFI_OPEN_READER|KASAFI_OPEN_READ_TIMEOUT_S|KASAFI_OPEN_STAGES|KASAFI_OPEN_STAGE_TIMEOUT_S|FIREWORKS_API_KEY|ORS_API_KEY|FIRMS_MAP_KEY|KASAFI_OPEN_ACCESS|KASAFI_ALLOW_SECURITY_BUDGET|KASAFI_PILOT_NUMBERS|KASAFI_EXEMPT_NUMBERS|KASAFI_HASH_KEY|KASAFI_VOICE_PER_DAY|KASAFI_QUESTIONS_PER_DAY|KASAFI_DAILY_SPEND_CAP_USD|KASAFI_COST_PER_VOICE_USD|KASAFI_COST_PER_QUESTION_USD|KASAFI_FETCHES_PER_DAY|META_API_KEY|BASETEN_API_KEY|SERPER_API_KEY|RELIEFWEB_APPNAME|DTMAPI_SUBSCRIPTION_KEY|DTMHNA_SUBSCRIPTION_KEY|KASAFI_TOPIC_BUDGET_S|WHATSAPP_TOKEN|WHATSAPP_PHONE_NUMBER_ID|WHATSAPP_VERIFY_TOKEN|WHATSAPP_APP_SECRET|WHATSAPP_BUSINESS_ACCOUNT_ID|WHATSAPP_WABA_ID|WABA_ID'
@@ -94,6 +97,15 @@ case "${1:-}" in
     echo "→ uploading keys (values not shown): $keys"
     tr -d '\r' < .env | grep -E "^($ALLOWED_KEYS)=" | "$SSH" "$HOST" "umask 077; cat > $REMOTE_ENV"
     remote_and_report sync-env
+    ;;
+  --sync-geo)
+    # the geo inputs only (boundaries, facilities, OSM places), never the local reports
+    [ -f data/geo/sokoto_lga_codab.geojson ] || die "no data/geo/ here"
+    tmp=$(mktemp)
+    tar -c -f "$tmp" -C data/geo $(cd data/geo && ls *.geojson) || { rm -f "$tmp"; die "packing data/geo failed"; }
+    echo "→ uploading $(du -h "$tmp" | cut -f1) of data/geo to $HOST"
+    "$SSH" "$HOST" "umask 077; cat > $REMOTE_GEO" < "$tmp"; rm -f "$tmp"
+    remote_and_report sync-geo
     ;;
   --sync-pdfs)
     tmp=$(mktemp)

@@ -18,4 +18,5 @@ docs/
 scripts/
 # ... except the topic prefetch, run on the server (docker compose exec api python scripts/prefetch_topics.py)
 !scripts/prefetch_topics.py
+!scripts/import_geo.py
 *.log

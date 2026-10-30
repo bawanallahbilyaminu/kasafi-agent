@@ -185,6 +185,25 @@ sync-index)
   exit 2
   ;;
 
+sync-geo)
+  # deploy.sh uploads a tar of data/geo/ (boundaries, facilities, places: not in git, the facility file's licence
+  # isn't confirmed). It goes into the app's data volume at /data/geo, then the geo import fills the PostGIS tables.
+  INCOMING=$APP/deploy/geo.incoming.tar
+  [ -s "$INCOMING" ] || { say "no $INCOMING uploaded"; exit 1; }
+  if dc exec -T api sh -c 'mkdir -p /data/geo && tar -x -m -C /data/geo' < "$INCOMING" \
+     && dc exec -T api python scripts/import_geo.py --geo /data/geo > /dev/null; then
+    rm -f "$INCOMING"
+    n=$(dc exec -T db psql -At -U kasafi -d kasafi -c "SELECT (SELECT count(*) FROM lga)||' LGAs, '||(SELECT count(*) FROM ward)||' wards, '||(SELECT count(*) FROM facility)||' facilities, '||(SELECT count(*) FROM place)||' places'")
+    say "geo imported: $n"
+    log "sync-geo ok: $n"
+    echo "RESULT=ok COMMIT=$(git rev-parse HEAD)"
+    exit 0
+  fi
+  rm -f "$INCOMING"
+  log "sync-geo FAILED"
+  echo "RESULT=failed COMMIT=none"
+  exit 1
+  ;;
 sync-pdfs)
   # deploy.sh uploads a tar of the source PDFs (public documents, named <doc id>.pdf). They go into the
   # app's data volume at /data/pdfs, where the evidence crops read them. Files are replaced, never deleted.
