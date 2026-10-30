@@ -186,6 +186,9 @@
           "3.01"
         ],
         [
+          "3.0%"
+        ],
+        [
           "14.63"
         ]
       ],
@@ -195,7 +198,7 @@
           "September 2026"
         ]
       ],
-      "source": "NBS CPI September 2026 (microdata catalog 154, download 1440, a ZIP): national headline 14.63% y/y (p6); Sokoto 3.01% m/m, third-highest (p16-17)."
+      "source": "NBS CPI September 2026 (microdata catalog 154, download 1440, a ZIP): national headline 14.63% y/y (p6); Sokoto 3.01% m/m, third-highest (p16-17); the appendix table (p19) prints the same All Items m/m for Sep 2026 to one decimal, 3.0 (index 131.2 -> 135.1, +2.97%: positive; p16's brackets are not a minus, its negatives print as (-6.10%))."
     },
     {
       "id": "21",
