@@ -10,7 +10,17 @@
    "numbers": [
     "68,951,198,631.73"
    ],
-   "code": "051700000000"
+   "code": "051700000000",
+   "forms": {
+    "hausa": "Nawa aka amince wa Ministry of Education a kasafin kudin 2026?",
+    "informal": "How much did Ministry of Education get in the 2026 budget?",
+    "code_switched": "Ministry of Education ta samu nawa a budget na 2026?",
+    "typo": "How much was aproved for the Ministry of Educaton in the 2026 budget?",
+    "followup": {
+     "previous": "What projects is the Ministry of Education handling?",
+     "question": "How much was approved for it in the 2026 budget?"
+    }
+   }
   },
   {
    "id": "lookup-02",
@@ -20,7 +30,17 @@
    "numbers": [
     "33,986,201,399.04"
    ],
-   "code": "056900000000"
+   "code": "056900000000",
+   "forms": {
+    "hausa": "Nawa aka amince wa Ministry for Higher Education a kasafin kudin 2026?",
+    "informal": "What's the 2026 budget for the Ministry for Higher Education?",
+    "code_switched": "Nawa aka approve wa Ministry for Higher Education a budget na 2026?",
+    "typo": "How mch was aproved for the Ministry for Higher Education in the 2026 budget?",
+    "followup": {
+     "previous": "What projects is the Ministry for Higher Education handling?",
+     "question": "How much was approved for it in the 2026 budget?"
+    }
+   }
   },
   {
    "id": "lookup-03",
@@ -30,7 +50,17 @@
    "numbers": [
     "2,481,546,024.24"
    ],
-   "code": "012300000000"
+   "code": "012300000000",
+   "forms": {
+    "hausa": "Nawa aka amince wa Ministry of Information a budget na 2026?",
+    "informal": "how much did Ministry of Information get in 2026 budget?",
+    "code_switched": "Ministry of Information ta samu nawa for 2026 budget?",
+    "typo": "How mch was aproved for the Ministry of Information in the 2026 budget?",
+    "followup": {
+     "previous": "What does the Ministry of Information do?",
+     "question": "How much was approved for it in the 2026 budget?"
+    }
+   }
   },
   {
    "id": "lookup-04",
@@ -40,7 +70,17 @@
    "numbers": [
     "12,257,369,417.24"
    ],
-   "code": "011200000000"
+   "code": "011200000000",
+   "forms": {
+    "hausa": "Nawa aka amince wa Sokoto State House of Assembly a kasafin kudin 2026?",
+    "informal": "How much did Sokoto State House of Assembly get in the 2026 budget?",
+    "code_switched": "Nawa aka approve wa Sokoto State House of Assembly a 2026 budget?",
+    "typo": "How mouch was aproved for the Sokoto State House of Assembly in the 2026 budget?",
+    "followup": {
+     "previous": "What does the Sokoto State House of Assembly do?",
+     "question": "How much was approved for it in the 2026 budget?"
+    }
+   }
   },
   {
    "id": "lookup-05",
@@ -50,7 +90,17 @@
    "numbers": [
     "316,037,728,539.97"
    ],
-   "code": "020000000000"
+   "code": "020000000000",
+   "forms": {
+    "hausa": "Nawa aka amince wa Economic Sector a kasafin kudin 2026?",
+    "informal": "How much for Economic Sector in 2026 budget?",
+    "code_switched": "Nawa aka approve wa Economic Sector a 2026 budget?",
+    "typo": "How mch was aproved for the Economic Sector in the 2026 budget?",
+    "followup": {
+     "previous": "What does the Economic Sector cover?",
+     "question": "How much was approved for it in the 2026 budget?"
+    }
+   }
   },
   {
    "id": "split-01",
@@ -62,7 +112,17 @@
     "133,950,000.00",
     "15,467,942,818.77"
    ],
-   "code": "023405700100"
+   "code": "023405700100",
+   "forms": {
+    "hausa": "Menene personnel, overhead da capital allocations na Department for Rural Roads a 2026?",
+    "informal": "What's the personnel, overhead and capital for Department for Rural Roads in 2026?",
+    "code_switched": "Nawa ne personnel, overhead da capital allocations na Department for Rural Roads in 2026?",
+    "typo": "What are teh personnel, overhead and capitel allocations of the Department for Rural Roads in 2026?",
+    "followup": {
+     "previous": "Where is the Department for Rural Roads located?",
+     "question": "What are its personnel, overhead and capital allocations in 2026?"
+    }
+   }
   },
   {
    "id": "split-02",
@@ -74,7 +134,17 @@
     "106,000,000.00",
     "225,711,564.00"
    ],
-   "code": "014800100100"
+   "code": "014800100100",
+   "forms": {
+    "hausa": "Menene kudin personnel, overhead da capital da aka ware wa Sokoto State Independent Electoral Commission a 2026?",
+    "informal": "How much did Sokoto State Independent Electoral Commission get for personnel, overhead & capital in 2026?",
+    "code_switched": "Sokoto State Independent Electoral Commission ta samu nawa for personnel, overhead da capital a 2026?",
+    "typo": "What are teh personel, overhead and captal allocations of the Sokoto State Independent Electoral Commission in 2026?",
+    "followup": {
+     "previous": "Where is the Sokoto State Independent Electoral Commission headquarters?",
+     "question": "What are its personnel, overhead and capital allocations in 2026?"
+    }
+   }
   },
   {
    "id": "split-03",
@@ -86,7 +156,17 @@
     "462,050,000.00",
     "650,000,000.00"
    ],
-   "code": "051705700100"
+   "code": "051705700100",
+   "forms": {
+    "hausa": "Menene allocation na personnel, overhead da capital na Female Education Board a 2026?",
+    "informal": "What's Female Education Board getting for personnel, overhead, capital in 2026?",
+    "code_switched": "Personnel, overhead da capital allocation na Female Education Board a 2026 din nawa ne?",
+    "typo": "What are the personnell, overhead and captal allocations of the Female Education Board in 2026?",
+    "followup": {
+     "previous": "What's the total 2026 budget for the Female Education Board?",
+     "question": "What are its personnel, overhead and capital allocations in 2026?"
+    }
+   }
   },
   {
    "id": "split-04",
@@ -98,7 +178,17 @@
     "745,500,000.00",
     "8,607,283,643.50"
    ],
-   "code": "025200100100"
+   "code": "025200100100",
+   "forms": {
+    "hausa": "Menene kason personnel, overhead da capital na Ministry of Water Resources a 2026?",
+    "informal": "What’s personnel, overhead and capital for Ministry of Water Resources in 2026?",
+    "code_switched": "Personnel, overhead da capital allocations na Ministry of Water Resources a 2026 nawa ne?",
+    "typo": "What are teh personnel, overhead and captial allocations of the Ministry of Water Resources in 2026?",
+    "followup": {
+     "previous": "What is the total budget of the Ministry of Water Resources in 2026?",
+     "question": "What are its personnel, overhead and capital allocations in 2026?"
+    }
+   }
   },
   {
    "id": "split-05",
@@ -110,7 +200,17 @@
     "100,500,000.00",
     "926,000,000.00"
    ],
-   "code": "025300500100"
+   "code": "025300500100",
+   "forms": {
+    "hausa": "Menene allocation na personnel, overhead da capital na Sokoto Urban & Reg. Planning Department a 2026?",
+    "informal": "What’s personnel, overhead and capital for Sokoto Urban & Reg. Planning Department in 2026?",
+    "code_switched": "Sokoto Urban & Reg. Planning Department a 2026, menene personnel, overhead and capital allocations dinsu?",
+    "typo": "What are the pesonnel, overhead and capital allocations of the Sokoto Urben & Reg. Planning Department in 2026?",
+    "followup": {
+     "previous": "What does the Sokoto Urban & Reg. Planning Department do?",
+     "question": "What are its personnel, overhead and capital allocations in 2026?"
+    }
+   }
   },
   {
    "id": "spend_quarter-01",
@@ -121,7 +221,17 @@
     "4,967,584.64",
     "673,970,200.00"
    ],
-   "code": "022200200100"
+   "code": "022200200100",
+   "forms": {
+    "hausa": "Nawa Commodity Board ta kashe har zuwa karshen Q2 2026, idan aka kwatanta da revised budget dinta?",
+    "informal": "How much did Commodity Board spend by end of Q2 2026 vs its revised budget?",
+    "code_switched": "Commodity Board ta kashe nawa by the end of Q2 2026, against its revised budget?",
+    "typo": "How muhc had the Commodity Baord spent by the end of Q2 2026, againts its revised budget?",
+    "followup": {
+     "previous": "What was the Commodity Board's revised budget for 2026?",
+     "question": "How much had it spent by the end of Q2 2026, against its revised budget?"
+    }
+   }
   },
   {
    "id": "spend_quarter-02",
@@ -132,7 +242,17 @@
     "1,000,000.00",
     "42,000,000.00"
    ],
-   "code": "023800600200"
+   "code": "023800600200",
+   "forms": {
+    "hausa": "Nawa SUSTAINABLE DEVELOPMENT GOALS (SDG) ta kashe har zuwa karshen Q2 2026, idan aka kwatanta da revised budget dinta?",
+    "informal": "How much did SUSTAINABLE DEVELOPMENT GOALS (SDG) spend by end of Q2 2026 vs its revised budget?",
+    "code_switched": "SUSTAINABLE DEVELOPMENT GOALS (SDG) ta spend nawa by end of Q2 2026 against revised budget dinta?",
+    "typo": "How much had teh SUSTAINABLE DEVELOPMENT GOALS (SDG) spnet by the end of Q2 2026, againts its revised budget?",
+    "followup": {
+     "previous": "What was the revised budget for SUSTAINABLE DEVELOPMENT GOALS (SDG) in 2026?",
+     "question": "How much had it spent by the end of Q2 2026, against its revised budget?"
+    }
+   }
   },
   {
    "id": "spend_quarter-03",
@@ -143,7 +263,17 @@
     "420,116,810.00",
     "2,541,605,200.00"
    ],
-   "code": "023800100100"
+   "code": "023800100100",
+   "forms": {
+    "hausa": "Nawa Ministry of Budget and Economic Planning ta kashe har zuwa karshen Q2 2026, idan aka kwatanta da revised budget dinta?",
+    "informal": "how much had Ministry of Budget and Economic Planning spent by end of Q2 2026 vs its revised budget?",
+    "code_switched": "Ministry of Budget and Economic Planning ta kashe nawa by the end of Q2 2026 against revised budget dinta?",
+    "typo": "How much had the Ministry of Budjet and Economic Planing spent by the end of Q2 2026, aganst its revised budget?",
+    "followup": {
+     "previous": "What was the revised budget of the Ministry of Budget and Economic Planning for 2026?",
+     "question": "How much had it spent by the end of Q2 2026, against its revised budget?"
+    }
+   }
   },
   {
    "id": "spend_quarter-04",
@@ -154,7 +284,17 @@
     "4,859,011.52",
     "81,758,005.00"
    ],
-   "code": "011101000100"
+   "code": "011101000100",
+   "forms": {
+    "hausa": "Nawa Bureau for Public Procurement and Price Intelligence ta kashe har zuwa karshen Q2 2026, idan aka kwatanta da revised budget dinta?",
+    "informal": "How much did Bureau for Public Procurement and Price Intelligence spend by end of Q2 2026 vs its revised budget?",
+    "code_switched": "Bureau for Public Procurement and Price Intelligence ta spend nawa by end of Q2 2026 against revised budget dinta?",
+    "typo": "How much had teh Bureau for Public Procurement and Price Intelligence sepnt by the end of Q2 2026, against its revised budget?",
+    "followup": {
+     "previous": "What is the revised budget of the Bureau for Public Procurement and Price Intelligence?",
+     "question": "How much had it spent by the end of Q2 2026, against its revised budget?"
+    }
+   }
   },
   {
    "id": "spend_quarter-05",
@@ -165,7 +305,17 @@
     "7,612,786,073.92",
     "37,151,867,627.25"
    ],
-   "code": "017000100200"
+   "code": "017000100200",
+   "forms": {
+    "hausa": "Nawa Department for Security Matters ta kashe har zuwa ƙarshen Q2 2026, idan aka kwatanta da revised budget ɗinta?",
+    "informal": "How much had Department for Security Matters spent by end of Q2 2026 vs its revised budget?",
+    "code_switched": "Department for Security Matters ta kashe nawa by the end of Q2 2026, against its revised budget?",
+    "typo": "How much had teh Department for Security Matters spent by the end of Q2 2026, aganst its revised budjet?",
+    "followup": {
+     "previous": "What was the revised budget of Department for Security Matters for 2026?",
+     "question": "How much had it spent by the end of Q2 2026, against its revised budget?"
+    }
+   }
   },
   {
    "id": "compare-01",
@@ -176,7 +326,17 @@
     "4,463,663,285.02",
     "6,092,663,285.02"
    ],
-   "code": "032600000000"
+   "code": "032600000000",
+   "forms": {
+    "hausa": "Kwantanta kasafin kuɗin Ministry of Justice da aka amince da shi a 2025 da kuma a 2026.",
+    "informal": "Ministry of Justice approved budget in 2025 vs 2026?",
+    "code_switched": "Compare approved budget na Ministry of Justice a 2025 da 2026 fa?",
+    "typo": "Compare teh Ministry of Justice's approved budjet in 2025 and 2026.",
+    "followup": {
+     "previous": "What was Ministry of Justice's approved budget in 2025?",
+     "question": "How does its approved budget in 2026 compare to 2025?"
+    }
+   }
   },
   {
    "id": "compare-02",
@@ -187,7 +347,17 @@
     "1,348,794,500.56",
     "3,589,478,500.56"
    ],
-   "code": "027900000000"
+   "code": "027900000000",
+   "forms": {
+    "hausa": "Kwatanta kasafin kudin Ministry of Innovation and Digital Economy da aka amince da shi a 2025 da 2026.",
+    "informal": "Ministry of Innovation and Digital Economy's approved budget in 2025 vs 2026?",
+    "code_switched": "Ministry of Innovation and Digital Economy approved budget din 2025 da 2026 fa, kwatanta su?",
+    "typo": "Comapre the Ministry of Innovation and Digtal Economy's aproved budget in 2025 and 2026.",
+    "followup": {
+     "previous": "What does the Ministry of Innovation and Digital Economy do?",
+     "question": "Compare its approved budget in 2025 and 2026?"
+    }
+   }
   },
   {
    "id": "compare-03",
@@ -198,7 +368,17 @@
     "58,993,780.12",
     "60,993,780.12"
    ],
-   "code": "025000000000"
+   "code": "025000000000",
+   "forms": {
+    "hausa": "Kwatanta kasafin kuɗin Fiscal Responsibility Commission da aka amince da shi a 2025 da 2026.",
+    "informal": "Fiscal Responsibility Commission approved budget 2025 vs 2026?",
+    "code_switched": "Kwatanta Fiscal Responsibility Commission approved budget na 2025 da 2026?",
+    "typo": "Comapre the Fiscal Responsibilty Commission's aproved budget in 2025 and 2026.",
+    "followup": {
+     "previous": "What does the Fiscal Responsibility Commission do?",
+     "question": "Compare its approved budget in 2025 and 2026?"
+    }
+   }
   },
   {
    "id": "compare-04",
@@ -209,7 +389,17 @@
     "8,444,823,620.00",
     "7,236,808,166.70"
    ],
-   "code": "051400000000"
+   "code": "051400000000",
+   "forms": {
+    "hausa": "Kwatanta approved budget din Ministry for Women Affairs na 2025 da na 2026.",
+    "informal": "What's the Ministry for Women Affairs's approved budget in 2025 vs 2026?",
+    "code_switched": "Kwatanta approved budget na Ministry for Women Affairs, 2025 da 2026 fa?",
+    "typo": "Comapre the Ministry for Women Affairs's aproved budget in 2025 and 2026.",
+    "followup": {
+     "previous": "What does the Ministry for Women Affairs do?",
+     "question": "How did its approved budget compare in 2025 and 2026?"
+    }
+   }
   },
   {
    "id": "compare-05",
@@ -220,7 +410,17 @@
     "14,028,166,805.41",
     "18,527,180,961.21"
    ],
-   "code": "011100000000"
+   "code": "011100000000",
+   "forms": {
+    "hausa": "Kwatanta approved budget ɗin Government House a 2025 da 2026.",
+    "informal": "Government House approved budget 2025 vs 2026?",
+    "code_switched": "Kwatanta mana Government House approved budget na 2025 and 2026.",
+    "typo": "Comapre the Goverment House's approved budget in 2025 and 2026.",
+    "followup": {
+     "previous": "What does Government House do?",
+     "question": "How does its approved budget compare in 2025 and 2026?"
+    }
+   }
   },
   {
    "id": "share-01",
@@ -239,7 +439,17 @@
      "149,822,992.60"
     ]
    ],
-   "code": "012300300100"
+   "code": "012300300100",
+   "forms": {
+    "hausa": "A cikin approved budget na 2026 na Sokoto State Rima Televiosn (Rtv), kashi nawa ne capital?",
+    "informal": "How much of Sokoto State Rima Televiosn (Rtv)'s 2026 approved budget is capital?",
+    "code_switched": "Kashi nawa na 2026 approved budget na Sokoto State Rima Televiosn (Rtv) is capital?",
+    "typo": "What shrae of the Sokoto State Rima Televiosn (Rtv)'s 2026 approved budjet is capial?",
+    "followup": {
+     "previous": "What is Sokoto State Rima Televiosn (Rtv)'s 2026 approved budget?",
+     "question": "What share of its 2026 approved budget is capital?"
+    }
+   }
   },
   {
    "id": "share-02",
@@ -258,7 +468,17 @@
      "302,140,589.44"
     ]
    ],
-   "code": "026800300100"
+   "code": "026800300100",
+   "forms": {
+    "hausa": "Kashi nawa na 2026 approved budget na Poultry Development Agency capital ne?",
+    "informal": "How much of Poultry Development Agency's 2026 approved budget is capital?",
+    "code_switched": "Poultry Development Agency 2026 approved budget din, what share ne capital?",
+    "typo": "What shrae of the Poultry Develpment Agency's 2026 approved budget is capital?",
+    "followup": {
+     "previous": "What is Poultry Development Agency's 2026 approved budget?",
+     "question": "What share of its 2026 approved budget is capital?"
+    }
+   }
   },
   {
    "id": "share-03",
@@ -277,7 +497,17 @@
      "673,970,200.00"
     ]
    ],
-   "code": "022200200100"
+   "code": "022200200100",
+   "forms": {
+    "hausa": "Wane kaso na kasafin kudin Commodity Board da aka amince da shi na 2026 na babban aiki ne?",
+    "informal": "Commodity Board's 2026 budget — how much of it is capital?",
+    "code_switched": "Commodity Board 2026 approved budget din nan, what share ne capital?",
+    "typo": "What sahre of the Commodity Board's 2026 approved budget is capitel?",
+    "followup": {
+     "previous": "What is the Commodity Board's total approved budget for 2026?",
+     "question": "What share of its 2026 approved budget is capital?"
+    }
+   }
   },
   {
    "id": "share-04",
@@ -296,7 +526,17 @@
      "1,484,587,287.28"
     ]
    ],
-   "code": "022205100100"
+   "code": "022205100100",
+   "forms": {
+    "hausa": "Kashi nawa ne na kasafin kudin Sokoto State SME Development Agency na 2026 da aka amince da shi ya ke na capital?",
+    "informal": "what bit of Sokoto State SME Development Agency's 2026 approved budget is capital?",
+    "code_switched": "Sokoto State SME Development Agency 2026 approved budget din, what share ne ya ke capital?",
+    "typo": "What shrae of the Sokoto State SME Developmant Agency's 2026 approved budget is capital?",
+    "followup": {
+     "previous": "What is Sokoto State SME Development Agency's 2026 approved budget?",
+     "question": "What share of its 2026 approved budget is capital?"
+    }
+   }
   },
   {
    "id": "share-05",
@@ -315,7 +555,17 @@
      "60,993,780.12"
     ]
    ],
-   "code": "025000100100"
+   "code": "025000100100",
+   "forms": {
+    "hausa": "Kashi nawa na kasafin kudin 2026 da aka amince wa Fiscal Responsibility Commission ne na capital?",
+    "informal": "Of Fiscal Responsibility Commission's 2026 approved budget, how much is capital?",
+    "code_switched": "Fiscal Responsibility Commission approved budget na 2026, what share ne capital?",
+    "typo": "What shrae of the Fiscal Responsiblity Commission's 2026 aproved budget is capital?",
+    "followup": {
+     "previous": "What is the Fiscal Responsibility Commission's 2026 approved budget?",
+     "question": "What share of its 2026 approved budget is capital?"
+    }
+   }
   },
   {
    "id": "false_premise-01",
@@ -327,7 +577,17 @@
     "829,500,000.00"
    ],
    "premise_false": true,
-   "code": "016700000000"
+   "code": "016700000000",
+   "forms": {
+    "hausa": "Me ya sa approved budget na Ministry for Special Duties ya ragu daga 2025 zuwa 2026?",
+    "informal": "Why did Ministry for Special Duties's approved budget drop from 2025 to 2026?",
+    "code_switched": "Me ya sa Ministry for Special Duties approved budget ya fall daga 2025 to 2026?",
+    "typo": "Why did teh Ministry for Special Duties's approved budjet fall from 2025 to 2026?",
+    "followup": {
+     "previous": "What was the Ministry for Special Duties's approved budget in 2025?",
+     "question": "Why did its approved budget fall from 2025 to 2026?"
+    }
+   }
   },
   {
    "id": "false_premise-02",
@@ -339,7 +599,17 @@
     "278,879,883,746.37"
    ],
    "premise_false": true,
-   "code": "050000000000"
+   "code": "050000000000",
+   "forms": {
+    "hausa": "Me ya sa kasafin Social Sector da aka amince da shi ya ragu daga 2025 zuwa 2026?",
+    "informal": "Why'd Social Sector's budget drop from 2025 to 2026?",
+    "code_switched": "Me ya sa Social Sector approved budget din ya fall daga 2025 to 2026?",
+    "typo": "Why did the Socail Sector's aproved budget fall from 2025 to 2026?",
+    "followup": {
+     "previous": "What was the Social Sector's approved budget in 2025?",
+     "question": "Why did its approved budget fall from 2025 to 2026?"
+    }
+   }
   },
   {
    "id": "false_premise-03",
@@ -351,7 +621,17 @@
     "606,837,188.04"
    ],
    "premise_false": true,
-   "code": "014000000000"
+   "code": "014000000000",
+   "forms": {
+    "hausa": "Me ya sa approved budget na Office of Auditor General's ya ragu daga 2025 zuwa 2026?",
+    "informal": "Why'd the Office of Auditor General's approved budget fall from 2025 to 2026?",
+    "code_switched": "Me ya sa Office of Auditor General's approved budget ya fall daga 2025 to 2026?",
+    "typo": "Why did teh Office of Auditor General's approved budgte fall fom 2025 to 2026?",
+    "followup": {
+     "previous": "What was the Office of Auditor General's approved budget in 2025?",
+     "question": "Why did its approved budget fall from 2025 to 2026?"
+    }
+   }
   },
   {
    "id": "false_premise-04",
@@ -363,7 +643,17 @@
     "316,037,728,539.97"
    ],
    "premise_false": true,
-   "code": "020000000000"
+   "code": "020000000000",
+   "forms": {
+    "hausa": "Me ya sa approved budget na Economic Sector ya ragu daga 2025 zuwa 2026?",
+    "informal": "why'd the Economic Sector's budget drop from 2025 to 2026?",
+    "code_switched": "Me ya sa Economic Sector approved budget ya fall from 2025 to 2026?",
+    "typo": "Why did teh Economic Sector's aproved budjet fall from 2025 to 2026?",
+    "followup": {
+     "previous": "What was the Economic Sector's approved budget in 2025?",
+     "question": "Why did its approved budget fall from 2025 to 2026?"
+    }
+   }
   },
   {
    "id": "false_premise-05",
@@ -375,7 +665,17 @@
     "17,057,258,000.00"
    ],
    "premise_false": true,
-   "code": "051300000000"
+   "code": "051300000000",
+   "forms": {
+    "hausa": "Me ya sa kasafin kudin Ministry of Youth and Sports Development da aka amince da shi ya ragu daga 2025 zuwa 2026?",
+    "informal": "Why'd the Ministry of Youth and Sports Development's approved budget fall from 2025 to 2026?",
+    "code_switched": "Me ya sa approved budget na Ministry of Youth and Sports Development ya faɗi daga 2025 to 2026?",
+    "typo": "Why did teh Ministry of Youth and Sports Developmnet's aproved budget fall from 2025 to 2026?",
+    "followup": {
+     "previous": "What was the Ministry of Youth and Sports Development's approved budget in 2025?",
+     "question": "Why did its approved budget fall from 2025 to 2026?"
+    }
+   }
   },
   {
    "id": "not_in_data-01",
@@ -384,7 +684,17 @@
    "text": "How much did the Sokoto Road Maintenance Agency spend in Q4 2026?",
    "expect_gap": "Q2 2026",
    "numbers": [],
-   "code": "023400400100"
+   "code": "023400400100",
+   "forms": {
+    "hausa": "Nawa Sokoto Road Maintenance Agency ta kashe a Q4 2026?",
+    "informal": "What'd Sokoto Road Maintenance Agency spend in Q4 2026?",
+    "code_switched": "Sokoto Road Maintenance Agency ta spend nawa a Q4 2026?",
+    "typo": "How muhc did the Sokoto Road Maintenace Agency spend in Q4 2026?",
+    "followup": {
+     "previous": "What is the 2026 budget for Sokoto Road Maintenance Agency?",
+     "question": "How much did it spend in Q4 2026?"
+    }
+   }
   },
   {
    "id": "not_in_data-02",
@@ -393,7 +703,17 @@
    "text": "How much did the College of Nursing Sciences spend in Q4 2026?",
    "expect_gap": "Q2 2026",
    "numbers": [],
-   "code": "052110400100"
+   "code": "052110400100",
+   "forms": {
+    "hausa": "Nawa College of Nursing Sciences ta kashe a Q4 2026?",
+    "informal": "how much did College of Nursing Sciences spend in Q4 2026?",
+    "code_switched": "College of Nursing Sciences ta spend nawa for Q4 2026?",
+    "typo": "How muhc did teh College of Nursing Sciences spend in Q4 2026?",
+    "followup": {
+     "previous": "What is the 2026 budget for College of Nursing Sciences?",
+     "question": "How much did it spend there in Q4 2026?"
+    }
+   }
   },
   {
    "id": "not_in_data-03",
@@ -402,7 +722,17 @@
    "text": "How much did the Ministry of Culture & Tourism spend in Q4 2026?",
    "expect_gap": "Q2 2026",
    "numbers": [],
-   "code": "023600100100"
+   "code": "023600100100",
+   "forms": {
+    "hausa": "Nawa Ministry of Culture & Tourism ta kashe a Q4 2026?",
+    "informal": "how much did the Ministry of Culture & Tourism spend in Q4 2026?",
+    "code_switched": "Ministry of Culture & Tourism ta spend nawa in Q4 2026?",
+    "typo": "How muhc did the Ministry of Culture & Toruism spen in Q4 2026?",
+    "followup": {
+     "previous": "What was the approved budget for the Ministry of Culture & Tourism in 2026?",
+     "question": "How much did it spend in Q4 2026?"
+    }
+   }
   },
   {
    "id": "not_in_data-04",
@@ -411,7 +741,17 @@
    "text": "How much did the College of Agriculture Wurno spend in Q4 2026?",
    "expect_gap": "Q2 2026",
    "numbers": [],
-   "code": "021502100100"
+   "code": "021502100100",
+   "forms": {
+    "hausa": "Nawa College of Agriculture Wurno ta kashe a Q4 2026?",
+    "informal": "College of Agriculture Wurno spent how much in Q4 2026?",
+    "code_switched": "Nawa College of Agriculture Wurno ta spend a Q4 2026?",
+    "typo": "How much did teh College of Agriculture Wurno spned in Q4 2026?",
+    "followup": {
+     "previous": "What was the approved budget for College of Agriculture Wurno in 2026?",
+     "question": "How much did it spend in Q4 2026?"
+    }
+   }
   },
   {
    "id": "not_in_data-05",
@@ -420,7 +760,17 @@
    "text": "How much did the Infectious Diseases Hospital Amanawa spend in Q4 2026?",
    "expect_gap": "Q2 2026",
    "numbers": [],
-   "code": "052102600300"
+   "code": "052102600300",
+   "forms": {
+    "hausa": "Nawa ne Infectious Diseases Hospital Amanawa ta kashe a Q4 2026?",
+    "informal": "What's the spend for Infectious Diseases Hospital Amanawa in Q4 2026?",
+    "code_switched": "Nawa Infectious Diseases Hospital Amanawa ta spend a Q4 2026?",
+    "typo": "How much did teh Infectious Diseases Hospitel Amanawa spend in Q4 2026?",
+    "followup": {
+     "previous": "What is the budget of Infectious Diseases Hospital Amanawa for 2026?",
+     "question": "How much did it spend in Q4 2026?"
+    }
+   }
   },
   {
    "id": "rank_lga-01",
@@ -440,7 +790,17 @@
     "Tambuwal",
     "Tureta",
     "Shagari"
-   ]
+   ],
+   "forms": {
+    "hausa": "Wadanne LGAs 5 ne a Sokoto suka fi yawan IDPs?",
+    "informal": "which 5 LGAs in Sokoto got the most IDPs?",
+    "code_switched": "Wadanne 5 LGAs ne a Sokoto have the most IDPs?",
+    "typo": "Which 5 LGAs in Sokoto hvae the msot IDPs?",
+    "followup": {
+     "previous": "How many IDPs are in Sokoto?",
+     "question": "Which 5 LGAs there have the most IDPs?"
+    }
+   }
   },
   {
    "id": "lookup_lga-01",
@@ -449,7 +809,17 @@
    "text": "How many IDPs are there in Silame LGA?",
    "numbers": [
     "3,386"
-   ]
+   ],
+   "forms": {
+    "hausa": "IDPs nawa ne suke a Silame LGA?",
+    "informal": "How many IDPs in Silame LGA?",
+    "code_switched": "How many IDPs ne a Silame LGA?",
+    "typo": "How many IDPs aer ther in Silame LGA?",
+    "followup": {
+     "previous": "Is Silame LGA hosting displaced people?",
+     "question": "How many IDPs are in it?"
+    }
+   }
   },
   {
    "id": "lookup_lga-02",
@@ -458,7 +828,17 @@
    "text": "How many IDPs are there in Shagari LGA?",
    "numbers": [
     "14,850"
-   ]
+   ],
+   "forms": {
+    "hausa": "IDPs nawa ne a Shagari LGA?",
+    "informal": "how many IDPs in Shagari LGA?",
+    "code_switched": "How many IDPs ne a Shagari LGA?",
+    "typo": "How mnay IDPs are ther in Shagari LGA?",
+    "followup": {
+     "previous": "Which state is Shagari LGA in?",
+     "question": "How many IDPs are in it?"
+    }
+   }
   },
   {
    "id": "lookup_lga-03",
@@ -467,7 +847,17 @@
    "text": "How many IDPs are there in Bodinga LGA?",
    "numbers": [
     "1,990"
-   ]
+   ],
+   "forms": {
+    "hausa": "IDPs nawa ne a Bodinga LGA?",
+    "informal": "How many IDPs in Bodinga LGA?",
+    "code_switched": "How many IDPs ne a Bodinga LGA?",
+    "typo": "How mnay IDPs are thre in Bodinga LGA?",
+    "followup": {
+     "previous": "Is Bodinga LGA affected by displacement?",
+     "question": "How many IDPs does it have?"
+    }
+   }
   },
   {
    "id": "lookup_lga-04",
@@ -476,7 +866,17 @@
    "text": "How many IDPs are there in Tureta LGA?",
    "numbers": [
     "15,068"
-   ]
+   ],
+   "forms": {
+    "hausa": "Adadin IDPs a Tureta LGA nawa ne?",
+    "informal": "how many IDPs in Tureta LGA?",
+    "code_switched": "Nawa IDPs are there a Tureta LGA?",
+    "typo": "How many IDPs aer there ni Tureta LGA?",
+    "followup": {
+     "previous": "Is Tureta LGA affected by displacement?",
+     "question": "How many IDPs are in it?"
+    }
+   }
   },
   {
    "id": "lookup_lga-05",
@@ -485,7 +885,17 @@
    "text": "How many IDPs are there in Goronyo LGA?",
    "numbers": [
     "1,926"
-   ]
+   ],
+   "forms": {
+    "hausa": "IDPs guda nawa ne suke a Goronyo LGA?",
+    "informal": "how many IDPs in Goronyo LGA?",
+    "code_switched": "Nawa IDPs ne a Goronyo LGA?",
+    "typo": "How mnay IDPs aer there in Goronyo LGA?",
+    "followup": {
+     "previous": "Is Goronyo LGA affected by displacement?",
+     "question": "How many IDPs are there there?"
+    }
+   }
   },
   {
    "id": "trend-01",
@@ -495,7 +905,17 @@
    "numbers": [
     "181,526",
     "88,562"
-   ]
+   ],
+   "forms": {
+    "hausa": "Yaya yawan IDPs a Jihar Sokoto ya canza a DTM rounds na baya-bayan nan?",
+    "informal": "How've IDP numbers in Sokoto changed in recent DTM rounds?",
+    "code_switched": "Yawan IDPs na Sokoto State fa, how has it changed a last DTM rounds?",
+    "typo": "How has the numbr of IDPs in Sokoto State chagned over the last DTM rounds?",
+    "followup": {
+     "previous": "What is the latest DTM figure for Sokoto State?",
+     "question": "How has the number of IDPs there changed over the last DTM rounds?"
+    }
+   }
   }
  ]
 }
