@@ -21,7 +21,7 @@
 # Hausa synonyms are for the planner's topic detection; documents are searched in English.
 
 version: 1
-updated: 2026-10-29  # rev 2: added Sokoto SBS and the SBS/JIPS/DRC durable solutions report
+updated: 2026-10-29  # rev 4 (ReliefWeb approved; appname moved to .env): + Sokoto SBS, SBS/JIPS/DRC report, UN joint social protection programme (mptf.undp.org)
 
 # ---------------------------------------------------------------------------
 # Machine-readable discovery channels (prefer these over web search)
@@ -312,6 +312,16 @@ topics:
         level: zone
         tier: 2
         verified: "no"
+      - id: un_joint_sdg_social_protection
+        name: "UN Joint Programme: Institutionalizing Social Protection for Accelerated SDG Implementation in Nigeria (UNICEF, WFP, ILO, UNDP; Sokoto pilot, 2020-2022)"
+        domains: [mptf.undp.org, jointsdgfund.org, un.social-protection.org, ilo.org, docs.wfp.org]
+        urls:
+          - https://mptf.undp.org/sites/default/files/documents/2023-05/nigeria_final_evaluation_report.pdf
+        doc_types: [final independent evaluation (Samuel Hall for UNICEF), annual progress reports]
+        level: state
+        tier: 2
+        key_figures: "Sokoto pilot: 6,000 people given health insurance; 658 pregnant/lactating women and caregivers given cash transfers; 59% of surveyed beneficiaries assisted by qualified health personnel vs 47% of non-beneficiaries"
+        verified: 2026-10-30
       - id: nassp_nasco
         name: National Social Safety Nets / NASSCO (National Social Register by state)
         domains: [nassp.gov.ng, nasscp.gov.ng]
