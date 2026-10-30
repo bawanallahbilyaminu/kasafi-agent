@@ -35,6 +35,18 @@ def test_the_crosswalk_matches_the_cod_ab_grid3_and_facility_files() -> None:
         assert GRID3_CODES[canonical(p["lganame"])] == p["lgacode"], p["lganame"]
 
 
+def test_an_emonc_name_matches_only_on_its_own_place_words() -> None:
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("match_emonc", Path(__file__).resolve().parents[1] / "scripts" /
+                                                  "match_emonc.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    assert m.score("Binji Gh", "Binji General Hospital") == 1.0                     # the report's abbreviation
+    assert m.score("Margai Health Clinic", "Rara Health Clinic") < 0.5             # 'Health Clinic' alone: no match
+    assert m.score("Specialist Hospital", "Shiyar Marina Specialist Hospital") == 0.0   # no place word to match on
+    assert m.BAR <= m.score("Maikulki Health Clinic", "Maikulki Health Post") < 1.0     # a kind apart: shown in score
+
+
 def _conn():
     psycopg = pytest.importorskip("psycopg")
     from app.config import get_settings
