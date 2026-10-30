@@ -56,9 +56,9 @@ from app.agent import trace
 from app import usage
 from app.agent.category import TOP_UNITS, CategoryResult, pct, run_category
 from app.agent.calculate import MIXED, CalcError, Calculation, MixedBases, offer_text, validate
-from app.agent.line_answer import (WHOLE_BUDGET, LineResult, fmt, is_location, item_of, kind_of, level, read_lines,
-                                   short_name)
-from app.retrieval.line_search import MAX_LINES, name_key, nearest, search_lines
+from app.agent.line_answer import (TOTAL_ASKED, WHOLE_BUDGET, LineResult, fmt, is_location, item_of, kind_of, level,
+                                   read_lines, short_name)
+from app.retrieval.line_search import MAX_LINES, name_key, names_a_kind, nearest, search_lines
 from app.config import Settings, get_settings
 from app.providers.baseten import BasetenClient
 from app.providers.fireworks import FireworksClient, OpenModel
@@ -1577,6 +1577,30 @@ STAT_MEASURES = {"idp_count", "returnee_count", "idp_households", "unemployment_
                  "poverty_rate", "malnutrition_rate", "population"}
 
 
+def with_total_rows(conn, hits: list, years: list[int], most: int = 4) -> list:
+    """A total asked, no kind of spending named: each line among those read that is one kind's row (a sector's
+    capital) gets its total table's row (same code, same document) beside it, so the total is there to take
+    (line_answer.prefer_total) even when the search ranked only the kind's copy."""
+    read = hits[:MAX_LINES]
+    have = {x.id for x in read}
+    out, added = list(hits), 0
+    for x in read:
+        if added >= most or x.spend_kind not in ("capital", "personnel", "overhead") or not x.code:
+            continue
+        if any(y.code == x.code and y.doc_id == x.doc_id and y.spend_kind == "total" for y in read):
+            continue
+        twin = next((y for y in search_lines(conn, [short_name(x).split(" (")[0]], years=years, limit=40)
+                     if y.code == x.code and y.doc_id == x.doc_id and y.spend_kind == "total" and y.id not in have),
+                    None)
+        if twin is not None:
+            out.insert(out.index(x) + 1, twin)
+            have.add(twin.id)
+            added += 1
+    if added:
+        log.info("a total asked: %d total row(s) added beside their kind's rows", added)
+    return out
+
+
 async def _line_path(conn, plan: Plan, question: str, lang: str, client, second, settings: Settings, t: dict,
                      acq) -> Answer | None:
     """Wide search over the budget lines, two readings, code verifies; None when no verified row answers."""
@@ -1595,6 +1619,9 @@ async def _line_path(conn, plan: Plan, question: str, lang: str, client, second,
                  if short_name(x).lower() == "total expenditure" and x.cells]
         if whole and (top := max(whole, key=lambda x: max(c.amount for c in x.cells))).id not in have:
             hits = [top, *hits]
+    both = f"{question} {plan.english_question}"
+    if TOTAL_ASKED.search(both) and not names_a_kind(both):
+        hits = with_total_rows(conn, hits, plan.line_search["years"])
     t0 = time.perf_counter()
     res = await read_lines(question, plan.english_question, lang, hits, client, settings,
                            question_years(question, plan.english_question), chat_json, second)
