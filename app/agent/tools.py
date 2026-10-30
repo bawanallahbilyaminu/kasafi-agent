@@ -117,7 +117,7 @@ async def dtm_fill(http: httpx.AsyncClient, settings, need: Need, cells: list[Ce
     top = rounds[0]
     # joined by P-code (DTM's own admin2Pcode; from its name by the crosswalk when a row has none): 'Wamako' is
     # NG034021 whatever the spelling
-    by_lga = {(f.pcode or pcode(f.place) or f.place.lower()): f for f in lgas or []}
+    by_lga = {(pcode(f.pcode or "") or pcode(f.place) or f.place.lower()): f for f in lgas or []}   # NGA034013 too
     out.api = (f"IOM DTM API (Baseline), Round {top.round}, reporting date {top.date}"
                + (f", as pulled on {pulled}" if pulled else ""))
     for c in cells:

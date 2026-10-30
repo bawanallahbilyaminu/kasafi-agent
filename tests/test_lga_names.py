@@ -20,7 +20,8 @@ def test_all_23_and_the_question_resolves_to_the_canonical_name() -> None:
     assert resolve(Entity("lga", "Wamako"), Names(lgas=("Wamakko",))).resolved == "Wamakko"
 
 
-def test_dtm_places_are_matched_through_the_canonical_name(monkeypatch) -> None:
+@pytest.mark.parametrize("code", ["", "NGA034021", "NG034021"])     # the live API sends the ISO3 form
+def test_dtm_places_are_matched_through_the_canonical_name(monkeypatch, code) -> None:
     import asyncio
 
     from app.agent import tools
@@ -29,7 +30,7 @@ def test_dtm_places_are_matched_through_the_canonical_name(monkeypatch) -> None:
     from app.sources.dtm import RoundFigure
 
     rounds = [RoundFigure("Sokoto", 18, "2025-10-31", 181526, {})]
-    lgas = [RoundFigure("Wamako", 18, "2025-10-31", 4026, {})]
+    lgas = [RoundFigure("Wamako", 18, "2025-10-31", 4026, {}, pcode=code)]
 
     async def state(*a, **k):
         return rounds

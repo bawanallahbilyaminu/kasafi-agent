@@ -75,9 +75,12 @@ _BY_PCODE = {p: n for n, p in PCODES.items()}
 
 
 def pcode(name: str) -> str:
-    """The LGA's P-code for any spelling of its name (or its P-code itself), or ''."""
+    """The LGA's P-code for any spelling of its name, or its P-code in either form: COD-AB's NG034013 or the ISO3
+    form NGA034013 that IOM DTM returns (both mean Sabon Birni); '' when it is none of them."""
     if name in _BY_PCODE:
         return name
+    if (m := re.fullmatch(r"NGA?(\d{6})", (name or "").strip().upper())) and f"NG{m.group(1)}" in _BY_PCODE:
+        return f"NG{m.group(1)}"
     return PCODES.get(canonical(name), "")
 
 
