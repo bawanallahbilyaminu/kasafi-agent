@@ -59,7 +59,7 @@ wait_healthy() {  # $1 = commit the container must report
 build_and_start() {  # $1 = commit; runs migrations between build and start
   local commit=$1
   say "building $(short "$commit")"
-  KASAFI_COMMIT=$commit dc build --quiet api
+  KASAFI_COMMIT=$commit dc build --quiet api db     # db: pgvector + PostGIS (db/Dockerfile), cached after once
   docker tag "$IMAGE:latest" "$IMAGE:$(short "$commit")"
   say "starting database"
   dc up -d --wait db

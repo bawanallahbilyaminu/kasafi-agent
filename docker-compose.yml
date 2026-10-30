@@ -1,9 +1,10 @@
-# Local development database: Postgres 17 + pgvector.
+# Local development database: Postgres 17 + pgvector + PostGIS (db/Dockerfile).
 # POSTGRES_PASSWORD comes from .env (never committed). Bound to localhost only.
 # Example DATABASE_URL: postgresql+psycopg://kasafi:<password>@localhost:5432/kasafi
 services:
   db:
-    image: pgvector/pgvector:pg17
+    build: ./db
+    image: kasafi-db:pg17-postgis
     environment:
       POSTGRES_USER: kasafi
       POSTGRES_DB: kasafi

@@ -3,7 +3,7 @@
 #
 # - api:    listens only on 127.0.0.1:${KASAFI_PORT}. CloudPanel's nginx forwards
 #           https://kasafi-api.halalnumeriq.com.ng to it (see deploy/README.md).
-# - db:     Postgres 17 + pgvector, with NO published port: only reachable from the api on
+# - db:     Postgres 17 + pgvector + PostGIS (db/Dockerfile), with NO published port: only reachable from the api on
 #           the kasafi-agent network.
 # - backup: pg_dump every 24 h into deploy/backups/, keeping 7 days.
 # Secrets: deploy/.env (synced from the laptop by deploy.sh --sync-env) and deploy/db.env
@@ -56,7 +56,9 @@ services:
     networks: [kasafi-agent]
 
   db:
-    image: pgvector/pgvector:pg17
+    build:
+      context: ../db                 # pgvector/pgvector:pg17 + PostGIS 3 (db/Dockerfile); same data volume
+    image: kasafi-agent-db:pg17-postgis
     container_name: kasafi-agent-db
     env_file: [db.env]
     environment:
