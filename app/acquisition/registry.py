@@ -38,6 +38,8 @@ class Publisher:
     definition_note: str = ""      # e.g. the NBS labour definitions: always shown with its figures
     note: str = ""
     verified: str = ""
+    aliases: tuple[str, ...] = ()  # how other documents name its report ('the 2022 National MPI'): a figure
+                                   # quoted under one of these is this publisher's, as cited
 
     @property
     def is_verified(self) -> bool:
@@ -133,7 +135,7 @@ def _publisher(d: dict) -> Publisher:
                      latest_known=str(d.get("latest_known") or ""), discovery=_t(d.get("discovery")),
                      exclude=_t(d.get("exclude")), scope_note=str(d.get("scope_note") or ""),
                      definition_note=str(d.get("definition_note") or ""), note=str(d.get("note") or ""),
-                     verified=str(d.get("verified") or ""))
+                     verified=str(d.get("verified") or ""), aliases=_t(d.get("aliases")))
 
 
 def parse_registry(text: str) -> Registry:

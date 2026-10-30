@@ -321,6 +321,82 @@ def test_a_change_is_computed_between_the_same_measure_with_a_comparability_note
     assert tp.change_lines(cards, "What is Sokoto's MPI?", "en") == []          # not a change question
 
 
+def test_the_text_before_a_figure_says_whose_it_is() -> None:
+    topic = registry().topics["poverty_welfare"]
+    sbs_p17 = ("The findings of the 2022 National MPI were sobering for Sokoto State. The report identified that 63% "
+               "of persons were poor, but in Sokoto State, the incidence of poverty surged to 91%, the highest.")
+    assert tp.quoted_from("91%", sbs_p17, topic, SBS_MPI, 2025) == "NBS Nigeria Multidimensional Poverty Index 2022"
+    ds_p12 = "According to the 2022 Nigeria Multidimensional Poverty Index, Sokoto State recorded an incidence at 91%."
+    assert tp.quoted_from("91%", ds_p12, topic, DS, 2026).startswith("NBS Nigeria")
+    own = "While the NBS 2022 National MPI is the benchmark, this 2025 report finds a headcount of 59.1%."
+    assert tp.quoted_from("59.1%", own, topic, SBS_MPI, 2025) == ""            # the report's own figure
+    partners = "Prepared with OPHI and UNDP support. The state MPI value is 0.239."
+    assert tp.quoted_from("0.239", partners, topic, SBS_MPI, 2025) == ""       # a partner named, no report quoted
+    assert tp.SOKOTO_ROW.search("Rivers 0.241 0.219 0.264 Sokoto 0.409 0.391 0.427 90.5")
+
+
+def test_a_quote_of_a_figure_shown_from_its_source_is_dropped_and_the_source_not_missed() -> None:
+    nbs_own = mpi(NBS_MPI, "91%", "2022", "headcount", "incidence", page=16)
+    quote = mpi(DS, "91%", "2022", "headcount", "incidence", based_on="NBS MPI 2022", page=12)
+    sources = [tp.SourceResult(NBS_MPI, "nbs", status="ok", cards=[nbs_own]),
+               tp.SourceResult(DS, "ds", status="ok", cards=[quote])]
+    text, _ = tp.compose(registry().topics["poverty_welfare"], sources, [], "en")
+    assert "as cited in" not in text and "Couldn't get" not in text
+
+
+def test_only_the_same_measure_of_the_same_population_is_compared() -> None:
+    assert tp.population_of("all", "Child MPI Value") == "children"
+    assert tp.population_of("children under 5", "MPI") == "children" and tp.population_of("all", "MPI value") == "all"
+    assert tp.measure_of("0.40328", "index 0-1", "index", "Intensity of Poverty (A)") == "other"   # not an MPI value
+    assert tp.measure_of("0.415", "", "index", "Child MPI Value: incidence x intensity") == "index"
+    assert tp.measure_of("59.1%", "", "rate", "Headcount Ratio (H)") == "headcount"
+    assert tp.measure_of("0.409", "", "index", "Multidimensional Poverty Index (MPI) - The share of possible "
+                         "deprivations ... computed by multiplying 'Incidence' by 'Intensity'") == "index"
+    assert tp.measure_of("5.81 million people", "people", "headcount", "Number of poor - the number of people "
+                         "who are multidimensionally poor") == "count"
+    assert tp.card_year(mpi(NBS_MPI, "0.409", "2021/22", "index", "MPI")) == 2022
+    child = mpi(NBS_MPI, "0.415", "2022", "index", "Child MPI value", page=148)
+    child.population = "children"
+    sbs = mpi(SBS_MPI, "0.239", "2025", "index", "MPI value")
+    sbs.population = "all"
+    assert tp.change_lines([child, sbs], "how much has it improved?", "en") == [tp.W["en"]["no_change"]]
+    state = mpi(NBS_MPI, "0.409", "2022", "index", "MPI value", page=123)
+    state.population = "all"
+    assert "0.409 (NBS" in tp.change_lines([child, state, sbs], "how much has it improved?", "en")[0]
+
+
+def test_a_source_already_answering_is_not_sought_again() -> None:
+    quote = mpi(SBS_MPI, "91%", "2022", "headcount", "incidence", based_on="NBS Nigeria Multidimensional Poverty "
+                "Index 2022", page=17)
+    sources = [tp.SourceResult(SBS_MPI, "sbs", status="ok", cards=[quote]),
+               tp.SourceResult(NBS_MPI, "nbs", status="ok", cards=[])]
+    sources[1].publisher = registry().topics["poverty_welfare"].publishers[2]          # nbs_mpi, as the registry has it
+    assert tp.primary_sources(registry().topics["poverty_welfare"], sources) == []      # not NBS's poverty report
+
+
+def test_the_state_table_is_read_before_a_summary_or_a_childrens_table() -> None:
+    text = {16: "Poverty ranges from 27% in Ondo to 91% in Sokoto.",
+            148: "Appendix: Child MPI Incidence Intensity Value ... Rivers 0.291 Sokoto 0.415 0.400 0.429 96.7",
+            123: "Appendix D: Tables State MPI Incidence (H, %) Intensity (A, %) Value ... Sokoto 0.409 0.391 0.427 90.5",
+            9: "Foreword"}
+    assert tp.page_order(text, "What is Sokoto's MPI value?")[:3] == [123, 148, 16]
+    assert tp.page_order(text, "What is the child MPI in Sokoto?")[0] == 148
+
+
+def test_sources_without_a_common_measure_are_each_asked_for_the_others() -> None:
+    nbs = tp.SourceResult(NBS_MPI, "nbs", status="ok", cards=[mpi(NBS_MPI, "91%", "2022", "headcount", "incidence")])
+    sbs = tp.SourceResult(SBS_MPI, "sbs", status="ok", cards=[mpi(SBS_MPI, "0.239", "2025", "index", "MPI value")])
+    for c in nbs.cards + sbs.cards:
+        c.population = "all"
+    asks = dict((s.publisher.id, want) for s, want in tp.align_wants([nbs, sbs]))
+    assert asks == {"nbs_mpi": tp.WANT["index"], "sokoto_mpi": tp.WANT["headcount"]}
+    sbs.cards.append(mpi(SBS_MPI, "59.1%", "2025", "headcount", "headcount"))
+    sbs.cards[-1].population = "all"
+    assert tp.align_wants([nbs, sbs]) == []                   # a common measure: nothing more to ask
+    assert tp.across_sources("how much has it improved?") and tp.across_sources("compare NBS and SBS")
+    assert not tp.across_sources("What is Sokoto's MPI?")
+
+
 def test_a_follow_up_naming_a_source_is_a_source_hint() -> None:
     from app.agent.answer import names_source
     assert names_source("poverty_welfare", "There's an NBS MPI report from 2022")

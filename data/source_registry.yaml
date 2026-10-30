@@ -302,6 +302,7 @@ topics:
         urls:
           - https://nigerianstat.gov.ng/download/1241254
         doc_types: [national MPI report with state MPI, headcount and intensity]
+        aliases: [National MPI, Nigeria MPI, Nigeria Multidimensional Poverty Index, Nigeria Child MPI]
         level: state
         tier: 1
         verified: "no"

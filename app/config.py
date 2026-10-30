@@ -96,8 +96,10 @@ class Settings(BaseSettings):
     kasafi_open_reader: bool = True
     kasafi_open_read_timeout_s: float = 20.0
     # Other stages run on Muse Spark Open too, to spend Baseten's credits rather than Meta's (comma list of plan,
-    # compose; app/agent/answer.stage_json). Slower than the timeout, or failing, and Muse Spark answers instead
-    kasafi_open_stages: str = ""
+    # compose; app/agent/answer.stage_json). Slower than the timeout, or failing, and Muse Spark answers instead.
+    # Oct 30, the 39: compose on Open 0 wrong, median 2.9 s vs 6.2 s; the planner on Open missed m21's rank
+    # query 2 of 3 times (Muse Spark ~1 of 5), so it stays on Muse Spark
+    kasafi_open_stages: str = "compose"
     kasafi_open_stage_timeout_s: float = 15.0
 
     # Web search

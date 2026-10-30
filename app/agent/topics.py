@@ -83,6 +83,7 @@ class Card:
     edition: str = ""
     based_on: str = ""         # whose figure the page says this is ("IOM DTM Round 19", "NBS MPI 2022"), if it says
     measure: str = ""          # MEASURES: what kind of number it is, so only like is compared with like
+    population: str = ""       # whose: all (the whole population), children, women, urban ... (population_of)
 
     @property
     def number(self) -> float | None:
@@ -486,10 +487,26 @@ CARD_SYSTEM = (
     "measure: what kind of number it is, one of index (a value on a 0-1 scale, e.g. an MPI value 0.239), "
     "headcount (% of people, e.g. poverty incidence or headcount ratio), intensity (% average deprivation among "
     "the poor), rate (any other % or rate), count (people, households, cases), amount (money), other. "
+    "population: whose figure it is: 'all' for the whole population, else the group (children under 5, women, "
+    "adults, urban, rural, IDPs ...). Give whole-population figures, unless the QUESTION asks about a group. "
     'Reply with JSON only: {{"figures": [{{"value": "", "unit": "", "what": "", "ref_date": "", "geography": "", '
-    '"page": 0, "based_on": "", "measure": ""}}], "edition": "<the document\'s own edition or date, e.g. Round 18, '
-    'December 2025>"}}'
+    '"page": 0, "based_on": "", "measure": "", "population": ""}}], "edition": "<the document\'s own edition or '
+    'date, e.g. Round 18, December 2025>"}}'
 )
+
+_GROUPS = (("children", r"\bchild|\bunder[- ]?5|\baged? 0|\bunder[- ]?five|\binfant"), ("women", r"\bwom[ae]n|\bfemale"),
+           ("men", r"\bmen\b|\bmale\b"), ("adults", r"\badult"), ("youth", r"\byouth|\b15[–-]24|\b15[–-]35"),
+           ("urban", r"\burban"), ("rural", r"\brural"), ("idps", r"\bidps?\b|displaced"),
+           ("households", r"\bhouseholds?\b"))
+
+
+def population_of(said: str, what: str) -> str:
+    """Whose figure: 'all', or the group the model or the figure's own label names (a Child MPI is children's)."""
+    for text in (said, what):
+        for group, pat in _GROUPS:
+            if re.search(pat, (text or "").lower()):
+                return group
+    return "all"
 
 MEASURES = ("index", "headcount", "intensity", "rate", "count", "amount", "other")
 MEASURE_LABEL = {
@@ -500,13 +517,24 @@ MEASURE_LABEL = {
 }
 
 
-def measure_of(value: str, unit: str, said: str) -> str:
+def measure_of(value: str, unit: str, said: str, what: str = "") -> str:
     """The kind of number, checked against what is printed: a % is never a 0-1 index, and an index is a number
-    between 0 and 1 without a %; the model's word stands only where the printed figure allows it."""
+    between 0 and 1 without a %; the figure's own label ('Intensity of Poverty (A)', 'Headcount Ratio') names
+    its kind before the model's word (an intensity printed 0.40328 is no MPI value); the model's word stands
+    only where the printed figure allows it."""
     pct = value.strip().endswith("%") or unit.strip().lower() in ("%", "percent", "per cent", "percentage")
     m = re.search(r"\d[\d,]*(?:\.\d+)?", value)
     n = float(m.group(0).replace(",", "")) if m else None
     said = said if said in MEASURES else ""
+    # the label's name, not its definition ('MPI - ... computed by multiplying Incidence by Intensity' is an index)
+    head = re.split(r"\s[-–:]\s|[:;]\s", what.lower(), maxsplit=1)[0][:60]
+    if re.search(r"^\s*(?:the\s+)?(?:number|count|total number)\b", head):
+        said = "count" if not pct else said                        # 'Number of poor: 5.81 million'
+    elif not re.search(r"\bvalue\b|\bmpi\b|\bindex\b", head):
+        if re.search(r"\bintensity\b", head):
+            said = "intensity"
+        elif re.search(r"\bheadcount\b|\bincidence\b|multidimensionally poor|proportion of the population", head):
+            said = "headcount"
     if pct:
         return said if said in ("headcount", "intensity", "rate") else "rate"
     if said in ("headcount", "intensity", "rate"):      # a share printed without its % sign (59.1): still that
@@ -536,22 +564,85 @@ def printed_words(phrase: str, text: str) -> bool:
     return bool(words) and all(w.lower() in low for w in words)
 
 
+SOKOTO_ROW = re.compile(r"(?i)\bsokoto\s+\d[\d.,]*\s+\d[\d.,]*\s+\d")      # a table row: Sokoto, then figures
+
+
+def quoted_from(value: str, page_text: str, topic: Topic, own: Publisher, own_year: int | None = None) -> str:
+    """The registry publisher whose report the text just before the figure names, when it isn't the document's
+    own ('According to the 2022 Nigeria Multidimensional Poverty Index, Sokoto ... 91%', 'the 2022 National MPI'):
+    '<publisher> <year>', else ''. By its full name or an alias the registry gives, or its acronym in capitals
+    next to a year ('NBS 2022', '(NBS, Annual NLFS Report 2023'): a partner named without one ('with OPHI and
+    UNDP') never takes a report's own figure, and a topic word (MPI) names no one."""
+    flat = " ".join(page_text.split())
+    want = re.escape(_digits(value).rstrip("%").rstrip("."))
+    m = re.search(rf"(?<![\d.]){want}(?![\d])", re.sub(r"(?<=\d)[,\s](?=\d{3}\b)", "", flat)) if want else None
+    if not m:
+        return ""
+    # the figure's sentence and the one before it ('The findings of the 2022 National MPI were sobering. ...
+    # the incidence of poverty surged to 91%'); the digits-only search shifts no sentence boundary that matters
+    pre = flat[:m.start()]
+    stops = [x.end() for x in re.finditer(r"[.!?]\s", pre)]
+    window = flat[max(stops[-2] if len(stops) >= 2 else 0, m.start() - 300): m.start() + 40]
+    years = _YEAR.findall(window)
+    if own_year and years and int(years[-1]) == own_year:
+        return ""                    # 'the NBS 2022 MPI ... this 2025 report finds 59.1%': the report's own figure
+    low = " " + " ".join(re.findall(r"[a-z]+", window.lower())) + " "
+    topic_words = {s.lower() for s in topic.synonyms_en}
+
+    def phrase(s: str) -> str:
+        return " " + " ".join(re.findall(r"[a-z]+", s.lower())) + " "
+    fits = []
+    for p in topic.publishers:
+        if p.id == own.id or p.tier >= 3:
+            continue
+        core = " ".join(w for w in re.findall(r"[A-Za-z]{3,}", re.sub(r"\([^)]*\)|\b20\d\d\b|\b[A-Z]{2,}\b", " ",
+                                                                      p.name)))
+        names = [n for n in (core, *p.aliases) if len(n.split()) >= 2]
+        dated = [a for a in (n.upper() for n in publisher_names(p) - topic_words)
+                 if re.search(rf"\b{a}\b[^.]{{0,40}}\b20\d\d\b|\b20\d\d\b[^.]{{0,40}}\b{a}\b", window)]
+        if any(phrase(n) in low for n in names) or dated:
+            fits.append(p)
+    if not fits:
+        return ""
+    p = max(fits, key=lambda p: _fit(p, window))
+    return f"{short_pub(p)} {years[-1] if years else ''}".strip()
+
+
 def topic_query(topic: Topic, question: str) -> str:
     return " ".join(dict.fromkeys(["Sokoto", *topic.synonyms_en[:4], *re.findall(r"[A-Za-z]{5,}", question)[:6]]))
 
 
+def page_order(text: dict[int, str], question: str) -> list[int]:
+    """The pages to read for Sokoto's figures, best first (stable: search order breaks ties): a page naming
+    Sokoto, with a Sokoto table row ('Sokoto 0.409 0.391 ... 90.5': the state's own figures, not only a
+    summary's), with more of the question's words (the measure asked: 'MPI value', 'intensity'); a table for a
+    group (a Child MPI) after the whole population's, unless the question asks about that group."""
+    words = {w for w in re.findall(r"[a-z]{3,}", question.lower())
+             if w not in ("the", "and", "what", "how", "much", "has", "according", "sokoto", "state")}
+    asked = population_of("", question)
+
+    def key(p: int) -> tuple:
+        low = text[p].lower()
+        group = population_of("", low[:600])          # a table's own title says whose figures it has
+        return ("sokoto" in low, bool(SOKOTO_ROW.search(text[p])), group == asked or group == "all",
+                sum(w in low for w in words))
+    return sorted(text, key=key, reverse=True)
+
+
 async def fact_cards(conn: psycopg.Connection, src: SourceResult, topic: Topic, question: str, client: ChatClient,
-                     settings: Settings) -> list[Card]:
-    hits = search(conn, topic_query(topic, question), k=30, doc_ids=[src.doc_id])
+                     settings: Settings, want: str = "") -> list[Card]:
+    """`want`: measures to copy first (the ones another source gave, so the two can be compared)."""
+    hits = search(conn, topic_query(topic, f"{question} {want}"), k=30, doc_ids=[src.doc_id])
     ranked = list(dict.fromkeys(h.page for h in hits))
+    # a dense state table ranks low in keyword search: the pages that print a Sokoto row are candidates too
+    ranked += [r[0] for r in conn.execute(r"SELECT page FROM pages WHERE doc_id = %s AND text ~* 'sokoto\s+[0-9]' "
+                                          "ORDER BY page LIMIT 40", (src.doc_id,)) if r[0] not in ranked]
     text = {p: (conn.execute("SELECT text FROM pages WHERE doc_id = %s AND page = %s", (src.doc_id, p)).fetchone()
                 or [""])[0] for p in ranked}
-    # a national report prints every state: the pages that name Sokoto (its table rows) come before the
-    # definitions and national totals that rank higher in keyword search
-    ranked.sort(key=lambda p: "sokoto" not in text[p].lower())
-    pages = {p: text[p] for p in ranked[:CARD_PAGES]}
+    pages = {p: text[p] for p in page_order(text, f"{question} {want}")[:CARD_PAGES]}
     if not pages:
         return []
+    own_year = (conn.execute("SELECT year FROM documents WHERE id = %s", (src.doc_id,)).fetchone() or [None])[0]
     p = src.publisher
     # a definition note names the figures that belong beside the headline one (NBS: underemployment,
     # informality, NEET beside the unemployment rate): those are asked for too, up to 5 figures in all
@@ -560,6 +651,8 @@ async def fact_cards(conn: psycopg.Connection, src: SourceResult, topic: Topic, 
     extra = (f"Copy first the {headline.group(1) if headline else 'headline'} rate itself, then, if printed for "
              f"Sokoto, up to {most} figures in all: {p.definition_note.split(';')[-1].strip()}. "
              if p.definition_note else "")
+    if want:
+        extra += f"Copy first, if printed for Sokoto: {want}. "
     body = "\n\n".join(f"--- page {n} ---\n{t[:PAGE_CHARS]}" for n, t in pages.items())
     messages = [{"role": "system", "content": CARD_SYSTEM.format(extra=extra)},
                 {"role": "user", "content": f"QUESTION: {question}\nDOCUMENT: {src.title}\n\n{body}"}]
@@ -585,11 +678,13 @@ async def fact_cards(conn: psycopg.Connection, src: SourceResult, topic: Topic, 
             based = str(f.get("based_on") or "")[:60]
             if based and not printed_words(based, " ".join(pages.values())):
                 based = ""                   # a source the pages don't name isn't claimed
-            unit = str(f.get("unit") or "")[:40]
-            cards.append(Card(p, src.doc_id, src.title, page, value, unit,
-                              str(f.get("what") or "")[:160], str(f.get("ref_date") or "")[:60],
+            # the code check too: the text before the figure names another publisher's report
+            based = based or quoted_from(value, pages[page], topic, p, own_year)
+            unit, what = str(f.get("unit") or "")[:40], str(f.get("what") or "")[:160]
+            cards.append(Card(p, src.doc_id, src.title, page, value, unit, what, str(f.get("ref_date") or "")[:60],
                               str(f.get("geography") or "")[:60], str(d.get("edition") or "")[:60], based,
-                              measure_of(value, unit, str(f.get("measure") or ""))))
+                              measure_of(value, unit, str(f.get("measure") or ""), what),
+                              population_of(str(f.get("population") or ""), what)))
         else:
             log.info("fact card dropped (not printed on the pages read): %s %s", p.id, value[:30])
     return cards[:most]
@@ -696,7 +791,9 @@ def source_label(c: Card, lang: str) -> str:
 def card_year(c: Card) -> int:
     """The year the figure refers to: its date, else the year of the report it is cited from, else the edition."""
     for text in (c.ref_date, c.based_on if cited_from_other(c) else "", c.edition):
-        if years := [int(y) for y in _YEAR.findall(text or "")]:
+        # a survey across two years ('2021/22') is dated by its end year
+        text = re.sub(r"\b(20)(\d\d)\s*[/–-]\s*(\d\d)\b", r"\1\3", text or "")
+        if years := [int(y) for y in _YEAR.findall(text)]:
             return max(years)
     return 0
 
@@ -720,8 +817,12 @@ def change_lines(cards: list[Card], question: str, lang: str) -> list[str]:
         return []
     w, label = W.get(lang, W["en"]), MEASURE_LABEL.get(lang, MEASURE_LABEL["en"])
     out = []
-    for m in COMPARED:
-        same = [c for c in cards if c.measure == m and _amount(c) is not None and card_year(c)]
+    groups = list(dict.fromkeys((c.measure, c.population or "all") for c in cards if c.measure in COMPARED))
+    for m, pop in sorted(groups, key=lambda g: (COMPARED.index(g[0]), g[1] != "all")):
+        # the same measure of the same population (a Child MPI is not the MPI); a publisher's own figure before a
+        # document's quote of it
+        same = sorted((c for c in cards if c.measure == m and (c.population or "all") == pop
+                       and _amount(c) is not None and card_year(c)), key=cited_from_other)
         years = sorted({card_year(c) for c in same})
         if len(years) < 2:
             continue
@@ -736,7 +837,8 @@ def change_lines(cards: list[Card], question: str, lang: str) -> list[str]:
                 size += f" ({w['relative'].format(pct=(abs(diff) / _amount(a) * 100).quantize(Decimal('0.1'), ROUND_HALF_UP))})"
         direction = w["fell"] if diff < 0 else w["rose"] if diff > 0 else w["unchanged"]
         pa, pb = f"{source_label(a, lang)}, {years[0]}", f"{source_label(b, lang)}, {years[-1]}"
-        out.append(w["change"].format(what=label[m] or m, a=a.value, b=b.value, pa=pa, pb=pb, direction=direction,
+        what = (label[m] or m) + ("" if pop == "all" else f", {pop}")
+        out.append(w["change"].format(what=what, a=a.value, b=b.value, pa=pa, pb=pb, direction=direction,
                                       diff=size))
         origin = lambda c: c.based_on.lower() if cited_from_other(c) else c.publisher.id      # noqa: E731
         if origin(a) != origin(b):
@@ -839,14 +941,21 @@ def compose(topic: Topic, sources: list[SourceResult], related: list[SourceResul
             question: str = "") -> tuple[str, bool]:
     w = W.get(lang, W["en"])
     label = MEASURE_LABEL.get(lang, MEASURE_LABEL["en"])
+    # a document's quote of a figure its own publisher's document gives too (SBS quoting NBS's 91%, beside NBS's
+    # report): shown once, from the source
+    own = [c for s in sources for c in s.cards if not cited_from_other(c)]
+    missing = [short_pub(s.publisher) for s in sources if not s.cards]     # before: a quote dropped is no miss
+    for s in sources:
+        s.cards = [c for c in s.cards if not (cited_from_other(c) and any(
+            o.publisher.id != c.publisher.id and o.number == c.number and card_year(o) == card_year(c)
+            and o.measure == c.measure and o.population == c.population for o in own))]
     cards = _reply_order([c for s in sources for c in s.cards[:1]])
     extra = [c for s in sources for c in s.cards[1:]]
-    missing = [short_pub(s.publisher) for s in sources if not s.cards]
     if not cards:
         return w["none"].format(names=", ".join(missing) or "-"), False
 
     def unit(c: Card) -> str:
-        if c.value.endswith("%") or not c.unit:
+        if c.value.endswith("%") or not c.unit or c.measure == "index":     # an index has no unit ('0.239')
             return ""
         return "%" if c.unit.strip().lower() in ("%", "percent", "per cent", "percentage") else f" {c.unit}"
 
@@ -854,6 +963,8 @@ def compose(topic: Topic, sources: list[SourceResult], related: list[SourceResul
         return f", {c.geography}" if c.geography else ""
     def what(c: Card) -> str:            # the measure says what kind of number it is (an MPI value is not a %)
         tag = label.get(c.measure, "") if c.measure in ("index", "headcount", "intensity") else ""
+        if tag and c.population not in ("", "all") and c.population not in c.what.lower():
+            tag += f", {c.population}"
         return f"{c.what} ({tag})" if tag and tag.split(",")[0] not in c.what.lower() else c.what
     top = cards[0]
     out = [w["newest"].format(value=top.value, unit=unit(top), what=what(top), geo=geo(top),
@@ -866,7 +977,7 @@ def compose(topic: Topic, sources: list[SourceResult], related: list[SourceResul
         out += [line(c) for s in sources if s.cards and s.cards[0] is first for c in s.cards]
     shown = cards + extra
     # why the main figures differ, between figures of the same measure only (an index never against a %)
-    if why := why_differ([c for c in cards if c.measure == top.measure], lang):
+    if why := why_differ([c for c in cards if c.measure == top.measure and c.population == top.population], lang):
         out += ["", why]
     if kinds := kinds_note(shown, lang):
         out += ["", kinds]
@@ -943,6 +1054,33 @@ PROGRESS = {
 STILL = {"ha": "⏳ Na samu {done} daga cikin {n}; ina jiran sauran…", "en": "⏳ Got {done} of {n}; waiting for the rest…"}
 
 
+COMPARE_Q = re.compile(r"(?i)\b(?:compar\w*|versus|vs|differ\w*|kwatanta)\b")
+
+
+def across_sources(text: str) -> bool:
+    """A change question or a comparison question: one measure from each source is needed."""
+    return bool(CHANGE_Q.search(text or "") or COMPARE_Q.search(text or ""))
+WANT = {"index": "the index value (0-1 scale, e.g. the MPI value)", "headcount": "the headcount (% of people, the "
+        "incidence)", "intensity": "the intensity (%)", "rate": "the rate (%)", "count": "the count",
+        "amount": "the amount"}
+
+
+def align_wants(sources: list[SourceResult]) -> list[tuple[SourceResult, str]]:
+    """For a change or comparison: when no measure (of one population) is given by two sources, each source with
+    a document is asked for the measures the others gave and it lacks."""
+    def keys(s: SourceResult) -> set[tuple[str, str]]:
+        return {(c.measure, c.population or "all") for c in s.cards if c.measure in WANT}
+    got = [s for s in sources if s.doc_id and s.cards]
+    if len(got) < 2 or any(len([s for s in got if k in keys(s)]) >= 2 for s0 in got for k in keys(s0)):
+        return []
+    out = []
+    for s in got:
+        lacking = set().union(*(keys(o) for o in got if o is not s)) - keys(s)
+        if lacking:
+            out.append((s, "; ".join(WANT[m] + ("" if pop == "all" else f" for {pop}") for m, pop in sorted(lacking))))
+    return out
+
+
 def primary_sources(topic: Topic, sources: list[SourceResult], most: int = 2) -> list[Publisher]:
     """The registry publishers whose figures the sources' documents quote (a card's based_on names them) and
     that aren't sources yet: their own documents are the primary sources of those figures."""
@@ -951,10 +1089,13 @@ def primary_sources(topic: Topic, sources: list[SourceResult], most: int = 2) ->
     out: list[Publisher] = []
     for c in (c for s in sources for c in s.cards if cited_from_other(c)):
         words = set(re.findall(r"[a-z]{3,}", c.based_on.lower()))
-        fits = [p for p in topic.publishers if p.tier < 3 and p.id not in have and p not in out
-                and (publisher_names(p) - topic_words) & words]
-        if fits:
-            out.append(max(fits, key=lambda p: _fit(p, c.based_on)))
+        fits = [p for p in topic.publishers if p.tier < 3 and ((publisher_names(p) - topic_words) & words
+                                                               or p.name.lower() in c.based_on.lower()
+                                                               or short_pub(p).lower() in c.based_on.lower())]
+        # the publisher it names best; already a source (NBS's MPI report): nothing more to seek
+        if fits and (best := max(fits, key=lambda p: (_fit(p, c.based_on), short_pub(p).lower() in
+                                                      c.based_on.lower()))).id not in have and best not in out:
+            out.append(best)
     return out[:most]
 
 
@@ -1027,8 +1168,22 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
                 task.cancel()
             for task, p in zip(more, origins):
                 if task in got and not task.exception():
-                    sources.append(task.result())
                     log.info("primary source of a cited figure: %s -> %s", p.id, task.result().status)
+                    if task.result().cards:      # not required: one that gives nothing isn't a missing source
+                        sources.append(task.result())
+        # a change or comparison across sources needs the same measure from each: a source without one another
+        # source gave is asked for it, once ('the MPI value' from NBS beside SBS's, 'the headcount' from SBS)
+        left = budget - (time.perf_counter() - t0)
+        if across_sources(ask) and left > 5 and (asks := align_wants(sources)):
+            async def again(s: SourceResult, want: str) -> None:
+                more = await fact_cards(conn, s, topic, ask, client, settings, want=want)
+                seen = {(c.value, c.page) for c in s.cards}
+                s.cards += [c for c in more if (c.value, c.page) not in seen]
+            jobs = [asyncio.ensure_future(again(s, want)) for s, want in asks]
+            _, late = await asyncio.wait(jobs, timeout=left)
+            for task in late:
+                task.cancel()
+            log.info("aligned measures across %d sources", len(asks))
         related = [results[p.id] for p in context if p.id in results]
         text, partial = compose(topic, sources, related, lang, ask)
         # API figures have no document page to cite or crop: the sources line names them
