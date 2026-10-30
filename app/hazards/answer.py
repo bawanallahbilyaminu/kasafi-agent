@@ -84,9 +84,12 @@ W = {
            "air_state": "{day}: worst air in {lga}, US AQI up to {aqi:.0f}, set by {by}: *{cat}*. There, PM10 "
                         "averaging {pm10:.0f} µg/m³ (WHO 24-hour guideline: 45), PM2.5 averaging {pm25:.0f} µg/m³ "
                         "(WHO 24-hour guideline: 15).",
-           "river_line": "{point} ({lga} LGA), {day}: {q:.0f} m³/s, *{level}* for {period} ({where_in}).",
+           "river_line": "{point} ({lga} LGA), {day}: {q} m³/s, *{level}* for {period} ({where_in}).",
            "rank_mid": "higher than {rank:.0f}% of {period} days since {since}",
            "rank_low": "the lowest for {period} since {since}", "rank_high": "the highest for {period} since {since}",
+           "rank_near_low": "lower than all but {k} of {n} {period} days since {since}",
+           "rank_near_high": "higher than all but {k} of {n} {period} days since {since}",
+           "dam": " Model estimate; releases from {dam} not included.",
            "levels": {"low": "low", "normal": "normal", "high": "high", "very_high": "very high"},
            "parts": {"early": "early", "mid": "mid", "late": "late"},
            "months": ("January", "February", "March", "April", "May", "June", "July", "August", "September",
@@ -135,9 +138,12 @@ W = {
            "air_state": "{day}: iska ta fi muni a {lga}, US AQI har zuwa {aqi:.0f}, saboda {by}: *{cat}*. A can, "
                         "matsakaicin PM10 {pm10:.0f} µg/m³ (iyakar WHO ta awa 24: 45), matsakaicin PM2.5 {pm25:.0f} "
                         "µg/m³ (iyakar WHO ta awa 24: 15).",
-           "river_line": "{point} (Ƙaramar Hukumar {lga}), {day}: {q:.0f} m³/s, *{level}* a {period} ({where_in}).",
+           "river_line": "{point} (Ƙaramar Hukumar {lga}), {day}: {q} m³/s, *{level}* a {period} ({where_in}).",
            "rank_mid": "sama da kashi {rank:.0f}% na kwanakin {period} tun {since}",
            "rank_low": "mafi ƙaranci a {period} tun {since}", "rank_high": "mafi yawa a {period} tun {since}",
+           "rank_near_low": "ƙasa da duka sai {k} cikin kwanaki {n} na {period} tun {since}",
+           "rank_near_high": "sama da duka sai {k} cikin kwanaki {n} na {period} tun {since}",
+           "dam": " Ƙiyasin samfuri ne; ba a haɗa da ruwan da ake sakowa daga {dam} ba.",
            "levels": {"low": "ƙasa da yadda aka saba", "normal": "kamar yadda aka saba", "high": "sama da yadda "
                       "aka saba", "very_high": "sama sosai da yadda aka saba"},
            "parts": {"early": "farkon", "mid": "tsakiyar", "late": "ƙarshen"},
@@ -274,6 +280,11 @@ def severity(conn, layer: str, where: read.Where, pids: list, day: date) -> int:
     return -1
 
 
+def discharge(q: float) -> str:
+    """m3/s as printed: a decimal below 10 (2.4, not 2), whole numbers above (1,976)."""
+    return f"{q:.1f}" if q < 10 else f"{q:,.0f}"
+
+
 def _dry(w: dict, label: str, prob: float) -> str:
     return w["rain_none"].format(day=label, p=prob) if prob >= 1 else w["rain_dry"].format(day=label)
 
@@ -331,11 +342,15 @@ def _layer_lines(conn, layer: str, lang: str, where: read.Where, pids: list, day
             rows = read.river_days(conn, d, lga) or (read.river_days(conn, d) if lga else [])
             for r in rows:
                 period = f"{w['parts'][r.period[0]]} {w['months'][r.period[1] - 1]}"
-                key = "rank_low" if r.rank < 0.5 else "rank_high" if r.rank > 99.5 else "rank_mid"
+                # 'the lowest' only below every day compared with; near the edges, how many days are beyond it
+                key, k = (("rank_low", 0) if r.n and r.below == 0 else ("rank_high", 0) if r.n and r.above == 0
+                          else ("rank_near_low", r.below) if r.rank < 1 else ("rank_near_high", r.above)
+                          if r.rank > 99 else ("rank_mid", 0))
                 out.append(w["river_line"].format(point=r.point, lga=r.lga, day=_day_label(d, today, lang),
-                                                  q=r.discharge, level=w["levels"][r.level], period=period,
-                                                  where_in=w[key].format(rank=r.rank, period=period,
-                                                                         since=r.since.year)))
+                                                  q=discharge(r.discharge), level=w["levels"][r.level], period=period,
+                                                  where_in=w[key].format(rank=r.rank, period=period, k=k, n=r.n,
+                                                                         since=r.since.year))
+                           + (w["dam"].format(dam=r.dam) if r.dam else ""))
     elif layer == "fires":
         lga = where.lga_pcode if where.kind == "lga" else ""
         counts = read.fire_counts(conn, 24, lga)

@@ -132,6 +132,21 @@ def test_a_river_is_compared_with_the_same_time_of_year() -> None:
     assert r.period == ("late", 10)
 
 
+def test_lowest_only_when_below_every_day_and_dam_releases_are_said(monkeypatch) -> None:
+    _patch(monkeypatch, _fresh())
+    from datetime import date as d
+    near = read.RiverDay("Rima near Goronyo", "Goronyo", TODAY, 2.4, 0.2, d(1997, 1, 1), None, "low", 2, 912, 914,
+                         "Goronyo Dam")                     # 1997's late October had 2.3: not 'the lowest'
+    monkeypatch.setattr(read, "river_days", lambda conn, day, pcode="": [near])
+    a = ha.hazard_answer(None, "river", "en", ["flood"], read.Where("lga", "NG034006", "Goronyo"), TODAY)
+    assert "Today: 2.4 m³/s, *low* for late October (lower than all but 2 of 914 late October days since 1997). " \
+           "Model estimate; releases from Goronyo Dam not included." in a.text and "the lowest" not in a.text
+    lowest = read.RiverDay("Rima near Goronyo", "Goronyo", TODAY, 2.2, 0.0, d(1997, 1, 1), None, "low", 0, 914, 914)
+    monkeypatch.setattr(read, "river_days", lambda conn, day, pcode="": [lowest])
+    a = ha.hazard_answer(None, "river", "en", ["flood"], read.Where("lga", "NG034006", "Goronyo"), TODAY)
+    assert "(the lowest for late October since 1997)." in a.text and "Model estimate" not in a.text
+
+
 def test_what_to_watch_out_for_leads_with_what_is_in_season(monkeypatch) -> None:
     _patch(monkeypatch, _fresh())
     monkeypatch.setattr(read, "air_day", lambda *a: None)

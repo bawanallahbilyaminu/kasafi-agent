@@ -27,7 +27,7 @@ from app.agent.answer import lagos_today  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.hazards import categories as cat  # noqa: E402
 from app.hazards import read  # noqa: E402
-from app.hazards.answer import SEASON, W  # noqa: E402
+from app.hazards.answer import SEASON, W, discharge  # noqa: E402
 
 RUNS = Path(__file__).with_name("runs")
 WHEN = {"en": {0: "today", 1: "tomorrow", 3: "over the next 3 days"},
@@ -60,7 +60,7 @@ def expected(conn, family: str, pid: int, lga: str, pcode: str, day, lang: str) 
         return [f"{r.pm10_mean:.0f} µg/m³", by, f"*{cat.label(r.category, lang)}*"] if r else None
     if family == "hazard_flood":
         rows = read.river_days(conn, day, pcode)
-        return [f"{rows[0].discharge:.0f} m³/s", f"*{W[lang]['levels'][rows[0].level]}*"] if rows else None
+        return [f"{discharge(rows[0].discharge)} m³/s", f"*{W[lang]['levels'][rows[0].level]}*"] if rows else None
     if family == "hazard_fires":
         n = sum(c.count for c in read.fire_counts(conn, 24, pcode))
         return [f": {n} {'in' if lang == 'en' else 'a'} {lga}"] if n else \

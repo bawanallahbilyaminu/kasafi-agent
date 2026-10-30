@@ -162,6 +162,10 @@ class RiverDay:
     since: date                      # the history's first day
     fetched_at: datetime | None
     level: str = "normal"            # low | normal | high | very_high, for the time of year (river_level)
+    below: int = 0                   # same-time-of-year days with less discharge
+    above: int = 0                   # ... and with more
+    n: int = 0                       # the same-time-of-year days compared with
+    dam: str = ""                    # the dam upstream whose releases the model doesn't include
 
     @property
     def period(self) -> tuple[str, int]:
@@ -185,6 +189,13 @@ def river_level(rank: float) -> str:
     return "low" if rank < 25 else "normal" if rank < 75 else "high" if rank < 95 else "very_high"
 
 
+# River points below a dam: GloFAS models neither the dam's releases nor its storage, so the figure is a model
+# estimate only (the Rima below Goronyo Dam; the Sokoto River below Bakolori Dam in Zamfara; both above Kebbi)
+REGULATED = {"Rima near Goronyo": "Goronyo Dam", "Rima near Wurno": "Goronyo Dam",
+             "Sokoto River at Sokoto city": "Bakolori Dam",
+             "Sokoto-Rima toward the Kebbi border": "Goronyo and Bakolori Dams"}
+
+
 def river_days(conn, day: date, lga_pcode: str = "") -> list[RiverDay]:
     """Each river point (in the LGA, or all): the day's forecast discharge against the same time of year in its own
     history (a river in late October is compared with late Octobers, not with the whole year)."""
@@ -201,7 +212,8 @@ def river_days(conn, day: date, lga_pcode: str = "") -> list[RiverDay]:
             continue
         rank = percentile_rank(float(q), season)
         out.append(RiverDay(name, lga, day, round(float(q), 1), rank, min(h[1] for h in hist), fetched,
-                            river_level(rank)))
+                            river_level(rank), sum(1 for x in season if x < q), sum(1 for x in season if x > q),
+                            len(season), REGULATED.get(name, "")))
     return out
 
 
