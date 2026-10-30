@@ -98,6 +98,17 @@ def test_dry_heat_takes_its_category_from_the_air_temperature_and_says_so(monkey
                                                                      read.Where("state"), TODAY).text
 
 
+def test_the_aqi_names_its_pollutant_and_each_pm_has_its_own_guideline(monkeypatch) -> None:
+    _patch(monkeypatch, _fresh())
+    air = read.AirDay("Tureta", TODAY, 179.0, 61.0, 120.0, 0.6, 204.0, "very_unhealthy", None, "PM2.5")
+    monkeypatch.setattr(read, "air_day", lambda conn, pid, lga, d: air)
+    a = ha.hazard_answer(None, "dust", "en", ["air"], read.Where("lga", "NG034020", "Tureta"), TODAY)
+    assert "US AQI up to 204, set by PM2.5: *Very unhealthy*. PM10 averaging 179 µg/m³ (WHO 24-hour guideline: " \
+           "45), PM2.5 averaging 61 µg/m³ (WHO 24-hour guideline: 15)" in a.text
+    a = ha.hazard_answer(None, "dust", "ha", ["air"], read.Where("state"), TODAY)
+    assert "US AQI har zuwa 204, saboda PM2.5" in a.text and "iyakar WHO ta awa 24: 15" in a.text
+
+
 def test_a_pin_without_grid_data_gets_its_lgas_forecast_said_as_such(monkeypatch) -> None:
     _patch(monkeypatch, _fresh())
     monkeypatch.setattr(read, "point_ids", lambda conn, where: [(7 if where.kind == "point" else 1, "Wamakko")])

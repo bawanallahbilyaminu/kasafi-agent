@@ -56,7 +56,8 @@ def expected(conn, family: str, pid: int, lga: str, pcode: str, day, lang: str) 
             ["no rain expected" if lang == "en" else "ba a sa ran ruwan sama ba"]
     if family == "hazard_air":
         r = read.air_day(conn, pid, lga, day)
-        return [f"{r.pm10_mean:.0f} µg/m³", f"*{cat.label(r.category, lang)}*"] if r else None
+        by = f"{'set by' if lang == 'en' else 'saboda'} {r.aqi_by}" if r else ""
+        return [f"{r.pm10_mean:.0f} µg/m³", by, f"*{cat.label(r.category, lang)}*"] if r else None
     if family == "hazard_flood":
         rows = read.river_days(conn, day, pcode)
         return [f"{rows[0].discharge:.0f} m³/s", f"*{W[lang]['levels'][rows[0].level]}*"] if rows else None

@@ -134,6 +134,7 @@ class AirDay:
     aqi_max: float                   # the higher of US AQI for PM10 and PM2.5, the day's maximum
     category: str
     fetched_at: datetime | None
+    aqi_by: str = "PM10"             # the pollutant that sets aqi_max (PM10 or PM2.5)
 
 
 def air_day(conn, pid: int, lga: str, day: date) -> AirDay | None:
@@ -142,11 +143,13 @@ def air_day(conn, pid: int, lga: str, day: date) -> AirDay | None:
     if not h["pm10"]:
         return None
     mean = lambda k: round(sum(v for _, v in h[k]) / len(h[k]), 1) if h[k] else 0.0     # noqa: E731
-    aqi = max([v for _, v in h["us_aqi_pm10"] + h["us_aqi_pm2_5"]], default=0.0)
+    by_pm10 = max([v for _, v in h["us_aqi_pm10"]], default=0.0)
+    by_pm25 = max([v for _, v in h["us_aqi_pm2_5"]], default=0.0)
+    aqi = max(by_pm10, by_pm25)
     fetched = conn.execute("SELECT max(fetched_at) FROM hazard_values WHERE layer = 'air' AND point_id = %s",
                            (pid,)).fetchone()[0]
     return AirDay(lga, day, mean("pm10"), mean("pm2_5"), mean("dust"), round(mean("aerosol_optical_depth"), 2), aqi,
-                  aqi_category(aqi), fetched)
+                  aqi_category(aqi), fetched, "PM2.5" if by_pm25 > by_pm10 else "PM10")
 
 
 @dataclass

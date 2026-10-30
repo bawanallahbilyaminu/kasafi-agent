@@ -78,10 +78,12 @@ W = {
                         "classes); chance of rain up to {p:.0f}%.",
            "rain_none": "{day}: no rain expected (chance up to {p:.0f}%).", "rain_dry": "{day}: no rain expected.",
            "rain_state": "{day}: most rain in {lga}, {mm:.1f} mm; {n} of 23 LGAs expect rain.",
-           "air_line": "{day}: PM10 averaging {pm10:.0f} µg/m³ (WHO 24-hour guideline: 45), PM2.5 {pm25:.0f} µg/m³ "
-                       "(guideline: 15), dust {dust:.0f} µg/m³; US AQI up to {aqi:.0f}: *{cat}*.",
-           "air_state": "{day}: dustiest in {lga}, PM10 averaging {pm10:.0f} µg/m³ (WHO 24-hour guideline: 45); "
-                        "US AQI up to {aqi:.0f}: *{cat}*.",
+           "air_line": "{day}: US AQI up to {aqi:.0f}, set by {by}: *{cat}*. PM10 averaging {pm10:.0f} µg/m³ (WHO "
+                       "24-hour guideline: 45), PM2.5 averaging {pm25:.0f} µg/m³ (WHO 24-hour guideline: 15), dust "
+                       "{dust:.0f} µg/m³.",
+           "air_state": "{day}: worst air in {lga}, US AQI up to {aqi:.0f}, set by {by}: *{cat}*. There, PM10 "
+                        "averaging {pm10:.0f} µg/m³ (WHO 24-hour guideline: 45), PM2.5 averaging {pm25:.0f} µg/m³ "
+                        "(WHO 24-hour guideline: 15).",
            "river_line": "{point} ({lga} LGA), {day}: {q:.0f} m³/s, *{level}* for {period} ({where_in}).",
            "rank_mid": "higher than {rank:.0f}% of {period} days since {since}",
            "rank_low": "the lowest for {period} since {since}", "rank_high": "the highest for {period} since {since}",
@@ -127,10 +129,12 @@ W = {
            "rain_dry": "{day}: ba a sa ran ruwan sama ba.",
            "rain_state": "{day}: inda za a fi samun ruwa shi ne {lga}, {mm:.1f} mm; ƙananan hukumomi {n} cikin 23 "
                          "suna sa ran ruwa.",
-           "air_line": "{day}: matsakaicin PM10 {pm10:.0f} µg/m³ (iyakar WHO ta awa 24: 45), PM2.5 {pm25:.0f} "
-                       "µg/m³ (iyaka: 15), ƙura {dust:.0f} µg/m³; US AQI har zuwa {aqi:.0f}: *{cat}*.",
-           "air_state": "{day}: inda ƙura ta fi yawa shi ne {lga}, matsakaicin PM10 {pm10:.0f} µg/m³ (iyakar WHO "
-                        "ta awa 24: 45); US AQI har zuwa {aqi:.0f}: *{cat}*.",
+           "air_line": "{day}: US AQI har zuwa {aqi:.0f}, saboda {by}: *{cat}*. Matsakaicin PM10 {pm10:.0f} µg/m³ "
+                       "(iyakar WHO ta awa 24: 45), matsakaicin PM2.5 {pm25:.0f} µg/m³ (iyakar WHO ta awa 24: 15), "
+                       "ƙura {dust:.0f} µg/m³.",
+           "air_state": "{day}: iska ta fi muni a {lga}, US AQI har zuwa {aqi:.0f}, saboda {by}: *{cat}*. A can, "
+                        "matsakaicin PM10 {pm10:.0f} µg/m³ (iyakar WHO ta awa 24: 45), matsakaicin PM2.5 {pm25:.0f} "
+                        "µg/m³ (iyakar WHO ta awa 24: 15).",
            "river_line": "{point} (Ƙaramar Hukumar {lga}), {day}: {q:.0f} m³/s, *{level}* a {period} ({where_in}).",
            "rank_mid": "sama da kashi {rank:.0f}% na kwanakin {period} tun {since}",
            "rank_low": "mafi ƙaranci a {period} tun {since}", "rank_high": "mafi yawa a {period} tun {since}",
@@ -314,13 +318,13 @@ def _layer_lines(conn, layer: str, lang: str, where: read.Where, pids: list, day
                 continue
             label = _day_label(d, today, lang)
             if where.kind == "state":
-                top = max(rows, key=lambda r: r.pm10_mean)
-                out.append(w["air_state"].format(day=label, lga=top.lga, pm10=top.pm10_mean, aqi=top.aqi_max,
-                                                 cat=cat.label(top.category, lang)))
+                top = max(rows, key=lambda r: (r.aqi_max, r.pm10_mean))   # the AQI sets the category shown
+                out.append(w["air_state"].format(day=label, lga=top.lga, pm10=top.pm10_mean, pm25=top.pm2_5_mean,
+                                                 aqi=top.aqi_max, by=top.aqi_by, cat=cat.label(top.category, lang)))
             else:
                 r = rows[0]
                 out.append(w["air_line"].format(day=label, pm10=r.pm10_mean, pm25=r.pm2_5_mean, dust=r.dust_mean,
-                                                aqi=r.aqi_max, cat=cat.label(r.category, lang)))
+                                                aqi=r.aqi_max, by=r.aqi_by, cat=cat.label(r.category, lang)))
     elif layer == "flood":
         lga = where.lga_pcode if where.kind == "lga" else ""
         for d in days:
