@@ -27,7 +27,7 @@ import yaml
 log = logging.getLogger(__name__)
 
 CONTACTS_PATH = Path(__file__).resolve().parents[2] / "data" / "emergency_contacts.yaml"
-CLASSIFY_TIMEOUT_S = 2.5
+CLASSIFY_TIMEOUT_S = 3.5       # Muse Spark at minimal reasoning answers in about 2 s
 
 
 @dataclass(frozen=True)
@@ -84,6 +84,13 @@ _PATTERNS = [
     r"\bhit by (?:a )?(?:car|motorcycle|okada|vehicle)\b", r"\bheart attack\b", r"\bchest pain\b",
     r"\bmiscarri(?:age|ed)\b", r"\b(?:is|are) dying\b", r"\babout to die\b",
     r"\b(?:very|so|extremely) hot\b.{0,40}\b(?:not|won'?t) (?:wake|waking|respond)",
+    r"\b(?:flood|water)\b.{0,30}\btrapped\b", r"\b(?:not|isn'?t|stopped) moving\b",
+    r"\bfell (?:into|in|down) (?:a |the )?(?:well|river|pond|water|pit)\b",
+    r"\b(?:car|motorcycle|okada|vehicle|lorry|truck|bus)\b.{0,15}\b(?:hit|knocked|ran over|crushed)\b",
+    r"\bcan'?t (?:speak|talk|move (?:his|her|their))\b", r"\b(?:face|mouth) (?:has )?(?:dropped|drooping|twisted)\b",
+    r"\bone side of (?:his|her|their) (?:face|body)\b", r"\b(?:turning|gone|going|went) blue\b",
+    r"\b(?:shaking|jerking)\b.{0,15}\b(?:jerking|shaking|stiff)\b",
+    r"\b(?:took|swallowed|ate|drank)\b.{0,30}\b(?:tablets|pills|packet|kerosene|petrol|bleach|insecticide)\b",
     # Hausa
     r"\bzubar da jini\b", r"\bzubar jini\b", r"\bjini (?:na|yana|ya ƙi|ya ki|ba ya) (?:zuba|tsayawa|daina)",
     r"\bba (?:ya|ta|sa) numfashi\b", r"\bbaya numfashi\b", r"\bnumfashi ya (?:ɗauke|dauke|tsaya)",
@@ -98,20 +105,29 @@ _PATTERNS = [
     r"\bjariri ya makale\b", r"\b(?:ya|ta) sha guba\b|\bguba\b", r"\b(?:hatsarin|haɗarin) (?:mota|babur|hanya)\b",
     r"\bhadarin (?:mota|babur)\b", r"\bmota ta (?:kaɗe|kade|buge)\b", r"\bɓari\b", r"\bbari ciki\b",
     r"\b(?:zai|za ta|yana|tana) mutuwa\b|\b(?:zai|za ta) mutu\b",
+    r"\bambaliya (?:ya|ta) kewaye\b", r"\b(?:mota|babur|okada|achaba|tirela)\s+(?:ya|ta)\s+(?:kaɗe|kade|buge|bige|taka)\b",
+    r"\bba (?:ya|ta) iya (?:magana|motsa)\b", r"\bfuska\w* ta (?:karkace|faɗi|fadi)\b",
+    r"\bleɓ\w*.{0,20}\bshuɗi\b|\bleb\w*.{0,20}\bshudi\b", r"\bciwon ƙirji\b|\bciwon kirji\b",
+    r"\b(?:ya|ta) sha\b.{0,12}\b(?:kananzir|fetur|bilic|maganin ƙwari|maganin kwari)\b",
+    r"\bhaɗiye\b.{0,30}\b(?:ƙwayoyi|kwayoyi|magani)\w*|\bhadiye\b.{0,30}\b(?:kwayoyi|magani)\w*",
+    r"\b(?:ya|ta) faɗa (?:rijiya|ruwa|kogi)\b|\b(?:ya|ta) fada (?:rijiya|ruwa|kogi)\b",
 ]
 PHRASES = re.compile("|".join(_PATTERNS), re.IGNORECASE)
 
 # a data question: the phrase may be a topic, not a situation (the classifier decides after consent)
 DATA = re.compile(r"(?i)\b(?:budget\w*|allocat\w*|spent|spending|naira|₦|kasafi\w*|kuɗi|kudi|how many|number of|"
                   r"rates?|percent\w*|per cent|statistic\w*|reports?|survey|ndhs|mics|ncdc|cases|data|trend\w*|"
-                  r"compare\w*|kashi|adadin|nawa|rahoto|ƙididdiga|kididdiga|policy|programme|shiri\w*|20\d\d)\b|%")
+                  r"compare\w*|kashi|adadin|yawan|nawa|rahoto\w*|ƙididdiga|kididdiga|policy|programme|shiri\w*|"
+                  r"20\d\d)\b|%")
 # words of a situation happening now to someone: they override a data word ("my wife is bleeding, 2 hours now")
 URGENT = re.compile(r"(?i)\b(?:now|right now|help|please|my|our|we|i am|i'm|he is|she is|he's|she's|yanzu|"
                     r"taimak\w*|don allah|matata|mijina|ɗana|dana|ɗiyata|diyata|yarona|yarinyata|mahaifiya\w*|"
                     r"mahaifi\w*|ɗan'uwa\w*)\b")
 HEALTH = re.compile(r"(?i)\b(?:sick|ill|pain\w*|hurt\w*|fever|vomit\w*|diarrh\w*|baby|child|pregnan\w*|blood|"
                     r"breath\w*|injur\w*|wound\w*|emergency|ciwo|rashin lafiya|zazza[bɓ]\w*|amai|gudawa|jariri|"
-                    r"yaro|yarinya|mai ciki|jini|numfashi|rauni|gaggawa|taimako)\b")
+                    r"yaro|yarinya|mai ciki|jini|numfashi|rauni|gaggawa|taimako|urgent|hurry|quickly|danger\w*|"
+                    r"lips?|face|chest|fell|swallowed|da sauri|maza-maza|haɗari|ƙirji|kirji|leɓe|lebe|fuska|"
+                    r"faɗi|fadi|haɗiye|hadiye)\b")
 MATERNAL = re.compile(r"(?i)\b(?:pregnan\w*|labou?r|deliver\w*|childbirth|miscarri\w*|placenta|baby (?:is )?stuck|"
                       r"mai ciki|naƙuda|nakuda|haihuwa|haifuwa|ɓari|bari ciki|jariri ya makale)\b")
 
@@ -160,7 +176,7 @@ async def classify(text: str, settings, client_factory=None, timeout: float = CL
         async with factory(settings, timeout=timeout) as client:
             r = await client.chat([{"role": "system", "content": CLASSIFY_SYSTEM},
                                    {"role": "user", "content": text[:1000]}],
-                                  model=settings.meta_model, reasoning_effort="low", max_tokens=400)
+                                  model=settings.meta_model, reasoning_effort="minimal", max_tokens=400)
         v = parse_json_reply(r.content).get("emergency")
         return v if isinstance(v, bool) else None
     try:

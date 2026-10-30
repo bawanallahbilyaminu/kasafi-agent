@@ -42,13 +42,16 @@ def test_the_three_nearest_match_a_brute_force_check_in_every_lga() -> None:
             got = [f.fid for f in fac.nearest_facilities(conn, lat, lon)]
             assert got == brute_force(conn, lat, lon), pcode
             hosp = fac.nearest_facilities(conn, lat, lon, Filters(levels=("Secondary", "Tertiary")))
-            assert [f.fid for f in hosp] == brute_force(conn, lat, lon, where="level IN ('Secondary', 'Tertiary')")
+            assert [f.fid for f in hosp] == brute_force(conn, lat, lon, where="(level IN ('Secondary', 'Tertiary') "
+                                                                               "OR level_option ILIKE '%hospital%')")
             nxt = fac.nearest_facilities(conn, lat, lon, skip=3)
             assert [f.fid for f in nxt] == brute_force(conn, lat, lon, k=6)[3:]
 
 
 def test_filters_reach_the_query() -> None:
     with _conn() as conn:
+        near_goronyo = fac.nearest_facilities(conn, 13.44, 5.67, Filters(levels=("Secondary", "Tertiary")), k=1)
+        assert near_goronyo[0].name == "Goronyo General Hospital"          # listed 'Primary', typed a hospital
         gov = fac.nearest_facilities(conn, 13.06, 5.245, Filters(ownership="Public"))
         assert gov and all(f.ownership == "Public" for f in gov)
         em = fac.nearest_facilities(conn, 13.06, 5.245, Filters(emonc="cemonc"))

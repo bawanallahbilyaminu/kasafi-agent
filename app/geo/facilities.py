@@ -83,7 +83,9 @@ def nearest_facilities(conn, lat: float, lon: float, filters: Filters = Filters(
     distance on the sphere."""
     where, args = ["f.geom IS NOT NULL"], {"lat": lat, "lon": lon, "n": CANDIDATES + skip}
     if filters.levels:
-        where.append("f.level = ANY(%(levels)s)")
+        # a hospital by its level or by its type: the file lists Goronyo General Hospital as 'Primary'
+        hospital = " OR f.level_option ILIKE '%%hospital%%'" if "Secondary" in filters.levels else ""
+        where.append(f"(f.level = ANY(%(levels)s){hospital})")
         args["levels"] = list(filters.levels)
     if filters.ownership:
         where.append("f.ownership = %(own)s")
