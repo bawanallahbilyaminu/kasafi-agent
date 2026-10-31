@@ -1054,6 +1054,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         prev = history[-1] if history else None
         if conn is not None:
             apply_period(conn, plan, question, today)        # a period named beats the newest report
+        drop_unnamed_splits(plan, question)                  # no kind of spending named: the total
         # health facilities from the registry: a count of a kind, or one facility by name (no money asked about)
         if conn is not None and (fac := facility_route(question, plan, conn, lang)):
             t["facilities"] = 0.0
@@ -1315,6 +1316,24 @@ def apply_period(conn, plan: Plan, question: str, today: date) -> None:
     pin_quarter(plan, period.quarter, rep[1])
     log.info("period asked: Q%d %s -> %s (left out: %s)", period.quarter, rep[1], rep[0],
              ", ".join(plan.skip_docs) or "-")
+
+
+BREAKDOWN_ASKED = re.compile(r"(?i)\b(?:debt|break\s*down|breakdown|split|by kind|components?|made up|bashi|"
+                             r"bashin|rabe-?rabe|kashi-?kashi|ya[kƙ]asa)\b")
+
+
+def drop_unnamed_splits(plan: Plan, question: str) -> None:
+    """A question that names no kind of spending asks for the total: the planner's splits (now and then
+    'personnel' for 'why did its budget fall?') are dropped, as the line reader keeps the total line for such a
+    question. A breakdown asked for, or debt service, keeps them."""
+    need = plan.need
+    if need is None or not need.splits or need.output_shape not in ("value", ""):
+        return
+    text = f"{question} {plan.english_question}"
+    if names_a_kind(text) or BREAKDOWN_ASKED.search(text):
+        return
+    log.info("no kind of spending named: the planner's splits %s dropped for the total", need.splits)
+    need.splits = []
 
 
 def pin_quarter(plan: Plan, quarter: int | None, year: int) -> None:
@@ -2648,8 +2667,10 @@ ANALYSIS_WORDS = {
         "function": "In {year}, all ministries and agencies together are allocated {total} for {subject}: "
                     "{personnel} for salaries, {overhead} for running costs and {capital} for capital projects.",
         "revenue": "The {year} budget expects {cur} from {source}.",
-        "revenue_all": "all its main sources (FAAC, independent revenue, aid and grants, and capital receipts "
-                       "including loans)",
+        "revenue_total": "The {year} budget expects total revenue of {cur}: {recurrent} recurrent revenue (FAAC, "
+                         "independent revenue, aid and grants) and {capital} capital receipts (loans and other "
+                         "capital receipts).",
+        "revenue_total_only": "The {year} budget expects total revenue of {cur}.",
         "revenue_cur": " By the end of {month} {year}, {cur_got} had been received ({cur_rate}%).",
         "revenue_prev": " In {prev}, {prev_amt} was budgeted (revised) and {prev_got} received by September.",
         "largest": "Largest:", "parts": "Main parts:", "sources": "Sources", "page": "p.",
@@ -2719,8 +2740,10 @@ ANALYSIS_WORDS = {
         "function": "A {year}, an ware wa {subject} {total} a duk ma'aikatu da hukumomi: {personnel} na albashi, "
                     "{overhead} na kuɗin gudanarwa, da {capital} na manyan ayyuka.",
         "revenue": "Kasafin {year} yana sa ran samun {cur} daga {source}.",
-        "revenue_all": "manyan hanyoyin kuɗinsa (FAAC, kuɗin shiga na cikin gida, tallafi, da kuɗin manyan ayyuka "
-                       "har da bashi)",
+        "revenue_total": "Kasafin {year} yana sa ran jimillar kuɗin shiga {cur}: {recurrent} kuɗin shiga na yau da "
+                         "kullum (FAAC, kuɗin shiga na cikin gida, tallafi) da {capital} kuɗin shiga na manyan ayyuka "
+                         "(bashi da sauran kuɗin shiga na manyan ayyuka).",
+        "revenue_total_only": "Kasafin {year} yana sa ran jimillar kuɗin shiga {cur}.",
         "revenue_cur": " Zuwa ƙarshen {month} {year}, an samu {cur_got} ({cur_rate}%).",
         "revenue_prev": " A {prev}, an yi kasafin {prev_amt} (wanda aka sabunta), kuma an samu {prev_got} zuwa Satumba.",
         "largest": "Mafi girma:", "parts": "Manyan sassa:", "sources": "Madogara", "page": "shafi",
@@ -2830,9 +2853,13 @@ def analysis_answer(conn, plan: Plan, res: AnalysisResult, lang: str, t: dict, a
         else:
             rows_head = w["parts"]
     elif res.tool == "revenue":
-        source = subject if res.focus != "all" else w["revenue_all"]
-        lead = w["revenue"].format(cur=f["cur"], source=source, **{k: v for k, v in common.items()
-                                                                     if k != "subject"})
+        years = {k: v for k, v in common.items() if k != "subject"}
+        if res.focus != "all":
+            lead = w["revenue"].format(cur=f["cur"], source=subject, **years)
+        elif "recurrent" in f and "capital" in f:     # the printed totals, each part named as what it is
+            lead = w["revenue_total"].format(cur=f["cur"], recurrent=f["recurrent"], capital=f["capital"], **years)
+        else:
+            lead = w["revenue_total_only"].format(cur=f["cur"], **years)
         if "cur_got" in f:
             month = QUARTER_END[lang if lang in QUARTER_END else "en"][res.facts["cur_quarter"].value]
             lead += w["revenue_cur"].format(month=month, cur_got=f["cur_got"], cur_rate=f.get("cur_rate", "-"),

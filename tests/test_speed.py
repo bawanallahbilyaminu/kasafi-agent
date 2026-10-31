@@ -250,3 +250,23 @@ def test_an_agency_named_staff_or_workers_is_no_headcount_question() -> None:
     mhe = Entity("mda", "Ministry for Higher Education", "Ministry for Higher Education", "051700000000")
     assert ag.headcount_asked(ag.Plan(q2, [], [], need=Need(q2, entities=[mhe])))
     assert ag.headcount_asked(ag.Plan(q2, [], []))                          # no need yet: the words decide
+
+
+def test_a_question_naming_no_kind_of_spending_takes_the_total() -> None:
+    def plan_for(q, splits, shape="value"):
+        need = Need(q, entities=[Entity("mda", "Ministry of Health", "Ministry of Health", "052100000000")],
+                    splits=list(splits), output_shape=shape)
+        return ag.Plan(q, [], [], need=need)
+    p = plan_for("Why did the Ministry of Health's budget fall from 2025 to 2026?", ["personnel"])
+    ag.drop_unnamed_splits(p, p.english_question)
+    assert p.need.splits == []
+    for q in ("How much does the Ministry of Health spend on salaries in 2026?",
+              "Nawa aka ware wa albashi a Ma'aikatar Lafiya a 2026?",
+              "How much is the Ministry of Health's debt service in 2026?",
+              "Give me the breakdown of the Ministry of Health's 2026 budget"):
+        p = plan_for(q, ["personnel"])
+        ag.drop_unnamed_splits(p, q)
+        assert p.need.splits == ["personnel"], q
+    p = plan_for("How is the Ministry of Health's 2026 budget made up?", ["personnel", "overhead", "capital"], "table")
+    ag.drop_unnamed_splits(p, p.english_question)
+    assert p.need.splits == ["personnel", "overhead", "capital"]

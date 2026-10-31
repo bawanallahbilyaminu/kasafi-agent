@@ -135,3 +135,46 @@ def test_planned_analysis_answers_without_a_compose_call(monkeypatch) -> None:
     assert a.text.startswith("The 2026 budget has 2 projects located in Tambuwal, with ₦3.00 billion allocated.")
     assert "not the local government's own allocation" in a.text and "• Completion of Premier Hospital" in a.text
     assert "📄 *Sources:* Budget, p. 61, 67" in a.text
+
+
+def test_revenue_headline_is_the_budgets_own_total_revenue_line(conn) -> None:
+    """The fixed revenue summary's headline figure is the printed Total Revenue line, which is the recurrent and
+    capital totals added, never a sum of the economic headings (the 2025 budget's gave the capital receipts
+    and grants alone, ₦144 bn, as 'all main sources'; total revenue is ₦413 bn)."""
+    for year in (2025, 2026):
+        r = an.run_analysis(conn, {"tool": "revenue", "year": year})
+        assert r is not None and r.found and r.focus == "all"
+        total = Decimal(r.facts["cur"].value)
+        printed = [Decimal(v) for (v,) in conn.execute(
+            f"SELECT approved_{year} FROM budget_items WHERE doc_id = %s AND classification = 'administrative' AND "
+            f"spend_kind = 'revenue' AND name = 'Total Revenue' AND approved_{year} IS NOT NULL",
+            (f"budget-{year}-approved",))]
+        assert total in printed
+        rec, cap = Decimal(r.facts["recurrent"].value), Decimal(r.facts["capital"].value)
+        assert abs(total - (rec + cap)) <= total * Decimal("0.005")
+        assert total > cap                                        # never the capital receipts alone
+    r = an.run_analysis(conn, {"tool": "revenue", "year": 2025})
+    assert r.facts["cur"].value == Decimal("413074379419.18")
+    a = ans.analysis_answer(conn, Plan("q", [], []), r, "en", {}, None)
+    assert "total revenue of ₦413.07 billion" in a.text and "₦268.95 billion recurrent revenue" in a.text \
+        and "₦144.13 billion capital receipts" in a.text and "all its main sources" not in a.text
+    ha = ans.analysis_answer(conn, Plan("q", [], []), r, "ha", {}, None)
+    assert "jimillar kuɗin shiga ₦413.07 biliyan" in ha.text
+
+
+def test_profile_headlines_are_the_printed_total_rows_and_their_parts_add_up(conn) -> None:
+    """The ministry and function summaries lead with the Total row of their classification, and the kinds they
+    name (salaries, running costs, capital, debt) add up to it: no sum of parts presented as a whole."""
+    for spec, cls, code in (({"tool": "mda_profile", "mda": "Ministry of Health", "year": 2026}, "administrative",
+                             "052100000000"),
+                            ({"tool": "function_profile", "function": "Health", "year": 2026}, "function", "707")):
+        r = an.run_analysis(conn, spec)
+        assert r is not None and r.found, spec
+        total = Decimal(r.facts["total"].value)
+        printed = conn.execute(
+            "SELECT approved_2026 FROM budget_items WHERE doc_id = 'budget-2026-approved' AND classification = %s "
+            "AND code = %s AND spend_kind = 'total' ORDER BY seq LIMIT 1", (cls, code)).fetchone()
+        assert printed and Decimal(printed[0]) == total
+        parts = sum((Decimal(r.facts[k].value) for k in ("personnel", "overhead", "capital", "debt") if k in r.facts),
+                    Decimal(0))
+        assert abs(total - parts) <= total * Decimal("0.005"), (total, parts)

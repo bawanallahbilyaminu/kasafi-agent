@@ -493,6 +493,34 @@ def function_profile(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
 # --- revenue -----------------------------------------------------------------------------------
 
 REVENUE_CODES = {"faac": "11", "igr": "12", "grants": "13", "capital_receipts": "14"}
+TOTAL_REVENUE, RECURRENT, CAPITAL_RECEIPTS = "Total Revenue", "Total Recurrent Revenue", "Total Capital Receipts"
+
+
+def revenue_totals(conn: psycopg.Connection, doc: str, year: int) -> dict[str, tuple]:
+    """The budget's own revenue totals, as printed: {name: (approved, previous year's revised, previous year's
+    Jan–Sep actual, page)} for Total Revenue, Total Recurrent Revenue and Total Capital Receipts. The Total
+    Revenue line is the one whose figure is the recurrent and capital totals added (the revenue-by-MDA table prints
+    a 'Total Revenue' of its own, the MDAs' independent revenue). The economic headings (FAAC, independent
+    revenue, aid and grants, capital receipts) are not all indexed in every budget, so they are never added up
+    for a total: the 2025 budget's sum of them was the capital receipts and grants alone, ₦144 bn, and the summary
+    called it the revenue from all main sources (total revenue is ₦413 bn)."""
+    cur, rev, got = _col(f"approved_{year}"), _col(f"revised_{year - 1}"), _col(f"jan_sep_{year - 1}")
+    rows = conn.execute(
+        f"SELECT name, {cur}, {rev}, {got}, page FROM budget_items WHERE doc_id = %s AND classification = "
+        f"'administrative' AND spend_kind = 'revenue' AND name = ANY(%s) ORDER BY page, seq",
+        (doc, [TOTAL_REVENUE, RECURRENT, CAPITAL_RECEIPTS])).fetchall()
+    out: dict[str, tuple] = {}
+    for name, c, r, g, p in rows:
+        if name != TOTAL_REVENUE and c is not None:
+            out.setdefault(name, (Decimal(c), r, g, p))
+    totals = [r for r in rows if r[0] == TOTAL_REVENUE and r[1] is not None]
+    if RECURRENT in out and CAPITAL_RECEIPTS in out:
+        want = out[RECURRENT][0] + out[CAPITAL_RECEIPTS][0]
+        totals = [r for r in totals if abs(Decimal(r[1]) - want) <= want * Decimal("0.005")] or totals
+    if totals:
+        name, c, r, g, p = totals[0]
+        out[TOTAL_REVENUE] = (Decimal(c), r, g, p)
+    return out
 
 
 def revenue(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
@@ -510,24 +538,45 @@ def revenue(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
         f"SELECT DISTINCT ON (code) code, name, {cur}, {rev}, {got}, page FROM budget_items WHERE doc_id = %s AND "
         f"classification = 'economic' AND spend_kind = 'revenue' AND code = ANY(%s) ORDER BY code, seq",
         (doc, codes))}
-    if not rows:
+    totals = revenue_totals(conn, doc, year) if focus == "all" else {}
+    if not rows and TOTAL_REVENUE not in totals:
         res.reason = "no_revenue"
         return res
     res.titles = _titles(conn, {doc})
-    total = sum((Decimal(r[1] or 0) for r in rows.values()), Decimal(0))
-    page = min(r[4] for r in rows.values())
-    res.money("cur", total, doc, page)
-    res.money("prev", sum((Decimal(r[2] or 0) for r in rows.values()), Decimal(0)), doc, page)
-    res.money("prev_got_jan_sep", sum((Decimal(r[3] or 0) for r in rows.values()), Decimal(0)), doc, page)
+    if focus == "all":
+        if TOTAL_REVENUE not in totals:                 # no printed total: nothing to add up safely
+            res.reason = "no_revenue"
+            return res
+        total, prev, prev_got, page = totals[TOTAL_REVENUE]
+        res.money("cur", total, doc, page)
+        res.money("prev", prev or 0, doc, page)
+        res.money("prev_got_jan_sep", prev_got or 0, doc, page)
+        for key, name in (("recurrent", RECURRENT), ("capital", CAPITAL_RECEIPTS)):
+            if name in totals:
+                res.money(key, totals[name][0], doc, totals[name][3])
+        res.working.append("Totals as printed (Total Revenue by Administrative Classification): " + "; ".join(
+            f"{n} {cur} {v[0]:,.2f} (p{v[3]})" for n, v in totals.items()))
+    else:
+        total = sum((Decimal(r[1] or 0) for r in rows.values()), Decimal(0))
+        page = min(r[4] for r in rows.values())
+        res.money("cur", total, doc, page)
+        res.money("prev", sum((Decimal(r[2] or 0) for r in rows.values()), Decimal(0)), doc, page)
+        res.money("prev_got_jan_sep", sum((Decimal(r[3] or 0) for r in rows.values()), Decimal(0)), doc, page)
     res.subject = rows[codes[0]][0].title() if focus != "all" else ""
     rep = latest_report(conn, year)
     if spec.get("report"):              # a period the question names: that report, even when a newer one exists
         q = conn.execute("SELECT max(quarter), max(year) FROM perf_items WHERE doc_id = %s", (spec["report"],)).fetchone()
         rep = (spec["report"], q[0]) if q and q[0] and q[1] == year else rep
     if rep:
-        got_now = conn.execute("SELECT sum(ytd_spent), min(page) FROM (SELECT DISTINCT ON (code) code, ytd_spent, page "
-                               "FROM perf_items WHERE doc_id = %s AND classification = 'economic' AND spend_kind = "
-                               "'revenue' AND code = ANY(%s) ORDER BY code, seq) x", (rep[0], codes)).fetchone()
+        if focus == "all":              # the report's own Total Revenue line (its economic headings aren't all in)
+            got_now = conn.execute("SELECT ytd_spent, page FROM perf_items WHERE doc_id = %s AND classification = "
+                                   "'administrative' AND spend_kind = 'revenue' AND name = %s AND ytd_spent IS NOT "
+                                   "NULL ORDER BY seq LIMIT 1", (rep[0], TOTAL_REVENUE)).fetchone() or (None, None)
+        else:
+            got_now = conn.execute("SELECT sum(ytd_spent), min(page) FROM (SELECT DISTINCT ON (code) code, ytd_spent, "
+                                   "page FROM perf_items WHERE doc_id = %s AND classification = 'economic' AND "
+                                   "spend_kind = 'revenue' AND code = ANY(%s) ORDER BY code, seq) x",
+                                   (rep[0], codes)).fetchone()
         if got_now[0] is not None:
             res.money("cur_got", got_now[0], rep[0], got_now[1])
             res.pct("cur_rate", got_now[0], total, rep[0], got_now[1])
@@ -545,7 +594,8 @@ def revenue(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
         if v:
             res.rows.append(Row(n, v, doc, p))
     res.working.insert(0, f"Source: {doc}, Revenue by Economic Classification; codes {', '.join(codes)}: "
-                          + "; ".join(f"{c} {r[0]} {cur} {Decimal(r[1] or 0):,.2f}" for c, r in sorted(rows.items())))
+                          + ("; ".join(f"{c} {r[0]} {cur} {Decimal(r[1] or 0):,.2f}" for c, r in sorted(rows.items()))
+                             or "none indexed"))
     res.found = True
     return res
 
