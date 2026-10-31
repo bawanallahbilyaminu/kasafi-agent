@@ -181,65 +181,65 @@
   {
    "id": "p4_narrative-01",
    "pattern": "p4_narrative",
-   "text": "What does the Sokoto State Budget Implementation Report Q3 2025 say about the budget performance, and what reasons does it give?",
+   "text": "What does the Budget Implementation Report Q4 2025 say about Revenue Performance, and what reasons does it give?",
    "lang": "en",
    "expect": [
-    "136,177,564.29"
+    "413,074,379,419.18"
    ],
    "cites": [
-    "bir-2025-q3",
-    48
+    "bir-2025-q4",
+    5
    ],
    "narrative": true
   },
   {
    "id": "p4_narrative-02",
    "pattern": "p4_narrative",
-   "text": "What does the Sokoto State Budget Implementation Report Q3 2025 say about Primary Healthcare Budget Performance, and what reasons does it give?",
+   "text": "What does the Sokoto State Budget Implementation Report Q3 2025 say about Revenue Performance, and what reasons does it give?",
    "lang": "en",
    "expect": [
-    "13,196,854,692.00"
+    "526,882,142,484.39"
    ],
    "cites": [
     "bir-2025-q3",
-    78
+    4
    ],
    "narrative": true
   },
   {
    "id": "p4_narrative-03",
    "pattern": "p4_narrative",
-   "text": "What does the Budget Implementation Report Q4 2025 say about the budget performance, and what reasons does it give?",
+   "text": "What does the Budget Implementation Report Q2 2026 say about Primary Healthcare Budget Performance, and what reasons does it give?",
    "lang": "en",
    "expect": [
-    "1,099,136.01"
+    "7,210,210,444.94"
    ],
    "cites": [
-    "bir-2025-q4",
-    48
+    "bir-2026-q2",
+    51
    ],
    "narrative": true
   },
   {
    "id": "p5_not_published-01",
    "pattern": "p5_not_published",
-   "text": "How many staff does the Ministry for Higher Education employ, and on which grade levels?",
+   "text": "How many staff does the Ministry for Special Duties employ, and on which grade levels?",
    "lang": "en",
    "expect": [
-    "6,722,649,078.46"
+    "12,000,000.00"
    ],
-   "code": "056900000000",
+   "code": "016700000000",
    "must_say": "(?i)publish|wallafa|buga"
   },
   {
    "id": "p5_not_published-02",
    "pattern": "p5_not_published",
-   "text": "How many staff does the Ministry of Water Resources employ, and on which grade levels?",
+   "text": "How many staff does the Government House employ, and on which grade levels?",
    "lang": "en",
    "expect": [
-    "1,026,195,159.68"
+    "444,249,916.87"
    ],
-   "code": "025200000000",
+   "code": "011100000000",
    "must_say": "(?i)publish|wallafa|buga"
   }
  ]

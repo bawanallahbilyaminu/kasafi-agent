@@ -375,3 +375,17 @@ def test_a_line_answer_without_a_summary_opens_with_a_sentence() -> None:
                         ("ha", "2026 Approved Budget na Sokoto State Independent Electoral Commission shi ne ")):
         a = ag.line_answer(None, _plan("SIEC 2026"), res, [x], lang, {}, None)
         assert a.text.startswith(start) and not a.text.startswith("•")
+
+
+def test_a_table_row_with_a_long_name_is_not_prose() -> None:
+    from app.retrieval.search import is_prose
+    narrative = ("4.A Overview\nIn the 2025 Approved Budget, the Primary Healthcare (PHC) sub-sector was allocated a "
+                 "total of ₦13,196,854,692.00 to finance key interventions aimed at improving access to quality "
+                 "healthcare services. However, due to fiscal adjustments necessitated by revenue shortfalls, the "
+                 "budget was revised downward to ₦10,700,000,000.00 by the end of Q3 2025.")
+    table = ("[Table: Total Expenditure by Programme Classification]\n0101 Effective governance of the Agriculture "
+             "Sector | 2025 Original Budget: 9,352,700,000.00 | 2025 Revised Budget: 16,852,700,000.00 | "
+             "2025 Q3 Performance: 2,096,701,590.46 | Balance (against Revised Budget): 15,505,797,447.79\n"
+             "0102 increase in access, retention, and completion rate at all levels | 2025 Original Budget: 1.00")
+    toc = "4 Basic Education Budget Performance........................................55\n4.A Overview ............55"
+    assert is_prose(narrative) and not is_prose(table) and not is_prose(toc)

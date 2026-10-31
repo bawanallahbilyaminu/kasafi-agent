@@ -138,18 +138,24 @@ def generate(conn, rng: random.Random) -> list[dict]:
     # p4: a BIR narrative paragraph: the reply must cite its page
     # (running text, never a table of contents; the narrative sits under the table title the indexer carries over,
     # so '[Table:' is no sign of a table. The reply must cite the page AND give a figure the paragraph prints.)
-    from app.retrieval.search import SENTENCES
-    prose = conn.execute("""SELECT c.doc_id, c.page, c.text, d.title FROM chunks c JOIN documents d ON d.id = c.doc_id
-        WHERE c.doc_id LIKE 'bir-%%' AND c.text ~ %s AND c.text !~ '\\.{6,}' AND length(c.text) > 400
+    from app.retrieval.search import is_prose
+    rows = conn.execute("""SELECT c.doc_id, c.page, c.text, d.title FROM chunks c JOIN documents d ON d.id = c.doc_id
+        WHERE c.doc_id LIKE 'bir-%%' AND length(c.text) > 400
           AND c.text ~* '(increase|decrease|reason|due to|attribut|variance|explain|however|as a result)'
-          AND c.text ~ '[0-9]{1,3},[0-9]{3},[0-9]{3}'""", (SENTENCES,)).fetchall()
-    for doc, page, text, doc_title in rng.sample(prose, min(3, len(prose))):
+          AND c.text ~ '[0-9]{1,3},[0-9]{3},[0-9]{3}'""").fetchall()
+    prose = []
+    for doc, page, text, doc_title in rows:
         body = re.sub(r"^\[Table:[^\]]*\]\n", "", text)
+        if not is_prose(body):
+            continue
         m = re.search(r"(?m)^\s*\d+(?:\.[A-Z])?\s+([A-Z][A-Za-z ]{6,60}?)\s*$", body)        # the section heading
         phrases = [p for p in re.findall(r"(?:[A-Z][a-z]+ ){2,}[A-Z][a-z]+", body)
                    if not re.search(r"Sokoto State Government|Budget Implementation Report", p)]
-        topic = m.group(1).strip() if m else (max(phrases, key=len) if phrases else "the budget performance")
-        figure = re.search(r"\d{1,3}(?:,\d{3}){2,}(?:\.\d{2})?", body).group(0)
+        topic = m.group(1).strip() if m else (max(phrases, key=len) if phrases else "")
+        figure = re.search(r"(?<![\d,.])\d{1,3}(?:,\d{3}){2,}(?:\.\d{2})?", body.split("\n", 1)[-1])
+        if topic and figure:                    # a paragraph with a subject the question can name, and a figure
+            prose.append((doc, page, doc_title, topic, figure.group(0)))
+    for doc, page, doc_title, topic, figure in rng.sample(prose, min(3, len(prose))):
         add("p4_narrative", f"What does the {doc_title} say about {topic}, and what reasons does it give?",
             [figure], cites=[doc, page], narrative=True)
 

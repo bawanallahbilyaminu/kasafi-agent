@@ -35,7 +35,8 @@ all_terms AS (
       AND (%(docs)s::text[] IS NULL OR c.doc_id = ANY(%(docs)s::text[]))
       AND (NOT %(key_rows)s OR (c.text LIKE '%% | %%'
            AND length(c.text) - length(replace(c.text, chr(10), '')) <= 1))
-      AND (NOT %(prose)s OR (c.text ~ %(sentences)s AND c.text !~ '\\.{6,}'))
+      AND (NOT %(prose)s OR (c.text ~ %(sentences)s AND c.text ~ %(ends)s AND c.text !~ '\\.{6,}'
+           AND (length(c.text) - length(replace(c.text, ' | ', ''))) / 3 <= 2))
     ORDER BY rank DESC LIMIT %(k)s
 ),
 any_term AS (
@@ -44,7 +45,8 @@ any_term AS (
       AND (%(docs)s::text[] IS NULL OR c.doc_id = ANY(%(docs)s::text[]))
       AND (NOT %(key_rows)s OR (c.text LIKE '%% | %%'
            AND length(c.text) - length(replace(c.text, chr(10), '')) <= 1))
-      AND (NOT %(prose)s OR (c.text ~ %(sentences)s AND c.text !~ '\\.{6,}'))
+      AND (NOT %(prose)s OR (c.text ~ %(sentences)s AND c.text ~ %(ends)s AND c.text !~ '\\.{6,}'
+           AND (length(c.text) - length(replace(c.text, ' | ', ''))) / 3 <= 2))
       AND (SELECT count(*) FROM all_terms) < %(k)s
     ORDER BY rank DESC LIMIT %(k)s
 ),
@@ -90,9 +92,17 @@ def printed_query(query: str) -> str:
     return out if out != query else ""
 
 
-# running text: six lower-case words in a row (a BIR's narrative sits under the table title the indexer carries
-# over, so '[Table:' can't tell prose from a table); dotted leaders mark a table of contents
-SENTENCES = r"[a-z]{3,} [a-z]{3,} [a-z]{3,} [a-z]{3,} [a-z]{3,} [a-z]{3,}"
+# running text: six lower-case words in a row and at least two sentence ends (a BIR's narrative sits under the
+# table title the indexer carries over, so '[Table:' can't tell prose from a table; a long programme name in a
+# table row can look like six words, so the sentence ends decide); dotted leaders mark a table of contents
+SENTENCES = r"(?:[a-z]+ ){5}[a-z]+"       # any six lower-case words in a row ('was allocated a total of the')
+SENTENCE_ENDS = r"[a-z0-9%)]\.\s+[A-Z].*[a-z0-9%)]\.(\s|$)"
+
+
+def is_prose(text: str) -> bool:
+    """The same test in Python (the eval generator picks narrative paragraphs with it)."""
+    return bool(re.search(SENTENCES, text) and re.search(SENTENCE_ENDS, text, re.S) and not re.search(r"\.{6,}", text)
+                and text.count(" | ") <= 2)
 
 
 def search(conn: psycopg.Connection, query: str, *, k: int = 8, doc_ids: list[str] | None = None,
@@ -101,10 +111,10 @@ def search(conn: psycopg.Connection, query: str, *, k: int = 8, doc_ids: list[st
     such as a ministry's total, which keyword ranking over whole pages tends to bury. A query naming an indicator
     in everyday words also runs with its printed name, and the best hits of both are kept. prose=True searches only
     running text (no table rows): a report's narrative, for what it explains, corrects or notes."""
-    rows = conn.execute(SQL, {"q": query, "k": k, "docs": doc_ids, "key_rows": key_rows, "prose": prose, "sentences": SENTENCES}).fetchall()
+    rows = conn.execute(SQL, {"q": query, "k": k, "docs": doc_ids, "key_rows": key_rows, "prose": prose, "sentences": SENTENCES, "ends": SENTENCE_ENDS}).fetchall()
     if alt := printed_query(query):
         seen = {(r[0], r[3], r[6]) for r in rows}
-        more = [r for r in conn.execute(SQL, {"q": alt, "k": k, "docs": doc_ids, "key_rows": key_rows, "prose": prose, "sentences": SENTENCES}).fetchall()
+        more = [r for r in conn.execute(SQL, {"q": alt, "k": k, "docs": doc_ids, "key_rows": key_rows, "prose": prose, "sentences": SENTENCES, "ends": SENTENCE_ENDS}).fetchall()
                 if (r[0], r[3], r[6]) not in seen]
         rows = sorted(rows + more, key=lambda r: -r[5])[:k]
     return [Hit(*r) for r in rows]
