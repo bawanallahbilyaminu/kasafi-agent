@@ -16,7 +16,8 @@ masked to cropland (ESA WorldCover 2021, class 40, majority per cell):
 - bsi_share, bsi_median (per year, 2017→): dry-season (February–April) Sentinel-2 BSI from the two clearest
   scenes per tile and year, averaged to 200 m, clouds masked with SCL (mode); the share of cropland cells over
   BSI_BARE and the median.
-- rain_season_mm (per year, 2001→): Open-Meteo archive at the unit's centroid, June–October.
+- rain_season_mm (per year, 2001→): Open-Meteo archive at the LGA's centroid (each ward takes its LGA's series;
+  the ERA5-Land grid is ~9 km), June–October.
 - cropland_share, cropland_cells (year 0).
 
 Results go to ward_history (migration 0021). Nothing here stores a user or a pin.
@@ -368,9 +369,11 @@ def bsi_year(grid: Grid, units: Units, crop: np.ndarray, year: int, workers: int
 
 
 def rain_years(units: Units, first_year: int, today: date, workers: int = 1) -> dict[tuple[str, str], dict[int, float]]:
-    """June–October rain per unit centroid and year. One call at a time with a pause: the Open-Meteo archive
-    rate-limits a burst of 26-year requests (31 Oct 2026: 241 of 268 came back 429 at four threads)."""
-    keys = list(units.centroids)
+    """June–October rain per year at the LGA centroids and the state's; each ward takes its LGA's series (the
+    ERA5-Land grid is ~9 km, coarser than most wards). One call at a time with a pause and a long backoff: the
+    Open-Meteo archive's hourly quota weighs a 26-year request heavily (31 Oct 2026: 241 of 268 ward calls came
+    back 429 at four threads, and a sequential rerun was still limited)."""
+    keys = [k for k in units.centroids if k[0] in ("lga", "state")]
 
     def one(key):
         lat, lon = units.centroids[key]
@@ -381,7 +384,7 @@ def rain_years(units: Units, first_year: int, today: date, workers: int = 1) -> 
                 return key, {y: v["season_mm"] for y, v in rain.by_year(daily).items()}
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429:
-                    time.sleep(15 * (attempt + 1))
+                    time.sleep(60 * (attempt + 1))
                     continue
                 log.warning("area: rain for %s failed: HTTP %s", key, e.response.status_code)
                 return key, {}
@@ -395,6 +398,9 @@ def rain_years(units: Units, first_year: int, today: date, workers: int = 1) -> 
     with ThreadPoolExecutor(max_workers=workers) as ex:
         for key, vals in ex.map(one, keys):
             out[key] = vals
+    for code, _, lga in units.wards.values():
+        if ("lga", lga) in out:
+            out[("ward", code)] = out[("lga", lga)]
     return out
 
 
