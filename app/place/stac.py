@@ -34,13 +34,17 @@ def _headers() -> dict[str, str]:
 
 
 def search(collection: str, lon: float, lat: float, start: str, end: str, *, max_cloud: float | None = None,
-           fields: list[str] | None = None, limit: int = 2000, ids: list[str] | None = None) -> list[dict]:
-    """Items of a collection whose footprint holds the point, dated start/end (ISO dates), oldest first.
-    Pages are followed; `fields` keeps the response small (properties.datetime, assets.B04.href, ...); `ids`
-    narrows to named items (a scene cached by id)."""
-    body: dict = {"collections": [collection], "intersects": {"type": "Point", "coordinates": [lon, lat]},
-                  "datetime": f"{start}/{end}", "limit": min(PAGE, limit),
+           fields: list[str] | None = None, limit: int = 2000, ids: list[str] | None = None,
+           bbox: tuple[float, float, float, float] | None = None) -> list[dict]:
+    """Items of a collection whose footprint holds the point (or crosses `bbox`), dated start/end (ISO dates),
+    oldest first. Pages are followed; `fields` keeps the response small (properties.datetime, assets.B04.href,
+    ...); `ids` narrows to named items (a scene cached by id)."""
+    body: dict = {"collections": [collection], "datetime": f"{start}/{end}", "limit": min(PAGE, limit),
                   "sortby": [{"field": "properties.datetime", "direction": "asc"}]}
+    if bbox is not None:
+        body["bbox"] = list(bbox)
+    else:
+        body["intersects"] = {"type": "Point", "coordinates": [lon, lat]}
     if max_cloud is not None:
         body["query"] = {"eo:cloud_cover": {"lt": max_cloud}}
     if ids:
