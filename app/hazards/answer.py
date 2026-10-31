@@ -210,7 +210,9 @@ def where_for(entities: list, place: dict | None) -> read.Where:
 
 
 def hazard_answer(conn, question: str, lang: str, layers: list[str], where: read.Where, today: date,
-                  settings=None) -> HazardAnswer:
+                  settings=None, status: bool = True) -> HazardAnswer:
+    """The details of a hazard answer. `status=False` when the summary (app/hazards/summary.py) already gives the
+    official warning status: the details then quote only warnings and outlooks that exist."""
     w = W.get(lang, W["en"])
     days = days_asked(question, today)
     pids = read.point_ids(conn, where)
@@ -224,7 +226,8 @@ def hazard_answer(conn, question: str, lang: str, layers: list[str], where: read
         intro = []
     place = w["where_state"] if where.kind == "state" else w["where_lga"].format(lga=where.lga)
     out, found, used = [f"📍 {place}"] + intro, False, {}
-    if conn is not None and (official := official_lines(conn, lang, layers, where)):
+    official = official_lines(conn, lang, layers, where, status=status) if conn is not None else []
+    if official:
         out += ["", *official]                  # official warnings first, verbatim; the model forecasts follow
     for layer in [x for x in layers if x in LAYERS]:
         src = LAYER_OF_SOURCE[layer]
@@ -256,7 +259,9 @@ def hazard_answer(conn, question: str, lang: str, layers: list[str], where: read
         if conn is not None and outlook_conflict(conn, where, today):
             out.append(w["river_conflict"])
     if used:
-        if any(s in used for s in ("forecast", "air", "flood")):
+        # 'model forecasts, not official' said once: the official section's heading or the river note may have it
+        if any(s in used for s in ("forecast", "air", "flood")) and not official and \
+                not ("flood" in layers and found):
             out += ["", w["forecast_note"]]
         out.append(f"📄 *{w['sources']}:* " + "; ".join(
             f"{read.source_of(s)}, {w['fetched'].format(when=at.astimezone(read.LAGOS).strftime('%d %b %H:%M'))}"

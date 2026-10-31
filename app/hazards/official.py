@@ -247,9 +247,12 @@ def checked_status(lang: str, checked: datetime, place: str, now: datetime | Non
     return t["stale_none"].format(place=place, ago=ago, when=at.strftime("%d %b"))
 
 
-def official_lines(conn, lang: str, layers: list[str], where: read.Where, now: datetime | None = None) -> list[str]:
+def official_lines(conn, lang: str, layers: list[str], where: read.Where, now: datetime | None = None,
+                   status: bool = True) -> list[str]:
     """The 'Official warnings' section that leads a hazard answer (warnings, then the official outlooks for the
-    current months), or [] when the question has no hazard."""
+    current months), or [] when the question has no hazard. With `status=False` (the summary already says whether
+    a warning is in force) the 'no active alert' line is left out, and the section only appears when there is a
+    warning, an expired one or an outlook to quote."""
     t = _t(lang)
     hazards = tuple(dict.fromkeys(h for x in layers for h in LAYER_HAZARDS.get(x, ())))
     if not hazards:
@@ -258,17 +261,20 @@ def official_lines(conn, lang: str, layers: list[str], where: read.Where, now: d
     live, gone = advisories_for(conn, hazards, where, now)
     warnings = [a for a in live if a.kind != "outlook"]
     outlooks = [a for a in live if a.kind == "outlook"]
-    out = [t["head"]]
+    expired = [] if warnings or not gone or gone.kind == "outlook" else [gone]
+    if not status and not (warnings or expired or outlooks):
+        return []
+    out = [t["head"]] if status or warnings or expired else []
     if checked is None:
-        out.append(t["unchecked"])
+        if status:
+            out.append(t["unchecked"])
     else:
         out += [quote(lang, a) for a in warnings[:3]]
-        if not warnings and gone and gone.kind != "outlook":
-            out.append(quote(lang, gone, expired=True))
-        if not warnings:
+        out += [quote(lang, a, expired=True) for a in expired]
+        if not warnings and status:
             out.append(checked_status(lang, checked, _place(lang, where), now))
     if outlooks:
-        out += ["", t["outlook_now"], *[quote(lang, a) for a in outlooks[:3]]]
+        out += [*([""] if out else []), t["outlook_now"], *[quote(lang, a) for a in outlooks[:3]]]
     return out + ["", t["model_head"]]
 
 

@@ -223,7 +223,15 @@ All of these go through the planning loop as capabilities, not a separate bot.
 **Answer format (Oct 31, every answer type):**
 1. An executive summary: 1–3 plain sentences that answer directly, in the user's language.
    - Facility and emergency summaries are written in code.
-   - Hazard, official-outlook and topic summaries are written by Muse Spark (`app/agent/summary.py`) from the answer's own details. Any figure the details don't print drops the summary.
+   - **Hazard summaries are written in code (Oct 31, `app/hazards/summary.py`)**: 2–3 sentences that synthesise and never repeat the details:
+     - the category with its meaning quoted from the scale's owner (US EPA for AQI, the NWS for heat; Hausa marked "fassarar Kasafi");
+     - PM2.5 / PM10 as multiples of the WHO daily guideline;
+     - what drives it (the pollutant setting the AQI; air temperature vs heat index);
+     - tomorrow vs the day asked, and the LGA's place among the 23 when it's near either end;
+     - the official warning status as the last sentence.
+
+     The details then leave out the "no active alert" line, and "model forecasts, not official" appears once.
+   - Official-outlook and topic summaries are written by Muse Spark (`app/agent/summary.py`) from the answer's own details. Any figure the details don't print drops the summary.
    - Budget answers already lead with their synthesis.
 2. The details: figures, bullets, map.
 3. One compact sources line, e.g. "📄 NiMet, 2026 Seasonal Climate Prediction p. 12–16; NiMet SCP Update p. 3".

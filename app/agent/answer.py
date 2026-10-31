@@ -49,7 +49,9 @@ from app.agent.tools import APPROVED_YEARS, budget_fill, dtm_fill
 from app.agent.topics import TopicResult, topic_answer
 from app.geo.location import names_place, with_location
 from app.hazards import official
+from app.agent.summary import lead, split_quotes
 from app.hazards.answer import MEASURE_LAYERS, days_asked, hazard_answer, layers_asked, where_for
+from app.hazards.summary import hazard_summary
 from app.agent.topics import note_of as topic_note
 from app.agent.topics import local_documents as topics_local
 from app.agent.topics import named_publishers
@@ -1020,12 +1022,18 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         # weather and hazards (heat, dust, rain, rivers, fires): answered in code from the fetched layers
         if conn is not None and (layers := hazard_route(question, plan)):
             t0 = time.perf_counter()
-            ha = hazard_answer(conn, f"{question} {plan.english_question}", lang, layers,
-                               where_for(plan.need.entities if plan.need else [], place), today, settings)
+            q = f"{question} {plan.english_question}"
+            ha = hazard_answer(conn, q, lang, layers, where_for(plan.need.entities if plan.need else [], place),
+                               today, settings, status=False)
+            # the summary is written in code from the same data (app/hazards/summary.py): it synthesises, quotes
+            # the scales' owners, and carries the official warning status the details then leave out
+            summary = hazard_summary(conn, lang, ha.layers, ha.where, days_asked(q, today)[0], today) \
+                if ha.found else ""
             t["hazard"] = time.perf_counter() - t0
             log.info("hazard answer: layers %s, %s, found=%s", ",".join(layers), ha.where.kind, ha.found)
             # no data for the day asked is still an answer ("not available now"), only partial
-            text, quotes, summary = await _led(question, ha.text, lang, settings, client)
+            details, quotes = split_quotes(ha.text)
+            text = lead(summary, details)
             return Answer(text, True, True, plan=plan, timings=t, exact=f"{summary}\n{ha.text}",
                           partial=not ha.found, quotes=quotes,
                           maps=maps_for(f"{question} {plan.english_question}", ha, today) if ha.found else [])
