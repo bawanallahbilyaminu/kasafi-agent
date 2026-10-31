@@ -50,9 +50,13 @@ MONEY = re.compile(r"(?i)\b(?:budget\w*|allocat\w*|spent|spend\w*|naira|₦|kasa
 T = {
     "en": {"head": "⚠️ *Official warnings*", "model_head": "*Model forecasts (not official):*",
            "line": "{src}, issued {date}: “{text}”", "expired": "{src}, issued {date} (*expired*): “{text}”",
-           "none": "No current official warning for {place} from NEMA, the Sokoto State Government (SEMA) or the "
-                   "Ministry of Health (checked {when}).",
-           "unchecked": "Official warnings haven't been checked yet.",
+           "none": "No active alert from NEMA, the Sokoto State Government (SEMA) or the Ministry of Health for "
+                   "{place} as of {when}.",
+           "stale_none": "Last checked {ago} ({when}); no alert from NEMA, the Sokoto State Government (SEMA) or "
+                         "the Ministry of Health for {place} then.",
+           "unchecked": "Kasafi has no successful check of NEMA, SEMA or Ministry of Health alerts yet, so it can't "
+                        "say whether one is active.",
+           "today": "{t} today", "yesterday": "yesterday {t}", "days_ago": "{n} days ago", "day_ago": "a day ago",
            "place_state": "Sokoto State", "place_lga": "{lga} LGA",
            "names": {"cholera": "Cholera", "csm": "Meningitis (CSM)", "lassa": "Lassa fever", "measles": "Measles",
                      "diphtheria": "Diphtheria"},
@@ -94,9 +98,14 @@ T = {
     "ha": {"head": "⚠️ *Gargaɗin hukuma*", "model_head": "*Hasashen samfuri (ba na hukuma ba):*",
            "line": "{src}, an fitar {date}: “{text}”", "expired": "{src}, an fitar {date} (*wa'adinsa ya ƙare*): "
                                                                "“{text}”",
-           "none": "Babu gargaɗin hukuma na yanzu ga {place} daga NEMA, Gwamnatin Jihar Sokoto (SEMA) ko "
-                   "Ma'aikatar Lafiya (an duba {when}).",
-           "unchecked": "Ba a duba gargaɗin hukuma ba tukuna.",
+           "none": "Babu gargaɗi mai aiki daga NEMA, Gwamnatin Jihar Sokoto (SEMA) ko Ma'aikatar Lafiya ga {place} "
+                   "har zuwa {when}.",
+           "stale_none": "An duba ƙarshe {ago} ({when}); babu gargaɗi daga NEMA, Gwamnatin Jihar Sokoto (SEMA) ko "
+                         "Ma'aikatar Lafiya ga {place} a lokacin.",
+           "unchecked": "Kasafi bai yi nasarar duba gargaɗin NEMA, SEMA ko Ma'aikatar Lafiya ba tukuna, don haka ba "
+                        "zai iya cewa akwai ko babu ba.",
+           "today": "{t} yau", "yesterday": "jiya {t}", "days_ago": "kwanaki {n} da suka wuce",
+           "day_ago": "kwana ɗaya da ya wuce",
            "place_state": "Jihar Sokoto", "place_lga": "Ƙaramar Hukumar {lga}",
            "names": {"cholera": "Kwalara", "csm": "Sankarau (CSM)", "lassa": "Zazzaɓin Lassa", "measles": "Ƙyanda",
                      "diphtheria": "Mashaƙo (diphtheria)"},
@@ -223,6 +232,21 @@ def quote(lang: str, a: Adv, expired: bool = False) -> str:
     return t["expired" if expired else "line"].format(src=src, date=_date(a.issued_at), text=a.text) + f"\n{a.url}"
 
 
+def checked_status(lang: str, checked: datetime, place: str, now: datetime | None = None) -> str:
+    """'No active alert ... as of 06:00 today' when the crawl last succeeded within 24 hours; otherwise when it last
+    did ('Last checked 2 days ago (29 Oct); no alert then'). Never 'none' without a successful check."""
+    t = _t(lang)
+    now = now or datetime.now(timezone.utc)
+    at, today = checked.astimezone(read.LAGOS), now.astimezone(read.LAGOS).date()
+    clock = at.strftime("%H:%M")
+    if now - checked <= timedelta(hours=24):
+        when = t["today"].format(t=clock) if at.date() == today else t["yesterday"].format(t=clock)
+        return t["none"].format(place=place, when=when)
+    days = (today - at.date()).days
+    ago = t["day_ago"] if days <= 1 else t["days_ago"].format(n=days)
+    return t["stale_none"].format(place=place, ago=ago, when=at.strftime("%d %b"))
+
+
 def official_lines(conn, lang: str, layers: list[str], where: read.Where, now: datetime | None = None) -> list[str]:
     """The 'Official warnings' section that leads a hazard answer (warnings, then the official outlooks for the
     current months), or [] when the question has no hazard."""
@@ -242,8 +266,7 @@ def official_lines(conn, lang: str, layers: list[str], where: read.Where, now: d
         if not warnings and gone and gone.kind != "outlook":
             out.append(quote(lang, gone, expired=True))
         if not warnings:
-            out.append(t["none"].format(place=_place(lang, where),
-                                        when=checked.astimezone(read.LAGOS).strftime("%d %b %H:%M")))
+            out.append(checked_status(lang, checked, _place(lang, where), now))
     if outlooks:
         out += ["", t["outlook_now"], *[quote(lang, a) for a in outlooks[:3]]]
     return out + ["", t["model_head"]]
@@ -345,6 +368,19 @@ OUTLOOK_HAZARDS = {"flood": ("flood",), "climate": ("rain", "dry_spell", "heat",
 MOST_LINES = 12
 
 
+def page_ranges(pages: list[int]) -> str:
+    """'p. 12–16, 106' from [12, 13, 14, 15, 16, 106]."""
+    ps = sorted(set(pages))
+    if not ps:
+        return ""
+    runs, start = [], ps[0]
+    for a, b in zip(ps, ps[1:] + [None]):
+        if b != a + 1:
+            runs.append(f"{start}–{a}" if a != start else f"{a}")
+            start = b
+    return "p. " + ", ".join(runs)
+
+
 HEAT_WORDS = re.compile(r"(?i)temperat|heat|\bhot\b|harmattan|dust|zafi|ɗumi|dumi|hunturu|ƙura|kura\b")
 
 
@@ -381,6 +417,9 @@ def outlook_answer(conn, which: str, lang: str, where: read.Where, now: datetime
                     for a in items]
         if single:
             out += ["", t["lga_more"].format(n=len(single))]
+        out += ["", "📄 " + "; ".join(f"{SOURCE_NAMES.get(a.source, a.source)}, {a.title.split(',')[0]} "
+                                      f"{page_ranges([x.page for x in own if (x.doc_id or x.source) == d and x.page])}"
+                                      for d, a in {(a.doc_id or a.source): a for a in own}.items())]
         if any("Table" in a.title for a in own) and any("Table" not in a.title for a in own):
             out += ["", t["outlook_note"]]       # a table row next to the text's own figures: both shown
         return OfficialAnswer("\n".join(out), "outlook", True)

@@ -78,7 +78,7 @@ def test_an_expired_warning_is_marked_and_older_ones_dropped() -> None:
     conn = Conn([adv(30, "The Rima will overflow its banks at Goronyo."), adv(200, "An old alert.")])
     text = "\n".join(official.official_lines(conn, "en", ["flood"], GORONYO, NOW))
     assert "(*expired*): “The Rima will overflow" in text and "An old alert" not in text
-    assert "No current official warning for Goronyo LGA" in text
+    assert "No active alert from NEMA, the Sokoto State Government (SEMA) or the Ministry of Health for Goronyo LGA as of" in text
 
 
 def test_state_wide_warnings_reach_every_lga_and_unchecked_says_so() -> None:
@@ -86,12 +86,25 @@ def test_state_wide_warnings_reach_every_lga_and_unchecked_says_so() -> None:
                      hazard="rain")])
     assert "heavy rainfall" in "\n".join(official.official_lines(conn, "en", ["rain"], GORONYO, NOW))
     assert official.official_lines(Conn(checked=None), "ha", ["heat"], GORONYO, NOW)[:2] == \
-        ["⚠️ *Gargaɗin hukuma*", "Ba a duba gargaɗin hukuma ba tukuna."]
+        ["⚠️ *Gargaɗin hukuma*", "Kasafi bai yi nasarar duba gargaɗin NEMA, SEMA ko Ma'aikatar Lafiya ba tukuna, "
+                                "don haka ba zai iya cewa akwai ko babu ba."]
+
+
+def test_the_alert_status_comes_from_the_last_successful_check() -> None:
+    from datetime import datetime as dt
+    now = dt(2026, 10, 31, 9, 0, tzinfo=timezone.utc)                       # 10:00 in Sokoto
+    assert official.checked_status("en", dt(2026, 10, 31, 5, 0, tzinfo=timezone.utc), "Goronyo LGA", now) == \
+        "No active alert from NEMA, the Sokoto State Government (SEMA) or the Ministry of Health for Goronyo LGA " \
+        "as of 06:00 today."
+    assert "as of yesterday 19:00." in official.checked_status("en", dt(2026, 10, 30, 18, 0, tzinfo=timezone.utc),
+                                                               "Goronyo LGA", now)
+    stale = official.checked_status("en", dt(2026, 10, 29, 5, 0, tzinfo=timezone.utc), "Goronyo LGA", now)
+    assert stale.startswith("Last checked 2 days ago (29 Oct); no alert") and "No active" not in stale
 
 
 def test_a_current_outlook_follows_the_warnings_with_document_page_and_months() -> None:
     text = "\n".join(official.official_lines(Conn([ON, APRIL_HEAT]), "en", ["flood"], GORONYO, NOW))
-    assert "No current official warning for Goronyo LGA" in text            # an outlook is not a warning
+    assert "No active alert from NEMA, the Sokoto State Government (SEMA) or the Ministry of Health for Goronyo LGA as of" in text            # an outlook is not a warning
     assert "📘 *Official outlooks for these months (seasonal, not warnings):*\nNIHSA, 2026 Annual Flood Outlook, " \
            "Hydrological Area I (Niger North), October-November, page 42 (about October-November 2026; issued " \
            "April 2026): “In the ON period" in text

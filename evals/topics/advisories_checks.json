@@ -1,7 +1,7 @@
 {
  "_about": "Checked facts for evals/topics/advisories.json (drafted Oct 30 2026 from the local crawl; for Bilyaminu to check). any: one group's figures all in the reply; all_re: patterns that must match; must_not: a pattern that must not. Figures change as NCDC publishes: recheck against outbreak_cases before a run.",
  "checks": {
-  "a01": {"all_re": ["Official warnings", "No current official warning for Goronyo LGA|issued \\d\\d \\w+ 20\\d\\d", "Model forecasts \\(not official\\)", "Rima near Goronyo"],
+  "a01": {"all_re": ["Official warnings", "No active alert from NEMA[^\\n]*Goronyo LGA|Last checked|issued \\d\\d \\w+ 20\\d\\d", "Model forecasts \\(not official\\)", "Rima near Goronyo"],
           "must_not": "(?i)there is (?:a|an official) flood warning for Goronyo",
           "source": "advisories table (NEMA, Sokoto portal, Ministry of Health WordPress posts, crawled Oct 30 2026): no current Sokoto flood warning; GloFAS discharge at NG034006 'low for late October'"},
   "a02": {"any": [["450", "41", "47"]], "all_re": ["epi week 14 2025", "doesn't show the situation now", "health worker"],
@@ -13,7 +13,7 @@
   "a04": {"any": [["450", "41", "47"]], "all_re": ["makon epi 14 2025", "ma'aikacin lafiya"],
           "must_not": "(?i)antibiotic|maganin rigakafi ka sha",
           "source": "as a02"},
-  "a05": {"all_re": ["Gargaɗin hukuma", "Babu gargaɗin hukuma na yanzu ga Ƙaramar Hukumar Goronyo|an fitar", "Rima near Goronyo"],
+  "a05": {"all_re": ["Gargaɗin hukuma", "Babu gargaɗi mai aiki[^\\n]*Goronyo|An duba ƙarshe|an fitar", "Rima near Goronyo"],
           "source": "as a01"}
  }
 }
