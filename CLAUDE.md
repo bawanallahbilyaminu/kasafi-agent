@@ -58,7 +58,7 @@ Some details are not confirmed yet. Look them up (dev.meta.ai docs, provider doc
 
 ## Status (as of Oct 31, 2026)
 
-**Live: `8ba4a9e`** at https://kasafi-api.halalnumeriq.com.ng, deployed with `deploy/deploy.sh`.
+**Live: `20d7094`** at https://kasafi-api.halalnumeriq.com.ng, deployed with `deploy/deploy.sh`.
 - **Documents:** budgets and performance reports (structured core plus line search), topic sweeps across publishers (`app/agent/topics.py`, L32), fetching on demand, the admin trace and review pages.
 - **Hazard steps 1–5 of 7 are live** (`docs/hazard-and-services.md`):
   - location intake (the point in memory for 30 min, only the LGA stored);
@@ -79,9 +79,17 @@ Some details are not confirmed yet. Look them up (dev.meta.ai docs, provider doc
   - The advisories crawl runs daily at 06:00, with NCDC on Mondays at 07:00 (Lagos).
   - EmONC links: exact matches are used; the emergency path uses only links Bilyaminu confirmed.
   - Never write `.env`: give Bilyaminu the exact line to add.
-- **Next: hazard step 6 (alerts people sign up for), dry run first, not deployed until Bilyaminu says.** Then step 7 (evals, docs, demo). The full 39 eval runs on Tue Nov 3 only (`evals/`).
+- **Oct 31 afternoon, live at `20d7094`:**
+  - the emergency reply goes at once; road distance follows (ORS from the server: 0.16–0.22 s);
+  - the summary no longer repeats the alert-status line;
+  - a named facility beats the route shortcuts;
+  - facility corrections file (`data/geo/facility_corrections.yaml`);
+  - "likely" ward near borders;
+  - map fixes (samples via `scripts/map_samples.py`).
+- **Hazard step 6 (alerts) is built and in the live code, but off** (`KASAFI_ALERTS` unset; dry run by default; `/admin/alerts`). Don't turn it on until Bilyaminu says. **Blocker for live sends:** users are stored only as HMAC(number), so an alert has no address. This needs Bilyaminu's decision.
+- **Next:** step 7 (evals, docs, demo). The full 39 eval runs on Tue Nov 3 only (`evals/`).
 - **Open items:**
-  - ORS from the dev machine took 1.4–4.3 s, so the emergency reply often falls back to the straight line there. Check the rate on the server.
+  - Bilyaminu to fill `data/geo/facility_corrections.yaml` (Alheri Clinic and Sarda Quarters share one registry point).
   - The Goronyo river point needs Bilyaminu's confirmation.
   - The server has measles for August, not September; the NCDC crawl retries Mondays.
   - ReliefWeb search is off until `RELIEFWEB_APPNAME` is set.
