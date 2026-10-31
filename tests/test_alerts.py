@@ -492,3 +492,29 @@ def test_hadari_is_only_for_hazardous_danger_and_extreme_danger() -> None:
     from app.hazards.categories import LABELS
     with_hadari = {k for k, v in LABELS["ha"].items() if "haɗari" in v.lower()}
     assert with_hadari == {"hazardous", "danger", "extreme_danger"}
+
+
+def test_the_backfill_keeps_each_past_days_highest_aqi_and_leaves_today_to_the_live_layer() -> None:
+    from app.alerts import backfill
+    data = [{"hourly": {"time": ["2026-10-30T10:00", "2026-10-30T15:00", "2026-10-31T09:00", "2026-11-02T08:00"],
+                        "us_aqi_pm10": [80, 120, 90, 300], "us_aqi_pm2_5": [140, 110, None, 310]}}]
+    rows = backfill.daily_max(data, [7], date(2026, 11, 2))
+    assert sorted(rows) == [(7, date(2026, 10, 30), 140), (7, date(2026, 10, 31), 90)]     # today left out
+
+
+def test_the_backfill_is_due_only_while_the_baseline_is_short() -> None:
+    from app.alerts import backfill
+    short = FakeConn({"count(DISTINCT day)": [(5,)]})
+    assert backfill.due(short)
+    tried = FakeConn({"count(DISTINCT day)": [(5,)], "layer = %s AND ok": [(1,)]})
+    assert not backfill.due(tried)                                           # once a day at most
+    assert not backfill.due(FakeConn({"count(DISTINCT day)": [(92,)]}))
+
+
+def test_the_backfill_stays_under_the_daily_cap(monkeypatch) -> None:
+    from app.alerts import backfill
+    monkeypatch.setattr(backfill, "points", lambda conn, kinds: [(i, "x", 13.0, 5.0) for i in range(23)])
+    monkeypatch.setattr(backfill, "calls_today", lambda conn: 4950)
+    conn = FakeConn({"count(DISTINCT day)": [(0,)]})
+    days, calls = asyncio.run(backfill.backfill(conn, make_settings(kasafi_openmeteo_daily_cap=5000), http=object()))
+    assert calls == 0 and backfill.calls_for(23, 93, 2) == 161                # 161 calls would pass the cap

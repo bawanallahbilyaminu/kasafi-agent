@@ -51,7 +51,7 @@ _KEYWORDS = {
     ],
     "medical_advice": [
         r"\bw[ae]n[ei]\s+magani\b", r"\bwhat\s+(?:medicine|drug|treatment)\b", r"\bshould\s+i\s+take\b",
-        r"\bwhat\s+should\s+i\s+eat\b", r"\bme\s+zan\s+(?:ci|sha)\b",
+        r"\bwhat\s+should\s+i\s+eat\b", r"\bme\s+zan\s+(?:ci|sha)\b", r"\bzan\s+sha\b",   # 'kwaya nawa zan sha?'
         r"\bhow\s+(?:do|should|can)\s+i\s+treat\b", r"\btreat\b.{0,40}\bat\s+home\b",
     ],
 }
@@ -70,7 +70,7 @@ _BORDERLINE = re.compile("|".join([
     # security beyond the keywords: travel safety, kidnapping, armed groups
     r"\bsafe(?:st|ty|r)?\b", r"\baminci\b", r"\bsac[ei]\b", r"\barmed\b", r"\bsojoji\b", r"\btravel",
     # personal health questions: treating, taking, drinking, eating; someone's own body or family
-    r"\bmagani\w*", r"\bciwo\w*",                    # not 'sha' alone: 'ruwan sha' (drinking water) is a budget line r"\bzazza[ɓb]\w*", r"\btreat\b", r"\bpregnan\w*", r"\bfast(?:ing)?\b",
+    r"\bmagani\w*", r"\bciwo\w*", r"\b[ƙk]waya\w*", r"\bparacetamol\b", r"\bdose\b",                    # not 'sha' alone: 'ruwan sha' (drinking water) is a budget line r"\bzazza[ɓb]\w*", r"\btreat\b", r"\bpregnan\w*", r"\bfast(?:ing)?\b",
     r"\bmai\s+ciki\b", r"\bjariri\b", r"\bmy\s+(?:child|son|daughter|wife|husband|baby|mother|father)\b",
     r"\b(?:ɗa|da)na\b", r"\bmatata\b",
 ]), re.IGNORECASE)
@@ -90,9 +90,18 @@ def _norm(texts: list[str]) -> str:
     return "\n".join(t for t in texts if t).replace("’", "'").replace("ʼ", "'").replace("`", "'")
 
 
+# a budget or statistics question: medical keywords never refuse it outright ("how much is budgeted to treat
+# malaria at home?", "kasafin kula da marasa lafiya a gida"); the classifier decides
+# (budget and statistics words only: not 'how much' or 'nawa', which also ask a dose: 'kwaya nawa zan sha?')
+FIGURES = re.compile(r"(?i)\b(?:budget\w*|allocat\w*|kasafi\w*|naira|spent|spending|expenditure|funding|"
+                     r"statistic\w*|percent\w*|percentage|kashi|ware\s+wa|aka\s+ware)\b")
+
+
 def keyword_check(texts: list[str]) -> str | None:
     joined = _norm(texts)
     for cat in ("security", "electoral", "verdict", "medical_advice"):
+        if cat == "medical_advice" and FIGURES.search(joined):
+            continue
         if _KEYWORD_RE[cat].search(joined):
             return cat
     return None

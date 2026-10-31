@@ -122,9 +122,16 @@ def run(conn, store, settings, now: datetime | None = None) -> Counter:
     number is decrypted only to send)."""
     import asyncio
 
+    from app.alerts import backfill
     from app.alerts.recipients import INACTIVE_DAYS, live_sender
     if gone := store.prune_alert_subs(INACTIVE_DAYS, now):
         log.info("alert sign-ups deleted after %d days without contact: %d", INACTIVE_DAYS, gone)
+    if backfill.due(conn):                    # the dust baseline is short: fill it from the API's past days
+        try:
+            days, calls = asyncio.run(backfill.backfill(conn, settings))
+            log.info("dust baseline: %d days in air_daily after the backfill (%d Open-Meteo calls)", days, calls)
+        except Exception as e:                # noqa: BLE001 - the triggers run without it (Hazardous only)
+            log.warning("dust baseline backfill failed: %s", type(e).__name__)
     candidates = all_candidates(conn, now)
 
     async def go() -> Counter:

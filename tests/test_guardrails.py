@@ -217,3 +217,25 @@ def test_refusals_are_brief_name_no_one_and_offer_what_kasafi_can_do(key, lang) 
     assert any(x in text_ for x in ("«", "budget", "kasafi", "Kasafi", "health worker", "ma'aikacin lafiya"))
     assert not re.search(r"(?i)\b(?:governor|gwamna)\s+[A-Z]", text_)          # no politician named
     assert "\n\n" in text_                                                      # the refusal, then the offer
+
+
+@pytest.mark.parametrize("message", ["How much is budgeted for home-based care in 2026?",
+                                     "Nawa ne kasafin kula da marasa lafiya a gida a 2026?",
+                                     "How much is budgeted to treat malaria at home in 2026?",
+                                     "What percentage of children are treated for malaria at home?"])
+def test_home_treatment_figures_are_never_refused_by_keyword(message) -> None:
+    from app.guardrails.scope import keyword_check
+    assert keyword_check([message]) is None
+
+
+def test_home_treatment_advice_still_is() -> None:
+    from app.guardrails.scope import keyword_check
+    assert keyword_check(["How should I treat malaria at home?"]) == "medical_advice"
+    assert keyword_check(["Ina da ciwon kai, me zan sha?"]) == "medical_advice"
+
+
+@pytest.mark.parametrize("message", ["How much paracetamol should I take?", "Kwaya nawa zan sha?",
+                                     "What should I eat to lower my heart rate?"])
+def test_dose_and_diet_questions_are_still_refused(message) -> None:
+    from app.guardrails.scope import keyword_check, needs_model
+    assert keyword_check([message]) == "medical_advice" or needs_model([message])

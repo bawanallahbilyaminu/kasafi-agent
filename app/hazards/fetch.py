@@ -49,7 +49,7 @@ SOURCES = {"forecast": "Open-Meteo forecast (best-match weather models)",
 # the LGA centroids every 3 h; the map grid every 6 h (to stay well under Open-Meteo's free daily limit)
 INTERVALS = {"forecast": timedelta(hours=3), "air": timedelta(hours=6), "flood": timedelta(hours=24),
              "fires": timedelta(hours=3), "forecast_grid": timedelta(hours=6)}
-OPEN_METEO = ("forecast", "forecast_grid", "air", "flood", "flood_history")
+OPEN_METEO = ("forecast", "forecast_grid", "air", "flood", "flood_history", "air_history")
 # Open-Meteo counts a request as one call per location, more for a long range or many variables
 # (each 14 days or 10 variables beyond the first counts again)
 
