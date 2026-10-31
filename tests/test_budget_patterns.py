@@ -296,3 +296,55 @@ def test_hausa_templates_contain_only_latin_letters() -> None:
     texts = [v["ha"] for v in messages.TEXTS.values() if isinstance(v, dict) and isinstance(v.get("ha"), str)]
     texts += [str(v) for v in hs.W["ha"].values()] + list(hs.EPA_HA.values()) + list(hs.NWS_HA.values())
     assert texts and all(foreign_letters(t) == [] for t in texts)
+
+
+# --- 9. long replies are split, never cut mid-sentence ----------------------------------------------------------
+
+def test_long_text_splits_between_paragraphs_and_sentences_and_loses_nothing() -> None:
+    from app.whatsapp.client import split_text
+    para = "The Ministry of Health got ₦12.40 billion in 2026. It spent ₦3.10 billion by June. " * 30
+    text = "\n\n".join([para.strip()] * 3)
+    parts = split_text(text, 4096)
+    assert len(parts) >= 2 and all(len(p) <= 4096 for p in parts)
+    assert all(p.rstrip().endswith((".", "?", "!")) for p in parts)          # every part ends a sentence
+    assert "".join(p.replace("\n", "").replace(" ", "") for p in parts) == text.replace("\n", "").replace(" ", "")
+    assert split_text("short") == ["short"]
+
+
+def test_a_long_buttons_message_sends_its_text_first_and_keeps_the_buttons() -> None:
+    import asyncio
+
+    from app.whatsapp.conversation import Out
+    from app.whatsapp.webhook import deliver
+    sent = []
+
+    class WA:
+        async def send_text(self, to, body):
+            sent.append(("text", body))
+
+        async def send_buttons(self, to, body, buttons):
+            assert len(body) <= 1024
+            sent.append(("buttons", body))
+    long = "\n\n".join(f"Paragraph {i}: the 2026 approved budget for this agency is ₦1.20 billion." for i in range(40))
+    asyncio.run(deliver(WA(), "234", Out(long, [("calc_yes", "Yes, calculate")], lang="en")))
+    assert sent[-1][0] == "buttons" and all(kind == "text" for kind, _ in sent[:-1])
+    assert "Paragraph 0" in sent[0][1] and "Paragraph 39" in sent[-1][1]
+
+
+# --- 10. one reply per message, each message and crop once per turn ---------------------------------------------
+
+def test_a_message_delivered_twice_is_answered_once() -> None:
+    from app.whatsapp import webhook
+    webhook._delivered.clear()
+    assert webhook.first_delivery("wamid.1") and not webhook.first_delivery("wamid.1")
+    assert webhook.first_delivery("wamid.2")
+
+
+def test_identical_messages_and_crops_go_once_per_turn() -> None:
+    from app.evidence.crops import CropRequest
+    from app.whatsapp.conversation import Out
+    from app.whatsapp.webhook import sent_key, unique_crops
+    assert sent_key(Out("Language set to English.", lang="en")) == sent_key(Out("Language set to English.", lang="en"))
+    turn: set = set()
+    crop = CropRequest(1, "budget-2026-approved", "Budget", 16, "460,480,000.00")
+    assert len(unique_crops([crop, crop], turn)) == 1 and unique_crops([crop], turn) == []

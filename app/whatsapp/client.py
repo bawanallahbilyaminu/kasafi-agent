@@ -47,6 +47,33 @@ def _sha256_matches(data: bytes, expected: str | None) -> bool:
     return expected.strip() in {digest.hex(), base64.b64encode(digest).decode()}
 
 
+TEXT_LIMIT = 4096          # WhatsApp's limit for a text message
+SHORT_LIMIT = 1024         # for a caption, a buttons message's body and a location request
+
+
+def split_text(text: str, limit: int = TEXT_LIMIT) -> list[str]:
+    """The text in parts of at most `limit` characters, cut between paragraphs, else lines, else sentences, else
+    words: never mid-sentence when a boundary exists, and nothing is dropped."""
+    text = text or ""
+    if len(text) <= limit:
+        return [text]
+    parts: list[str] = []
+    rest = text
+    while len(rest) > limit:
+        window = rest[:limit]
+        cut = -1
+        for sep in ("\n\n", "\n", ". ", "? ", "! ", "; ", " "):
+            at = window.rfind(sep)
+            if at > limit // 3:            # a boundary in the last two thirds: not a tiny first part
+                cut = at + len(sep.rstrip(" ")) if sep.strip() else at
+                break
+        if cut <= 0:
+            cut = limit
+        parts.append(rest[:cut].rstrip())
+        rest = rest[cut:].lstrip()
+    return [p for p in parts + [rest] if p]
+
+
 class WhatsAppClient:
     def __init__(self, settings: Settings | None = None, *, transport: httpx.AsyncBaseTransport | None = None) -> None:
         settings = settings or get_settings()

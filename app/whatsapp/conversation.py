@@ -290,7 +290,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         text_out = f"{prefix}\n\n{body}" if prefix else body
         if options := getattr(result, "clarify", None):     # two readings: ask which one, with buttons
             store.set_pending_clarify(key, options)
-            return [Out(text_out[:1024], [(f"clar_{i}", o["title"][:20]) for i, o in enumerate(options[:3])])]
+            return [Out(text_out, [(f"clar_{i}", o["title"][:20]) for i, o in enumerate(options[:3])])]   # split when sent
         crops = (plan_crops(result, settings.kasafi_max_images)
                  if result is not None and settings.kasafi_evidence_images and store.images_on(key) else None)
         outs = [Out(text_out, CALC_BUTTONS.get(lang, CALC_BUTTONS["en"]) if offer else None, crops or None, lang)]

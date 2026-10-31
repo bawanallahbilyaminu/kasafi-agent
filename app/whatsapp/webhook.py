@@ -72,29 +72,90 @@ def extract_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+REDELIVERY_S = 900
+_delivered: dict[str, float] = {}            # message id -> when first seen (in memory, 15 minutes)
+
+
+def first_delivery(message_id: str) -> bool:
+    """False for a message id seen in the last 15 minutes: WhatsApp can deliver one message twice."""
+    import time
+    now = time.monotonic()
+    for k in [k for k, at in _delivered.items() if now - at > REDELIVERY_S]:
+        _delivered.pop(k, None)
+    if not message_id:
+        return True
+    if message_id in _delivered:
+        return False
+    _delivered[message_id] = now
+    return True
+
+
+def sent_key(out) -> tuple:
+    """What makes two messages of one turn the same one."""
+    import hashlib
+    image = hashlib.sha1(out.image).hexdigest() if getattr(out, "image", None) else ""
+    loc = tuple(sorted((out.location or {}).items())) if getattr(out, "location", None) else ()
+    return (out.text, image, loc, bool(getattr(out, "location_request", False)), tuple(out.buttons or ()))
+
+
+def unique_crops(crops, turn: set) -> list:
+    """Each cited page's crop once per turn."""
+    out = []
+    for c in crops or []:
+        key = ("crop", c.doc_id, c.page, c.figure)
+        if key not in turn:
+            turn.add(key)
+            out.append(c)
+    return out
+
+
+async def deliver(client, to: str, out) -> None:
+    """One message, split rather than cut: text over WhatsApp's 4,096 characters goes in several messages; a
+    caption, a buttons body or a location request over 1,024 sends its text first and keeps a whole last part."""
+    from app.whatsapp.client import SHORT_LIMIT, split_text
+    if getattr(out, "image", None):
+        parts = split_text(out.text, SHORT_LIMIT)
+        await client.send_image(to, out.image, parts[0])
+        for part in split_text("\n\n".join(parts[1:])) if len(parts) > 1 else []:
+            await client.send_text(to, part)
+    elif getattr(out, "location", None):
+        await client.send_location(to, **out.location)
+    elif getattr(out, "location_request", False) or out.buttons:
+        parts = split_text(out.text, SHORT_LIMIT)
+        for part in split_text("\n\n".join(parts[:-1])) if len(parts) > 1 else []:
+            await client.send_text(to, part)
+        if out.buttons:
+            await client.send_buttons(to, parts[-1], out.buttons)
+        else:
+            await client.send_location_request(to, parts[-1])
+    else:
+        for part in split_text(out.text):
+            await client.send_text(to, part)
+
+
 async def _reply(messages: list[dict[str, Any]]) -> None:
     client = WhatsAppClient()
     settings, store = get_settings(), get_store()
     try:
         for msg in messages:
-            async def send(out, to=msg["from"]) -> None:
-                if getattr(out, "image", None):
-                    await client.send_image(to, out.image, out.text[:1024])
-                elif getattr(out, "location", None):
-                    await client.send_location(to, **out.location)
-                elif getattr(out, "location_request", False):
-                    await client.send_location_request(to, out.text)
-                elif out.buttons:
-                    await client.send_buttons(to, out.text, out.buttons)
-                else:
-                    await client.send_text(to, out.text)
+            if not first_delivery(msg.get("id", "")):
+                log.info("message delivered again by WhatsApp: ignored")     # no second reply to one message
+                continue
+            turn: set = set()                                                   # what this turn has sent
+
+            async def send(out, to=msg["from"], turn=turn) -> None:
+                if (key := sent_key(out)) in turn:
+                    log.info("identical message in one turn: sent once")
+                    return
+                turn.add(key)
+                await deliver(client, to, out)
 
             try:
                 for out in await handle(msg, client, store=store, settings=settings, notify=send):
                     await send(out)
-                    if out.crops:          # after the text: a slow crop never delays the answer
-                        n = await send_evidence(client, msg["from"], out.crops, out.lang, settings)
-                        log.info("evidence images sent: %d of %d", n, len(out.crops))
+                    if crops := unique_crops(out.crops, turn):   # after the text: a slow crop never delays it
+                        n = await send_evidence(client, msg["from"], crops, out.lang, settings)
+                        log.info("evidence images sent: %d of %d", n, len(crops))
                 log.info("reply sent to %s", mask_phone(msg["from"]))
             except Exception:  # one failed reply must not stop the rest
                 log.exception("reply to %s failed", mask_phone(msg.get("from", "")))
