@@ -124,6 +124,12 @@ Table `advisories`: source, title, issued_at, valid_until, hazard, LGAs covered 
 - **A facility by name**, fuzzy-matched ("What about Arkilla PHC"), gives a card: type, level, ownership, ward and LGA from the registry, plus its EmONC status.
 - **Routes:** "I want to go to X" or "how far is it from me" gives the road distance and time, the pin, the directions link and the map. With no location on file, Kasafi asks for one and answers when it arrives. This works by voice too.
 - **"Hospital" / "asibiti"** means hospital-level facilities (secondary, tertiary). A facility of any kind at under half the distance gets its own line ("Nearer, but not a hospital: …"). With road times known, the list is ordered by time.
+- **A facility named in the message wins** over the "route / next / how far" shortcuts to the last list.
+- **Verified corrections** (`data/geo/facility_corrections.yaml`, outside git; `app/geo/corrections.py`) override
+  the registry's location, name, level or type at import (`scripts/import_geo.py`, or `--corrections` alone). Each
+  needs `verified_by` and `verified_on`. Answers say "(location checked 1 Nov 2026)".
+- **Ward wording:** within 300 m of a ward border (the 2019 GRID3 wards can be off near their edges), say "Wamakko
+  LGA (likely Bado ward)"; otherwise name the ward plainly.
 - **Location on every path** (`app/geo/location.py`): "my LGA", "near me" and "from me" carry the LGA on file to the planner, so budget, topic and hazard questions use it. A place named in the question overrides it. The point is kept in memory for 30 minutes, the LGA in the user record.
 
 ## 7. Emergency fast path
@@ -151,6 +157,21 @@ Render server-side with geopandas and matplotlib, on our own base layer: LGA bou
 | Hazard choropleth | Sokoto by LGA, coloured by the day's max heat index, dust or rain; legend with category names; title, valid time and source stamped on the image; the user's LGA outlined if known |
 | Near you | user's point (rounded to ~1 km on the image), the 3 nearest facilities numbered, the route line to number 1, the LGA name |
 | River flood | river points with this week's level vs history |
+
+**Built (Oct 31, after review of `data/samples/`; regenerate with `scripts/map_samples.py`):**
+- Choropleths print each LGA's value ("37°", "182"). When at least 75% of LGAs share one category, those LGAs are
+  shaded by value within it, from a pale tint up to the category's colour (never darker, which would read as the
+  next category). A legend line says what the shading and numbers mean. The Sokoto city LGAs are labelled in a
+  stack to the south-east, with leader lines.
+- Air uses the US EPA AQI colours (green, yellow, orange, red, purple, maroon).
+- Near-you: framed on the user's circle and the facilities (at least ~2 km across). Text is at least 28 px for titles
+  and 20 px for labels. The legend gives "1. Goronyo General Hospital: 10.9 km, about 15 min". There is a scale bar,
+  and the town nearest the user is always labelled. Markers are kept apart, and clear of the user's circle, with
+  leader lines. Vague names get their town ("Bone Centre, Wurno"). One map per answer, and not the same map again
+  within 10 minutes.
+- River map: titled "River levels today vs. normal for late October", with each label joined to its point by a
+  leader line.
+- A map whose data is older than twice the fetch interval says "(older than usual)" next to its fetch time.
 
 Images in Hausa or English to match the user. Colour-blind-safe palette with clear category labels. Cache per layer per hour. Each image's caption repeats the key number in text, for users on slow data.
 

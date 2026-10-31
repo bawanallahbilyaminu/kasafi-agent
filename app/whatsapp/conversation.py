@@ -573,7 +573,8 @@ async def _facilities(text: str, key: str, lang: str, store: UserStore, settings
             search.filters, search.skip = filters_from(text, search.filters), 0
         search.profile = profile_from(text, search.profile)
         log.info("facility follow-up: %s", step)
-        return await _facility_replies(spot, search, lang, settings, facility_fn, "route" if step == "route" else "list")
+        return await _facility_replies(spot, search, lang, settings, facility_fn, "route" if step == "route" else "list",
+                                       key)
     if is_count(text):                   # 'how many PHCs in Sokoto?': the registry's count
         return [Out(await asyncio.to_thread(counted, settings, text, lang), lang=lang)]
     if not is_facility_query(text) and (named := await _named_facility(text, key, lang, settings, facility_fn, spot)):
@@ -612,7 +613,7 @@ async def _named_facility(text: str, key: str, lang: str, settings: Settings, fa
     if spot is None:
         location_memory.wait_for_location(key, text)
         return [Out(FAC_WORDS.get(lang, FAC_WORDS["en"])["need_location"], lang=lang, location_request=True)]
-    return await _facility_replies(spot, search, lang, settings, facility_fn, "route")
+    return await _facility_replies(spot, search, lang, settings, facility_fn, "route", key)
 
 
 async def _after_location(question: str, key: str, lang: str, settings: Settings, facility_fn: FacilityFn,
@@ -625,7 +626,7 @@ async def _after_location(question: str, key: str, lang: str, settings: Settings
         return named
     search = location_memory.last_search(key)
     if search is not None and search.shown and follow_up(question) == "route":
-        return await _facility_replies(spot, search, lang, settings, facility_fn, "route")
+        return await _facility_replies(spot, search, lang, settings, facility_fn, "route", key)
     return []
 
 
@@ -636,11 +637,11 @@ async def _facility_search(question: str, key: str, lang: str, settings: Setting
         return []
     search = FacilitySearch(filters_from(question), profile=profile_from(question))
     location_memory.remember_search(key, search)
-    return await _facility_replies(spot, search, lang, settings, facility_fn, "list")
+    return await _facility_replies(spot, search, lang, settings, facility_fn, "list", key)
 
 
 async def _facility_replies(spot: Spot, search: FacilitySearch, lang: str, settings: Settings,
-                            facility_fn: FacilityFn, mode: str) -> list[Out]:
+                            facility_fn: FacilityFn, mode: str, key: str = "") -> list[Out]:
     try:
         pairs = await facility_fn(settings, spot.lat, spot.lon, search, lang, mode=mode)
     except Exception as e:      # noqa: BLE001 - PostGIS down: ask for the LGA rather than go silent
@@ -652,7 +653,32 @@ async def _facility_replies(spot: Spot, search: FacilitySearch, lang: str, setti
         image = rest[0] if rest else None
         if text or loc or image:
             outs.append(Out(text, lang=lang, location=loc, image=image))
-    return outs
+    return one_map(key, outs) if key else outs
+
+
+MAP_REPEAT_S = 600
+_maps_sent: dict[str, tuple[str, float]] = {}       # in memory: the last near-you map's hash per search, 10 minutes
+
+
+def one_map(key: str, outs: list[Out]) -> list[Out]:
+    """At most one map per answer, and not the same map again within 10 minutes (a repeated search or a follow-up
+    that draws the same facilities sends the text and pin only)."""
+    import hashlib
+    now, kept, seen = time.monotonic(), [], False
+    for out in outs:
+        if out.image:
+            digest = hashlib.sha1(out.image).hexdigest()
+            last = _maps_sent.get(key)
+            if seen or (last and last[0] == digest and now - last[1] < MAP_REPEAT_S):
+                if out.text:
+                    kept.append(Out(out.text, lang=out.lang))
+                continue
+            seen = True
+            _maps_sent[key] = (digest, now)
+        kept.append(out)
+    for k in [k for k, (_, at) in _maps_sent.items() if now - at > MAP_REPEAT_S]:
+        _maps_sent.pop(k, None)
+    return kept
 
 
 async def _guarded(texts: list[str], lang: str, guard_fn: GuardFn, settings: Settings) -> Out | None:

@@ -142,3 +142,108 @@ def test_an_answers_maps_follow_its_text_unless_images_are_off(monkeypatch) -> N
     store.set_images(key, False)
     outs = asyncio.run(conv.handle(msg, None, store=store, settings=s, answer_fn=answer, guard_fn=guard))
     assert not any(o.image for o in outs)
+
+
+# --- Oct 31 review: values on the map, shading within a category, AQI colours, a readable near-you map --------
+
+def test_most_lgas_in_one_category_are_shaded_by_value_within_it() -> None:
+    values = {f"L{i}": ("extreme_caution", 35.0 + i * 0.1, "") for i in range(20)} | {"L99": ("danger", 41.0, "")}
+    fill, dom, span = render.fills("heat", values)
+    assert dom == "extreme_caution" and span == (35.0, 36.9)
+    base = render.HEAT_COLORS[render.HEAT.index("extreme_caution")]
+    assert fill["L19"] == base and fill["L0"] != base                      # the highest gets the category's colour
+    assert fill["L99"] == render.HEAT_COLORS[render.HEAT.index("danger")]  # other categories keep theirs
+    # never darker than the category's own colour (darker would read as the next category)
+    assert all(sum(render._rgb(fill[f"L{i}"])) >= sum(render._rgb(base)) - 1e-9 for i in range(20))
+
+
+def test_a_mixed_day_is_shaded_by_category_only() -> None:
+    values = {f"L{i}": ("extreme_caution" if i < 14 else "danger", 35.0 + i, "") for i in range(23)}
+    fill, dom, span = render.fills("heat", values)
+    assert dom == "" and len(set(fill.values())) == 2
+
+
+def test_air_uses_the_standard_aqi_colours_green_to_maroon() -> None:
+    assert dict(zip(render.AIR, render.AIR_COLORS)) == {
+        "good": "#00e400", "moderate": "#ffff00", "unhealthy_sensitive": "#ff7e00", "unhealthy": "#ff0000",
+        "very_unhealthy": "#8f3f97", "hazardous": "#7e0023"}
+    usg, unhealthy = render._rgb("#ff7e00"), render._rgb("#ff0000")
+    assert abs(usg[1] - unhealthy[1]) > 0.4                                # clearly distinct neighbours
+
+
+def test_values_print_short_on_the_map() -> None:
+    assert render.short_value("heat", 37.4) == "37°" and render.short_value("air", 181.6) == "182"
+    assert render.short_value("rain", 2.36) == "2.4"
+
+
+def test_text_is_readable_on_a_phone() -> None:
+    px = lambda p: p * render.DPI / 72                                     # noqa: E731
+    assert px(render.TITLE) >= 28 and px(render.LABEL) >= 20 and px(render.LEGEND) >= 20
+
+
+def test_the_near_you_frame_fits_the_circle_and_facilities_at_least_2_km_across() -> None:
+    f = Facility("x", "A", "Primary", "", "Public", "", 13.0605, 5.1705, "Wamakko", "Wamakko", 0.1)
+    cx, cy, side = render.frame((13.06, 5.17), [f])
+    assert render.MIN_SIDE <= side < 0.03 and abs(cx - 5.17) < 0.01        # the ~1 km circle with padding
+    far = Facility("y", "B", "Primary", "", "Public", "", 13.2, 5.4, "Kware", "Kware", 25.0)
+    cx, cy, side = render.frame((13.06, 5.17), [f, far])
+    assert cx - side / 2 < 5.17 - render.YOU_RADIUS and cx + side / 2 > 5.4 and cy + side / 2 > 13.2
+
+
+def test_markers_never_overlap_each_other_or_the_users_circle() -> None:
+    import math
+    pts = [(5.17, 13.06), (5.1702, 13.0601), (5.1704, 13.0599)]
+    out = render.spread_markers(pts, 0.004, [(5.169, 13.059, 0.005)])
+    assert all(math.hypot(a[0] - b[0], a[1] - b[1]) >= 0.004 for i, a in enumerate(out) for b in out[i + 1:])
+    assert all(math.hypot(x - 5.169, y - 13.059) >= 0.005 for x, y in out)
+    assert render.spread_markers([(5.0, 13.0), (5.5, 13.5)], 0.01) == [(5.0, 13.0), (5.5, 13.5)]   # apart: unmoved
+
+
+@pytest.mark.parametrize("name,vague", [("Bone Centre", True), ("General Hospital", True),
+                                        ("Goronyo General Hospital", False), ("Arkilla Primary Health Center", False),
+                                        ("Specialist Hospital", True)])
+def test_vague_names_get_their_town(name, vague) -> None:
+    assert render.vague(name) is vague
+
+
+def test_the_legend_gives_road_distance_and_time() -> None:
+    f = Facility("x", "Goronyo General Hospital", "Secondary", "", "Public", "", 13.44, 5.67, "Goronyo", "Goronyo",
+                 0.8, road_km=10.9, minutes=15)
+    assert render.distance_words(f, "en") == "10.9 km, about 15 min"
+    assert render.distance_words(f, "ha") == "kilomita 10.9, kusan minti 15"
+    f.road_km = f.minutes = None
+    assert render.distance_words(f, "en") == "about 0.8 km (straight line)"
+
+
+def test_the_river_title_names_the_time_of_year() -> None:
+    assert render.river_title("en", date(2026, 10, 31), date(2026, 10, 31)) == \
+        "River levels today vs. normal for late October"
+    assert render.river_title("ha", date(2026, 11, 5), date(2026, 11, 5)).endswith("a farkon Nuwamba")
+
+
+def test_an_old_fetch_is_marked_on_the_map(monkeypatch) -> None:
+    at = datetime(2026, 10, 30, 18, 35, tzinfo=timezone.utc)
+    monkeypatch.setattr(read, "freshness", lambda conn, layer, now=None: read.Freshness(layer, at, True, 17.0))
+    assert render._fetched(None, "forecast", at, "en") == " · fetched 30 Oct 19:35 (older than usual)"
+    monkeypatch.setattr(read, "freshness", lambda conn, layer, now=None: read.Freshness(layer, at, False, 1.0))
+    assert render._fetched(None, "forecast", at, "en") == " · fetched 30 Oct 19:35"
+
+
+def test_the_near_you_map_renders_with_towns_scale_and_legend() -> None:
+    fs = [Facility("x", "Kware General Hospital", "Secondary", "General Hospital", "Public", "", 13.2, 5.27, "Kware",
+                   "Kware", 4.2, road_km=18.2, minutes=24),
+          Facility("y", "Bone Centre", "Secondary", "", "Public", "", 13.2005, 5.2702, "Kware", "Kware", 4.3)]
+    with _conn() as conn:
+        m = render.near_you_map(conn, 13.0589127, 5.1673341, "Wamakko", fs, None, "en", "x")
+        _jpeg(m.jpeg)
+
+
+def test_one_map_per_answer_and_not_the_same_one_twice() -> None:
+    from app.whatsapp import conversation as conv
+    conv._maps_sent.clear()
+    outs = [conv.Out("list"), conv.Out("", image=b"map-a"), conv.Out("", image=b"map-b"), conv.Out("", location={})]
+    first = conv.one_map("u1", outs)
+    assert [o.image for o in first if o.image] == [b"map-a"] and len(first) == 3
+    again = conv.one_map("u1", [conv.Out("list"), conv.Out("", image=b"map-a")])
+    assert not any(o.image for o in again)                                 # the same map again: text only
+    assert any(o.image for o in conv.one_map("u2", [conv.Out("", image=b"map-a")]))   # another user: sent
