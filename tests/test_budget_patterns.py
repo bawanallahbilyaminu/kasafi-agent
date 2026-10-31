@@ -229,10 +229,11 @@ def test_a_complete_answer_is_sent_as_it_is() -> None:
     client = CheckClient(['{"parts": [{"part": "2026 allocation", "status": "answered"}]}'])
     redone = []
 
-    async def redo():
+    async def redo(focus=None):
         redone.append(1)
         return _ans("x")
-    a = asyncio.run(ag.completed(_ans("₦1 bn"), "q", _plan("q"), "en", client, make_settings(), redo))
+    q = "How much was allocated in 2026, and how much was spent by the end of Q1 2026?"
+    a = asyncio.run(ag.completed(_ans("₦1 bn"), q, _plan(q), "en", client, make_settings(), redo))
     assert not redone and "Not found" not in a.text
 
 
@@ -245,16 +246,18 @@ def test_a_wrong_period_is_redone_and_what_is_still_missing_is_said() -> None:
         '{"part": "2026 allocation", "status": "answered"}]}',
         '{"parts": [{"part": "Q1 2026 spending", "status": "answered"}, '
         '{"part": "staff numbers", "status": "missing"}, {"part": "2026 allocation", "status": "answered"}]}'])
-    hints = []
-    plan = _plan("Allocation 2026 and spending by end of Q1 2026 and staff numbers?")
+    hints, focuses = [], []
+    plan = _plan("How much was allocated in 2026, and how much was spent by the end of Q1 2026, and how many staff?")
 
-    async def redo():
+    async def redo(focus=None):
         hints.append(plan.english_question)
+        focuses.append(focus)
         return _ans("Q1 figure")
     # the redo fixes the wrong period but leaves one part out: a missing part beats a wrong figure, so it's kept
     a = asyncio.run(ag.completed(_ans("Q2 figure"), plan.english_question, plan, "en", client, make_settings(), redo))
     assert "Answer every part: Q1 2026 spending (not: Q2 2026 given)" in hints[0]
-    assert plan.english_question.endswith("staff numbers?")                  # restored after the redo
+    assert focuses == [["Q1", "2026", "spending"]]                            # the missing part's words only
+    assert plan.english_question.endswith("how many staff?")                 # restored after the redo
     assert a.text.startswith("Q1 figure") and a.partial
     assert "Not found in these documents: staff numbers." in a.text
     assert a.text.index("Not found") < a.text.index("📄")                    # the note before the sources
@@ -269,9 +272,10 @@ def test_a_failing_check_never_holds_the_answer_back() -> None:
         async def chat(self, *a, **k):
             raise ValueError("down")
 
-    async def redo():
+    async def redo(focus=None):
         raise AssertionError("no redo without a verdict")
-    a = asyncio.run(ag.completed(_ans("₦1 bn"), "q", _plan("q"), "en", Boom(), make_settings(), redo))
+    q = "How much was allocated in 2026, and how much was spent by the end of Q1 2026?"
+    a = asyncio.run(ag.completed(_ans("₦1 bn"), q, _plan(q), "en", Boom(), make_settings(), redo))
     assert a.text.startswith("₦1 bn")
 
 

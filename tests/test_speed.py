@@ -4,6 +4,7 @@ the model-based parts check only for multi-part questions, and a redo that re-re
 part only. Nothing here may change an answer: only when work happens."""
 
 import asyncio
+import pytest
 import threading
 
 from app.retrieval import pool
@@ -36,3 +37,121 @@ def test_the_pool_passes_a_settings_keyword_through_to_the_search() -> None:
     got = asyncio.run(pool.run(s, lambda conn, terms, settings=None: (terms, settings is s), "C", ["x"], settings=s))
     assert got == (["x"], True)
     assert pool.run_sync(s, lambda conn, settings=None: settings is s, "C", settings=s).result() is True
+
+
+# --- the entity / level / period check in code, on every answer ------------------------------------------------
+
+from decimal import Decimal
+
+from app.agent import answer as ag
+from app.agent import consistency
+from app.agent.line_answer import LineResult, Selection
+from app.agent.need import Entity, Need
+from app.agent.periods import Period
+from app.retrieval.line_search import Cell, Line
+
+
+def _line(code, doc, year, period="full_year", measure="approved"):
+    x = Line(1, "t", doc, 5, "Total Expenditure by Administrative Classification", "Agency", "Agency | 2026: 1",
+             "administrative", "", "", 0.0, code=code, spend_kind="total")
+    cell = Cell("col", year, measure, period, Decimal("1"))
+    x.cells.append(cell)
+    return Selection(x, cell)
+
+
+def _answer_with(sels):
+    return ag.Answer("t", True, True, lines=LineResult(selections=sels, found="full"))
+
+
+def _plan_asking(entity_type, code):
+    need = Need("q", entities=[Entity(entity_type, "Govt House", "Government House", code)])
+    return ag.Plan("q", [], [], need=need)
+
+
+def test_rows_for_another_agency_or_the_parent_total_are_mismatches() -> None:
+    plan = _plan_asking("sub_agency", "011100100100")
+    assert consistency.check(plan, "q", _answer_with([_line("011100100100", "budget-2026-approved", 2026)])) == []
+    other = consistency.check(plan, "q", _answer_with([_line("052100000000", "budget-2026-approved", 2026)]))
+    assert [m.kind for m in other] == ["entity"]
+    parent = consistency.check(plan, "q", _answer_with([_line("011100000000", "budget-2026-approved", 2026)]))
+    assert [m.kind for m in parent] == ["level"] and "ministry total" in parent[0].got
+
+
+def test_a_figure_for_another_period_is_a_mismatch() -> None:
+    plan = _plan_asking("mda", "052100000000")
+    q2 = _answer_with([_line("052100000000", "bir-2026-q2", 2026, "q1_q2", "actual")])
+    assert [m.kind for m in consistency.check(plan, "q", q2, Period(2026, 1))] == ["period"]
+    assert consistency.check(plan, "q", q2, Period(2026, 2)) == []
+    y25 = _answer_with([_line("052100000000", "budget-2025-approved", 2025)])
+    assert [m.kind for m in consistency.check(plan, "q", y25, None, [2026])] == ["period"]
+    assert consistency.check(plan, "q", y25, None, [2025]) == []
+    assert consistency.check(plan, "q", ag.Answer("t", True, True)) == []    # nothing used: nothing to compare
+
+
+def test_focus_terms_and_notes() -> None:
+    m = [consistency.Mismatch("level", "Government House (011100100100)", "the ministry total (011100000000)")]
+    assert consistency.focus_terms(m, None) == ["Government House", "011100100100"]
+    assert consistency.note(m, "en") == "The row found is the ministry total (011100000000), not Government House " \
+                                        "(011100100100) on its own."
+    assert "Use exactly level: Government House" in consistency.redo_hint(m)
+
+
+@pytest.mark.parametrize("q,want", [
+    ("How much was allocated to the Ministry of Health in 2026?", False),
+    ("How much was allocated to the Ministry of Health in 2026, and how much had it spent by Q2?", True),
+    ("Compare the 2025 and 2026 education budgets", True),
+    ("Nawa aka ware wa lafiya a 2026, kuma nawa aka kashe?", True)])
+def test_single_part_questions_skip_the_model_check(q, want) -> None:
+    assert ag.is_multi_part(ag.Plan(q, [], []), q) is want
+
+
+def test_a_mismatch_is_redone_with_the_missing_part_and_a_leftover_is_said() -> None:
+    plan = _plan_asking("sub_agency", "011100100100")
+    first = _answer_with([_line("011100000000", "budget-2026-approved", 2026)])
+    first.text = "parent figure\n\n📄 *Sources:* x"
+    fixed = _answer_with([_line("011100100100", "budget-2026-approved", 2026)])
+    fixed.text = "own figure\n\n📄 *Sources:* x"
+    calls = []
+
+    async def redo(focus=None):
+        calls.append(focus)
+        return fixed
+    a = asyncio.run(ag.completed(first, "q", plan, "en", None, make_settings(), redo))
+    assert calls == [["Government House", "011100100100"]] and a is fixed and "not Government House" not in a.text
+
+    async def still(focus=None):
+        return first
+    a = asyncio.run(ag.completed(first, "q", plan, "en", None, make_settings(), still))
+    assert "The row found is the ministry total (011100000000), not Government House (011100100100) on its own." \
+           in a.text and a.partial
+    assert a.text.index("The row found") < a.text.index("📄")
+
+
+def test_the_redo_reads_the_same_hits_when_the_missing_part_is_already_among_them(monkeypatch) -> None:
+    hits = [_line("011100100100", "budget-2026-approved", 2026).line]
+    monkeypatch.setattr(ag, "search_lines", lambda conn, terms, **kw: list(hits))     # nothing new
+    plan = ag.Plan("q", [], [], line_search={"terms": ["x"], "years": [2026]})
+    same = asyncio.run(ag._focused_lines(None, plan, make_settings(), hits, ["Government House"], None))
+    assert same is hits
+    new = _line("011100200100", "budget-2026-approved", 2026).line
+    new.id = 2
+    monkeypatch.setattr(ag, "search_lines", lambda conn, terms, **kw: [new])
+    merged = asyncio.run(ag._focused_lines(None, plan, make_settings(), hits, ["Government House"], None))
+    assert [x.id for x in merged] == [2, 1]                                   # the missing part's rows first
+
+
+def test_crops_render_once_and_are_sent_only_if_still_cited(monkeypatch) -> None:
+    from app.evidence import crops
+    crops._cache.clear()
+    made = []
+
+    async def fake(req, settings):
+        made.append(req.figure)
+        return b"jpeg"
+    monkeypatch.setattr(crops, "_make_crop", fake)
+    req = crops.CropRequest(1, "budget-2026-approved", "t", 16, "460,480,000.00")
+    s = make_settings()
+    assert asyncio.run(crops.make_crop(req, s)) == b"jpeg" and asyncio.run(crops.make_crop(req, s)) == b"jpeg"
+    assert made == ["460,480,000.00"]                                        # rendered once
+    # the final answer no longer cites that row: plan_crops on it plans nothing, so nothing cached is sent
+    assert crops.plan_crops(ag.Answer("no figures", True, True), 2) == []

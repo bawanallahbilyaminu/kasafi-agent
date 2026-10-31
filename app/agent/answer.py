@@ -614,6 +614,22 @@ LINE_EVIDENCE_PAGES = 8       # each is a few printed rows, not a whole page (a 
 LINE_EVIDENCE_NEAR = 5       # a key term's nearest names in meaning that count as named by it
 
 
+def focused_evidence(conn: psycopg.Connection, plan: Plan, have: list[Evidence], focus: list[str]) -> list[Evidence]:
+    """The redo's evidence: the pages the missing part's words find (in the planned documents, the period's
+    reports left out), numbered after the evidence already gathered; nothing new means the same evidence."""
+    terms = [x for x in focus if len(x) >= 3][:6]
+    if not terms:
+        return have
+    scope = plan.doc_ids or None
+    seen = {(e.doc_id, e.page) for e in have}
+    hits = [h for h in search(conn, " ".join(terms), k=4, doc_ids=scope)
+            if (h.doc_id, h.page) not in seen and h.doc_id not in plan.skip_docs]
+    extra = [Evidence(len(have) + i, h.doc_id, h.title, h.year, h.page, "text", h.text)
+             for i, h in enumerate(dict.fromkeys(hits), 1)]
+    log.info("redo: %d new pages for the missing part", len(extra))
+    return [*have, *extra]
+
+
 def line_evidence(conn: psycopg.Connection, plan: Plan, have: list[Evidence]) -> list[Evidence]:
     """The printed budget rows named by the planner's key terms, as extra evidence. Page search can miss the
     one page with the row ('INDEPENDENT REVENUE ... 2026 Approved Budget'), and then the answer wrongly says
@@ -1141,16 +1157,19 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         planned = bool(plan.line_search) and not narrative_asked(plan)   # a narrative question: the pages lead
         plan.line_search = lines
 
-        async def both() -> Answer:
+        cache: dict = {}                 # the first search's hits and evidence: a redo starts from them
+
+        async def both(focus: list[str] | None = None) -> Answer:
             tl, tp = dict(t), dict(t)
-            la, pa = await first_complete(_line_path(conn, plan, question, lang, client, second, settings, tl, acq),
-                                          page(tp, gap=False), prefer_lines=planned)
+            la, pa = await first_complete(
+                _line_path(conn, plan, question, lang, client, second, settings, tl, acq, cache=cache, focus=focus),
+                page(tp, gap=False, cache=cache, focus=focus), prefer_lines=planned)
             got = better_answer(la, pa, prefer_lines=planned)
             got.timings = {**tp, **tl, "both": 1.0} if got is la else {**tl, **tp, "both": 1.0}
             return got
         a = await both()
         if a.found and not a.clarify:
-            a = await completed(a, question, plan, lang, client, settings, both)
+            a = await completed(a, question, plan, lang, client, settings, both, today)
         if not a.found and not a.clarify:
             return _not_found(conn, plan, lang, acq, a.timings)        # logs the gap once
         log.info("lines and pages side by side: kept the %s answer", "line" if a.lines is not None else "page")
@@ -1255,35 +1274,73 @@ def line_docs(conn, plan: Plan) -> list[str] | None:
     return readable_docs(conn, plan.skip_docs)
 
 
+MULTI_PART = re.compile(r"(?i)\b(?:and (?:how|what|which|where|when)|compar\w*|versus|\bvs\.?|between)\b|"
+                        r"\b(?:kuma|da kuma) (?:nawa|me|wane|wace|yaya)\b|;")
+
+
+def is_multi_part(plan: Plan, question: str) -> bool:
+    """More than one thing asked: several agencies, measures, years or an operation over two figures, or a
+    question joined with 'and how much' / 'kuma nawa'."""
+    need = plan.need
+    if need is not None:
+        kinds = [e for e in need.entities if e.type in ("mda", "sub_agency", "project", "programme", "function", "lga")]
+        if len(kinds) > 1 or len(need.measures) > 1 or len(need.years()) > 1 or \
+                need.operation in ("compare", "share", "ratio", "rank", "trend"):
+            return True
+    return bool(MULTI_PART.search(f"{question} {plan.english_question}"))
+
+
 async def completed(a: "Answer", question: str, plan: Plan, lang: str, client, settings: Settings,
-                    redo) -> "Answer":
-    """Before sending: every part of the question answered or marked not found, for the entity, level and period
-    asked (app/agent/completeness.py). A gap: redone once with the parts named; what is still missing is said."""
-    from app.agent import completeness
+                    redo, today: date | None = None) -> "Answer":
+    """Before sending, on every answer: (1) in code, the rows used are about the entity, level and period asked
+    (app/agent/consistency.py); (2) for a multi-part question, the model's check that every part is answered or
+    marked not found (app/agent/completeness.py). A mismatch or a gap: redone once (the missing part searched
+    for on its own, the hits already read re-read); what still doesn't match or is missing is said plainly. The
+    answer's crops render meanwhile, so they're ready to send (only the rows the final answer cites)."""
+    from app.agent import completeness, consistency
+    from app.agent.periods import asked_period
+    from app.evidence.crops import prerender
     t0 = time.perf_counter()
-    first = await completeness.check(question, plan.english_question, a.exact or a.text, lang, client, settings,
-                                     chat_json)
+    if settings.kasafi_evidence_images:
+        prerender(a, settings, settings.kasafi_max_images)
+    period = asked_period(question, plan.english_question)
+    years = [int(y) for y in question_years(question, plan.english_question)]
+    mism = consistency.check(plan, question, a, period, years)
+    parts = completeness.Check()
+    if not mism and is_multi_part(plan, question):
+        parts = await completeness.check(question, plan.english_question, a.exact or a.text, lang, client,
+                                         settings, chat_json)
     a.timings["check"] = time.perf_counter() - t0
-    if first.ok:
+    if not mism and parts.ok:
         return a
-    log.info("completeness: %d of %d parts missing or wrong; redoing once", len(first.gaps), len(first.parts))
+    hint = consistency.redo_hint(mism) if mism else completeness.redo_hint(parts)
+    focus = consistency.focus_terms(mism, plan) if mism else \
+        [w for p in parts.gaps for w in re.findall(r"\b[\w'-]{2,}\b", p["part"])]
+    log.info("%s; redoing once", f"consistency: {', '.join(m.kind for m in mism)} mismatch" if mism else
+             f"completeness: {len(parts.gaps)} of {len(parts.parts)} parts missing or wrong")
     asked = plan.english_question
-    plan.english_question = f"{asked} ({completeness.redo_hint(first)})"
+    plan.english_question = f"{asked} ({hint})"
     try:
-        again = await redo()
+        again = await redo(focus)
     finally:
         plan.english_question = asked
-    second = first
+    mism2, parts2 = mism, parts
     if again.found and not again.clarify:
-        second = await completeness.check(question, asked, again.exact or again.text, lang, client, settings,
-                                          chat_json)
-        if second.cost < first.cost:
+        mism2 = consistency.check(plan, question, again, period, years)
+        if not mism2 and is_multi_part(plan, question):
+            parts2 = await completeness.check(question, asked, again.exact or again.text, lang, client, settings,
+                                              chat_json)
+        elif not mism2:
+            parts2 = completeness.Check()
+        better = (len(mism2), parts2.cost) < (len(mism), parts.cost)
+        if better:
             again.timings["check"] = a.timings["check"]
             a = again
         else:
-            second = first
-    if line := completeness.not_found_line(second, lang):
-        a.text = with_note(a.text, line)
+            mism2, parts2 = mism, parts
+    notes = [n for n in (consistency.note(mism2, lang), completeness.not_found_line(parts2, lang)) if n]
+    if notes:
+        a.text = with_note(a.text, " ".join(notes))
         a.partial = True
     return a
 
@@ -1341,8 +1398,12 @@ def better_answer(la: "Answer | None", pa: "Answer", *, prefer_lines: bool) -> "
 
 async def _page_path(conn, plan: Plan, question: str, lang: str, client, settings: Settings, t: dict, *, acq,
                      latest, prev, context: str, recheck_note: str, gap: bool = True,
-                     second: ChatClient | None = None) -> Answer:
-    """Page search (or the rows of a planned budget query), the model composes, code checks every figure."""
+                     second: ChatClient | None = None, cache: dict | None = None,
+                     focus: list[str] | None = None) -> Answer:
+    """Page search (or the rows of a planned budget query), the model composes, code checks every figure. On a
+    redo (`cache` holds the first evidence) only the missing part (`focus`) is searched for, and the model
+    composes again over the evidence already gathered plus what that finds."""
+    cache = cache if cache is not None else {}
     t0 = time.perf_counter()
     budget, nmap = None, {}
     if plan.budget_query:                 # compare / total / share / rank: computed from the table rows
@@ -1353,7 +1414,11 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
         evidence, nmap = budget_evidence(budget)
     else:
         budget = None
-        evidence = await pool.run(settings, gather_evidence, conn, plan)     # off the loop: overlaps the line path
+        if cache.get("evidence") is not None:
+            evidence = await pool.run(settings, focused_evidence, conn, plan, cache["evidence"], focus or [])
+        else:
+            evidence = await pool.run(settings, gather_evidence, conn, plan)   # off the loop: overlaps the line path
+            cache["evidence"] = evidence
     t["search"] = t["page_search"] = time.perf_counter() - t0
     if not evidence:
         return _not_found(conn, plan, lang, acq, t, gap=gap)
@@ -1954,24 +2019,32 @@ def with_total_rows(conn, hits: list, years: list[int], most: int = 4) -> list:
 
 
 async def _line_path(conn, plan: Plan, question: str, lang: str, client, second, settings: Settings, t: dict,
-                     acq) -> Answer | None:
-    """Wide search over the budget lines, two readings, code verifies; None when no verified row answers."""
+                     acq, cache: dict | None = None, focus: list[str] | None = None) -> Answer | None:
+    """Wide search over the budget lines, two readings, code verifies; None when no verified row answers. On a
+    redo (`cache` holds the first search's hits): the rows for the missing part (`focus`) are searched for on
+    their own and read with the hits already found; when they are among them already, the hits are re-read."""
     t0 = time.perf_counter()
     docs = line_docs(conn, plan)
-    # the searches run in worker threads on their own connections (app/retrieval/pool.py): the page path and
-    # other users' turns go on meanwhile
-    hits = await pool.run(settings, search_lines, conn, plan.line_search["terms"], years=plan.line_search["years"],
-                          spend=plan.line_search.get("spend", "any"), question=plan.english_question, docs=docs,
-                          settings=settings)
-    # a project the question names ('Construction of …'): its rows by fuzzy name in the budgets' project lists and
-    # the BIRs' capital project tables come first, so spelling variants are found before any 'not found'
-    for phrase in project_phrases(question, plan.english_question)[:2]:
-        have = {x.id for x in hits}
-        named = [x for x in await pool.run(settings, project_lines, conn, phrase, years=plan.line_search["years"],
-                                           docs=docs) if x.id not in have]
-        if named:
-            log.info("project named: %d rows by fuzzy name", len(named))
-            hits = [*named, *hits]
+    cache = cache if cache is not None else {}
+    if cache.get("hits") is not None:
+        hits = await _focused_lines(conn, plan, settings, cache["hits"], focus or [], docs)
+    else:
+        # the searches run in worker threads on their own connections (app/retrieval/pool.py): the page path
+        # and other users' turns go on meanwhile
+        hits = await pool.run(settings, search_lines, conn, plan.line_search["terms"],
+                              years=plan.line_search["years"], spend=plan.line_search.get("spend", "any"),
+                              question=plan.english_question, docs=docs, settings=settings)
+        # a project the question names ('Construction of …'): its rows by fuzzy name in the budgets' project
+        # lists and the BIRs' capital project tables come first, so spelling variants are found before any
+        # 'not found'
+        for phrase in project_phrases(question, plan.english_question)[:2]:
+            have = {x.id for x in hits}
+            named = [x for x in await pool.run(settings, project_lines, conn, phrase,
+                                               years=plan.line_search["years"], docs=docs) if x.id not in have]
+            if named:
+                log.info("project named: %d rows by fuzzy name", len(named))
+                hits = [*named, *hits]
+        cache["hits"] = hits
     t["search"] = t["line_search"] = time.perf_counter() - t0
     log.info("line search: %d terms, %d hits", len(plan.line_search["terms"]), len(hits))
     if not hits:
@@ -2006,6 +2079,21 @@ async def _line_path(conn, plan: Plan, question: str, lang: str, client, second,
     if res.nearest:                  # nothing is that item, but related lines exist: name them as the nearest
         return nearest_answer(conn, plan, res, lang, t, acq)
     return None
+
+
+async def _focused_lines(conn, plan: Plan, settings: Settings, hits: list, focus: list[str], docs) -> list:
+    """The redo's lines: a search for the missing part only (its words), merged in front of the hits already
+    read; nothing new (the rows were among them) means the same hits are read again."""
+    terms = [x for x in focus if len(x) >= 3][:6]
+    if not terms:
+        return hits
+    found = await pool.run(settings, search_lines, conn, terms, years=plan.line_search["years"],
+                           spend=plan.line_search.get("spend", "any"), limit=MISSING_LINES, docs=docs,
+                           settings=settings)
+    have = {x.id for x in hits}
+    new = [x for x in found if x.id not in have]
+    log.info("redo: %d new rows for the missing part (%s)", len(new), "; ".join(terms)[:80])
+    return [*new, *hits][:MAX_LINES * 2] if new else hits
 
 
 def other_agency(plan: Plan, line) -> bool:

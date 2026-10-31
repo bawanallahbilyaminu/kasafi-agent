@@ -18,6 +18,7 @@ import io
 import logging
 import re
 import shutil
+import time
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -191,7 +192,45 @@ async def send_evidence(wa, to: str, requests: list[CropRequest], lang: str, set
     return sent
 
 
+CACHE_S = 600
+_cache: dict[tuple, tuple[float, bytes | None]] = {}       # (doc, page, figure) -> (made at, jpeg): 10 minutes
+_tasks: set = set()
+
+
+def _key(req: CropRequest) -> tuple:
+    return (req.doc_id, req.page, req.figure)
+
+
+def prerender(answer, settings: Settings, max_images: int = 2) -> None:
+    """Start rendering the crops an answer would send, in the background, while the answer is still being
+    checked; a crop is sent later only if its row is still cited in the final answer (plan_crops runs again on
+    that), and a cached crop is then instant."""
+    import asyncio
+
+    async def go() -> None:
+        for req in plan_crops(answer, max_images):
+            if _key(req) not in _cache:
+                await make_crop(req, settings)
+    try:
+        task = asyncio.get_running_loop().create_task(go())
+    except RuntimeError:
+        return
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
+
+
 async def make_crop(req: CropRequest, settings: Settings) -> bytes | None:
+    now = time.monotonic()
+    if (hit := _cache.get(_key(req))) and now - hit[0] < CACHE_S:
+        return hit[1]
+    jpeg = await _make_crop(req, settings)
+    _cache[_key(req)] = (now, jpeg)
+    for k in [k for k, (at, _) in _cache.items() if now - at > CACHE_S]:
+        _cache.pop(k, None)
+    return jpeg
+
+
+async def _make_crop(req: CropRequest, settings: Settings) -> bytes | None:
     path = pdf_path(req.doc_id, req.title, settings)
     if path is None:
         log.info("no PDF for %s: no evidence image", req.doc_id)

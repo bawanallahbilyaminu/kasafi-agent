@@ -88,6 +88,7 @@ def real(name: str) -> None:
 
 
 def run_crop(monkeypatch, req: CropRequest, sam_boxes=None, sam_error=None):
+    crops._cache.clear()                     # each test renders afresh: no crop from an earlier test
     calls = []
 
     async def fake_segment(jpeg, prompt, *, settings, timeout):
