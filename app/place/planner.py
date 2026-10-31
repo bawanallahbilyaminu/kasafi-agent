@@ -54,11 +54,12 @@ MEASURES = {
 }
 MEASURE_WORDS = [
     ("flood_map", re.compile(r"(?i)\b(?:un\s+(?:satellite\s+)?flood\s+map|unosat|flood\s+map|taswirar\s+ambaliya)\b")),
+    ("water", re.compile(r"(?i)\b(?:jrc|(?:often|usually|regularly)\s+under\s+water|surface\s+water|standing\s+water|"
+                         r"ponds?|wetland|fadama|ruwa(?:n)?\s+(?:fili|tafki)|ruwa\s+ke\s+yawan|yawan\s+ruwa|tafk\w*)\b")),
     ("flood", re.compile(r"(?i)\b(?:flood\w*|under\s+water|inundat\w*|ambaliya\w*|ruwa\s+ya\s+rufe)\b")),
     ("bare", re.compile(r"(?i)\b(?:bare\s+soil|bare\b|erosion|sand|degrad\w*|ƙasa\s+mara\s+ciyayi|kasa\s+mara\s+ciyayi|hamada|zaizay\w*)\b")),
-    ("water", re.compile(r"(?i)\b(?:surface\s+water|standing\s+water|ponds?|wetland|fadama|ruwa(?:n)?\s+(?:fili|tafki)|tafk\w*)\b")),
-    ("rain", re.compile(r"(?i)\b(?:rain\w*|rainfall|ruwan\s+sama|damina)\b")),
     ("greenness", re.compile(r"(?i)\b(?:green\w*|vegetat\w*|crop\s+(?:cover|growth)|ndvi|koriya\w*|ciyayi|shuke-?shuke)\b")),
+    ("rain", re.compile(r"(?i)\b(?:rain(?:fall)?|ruwan\s+sama|damina)\b")),
 ]
 AREA_WORDS = re.compile(r"(?i)\b(?:wards?|lgas?|local\s+government\w*|across|which\s+(?:wards?|lgas?|areas?|parts?)|"
                         r"state-?wide|the\s+state|sokoto\s+state|all\s+(?:wards|lgas)|gundum\w*|ƙaramar\s+hukuma\w*|"
@@ -314,7 +315,7 @@ def area_answer(conn, question: str, english: str, lang: str, level: str, unit: 
     if low:
         lines.append(t["low_data"].format(units=", ".join(r[1] for r in low[:6]) + (" …" if len(low) > 6 else ""),
                                           n=cut))
-    period = f"{spec['first']}–{loaded[-1]}" if spec["first"] else "1984–2020"
+    period = f"{loaded[0]}–{loaded[-1]}" if spec["first"] else "1984–2020"      # the years actually loaded
     res = {"greenness": "250 m", "flood": "200 m", "flood_map": "375 m", "water": "30 m", "bare": "200 m", "rain": "~9 km"}[key]
     lines.append(t["resolution"].format(period=period, res=res))
     # the ranking

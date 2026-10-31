@@ -68,7 +68,7 @@ def test_the_lga_answer_names_the_wards_that_stand_out_and_ranks_them(conn) -> N
     a = P.area_answer(conn, "Which wards of Wurno LGA were greenest in 2024?", "", "en", "lga", "NG034022", TODAY)
     assert a.found and a.year == 2024 and a.level == "ward"
     assert "wards of Wurno LGA, 2024" in a.text and "Greenest:" in a.text and "Least green:" in a.text
-    assert "Period 2001–" in a.text and "250 m" in a.text and "*Ranking (" in a.text
+    assert "Period " in a.text and "250 m" in a.text and "*Ranking (" in a.text
     assert "Kasafi reports what the satellite record shows" in a.text
     assert a.working.startswith("All wards, modis_peak, 2024") and a.specs[0]["kind"] == "area_map"
     ha = P.area_answer(conn, "Waɗanne gundumomin Wurno ne suka fi koriya a 2024?", "", "ha", "lga", "NG034022", TODAY)

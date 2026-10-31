@@ -254,7 +254,8 @@ def _finish(fig, ax, title: str, subtitle: str, footer: str, legend_line: str = 
     lines = textwrap.wrap(title, 48)
     fig.text(0.03, 0.972, "\n".join(lines), fontsize=TITLE, fontweight="bold", color=INK, va="top", linespacing=1.15)
     if subtitle:
-        fig.text(0.03, 0.972 - 0.036 * len(lines) - 0.008, subtitle, fontsize=SUBTITLE, color=MUTED, va="top")
+        fig.text(0.03, 0.972 - 0.036 * len(lines) - 0.008, textwrap.fill(subtitle, 92), fontsize=SUBTITLE, color=MUTED,
+                 va="top", linespacing=1.2)
     if legend_line:
         fig.text(0.5, legend_y, textwrap.fill(legend_line, 78), fontsize=SMALL, color=INK, ha="center", va="bottom",
                  linespacing=1.25)

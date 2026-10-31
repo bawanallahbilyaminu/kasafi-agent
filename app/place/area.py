@@ -367,18 +367,29 @@ def bsi_year(grid: Grid, units: Units, crop: np.ndarray, year: int, workers: int
     return out
 
 
-def rain_years(units: Units, first_year: int, today: date, workers: int = 4) -> dict[tuple[str, str], dict[int, float]]:
-    """June–October rain per unit centroid and year."""
+def rain_years(units: Units, first_year: int, today: date, workers: int = 1) -> dict[tuple[str, str], dict[int, float]]:
+    """June–October rain per unit centroid and year. One call at a time with a pause: the Open-Meteo archive
+    rate-limits a burst of 26-year requests (31 Oct 2026: 241 of 268 came back 429 at four threads)."""
     keys = list(units.centroids)
 
     def one(key):
         lat, lon = units.centroids[key]
-        try:
-            daily = rain.daily_rain(lat, lon, date(first_year, 1, 1), today)
-        except (httpx.HTTPError, OSError, KeyError) as e:
-            log.warning("area: rain for %s failed: %s", key, type(e).__name__)
-            return key, {}
-        return key, {y: v["season_mm"] for y, v in rain.by_year(daily).items()}
+        for attempt in range(6):
+            try:
+                daily = rain.daily_rain(lat, lon, date(first_year, 1, 1), today)
+                time.sleep(0.6)
+                return key, {y: v["season_mm"] for y, v in rain.by_year(daily).items()}
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    time.sleep(15 * (attempt + 1))
+                    continue
+                log.warning("area: rain for %s failed: HTTP %s", key, e.response.status_code)
+                return key, {}
+            except (httpx.HTTPError, OSError, KeyError) as e:
+                log.warning("area: rain for %s failed: %s", key, type(e).__name__)
+                return key, {}
+        log.warning("area: rain for %s failed: rate-limited six times", key)
+        return key, {}
 
     out = {}
     with ThreadPoolExecutor(max_workers=workers) as ex:
