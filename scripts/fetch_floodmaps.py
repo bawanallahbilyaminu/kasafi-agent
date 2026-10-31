@@ -65,11 +65,14 @@ def water_layers(folder: Path) -> list[Path]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--keep-raw", action="store_true")
+    ap.add_argument("--only", default="", help="one map code (a rerun after a dropped download)")
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     OUT.mkdir(parents=True, exist_ok=True)
     area = sokoto_area()
     for m in MAPS:
+        if a.only and m["code"] != a.only:
+            continue
         raw = OUT / "raw" / m["code"]
         if raw.exists():
             shutil.rmtree(raw)
