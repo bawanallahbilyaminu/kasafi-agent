@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -151,7 +152,68 @@ def test_check_skips_model_when_not_needed_and_fails_open() -> None:
     assert asyncio.run(scope.check(["Ina 'yan bindiga?"], settings=s, client_factory=Boom)).category == "security"
 
 
+def test_a_reply_that_does_not_parse_is_tried_once_more() -> None:
+    calls = []
+
+    class Flaky:
+        def __init__(self, settings): ...
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return None
+
+        async def chat(self, messages, **kw):
+            calls.append(1)
+            if len(calls) == 1:
+                raise ValueError("no JSON in the reply")
+            return ChatResult(content='{"category": "electoral", "reason": "party opinion"}', model="m",
+                              finish_reason="stop")
+    v = asyncio.run(scope.check(["Is the opposition party right about this year's budget?"], settings=make_settings(),
+                                client_factory=Flaky))
+    assert (v.category, v.tier, len(calls)) == ("electoral", "model", 2)
+
+
 def test_security_agencies_and_operations_always_reach_the_classifier() -> None:
     assert scope.needs_model(["Where are the Community Guard Corps deployed in Isa LGA?"])
     assert scope.needs_model(["Nawa aka ware wa 'yan sa kai a 2026?"])
     assert scope.keyword_check(["Where are the Community Guard Corps deployed?"]) is None   # the model decides
+
+
+@pytest.mark.parametrize("message,cat", [
+    ("Is the commissioner for finance corrupt?", "verdict"),
+    ("Shin kwamishinan kuɗi mai cin hanci ne?", "verdict"),
+    ("Has the government kept its promises on education?", "verdict"),
+    ("Is it safe to travel from Sokoto to Isa? Which route is safest?", "security"),
+    ("Wace hanya ce ta fi aminci daga Sokoto zuwa Sabon Birni?", "security"),
+    ("Which armed groups operate in Sabon Birni?", "security"),
+    ("How should I treat cholera at home?", "medical_advice"),
+    ("Ina da ciwon kai, me zan sha?", "medical_advice")])
+def test_clear_cases_are_refused_without_a_model(message, cat) -> None:
+    from app.guardrails.scope import keyword_check
+    assert keyword_check([message]) == cat
+
+
+@pytest.mark.parametrize("message", [
+    "What is the 2026 budget for the Anti-Corruption Commission?",
+    "Nawa aka ware wa hukumar yaƙi da cin hanci a 2026?",
+    "How much did the state spend on health in 2025?",
+    "How many PHCs are in Tureta?",
+    "Nawa aka ware wa sayen magunguna a 2026?"])
+def test_figures_on_sensitive_topics_are_never_refused_by_keyword(message) -> None:
+    from app.guardrails.scope import keyword_check
+    assert keyword_check([message]) is None
+
+
+@pytest.mark.parametrize("message", ["Is the state government doing a good job?", "Gwamnatin jiha tana aiki da kyau kuwa?",
+                                     "Mutane nawa aka sace a Goronyo?", "Is it safe for my pregnant wife to fast?"])
+def test_borderline_cases_reach_the_classifier(message) -> None:
+    from app.guardrails.scope import needs_model
+    assert needs_model([message])
+
+
+@pytest.mark.parametrize("key", ["guard_electoral", "guard_verdict", "guard_security", "guard_medical_advice"])
+@pytest.mark.parametrize("lang", ["ha", "en"])
+def test_refusals_are_brief_name_no_one_and_offer_what_kasafi_can_do(key, lang) -> None:
+    text_ = t(key, lang)
+    assert len(text_) < 400                                                     # brief, no lecture
+    assert any(x in text_ for x in ("«", "budget", "kasafi", "Kasafi", "health worker", "ma'aikacin lafiya"))
+    assert not re.search(r"(?i)\b(?:governor|gwamna)\s+[A-Z]", text_)          # no politician named
+    assert "\n\n" in text_                                                      # the refusal, then the offer

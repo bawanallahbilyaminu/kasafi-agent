@@ -200,16 +200,16 @@ TEXTS = {
     },
     # Scope guardrails (app/guardrails/scope.py)
     "guard_electoral": {
-        "ha": "Kasafi ba ya ba da ra'ayi kan 'yan takara, jam'iyyu ko zaɓe.\n\nIna amsa tambayoyi ne kawai game da takardun kasafi da manufofin gwamnati, tare da madogara.",
-        "en": "Kasafi doesn't give opinions on candidates, parties or elections.\n\nI only answer questions about public budget and policy documents, with sources.",
+        "ha": "Kasafi ba ya ba da ra'ayi kan 'yan siyasa, jam'iyyu ko zaɓe.\n\nZan iya nuna maka abin da kasafi da tsare-tsaren gwamnati suka ce, tare da madogara, misali: «Nawa aka ware wa ilimi a 2026?»",
+        "en": "Kasafi doesn't give opinions on politicians, parties or elections.\n\nI can show you what the budgets and plans say, with sources, for example: «How much was allocated to education in 2026?»",
     },
     "guard_verdict": {
         "ha": "Kasafi ba ya yanke hukunci kan ayyukan gwamnati ko na 'yan siyasa.\n\nAmma zan iya nuna maka bayanai daga takardu gefe da gefe, misali: «Nawa aka ware wa ilimi a 2025, kuma nawa aka kashe?»",
         "en": "Kasafi doesn't judge the performance of the government or politicians.\n\nBut I can show you the facts from the documents side by side, for example: «How much was allocated to education in 2025, and how much was spent?»",
     },
     "guard_security": {
-        "ha": "Yi haƙuri, tambayoyi game da tsaro, rikici ko hare-hare ba sa cikin abin da Kasafi ke amsawa.\n\nIna amsa tambayoyi game da kasafi da manufofin gwamnati.",
-        "en": "Sorry, questions about security, conflict or attacks are outside what Kasafi covers.\n\nI answer questions about public budgets and policies.",
+        "ha": "Yi haƙuri, Kasafi ba ya amsa tambayoyi game da hare-hare, 'yan bindiga, rikici ko amincin hanyoyi.\n\nZan iya ba ka alƙaluman kasafin hukumomin tsaro, tare da madogara, ko bayanin yanayi da haɗari (zafi, ƙura, ambaliya).",
+        "en": "Sorry, Kasafi doesn't answer questions about attacks, armed groups, security incidents or which roads are safe.\n\nI can give you budget figures for security agencies, with sources, or weather and hazard information (heat, dust, floods).",
     },
     "guard_medical_advice": {
         "ha": "Kasafi ba ya ba da shawarar magani ko ta abinci mai gina jiki.\n\nDon Allah ka tuntuɓi ma'aikacin lafiya. Zan iya taimaka maka da alƙaluman kasafin lafiya, misali: «Nawa aka ware wa lafiya a 2026?»",
