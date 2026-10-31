@@ -58,7 +58,7 @@ Some details are not confirmed yet. Look them up (dev.meta.ai docs, provider doc
 
 ## Status (as of Oct 31, 2026)
 
-**Live: `b32a607`** at https://kasafi-api.halalnumeriq.com.ng, deployed with `deploy/deploy.sh`.
+**Live: `3ea68e0`** at https://kasafi-api.halalnumeriq.com.ng, deployed with `deploy/deploy.sh`.
 - **Documents:** budgets and performance reports (structured core plus line search), topic sweeps across publishers (`app/agent/topics.py`, L32), fetching on demand, the admin trace and review pages.
 - **Hazard steps 1–5 of 7 are live** (`docs/hazard-and-services.md`):
   - location intake (the point in memory for 30 min, only the LGA stored);
@@ -103,6 +103,10 @@ Some details are not confirmed yet. Look them up (dev.meta.ai docs, provider doc
   - outbreak alerts fire only on recent epi weeks;
   - Hausa summary templates for correction in `docs/hazard-summaries-ha.md`.
   - Waiting on Bilyaminu: `KASAFI_ALERTS=true` in the local .env, then `--sync-env`; the correct types for Hussaini Medical Center and Noma Hospital.
+- **Nov 1, live at `3ea68e0`:**
+  - the eleven Oct 31 phone-test answer patterns are fixed (lesson L33; `evals/patterns`, 21 generated cases, 0 wrong);
+  - pre-deploy eval: fresh 52 at 0 wrong (median 5.4 s), topics 12 at 0 wrong, advisories 5 at 0 wrong.
+  - Alerts are ON in dry run on the server (`KASAFI_ALERTS=true` via `--sync-env`); season dust needs AQI 201+.
 - **Hazard step 6 (alerts) is built and in the live code, but off** (`KASAFI_ALERTS` unset; dry run by default; `/admin/alerts`). Don't turn it on until Bilyaminu says. Recipients: only subscribers' numbers are stored, encrypted (`KASAFI_ALERTS_NUMBER_KEY`), and deleted on STOP, DELETE MY DATA or 90 days without contact. Bilyaminu adds the key and `KASAFI_ALERTS_DAILY_CAP` to `.env` himself.
 - **Next:** step 7 (evals, docs, demo). The full 39 eval runs on Tue Nov 3 only (`evals/`).
 - **Open items:**
