@@ -269,3 +269,30 @@ def test_a_failing_check_never_holds_the_answer_back() -> None:
         raise AssertionError("no redo without a verdict")
     a = asyncio.run(ag.completed(_ans("₦1 bn"), "q", _plan("q"), "en", Boom(), make_settings(), redo))
     assert a.text.startswith("₦1 bn")
+
+
+# --- 7. Hausa letters stay Latin --------------------------------------------------------------------------------
+
+def test_lookalike_letters_from_other_scripts_become_hausa_letters() -> None:
+    from app.language import foreign_letters, normalize_letters
+    assert normalize_letters("Ɗaҳan", "ha") == "Ɗaƴan"                          # Cyrillic ҳ for ƴ
+    assert normalize_letters("ӄaramar hukuma", "ha") == "ƙaramar hukuma"
+    assert normalize_letters("Мinistry оf Неalth", "en") == "Ministry of Health"   # Cyrillic М, о, Н, е
+    assert normalize_letters("ķaramar ƃangare đaya", "ha") == "ƙaramar ɓangare ɗaya"
+    assert normalize_letters("Đorđević", "en") == "Đorđević"                    # đ is only Hausa's ɗ in Hausa
+    assert normalize_letters("Ƴaƴan Ɓunu", "ha") == "Ƴaƴan Ɓunu"                  # the user's own spelling kept
+    assert foreign_letters(normalize_letters("Ɗaҳan Кasafi", "ha")) == []
+
+
+def test_every_message_is_normalised_before_it_is_sent() -> None:
+    from app.whatsapp.conversation import Out
+    assert Out("Ɗaҳan", lang="ha").text == "Ɗaƴan"
+
+
+def test_hausa_templates_contain_only_latin_letters() -> None:
+    from app.hazards import summary as hs
+    from app.language import foreign_letters
+    from app.whatsapp import messages
+    texts = [v["ha"] for v in messages.TEXTS.values() if isinstance(v, dict) and isinstance(v.get("ha"), str)]
+    texts += [str(v) for v in hs.W["ha"].values()] + list(hs.EPA_HA.values()) + list(hs.NWS_HA.values())
+    assert texts and all(foreign_letters(t) == [] for t in texts)

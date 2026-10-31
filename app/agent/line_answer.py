@@ -91,6 +91,8 @@ SELECT_SYSTEM = (
     "{SHARE_PCT}, {SPENT_PCT} or {RATIO} where a calculated figure belongs, followed by (Kasafi's calculation) / (lissafin "
     "Kasafi). Leave chosen lines whose figure is 0.00 out of the summary unless the question asks about them; "
     "the list under the summary still shows them. "
+    "Write names exactly as the user or the line wrote them; in Hausa use ɓ ɗ ƙ ƴ (Ɓ Ɗ Ƙ Ƴ), never a look-alike "
+    "letter from another alphabet. "
     "Neutral facts only; for security agencies or lines, the figures alone with no commentary. For a share, name "
     "the whole it is of and whether it is approved or actual (e.g. 'of the 2026 approved budget's Total "
     "Expenditure'). For a target or benchmark (e.g. the Abuja Declaration's 15% for health), put the two figures "

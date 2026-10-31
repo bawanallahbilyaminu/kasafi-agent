@@ -40,7 +40,7 @@ from app.sources.lga_names import name_of
 from app.alerts.signup import reply as alerts_reply
 from app.guardrails import emergency as em
 from app.guardrails.emergency import EMERGENCY_REPLY, is_medical_emergency
-from app.language import detect_language
+from app.language import detect_language, normalize_letters
 from app.providers.chat import ProviderError
 from app.providers.stt import heard_texts
 from app.users import UserStore, user_key
@@ -83,6 +83,9 @@ class Out:
     location_request: bool = False     # sent as WhatsApp's location request message ("Share location" button)
     location: dict | None = None       # sent as a location message (a facility's pin): latitude, longitude, name...
     image: bytes | None = None         # a map (JPEG), sent with `text` as its caption
+
+    def __post_init__(self) -> None:   # every message: no look-alike letters from other scripts ('ҳ' for 'ƴ')
+        self.text = normalize_letters(self.text, self.lang)
 
 
 def _norm(text: str) -> str:

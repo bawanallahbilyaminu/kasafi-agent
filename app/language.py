@@ -36,3 +36,35 @@ def detect_language(text: str) -> str | None:
     if ha + en < 2 or ha == en:
         return None
     return "ha" if ha > en else "en"
+
+
+# --- Hausa letters: models sometimes write a look-alike from another script ('Ɗaҳan' for 'Ƴaƴan') ----------------
+
+# Cyrillic and Greek letters that look like Latin ones (any language): the Latin letter. Cyrillic ҳ (h with a
+# descender) and ӄ / ҡ (k with a hook) stand in for Hausa ƴ and ƙ.
+_LOOKALIKE = str.maketrans({
+    "ҳ": "ƴ", "Ҳ": "Ƴ", "ӄ": "ƙ", "Ӄ": "Ƙ", "ҡ": "ƙ", "Ҡ": "Ƙ", "ԁ": "d",
+    "а": "a", "А": "A", "в": "b", "В": "B", "е": "e", "Е": "E", "к": "k", "К": "K", "м": "m", "М": "M", "н": "h",
+    "Н": "H", "о": "o", "О": "O", "р": "p", "Р": "P", "с": "c", "С": "C", "т": "t", "Т": "T", "у": "y", "У": "Y",
+    "х": "x", "Х": "X", "і": "i", "І": "I", "ј": "j", "Ј": "J", "ѕ": "s", "Ѕ": "S", "ԛ": "q", "ԝ": "w",
+    "α": "a", "Α": "A", "Β": "B", "ε": "e", "Ε": "E", "Ζ": "Z", "Η": "H", "ι": "i", "Ι": "I", "κ": "k", "Κ": "K",
+    "Μ": "M", "Ν": "N", "ο": "o", "Ο": "O", "ρ": "p", "Ρ": "P", "Τ": "T", "υ": "u", "Υ": "Y", "χ": "x", "Χ": "X",
+})
+# Latin letters that models write for Hausa's hooked ones (Hausa only: đ and ķ are real letters elsewhere)
+_HAUSA_HOOKS = str.maketrans({"ķ": "ƙ", "Ķ": "Ƙ", "ƃ": "ɓ", "Ƃ": "Ɓ", "đ": "ɗ", "Đ": "Ɗ", "ď": "ɗ", "Ď": "Ɗ",
+                              "ÿ": "ƴ", "Ÿ": "Ƴ"})
+
+
+def normalize_letters(text: str, lang: str | None = None) -> str:
+    """Look-alike letters from other scripts back to Latin, and (for Hausa) the hooked letters ɓ ɗ ƙ ƴ written
+    with the wrong mark. Latin letters, including the user's own spelling of names, are left as they are."""
+    if not text:
+        return text
+    out = text.translate(_LOOKALIKE)
+    return out.translate(_HAUSA_HOOKS) if lang == "ha" else out
+
+
+def foreign_letters(text: str) -> list[str]:
+    """Letters that are not Latin script (the test: Hausa replies contain none)."""
+    import unicodedata
+    return [ch for ch in text if ch.isalpha() and not unicodedata.name(ch, "").startswith("LATIN")]
