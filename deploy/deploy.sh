@@ -7,7 +7,9 @@
 #                                  structured core: budget_items/projects/perf_items/entity_builds) from the dev DB
 #   deploy/deploy.sh --sync-pdfs   copy the source PDFs (public documents) to the server, for evidence crops
 #   deploy/deploy.sh --sync-geo    copy data/geo/*.geojson (not in git) to /data/geo on the server and run the geo
-#                                  import there (LGAs, wards, facilities, places into PostGIS)
+#                                  import there (LGAs, wards, facilities, places into PostGIS), with the corrections
+#   deploy/deploy.sh --sync-corrections  copy data/geo/facility_corrections.yaml and apply it to the server's facility
+#                                  table only (scripts/import_geo.py --corrections)
 #   deploy/deploy.sh --sync-advisories  copy data/advisories/*.pdf (NIHSA AFO, NiMet SCP: not in git) to /data/pdfs,
 #                                  index and OCR them there (Muse Spark vision, ~$1.4) and load data/official_outlooks.yaml
 #   deploy/deploy.sh --sync-hints  copy data/private/partners_hints.json (not in git) to deploy/private/ on the
@@ -105,10 +107,20 @@ case "${1:-}" in
     # the geo inputs only (boundaries, facilities, OSM places), never the local reports
     [ -f data/geo/sokoto_lga_codab.geojson ] || die "no data/geo/ here"
     tmp=$(mktemp)
-    tar -c -f "$tmp" -C data/geo $(cd data/geo && ls *.geojson) || { rm -f "$tmp"; die "packing data/geo failed"; }
+    tar -c -f "$tmp" -C data/geo $(cd data/geo && ls *.geojson facility_corrections.yaml 2>/dev/null) \
+      || { rm -f "$tmp"; die "packing data/geo failed"; }
     echo "→ uploading $(du -h "$tmp" | cut -f1) of data/geo to $HOST"
     "$SSH" "$HOST" "umask 077; cat > $REMOTE_GEO" < "$tmp"; rm -f "$tmp"
     remote_and_report sync-geo
+    ;;
+  --sync-corrections)
+    # only data/geo/facility_corrections.yaml, applied to the server's facility table (no full geo import)
+    [ -f data/geo/facility_corrections.yaml ] || die "no data/geo/facility_corrections.yaml here"
+    uv run python -c "from app.geo.corrections import load; load()" || die "the corrections file is invalid"
+    tmp=$(mktemp)
+    tar -c -f "$tmp" -C data/geo facility_corrections.yaml || { rm -f "$tmp"; die "packing failed"; }
+    "$SSH" "$HOST" "umask 077; cat > $REMOTE_GEO" < "$tmp"; rm -f "$tmp"
+    remote_and_report sync-corrections
     ;;
   --sync-pdfs)
     tmp=$(mktemp)

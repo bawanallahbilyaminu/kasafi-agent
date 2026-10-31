@@ -83,7 +83,7 @@ def nearest_facilities(conn, lat: float, lon: float, filters: Filters = Filters(
                        ) -> list[Facility]:
     """The k nearest facilities matching the filters (after `skip` nearer ones: 'the next one'), by straight-line
     distance on the sphere."""
-    where, args = ["f.geom IS NOT NULL"], {"lat": lat, "lon": lon, "n": CANDIDATES + skip}
+    where, args = ["f.geom IS NOT NULL", "NOT f.hidden"], {"lat": lat, "lon": lon, "n": CANDIDATES + skip}
     if filters.levels:
         # a hospital by its level or by its type: the file lists Goronyo General Hospital as 'Primary'
         hospital = " OR f.level_option ILIKE '%%hospital%%'" if "Secondary" in filters.levels else ""

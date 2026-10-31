@@ -206,6 +206,25 @@ sync-geo)
   exit 1
   ;;
 
+sync-corrections)
+  # deploy.sh uploads a tar holding data/geo/facility_corrections.yaml only; it is applied to the facility table
+  # (scripts/import_geo.py --corrections), with no full geo import
+  INCOMING=$APP/deploy/geo.incoming.tar
+  [ -s "$INCOMING" ] || { say "no $INCOMING uploaded"; exit 1; }
+  if dc exec -T api sh -c 'mkdir -p /data/geo && tar -x -m -C /data/geo' < "$INCOMING" \
+     && out=$(dc exec -T api python scripts/import_geo.py --geo /data/geo --corrections); then
+    rm -f "$INCOMING"
+    say "corrections applied:"; echo "$out"
+    log "sync-corrections ok"
+    echo "RESULT=ok COMMIT=$(git rev-parse HEAD)"
+    exit 0
+  fi
+  rm -f "$INCOMING"
+  log "sync-corrections FAILED"
+  echo "RESULT=failed COMMIT=none"
+  exit 1
+  ;;
+
 sync-advisories)
   # deploy.sh uploads a tar of data/advisories/*.pdf (official documents Bilyaminu downloaded: not in git), named by
   # document id. They join the source PDFs in /data/pdfs; the three are indexed and OCR'd there, then the official

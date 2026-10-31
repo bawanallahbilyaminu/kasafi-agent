@@ -54,8 +54,48 @@ def test_facility_answers_say_when_a_location_was_checked() -> None:
     assert "checked" not in fac.facilities_text("en", [plain], fac.Filters())
 
 
-def test_the_template_file_parses_and_applies_nothing() -> None:
+def test_the_local_corrections_file_is_valid() -> None:
     from pathlib import Path
     p = Path("data/geo/facility_corrections.yaml")
-    if p.exists():
-        assert fixes.load(p) == []
+    if not p.exists():
+        pytest.skip("data/geo/ not present (not in git)")
+    assert all(c.verified_by and c.verified_on for c in fixes.load(p))       # parse() raises on a bad entry
+
+
+def test_remove_and_hide_entries() -> None:
+    gone, held = fixes.parse([
+        {"fid": "536eb69c", "remove": True, "verified_by": "B", "verified_on": "2026-10-31", "note": "not a facility"},
+        {"nhfr_code": "33/21/1/2/2/0056", "hide": True, "verified_by": "B", "verified_on": "2026-10-31"}])
+    assert gone.fields == ["removed"] and gone.remove and held.fields == ["hidden"] and held.hide
+    with pytest.raises(fixes.CorrectionError, match="removal can't also change"):
+        fixes.parse([{"fid": "x", "remove": True, "name": "Y", "verified_by": "B", "verified_on": "2026-10-31"}])
+
+
+class _Conn:
+    """Records the SQL an apply runs; `found` answers the facility lookup."""
+    def __init__(self, found):
+        self.found, self.sql = found, []
+
+    def execute(self, sql, args=()):
+        self.sql.append((sql, args))
+        rows = self.found if sql.startswith("SELECT fid, name FROM facility") else []
+
+        class R:
+            def fetchall(self):
+                return rows
+        return R()
+
+
+def test_apply_removes_hides_and_tolerates_an_earlier_removal() -> None:
+    [gone] = fixes.parse([{"fid": "s1", "remove": True, "verified_by": "B", "verified_on": "2026-10-31"}])
+    conn = _Conn([("s1", "Salewa Health Post")])
+    assert fixes.apply(conn, [gone]) == ["- Salewa Health Post: removed (verified by B, 31 Oct 2026)"]
+    assert any(s.startswith("DELETE FROM facility WHERE") for s, _ in conn.sql)
+    assert any(s.startswith("DELETE FROM facility_capability") for s, _ in conn.sql)
+    assert fixes.apply(_Conn([]), [gone]) == ["- {'fid': 's1'}: removed (already gone)"]       # a re-run
+    [held] = fixes.parse([{"nhfr_code": "x", "hide": True, "verified_by": "B", "verified_on": "2026-10-31"}])
+    conn = _Conn([("x1", "Sarda Quarters Health Clinic")])
+    fixes.apply(conn, [held])
+    assert conn.sql[0][0] == "UPDATE facility SET hidden = false WHERE hidden"            # reset first
+    update = next((s, a) for s, a in conn.sql if s.startswith("UPDATE facility SET correction"))
+    assert "hidden = %s" in update[0] and True in update[1]

@@ -74,7 +74,7 @@ def _rows(conn, where: str = "TRUE", args: tuple = ()) -> list[Registered]:
         "ELSE 'bemonc' END FROM facility_capability c WHERE c.fid = f.fid AND (c.confirmed OR c.score >= 1.0)), "
         "f.correction, ST_Distance(ST_Boundary(w.geom)::geography, f.geom::geography) "
         "FROM facility f LEFT JOIN lga l ON l.pcode = f.lga_pcode LEFT JOIN ward w ON w.wardcode = f.ward_code "
-        f"WHERE f.geom IS NOT NULL AND {where}", args).fetchall()]
+        f"WHERE f.geom IS NOT NULL AND NOT f.hidden AND {where}", args).fetchall()]
 
 
 def find_by_name(conn, text: str, lga_pcodes: list[str] | None = None) -> list[Registered]:
@@ -182,7 +182,7 @@ def count_answer(conn, text: str, lang: str = "en") -> str:
     w = W.get(lang, W["en"])
     key, cond = next(((k, c) for p, k, c in KINDS if re.search(rf"(?i){p}", text)), ("all", "TRUE"))
     own = next((o for p, o in OWNERSHIP if re.search(rf"(?i){p}", text)), "")
-    where, args, place = [cond], [], w["state"]
+    where, args, place = [cond, "NOT f.hidden"], [], w["state"]
     if own:
         where.append("f.ownership = %s")
         args.append(own)
@@ -202,7 +202,7 @@ def count_answer(conn, text: str, lang: str = "en") -> str:
     own_word = (f"{w[own]} " if lang != "ha" else f" {w[own]}") if own else ""
     lines = [w["count"].format(place=place, n=n, what=w[key], own=own_word)]
     if key == "phc":
-        prim = conn.execute("SELECT count(*) FROM facility f WHERE f.level = 'Primary' AND "
+        prim = conn.execute("SELECT count(*) FROM facility f WHERE f.level = 'Primary' AND NOT f.hidden AND "
                             + " AND ".join(where[1:] or ["TRUE"]), tuple(args)).fetchone()[0]
         lines.append(w["also"].format(n=prim))
     if not lgas and not ward and n:
