@@ -95,6 +95,8 @@ def main() -> None:
                 if layer.suffix == ".gdb":
                     for name in pyogrio_layers(layer):
                         g = gpd.read_file(layer, layer=name)
+                        if not isinstance(g, gpd.GeoDataFrame):          # a plain table (population exposure)
+                            continue
                         if g.geom_type.isin(["Polygon", "MultiPolygon"]).any():
                             parts.append(clip(g, area, name))
                 else:
