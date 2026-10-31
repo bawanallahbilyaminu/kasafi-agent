@@ -20,6 +20,8 @@ ENV FASTEMBED_CACHE_PATH=/opt/fastembed
 RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')" \
     && chmod -R a+rX /opt/fastembed
 ENV HF_HUB_OFFLINE=1
+# the maps (matplotlib, fontconfig) keep their caches in /tmp: the home folder is read-only in the container
+ENV MPLCONFIGDIR=/tmp/matplotlib XDG_CACHE_HOME=/tmp/cache
 
 COPY app ./app
 # The source registry (fetch allowlist, topics, publishers) and the topic prefetch script. The private partner
