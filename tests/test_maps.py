@@ -146,21 +146,16 @@ def test_an_answers_maps_follow_its_text_unless_images_are_off(monkeypatch) -> N
 
 # --- Oct 31 review: values on the map, shading within a category, AQI colours, a readable near-you map --------
 
-def test_most_lgas_in_one_category_are_shaded_by_value_within_it() -> None:
-    values = {f"L{i}": ("extreme_caution", 35.0 + i * 0.1, "") for i in range(20)} | {"L99": ("danger", 41.0, "")}
-    fill, dom, span = render.fills("heat", values)
-    assert dom == "extreme_caution" and span == (35.0, 36.9)
-    base = render.HEAT_COLORS[render.HEAT.index("extreme_caution")]
-    assert fill["L19"] == base and fill["L0"] != base                      # the highest gets the category's colour
-    assert fill["L99"] == render.HEAT_COLORS[render.HEAT.index("danger")]  # other categories keep theirs
-    # never darker than the category's own colour (darker would read as the next category)
-    assert all(sum(render._rgb(fill[f"L{i}"])) >= sum(render._rgb(base)) - 1e-9 for i in range(20))
-
-
-def test_a_mixed_day_is_shaded_by_category_only() -> None:
-    values = {f"L{i}": ("extreme_caution" if i < 14 else "danger", 35.0 + i, "") for i in range(23)}
-    fill, dom, span = render.fills("heat", values)
-    assert dom == "" and len(set(fill.values())) == 2
+@pytest.mark.parametrize("layer,order,colors", [("heat", render.HEAT, render.HEAT_COLORS),
+                                                ("air", render.AIR, render.AIR_COLORS),
+                                                ("rain", render.RAIN, render.RAIN_COLORS)])
+def test_every_fill_is_exactly_a_legend_colour(layer, order, colors) -> None:
+    values = {f"L{i}": (order[i % len(order)], 30.0 + i * 0.7, "") for i in range(23)}
+    fill = render.fills(layer, values)
+    assert set(fill.values()) <= set(colors)                               # no shades the legend doesn't have
+    assert fill["L0"] == colors[0] and fill["L1"] == colors[1]
+    one = render.fills(layer, {f"L{i}": (order[1], 30.0 + i, "") for i in range(23)})
+    assert set(one.values()) == {colors[1]}                                # one category: one colour, numbers differ
 
 
 def test_air_uses_the_standard_aqi_colours_green_to_maroon() -> None:
@@ -247,3 +242,27 @@ def test_one_map_per_answer_and_not_the_same_one_twice() -> None:
     again = conv.one_map("u1", [conv.Out("list"), conv.Out("", image=b"map-a")])
     assert not any(o.image for o in again)                                 # the same map again: text only
     assert any(o.image for o in conv.one_map("u2", [conv.Out("", image=b"map-a")]))   # another user: sent
+
+
+def test_far_facilities_are_in_the_legend_only() -> None:
+    near = Facility("a", "Goronyo General Hospital", "Secondary", "", "Public", "", 13.44, 5.67, "Goronyo", "Goronyo",
+                    0.9)
+    far1 = Facility("b", "Wurno General Hospital", "Secondary", "", "Public", "", 13.29, 5.42, "Wurno", "Wurno", 30.2)
+    mid = Facility("c", "Kagara PHC", "Primary", "", "Public", "", 13.5, 5.7, "Goronyo", "Goronyo", 7.0)
+    assert render.on_map([near, far1, mid]) == [True, False, True]
+    assert render.on_map([far1, near]) == [True, True]                     # the first is always drawn
+    cx, cy, side = render.frame((13.44, 5.67), [near])
+    assert side < 0.03                                                    # zoomed to the user and the nearest
+
+
+def test_towns_use_the_official_lga_spelling() -> None:
+    from app.sources.lga_names import canonical
+    assert canonical("Salame") == "Silame" and canonical("Tambawal") == "Tambuwal" and canonical("Achida") == ""
+
+
+def test_the_near_you_map_with_a_far_facility_renders() -> None:
+    fs = [Facility("x", "Goronyo General Hospital", "Secondary", "", "Public", "", 13.441, 5.672, "Goronyo",
+                   "Goronyo", 0.9, road_km=1.2, minutes=3),
+          Facility("y", "Wurno General Hospital", "Secondary", "", "Public", "", 13.29, 5.42, "Wurno", "Wurno", 30.2)]
+    with _conn() as conn:
+        _jpeg(render.near_you_map(conn, 13.44, 5.67, "Goronyo", fs, None, "ha", "x").jpeg)

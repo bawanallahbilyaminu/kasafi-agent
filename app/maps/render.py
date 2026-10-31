@@ -3,10 +3,11 @@ base layer: LGA boundaries (OCHA COD-AB) with main roads and rivers from OpenStr
 scripts/import_geo.py). No third-party tiles.
 
 - hazard_map: Sokoto by LGA for the day's heat category, dust/air (US AQI) or rain class, each LGA's value printed
-  on it, the user's LGA outlined. When most LGAs share one category, those are shaded by their value within it
-  (lighter to darker), so the map still shows differences; a legend line says what the shading means.
-- near_you_map: framed on the user's ~1 km circle and the facilities (at least ~2 km across), the facilities
-  numbered with road distance and time in the legend, the main towns nearby, a scale bar, the road route to 1.
+  on it, the user's LGA outlined. Every fill is exactly a legend colour (no shades between categories): the printed
+  numbers show the differences within a category; a legend line says what colour and numbers mean.
+- near_you_map: framed on the user's ~1 km circle, the nearest facility and any other within ~15 km (at least ~2 km
+  across); facilities farther away are listed in the legend only. Facilities numbered with road distance and time in
+  the legend, the main towns nearby under their official LGA spellings, a scale bar, the road route to 1.
 - river_map: the river points with today's level against normal for the time of year, each label joined to its
   point by a leader line; a model estimate.
 
@@ -26,7 +27,6 @@ import re
 import textwrap
 import threading
 import time
-from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime
 
@@ -42,6 +42,7 @@ from shapely import wkb  # noqa: E402
 
 from app.hazards import categories as cat  # noqa: E402
 from app.hazards import read  # noqa: E402
+from app.sources.lga_names import canonical  # noqa: E402
 
 # ordinal ramps (dataviz validate_palette.js --ordinal: all checks pass on the white surface)
 HEAT = ("below", "caution", "extreme_caution", "danger", "extreme_danger")
@@ -67,7 +68,7 @@ def pt(px: float) -> float:
 
 TITLE, SUBTITLE, LABEL, LEGEND, SMALL, FOOT = pt(28.5), pt(18), pt(20.5), pt(20.5), pt(15), pt(14)
 MIN_SIDE = 0.02                            # degrees, ~2.2 km: the near-you map is never zoomed in further
-DOMINANT = 0.75                            # this share of LGAs in one category: shade by value within it
+FAR_KM = 15.0                              # a facility farther than this is in the near-you legend only
 
 T = {
     "en": {"heat": "Heat", "air": "Dust and air quality (US AQI)", "rain": "Rain", "today": "today",
@@ -86,11 +87,11 @@ T = {
            "rain_src": "Open-Meteo forecast; WMO rain intensity classes",
            "facility_src": "Facilities: GRID3 Nigeria / NHFR (Nov 2024). Opening hours not confirmed.",
            "legend_cat": "Colour: each LGA's {scale} category. Numbers: {measure}.",
-           "legend_within": "Most LGAs are {cat}: within it, darker means higher ({lo} to {hi}). Numbers: {measure}.",
            "scales": {"heat": "heat", "air": "US AQI", "rain": "rain intensity"},
            "measures": {"heat": "the day's highest temperature or heat index, °C", "air": "the day's highest US AQI",
                         "rain": "the day's rain, mm"},
            "dist_road": "{km} km, about {mins}", "dist_line": "about {km} km (straight line)",
+           "off_map": " (beyond the map)",
            "river_legend": "Colour: today's flow against the same time of year since {year}."},
     "ha": {"heat": "Zafin rana", "air": "Ƙura da ingancin iska (US AQI)", "rain": "Ruwan sama", "today": "yau",
            "tomorrow": "gobe", "valid": "Na {day}", "fetched": "an samo {when}", "old": " (ya daɗe fiye da yadda aka saba)",
@@ -109,12 +110,11 @@ T = {
            "rain_src": "Hasashen Open-Meteo; matakan ruwan sama na WMO",
            "facility_src": "Cibiyoyi: GRID3 Nigeria / NHFR (Nuwamba 2024). Ba a tabbatar da lokutan buɗewa ba.",
            "legend_cat": "Launi: matakin {scale} na kowace ƙaramar hukuma. Lambobi: {measure}.",
-           "legend_within": "Yawancin ƙananan hukumomi suna {cat}: a cikinsa, mai duhu ya fi yawa ({lo} zuwa {hi}). "
-                            "Lambobi: {measure}.",
            "scales": {"heat": "zafi", "air": "US AQI", "rain": "ruwan sama"},
            "measures": {"heat": "mafi girman zafin iska ko ma'aunin zafi na ranar, °C",
                         "air": "mafi girman US AQI na ranar", "rain": "ruwan saman ranar, mm"},
            "dist_road": "kilomita {km}, kusan {mins}", "dist_line": "kusan kilomita {km} (a miƙe)",
+           "off_map": " (bayan iyakar taswirar)",
            "river_legend": "Launi: kwararar yau idan aka kwatanta da wannan lokaci na shekara tun {year}."},
 }
 
@@ -129,20 +129,6 @@ class MapImage:
 
 def _rgb(h: str) -> tuple[float, float, float]:
     return tuple(int(h[i:i + 2], 16) / 255 for i in (1, 3, 5))
-
-
-def _hex(c) -> str:
-    return "#%02x%02x%02x" % tuple(round(max(0.0, min(1.0, v)) * 255) for v in c)
-
-
-def _mix(a: str, b: str, t: float) -> str:
-    return _hex(tuple(x + (y - x) * t for x, y in zip(_rgb(a), _rgb(b))))
-
-
-def within(color: str, f: float) -> str:
-    """A category's colour shaded by a value's place in that category's range (f 0..1): from a pale tint up to the
-    category's own colour, never darker (darker would look like the next category)."""
-    return _mix(color, "#ffffff", 0.6 * (1 - max(0.0, min(1.0, f))))
 
 
 def dark(color: str) -> bool:
@@ -295,26 +281,12 @@ def short_value(layer: str, v: float) -> str:
     return f"{v:.0f}°" if layer == "heat" else f"{v:.0f}" if layer == "air" else f"{v:.1f}"
 
 
-SPREAD = {"heat": 1.0, "air": 5.0, "rain": 0.5}     # less spread than this within the category: nothing to shade
-
-
-def fills(layer: str, values: dict[str, tuple[str, float, str]]) -> tuple[dict[str, str], str, tuple]:
-    """Each LGA's fill, and the dominant category with its value range when most LGAs share one (those LGAs are
-    shaded by value within it); ('', ()) otherwise."""
+def fills(layer: str, values: dict[str, tuple[str, float, str]]) -> dict[str, str]:
+    """Each LGA's fill: exactly its category's legend colour (the printed number carries the difference within a
+    category; shades in between would be colours the legend doesn't have)."""
     order, colors = {"heat": (HEAT, HEAT_COLORS), "air": (AIR, AIR_COLORS), "rain": (RAIN, RAIN_COLORS)}[layer]
     shade = dict(zip(order, colors))
-    out = {n: shade.get(v[0], "#f4f3f0") for n, v in values.items()}
-    if not values:
-        return out, "", ()
-    dom, n = Counter(v[0] for v in values.values()).most_common(1)[0]
-    vals = [v[1] for v in values.values() if v[0] == dom]
-    lo, hi = min(vals), max(vals)
-    if n < DOMINANT * len(values) or hi - lo < SPREAD[layer] or dom not in shade:
-        return out, "", ()
-    for name, v in values.items():
-        if v[0] == dom:
-            out[name] = within(shade[dom], (v[1] - lo) / (hi - lo))
-    return out, dom, (lo, hi)
+    return {n: shade.get(v[0], "#f4f3f0") for n, v in values.items()}
 
 
 _cache: dict[tuple, tuple[float, MapImage]] = {}
@@ -340,7 +312,7 @@ def hazard_map(conn, layer: str, day: date, lang: str = "en", highlight: str = "
     fig, ax = plt.subplots(figsize=FIGSIZE)
     fig.subplots_adjust(left=0.02, right=0.98, top=0.87, bottom=0.235)
     shade = dict(zip(order, colors))
-    fill, dom, span = fills(layer, values)
+    fill = fills(layer, values)
     lgas.plot(ax=ax, color=[fill.get(n, "#f4f3f0") for n in lgas["name"]], edgecolor=EDGE, linewidth=1.2, zorder=1)
     _draw_base(ax, lgas, lines)
     lgas.boundary.plot(ax=ax, color=EDGE, linewidth=1.2, zorder=3)        # a white gap between the fills
@@ -370,10 +342,7 @@ def hazard_map(conn, layer: str, day: date, lang: str = "en", highlight: str = "
         handles.append(Line2D([0], [0], color=INK, linewidth=2.8, label=t["your_lga"]))
     fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.075), ncol=2 if layer == "air" else 3,
                frameon=False, fontsize=pt(16.5), handlelength=1.6, columnspacing=1.4)
-    measure = t["measures"][layer]
-    legend_line = (t["legend_within"].format(cat=cat.label(dom, lang), lo=short_value(layer, span[0]),
-                                             hi=short_value(layer, span[1]), measure=measure) if dom else
-                   t["legend_cat"].format(scale=t["scales"][layer], measure=measure))
+    legend_line = t["legend_cat"].format(scale=t["scales"][layer], measure=t["measures"][layer])
     top = max(values.items(), key=lambda kv: kv[1][1])
     fetched = read.freshness(conn, "air" if layer == "air" else "forecast").fetched_at
     day_word = _day_word(day, today or day, lang)
@@ -423,6 +392,12 @@ def approx(lat: float, lon: float) -> tuple[float, float]:
     return round(lat, 2), round(lon, 2)
 
 
+def on_map(facilities: list) -> list[bool]:
+    """Which facilities the near-you map draws: the first (the nearest shown) and any other within FAR_KM in a
+    straight line; the rest are in the legend only, so one far facility doesn't zoom the map out."""
+    return [i == 0 or f.km <= FAR_KM for i, f in enumerate(facilities)]
+
+
 def frame(me: tuple[float, float], facilities: list) -> tuple[float, float, float]:
     """(centre lon, centre lat, side in degrees): the user's ~1 km circle and the facilities with padding, at least
     MIN_SIDE across."""
@@ -462,6 +437,7 @@ def towns_in(conn, cx: float, cy: float, side: float, near: tuple[float, float],
     for name, lat, lon, kind in rows:
         if kind == "village" and (side > 0.12 or sum(1 for o in out if o[3] == "village") >= 3):
             continue
+        name = canonical(name) or name           # an LGA's town under the official spelling (Silame, not Salame)
         if name.lower() not in seen:
             seen.add(name.lower())
             out.append((name, lat, lon, kind))
@@ -525,7 +501,8 @@ def near_you_map(conn, lat: float, lon: float, lga: str, facilities: list, route
     t = T[lang]
     me = approx(lat, lon)
     lgas, lines = base(conn)
-    cx, cy, side = frame(me, facilities)
+    drawn = on_map(facilities)
+    cx, cy, side = frame(me, [f for f, shown in zip(facilities, drawn) if shown])
     fig, ax = plt.subplots(figsize=FIGSIZE)
     fig.subplots_adjust(left=0.02, right=0.98, top=0.9, bottom=0.27)
     lgas.plot(ax=ax, color="#f4f3f0", edgecolor="#c9c6bf", linewidth=1.6, zorder=1)
@@ -541,8 +518,11 @@ def near_you_map(conn, lat: float, lon: float, lga: str, facilities: list, route
     ax.add_patch(Circle((me[1], me[0]), YOU_RADIUS, facecolor="#256abf", alpha=0.18, edgecolor="#256abf",
                         linewidth=2, zorder=6))
     sep = side * 0.06
-    marks = spread_markers([(f.lon, f.lat) for f in facilities], sep, [(me[1], me[0], YOU_RADIUS + sep * 0.6)])
-    for i, (f, (mx, my)) in enumerate(zip(facilities, marks), 1):
+    numbered = [(i, f) for i, (f, shown) in enumerate(zip(facilities, drawn), 1) if shown]
+    # markers stay off the circle's centre (so 'about here' stays visible), not off the whole ~1 km circle: a
+    # facility inside it is drawn where it is
+    marks = spread_markers([(f.lon, f.lat) for _, f in numbered], sep, [(me[1], me[0], sep)])
+    for (i, f), (mx, my) in zip(numbered, marks):
         if (mx, my) != (f.lon, f.lat):           # moved apart: its true point keeps a dot and a leader line
             ax.plot([f.lon, mx], [f.lat, my], color=INK, linewidth=1.2, zorder=7)
             ax.scatter([f.lon], [f.lat], s=40, color=INK, zorder=7)
@@ -569,8 +549,9 @@ def near_you_map(conn, lat: float, lon: float, lga: str, facilities: list, route
     handles = [Line2D([0], [0], marker="o", color="none", markerfacecolor="#9ec5f4", markeredgecolor="#256abf",
                       markersize=16, label=t["you"])]
     handles += [Line2D([0], [0], marker="o", color="none", markerfacecolor=INK, markersize=14,
-                       label=f"{i}. {legend_name(conn, f)}: {distance_words(f, lang)}")
-                for i, f in enumerate(facilities, 1)]
+                       label=f"{i}. {legend_name(conn, f)}: {distance_words(f, lang)}"
+                             + ("" if shown else t["off_map"]))
+                for i, (f, shown) in enumerate(zip(facilities, drawn), 1)]
     if route:
         handles.append(Line2D([0], [0], color="#256abf", linewidth=4, label=t["route"]))
     fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.06), ncol=1, frameon=False,

@@ -159,12 +159,14 @@ Render server-side with geopandas and matplotlib, on our own base layer: LGA bou
 | River flood | river points with this week's level vs history |
 
 **Built (Oct 31, after review of `data/samples/`; regenerate with `scripts/map_samples.py`):**
-- Choropleths print each LGA's value ("37°", "182"). When at least 75% of LGAs share one category, those LGAs are
-  shaded by value within it, from a pale tint up to the category's colour (never darker, which would read as the
-  next category). A legend line says what the shading and numbers mean. The Sokoto city LGAs are labelled in a
-  stack to the south-east, with leader lines.
+- Choropleths print each LGA's value ("37°", "182"). Every fill is exactly a legend colour; the numbers show the
+  differences within a category (shading by value within a category was tried and dropped on Oct 31 because it made
+  colours that aren't in the legend). A legend line says what colour and numbers mean. The Sokoto city LGAs are
+  labelled in a stack to the south-east, with leader lines.
 - Air uses the US EPA AQI colours (green, yellow, orange, red, purple, maroon).
-- Near-you: framed on the user's circle and the facilities (at least ~2 km across). Text is at least 28 px for titles
+- Near-you: framed on the user's circle, the nearest facility and any other within 15 km (at least ~2 km across).
+  Farther facilities are in the legend only, marked "(beyond the map)". Town names use the official LGA spelling
+  (Silame, not OSM's "Salame"). Text is at least 28 px for titles
   and 20 px for labels. The legend gives "1. Goronyo General Hospital: 10.9 km, about 15 min". There is a scale bar,
   and the town nearest the user is always labelled. Markers are kept apart, and clear of the user's circle, with
   leader lines. Vague names get their town ("Bone Centre, Wurno"). One map per answer, and not the same map again
