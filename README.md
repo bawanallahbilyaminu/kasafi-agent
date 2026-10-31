@@ -130,9 +130,11 @@ A question that names a publisher ("according to IOM") is answered from that pub
 
 Work in progress. See [`docs/architecture.md`](docs/architecture.md) for the design and build plan.
 
-**Roadmap (after the hackathon):** place history (`docs/place-history.md`) adds Sentinel-1 radar for rainy-season
-flooding, and moves the weather and rainfall layers from Open-Meteo's free non-commercial tier to a paid key (the
-hazard answers and the place history use its forecast and archive APIs under those terms today).
+**Roadmap (after the hackathon):** place history (`docs/place-history.md`) adds the JRC yearly water history
+(1984–2024, published only through Google Earth Engine, whose non-commercial terms don't fit a startup product:
+a commercial Earth Engine licence or a self-hosted copy), extends the Sentinel-1 radar flood check from the plot
+to whole wards, and moves the weather and rainfall layers from Open-Meteo's free non-commercial tier to a paid key
+(the hazard answers and the place history use its forecast and archive APIs under those terms today).
 
 ## Built during the hackathon
 

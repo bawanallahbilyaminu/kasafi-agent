@@ -75,7 +75,8 @@ def main() -> None:
             shutil.rmtree(raw)
         raw.mkdir(parents=True)
         logging.info("fetching %s (%s)", m["code"], m["url"])
-        with httpx.Client(timeout=600, follow_redirects=True, headers={"User-Agent": UA}) as c:
+        # unosat.org served about 17 KB/s on 31 Oct 2026: a 15 MB file takes a quarter of an hour
+        with httpx.Client(timeout=httpx.Timeout(3600, connect=60), follow_redirects=True, headers={"User-Agent": UA}) as c:
             r = c.get(m["url"])
             r.raise_for_status()
         with zipfile.ZipFile(io.BytesIO(r.content)) as z:

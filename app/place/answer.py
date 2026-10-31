@@ -155,9 +155,11 @@ W = {
         "turbid": "Note: Sentinel-2's cloud mask also hides bright, muddy water, so water in the rainy months can "
                   "be under-counted here.",
         "nearest_working": "Nearest water body ({km} km, {ha} ha): water months per year {months}.",
-        "and": " and ", "in": "in ",
+        "and": " and ", "in": "in ", "mostly": "mostly ",
         "flood_radar": "Radar (Sentinel-1) saw flood water at this spot: {items}",
         "flood_radar_item": "flood water seen on {n} of {total} radar passes in {year} ({dates})",
+        "flood_radar_all": "water on every July–October radar pass in {first}–{last} ({n} of {n})",
+        "maps_none": "no official satellite flood map is loaded for Sokoto yet",
         "flood_official": "it lies inside the UN satellite flood map of {period} (UNOSAT)",
         "flood_optical": "Sentinel-2 saw water in {when}",
         "flood_none": "No flood water was seen at this spot in {first}–{last}: on none of the {passes} July–October "
@@ -241,9 +243,11 @@ W = {
         "turbid": "Lura: matakin gajimare na Sentinel-2 yana ɓoye ruwa mai laka mai haske ma, saboda haka ana iya "
                   "ƙidaya ruwan watannin damina ƙasa da yadda yake a nan.",
         "nearest_working": "Tafkin ruwa mafi kusa (kilomita {km}, hekta {ha}): watannin ruwa a kowace shekara {months}.",
-        "and": " da ", "in": "a ",
+        "and": " da ", "in": "a ", "mostly": "galibi ",
         "flood_radar": "Radar (Sentinel-1) ta ga ruwan ambaliya a wannan wuri: {items}",
         "flood_radar_item": "an ga ruwan ambaliya a {n} cikin {total} na hotunan radar a {year} ({dates})",
+        "flood_radar_all": "ruwa a kowane hoton radar na Yuli–Oktoba a {first}–{last} ({n} cikin {n})",
+        "maps_none": "ba a riga an ɗora wata taswirar ambaliya ta tauraron ɗan adam ta hukuma ta Sokoto ba",
         "flood_official": "yana cikin taswirar ambaliya ta tauraron ɗan adam ta MDD (UNOSAT) ta {period}",
         "flood_optical": "Sentinel-2 ta ga ruwa a {when}",
         "flood_none": "Ba a ga ruwan ambaliya a wannan wuri ba a {first}–{last}: ba a cikin ɗaya daga cikin hotunan "
@@ -292,12 +296,15 @@ def when_text(years: dict[int, H.YearRow], lang: str) -> str:
     if not seen:
         return ""
     ys = sorted(seen)
-    common = set(ys[-1] and seen[ys[-1]])
+    counts: dict[int, int] = {}
     for y in ys:
-        common &= set(seen[y])
+        for m in seen[y]:
+            counts[m] = counts.get(m, 0) + 1
+    usual = sorted(m for m, c in counts.items() if c * 2 >= len(ys))        # months wet in at least half the years
     span = f"{ys[0]}–{ys[-1]}" if len(ys) > 2 and ys[-1] - ys[0] == len(ys) - 1 else ", ".join(str(y) for y in ys)
-    if common and len(ys) >= 3:
-        return f"{months_text(sorted(common), lang)} {_t(lang)['in']}{span}"
+    if usual and len(ys) >= 3:
+        every = all(set(usual) <= set(seen[y]) for y in ys)
+        return f"{'' if every else _t(lang)['mostly']}{months_text(usual, lang)} {_t(lang)['in']}{span}"
     return "; ".join(f"{y} ({months_text(ms, lang)})" for y, ms in seen.items())
 
 
@@ -358,11 +365,9 @@ def flood_sentence(h: H.History, lang: str) -> str:
     ev: FloodEvidence = h.floods
     years = sorted(h.years)
     parts: list[str] = []
-    radar_items = [t["flood_radar_item"].format(n=r.water_passes, total=r.passes, year=y,
-                                                dates=", ".join(_short_date(d, lang) for d in r.water))
-                   for y, r in sorted(ev.radar.items()) if r.water]
+    radar_items = radar_text(ev.radar, lang)
     if radar_items:
-        parts.append(t["flood_radar"].format(items="; ".join(radar_items)))
+        parts.append(t["flood_radar"].format(items=radar_items))
     for m in ev.official:
         parts.append(t["flood_official"].format(period=period_text(m["period_start"], m["period_end"], lang)))
     when = when_text({y: r for y, r in h.years.items() if y in optical_years(h)}, lang)
@@ -373,13 +378,33 @@ def flood_sentence(h: H.History, lang: str) -> str:
     else:
         passes = sum(r.passes for r in ev.radar.values())
         ry = sorted(ev.radar) or years
-        s = t["flood_none"].format(first=ry[0], last=ry[-1], passes=passes, maps=t["maps_covered"]) + " " + \
+        s = t["flood_none"].format(first=ry[0], last=ry[-1], passes=passes,
+                                   maps=t["maps_covered"] if ev.maps_loaded else t["maps_none"]) + " " + \
             t["flood_reason"]
     if h.on_water:
         occ = h.jrc.get("occurrence")
         s = t["on_water"].format(occ=f"{occ:.0f}" if occ is not None else "–", when=when_text(h.years, lang) or
                                  t["none"]) + " " + s
     return s + nearest_sentence(h, lang)
+
+
+def radar_text(rows: dict, lang: str) -> str:
+    """'every pass in 2017–2026 (96 of 96)' for a water body; else each year with water, its count and dates (four
+    at most, else the first and last)."""
+    t = _t(lang)
+    wet = {y: r for y, r in sorted(rows.items()) if r.water}
+    if not wet:
+        return ""
+    full = [y for y, r in wet.items() if r.water_passes == r.passes]
+    if full and len(full) == len(rows) and len(full) >= 3:
+        n = sum(r.passes for r in rows.values())
+        return t["flood_radar_all"].format(first=full[0], last=full[-1], n=n)
+    items = []
+    for y, r in wet.items():
+        ds = [_short_date(d, lang) for d in r.water]
+        dates = ", ".join(ds) if len(ds) <= 4 else f"{ds[0]} – {ds[-1]}"
+        items.append(t["flood_radar_item"].format(n=r.water_passes, total=r.passes, year=y, dates=dates))
+    return "; ".join(items)
 
 
 def water_sentence(h: H.History, lang: str) -> str:

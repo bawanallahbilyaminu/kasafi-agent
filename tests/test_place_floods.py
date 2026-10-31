@@ -86,4 +86,15 @@ def test_flood_wording_never_says_never_flooded() -> None:
         y.water_months = []
     s = A.flood_sentence(h, "en")
     assert s.startswith("No flood water was seen at this spot") and "under crops" in s and "never" not in s.lower()
-    assert "radar passes" in s and "2017–2026" in s
+    assert "none of the 100 July–October radar passes" in s and "2017–2026" in s
+    assert "no official satellite flood map is loaded" in s             # the clipped maps aren't on this machine
+    h.floods.maps_loaded = True
+    assert "UNOSAT, October 2022" in A.flood_sentence(h, "en")
+    # a water body: every pass under water is said once, not listed pass by pass
+    h.floods = floods.FloodEvidence(radar={y: radar.RadarYear(y, 10, [f"{y}-07-{d:02d}" for d in range(1, 11)])
+                                           for y in range(2017, 2027)})
+    s = A.flood_sentence(h, "en")
+    assert "water on every July–October radar pass in 2017–2026 (100 of 100)" in s and "1 Jul" not in s
+    # many dates in one year: the first and the last
+    h.floods = floods.FloodEvidence(radar={2024: radar.RadarYear(2024, 12, [f"2024-08-{d:02d}" for d in (3, 9, 15, 21, 27)])})
+    assert "5 of 12 radar passes in 2024 (3 Aug – 27 Aug)" in A.flood_sentence(h, "en")

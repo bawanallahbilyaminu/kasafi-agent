@@ -31,6 +31,7 @@ _maps_cache: dict[str, object] = {}
 class FloodEvidence:
     radar: dict[int, radar.RadarYear] = field(default_factory=dict)
     official: list[dict] = field(default_factory=list)       # [{"source", "code", "period_start", "period_end"}]
+    maps_loaded: bool = False                                  # the clipped official maps exist on this server
     radar_source: str = RADAR_SOURCE
 
     def radar_years_with_water(self) -> list[int]:
@@ -111,6 +112,7 @@ def flood_evidence(conn, lat: float, lon: float, geom: dict, *, today: date, wor
     except Exception as e:                                   # noqa: BLE001 - radar is one of three sources
         log.warning("place: radar failed: %s", type(e).__name__)
     try:
+        ev.maps_loaded = load_maps() is not None
         ev.official = official_maps_at(geom)
     except Exception as e:                                   # noqa: BLE001
         log.warning("place: official flood maps failed: %s", type(e).__name__)
