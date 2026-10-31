@@ -225,6 +225,8 @@ def hazard_answer(conn, question: str, lang: str, layers: list[str], where: read
     else:
         intro = []
     place = w["where_state"] if where.kind == "state" else w["where_lga"].format(lga=where.lga)
+    if where.name:                              # a place the question named ('dust near Arkilla')
+        place = f"{where.name}, {place}"
     out, found, used = [f"📍 {place}"] + intro, False, {}
     official = official_lines(conn, lang, layers, where, status=status) if conn is not None else []
     if official:

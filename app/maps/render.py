@@ -95,6 +95,8 @@ T = {
            "caption_lga": "{what} {day} in {lga} LGA: {value} ({cat}).",
            "here_title": "{what} around you, {day}",
            "caption_here": "{what} {day} at your location ({lga} LGA): {value} ({cat}).",
+           "place_title": "{what} around {place}, {day}",
+           "caption_place": "{what} {day} near {place} ({lga} LGA): {value} ({cat}).",
            "grid_air": "The air-quality model's grid is ~40 km (cell edges dotted): this whole area shares one "
                        "value, and no finer detail is drawn.",
            "grid_fc": "Forecast values at points about 11 km apart; no finer detail is drawn.",
@@ -130,6 +132,8 @@ T = {
            "caption_lga": "{what} {day} a Ƙaramar Hukumar {lga}: {value} ({cat}).",
            "here_title": "{what} a kewayenka, {day}",
            "caption_here": "{what} {day} a inda kake (Ƙaramar Hukumar {lga}): {value} ({cat}).",
+           "place_title": "{what} a kewayen {place}, {day}",
+           "caption_place": "{what} {day} kusa da {place} (Ƙaramar Hukumar {lga}): {value} ({cat}).",
            "grid_air": "Ragar samfurin ingancin iska kusan kilomita 40 ce (iyakokin raga a ɗigo-ɗigo): duk wannan "
                        "yanki ƙima ɗaya yake da ita, kuma ba a zana wani ƙarin dalla-dalla ba.",
            "grid_fc": "Ƙimomin hasashe a wurare masu nisan kusan kilomita 11 da juna; ba a zana ƙarin dalla-dalla ba.",
@@ -444,7 +448,7 @@ def draw(conn, s: dict, lang: str, today: date | None = None) -> MapImage | None
     if s["kind"] == "river":
         return river_map(conn, day, lang, today)
     if s["kind"] == "local":
-        return local_map(conn, s["layer"], day, s["lat"], s["lon"], lang, today)
+        return local_map(conn, s["layer"], day, s["lat"], s["lon"], lang, today, s.get("label", ""))
     if s["kind"] == "fires":
         return fires_map(conn, s.get("view", "state"), lang, s.get("pcode", ""), s.get("lat"), s.get("lon"))
     return None
@@ -509,16 +513,17 @@ def _local_base(conn, cx: float, cy: float, side: float, me: tuple[float, float]
     return fig, ax
 
 
-def local_map(conn, layer: str, day: date, lat: float, lon: float, lang: str = "en", today: date | None = None
-              ) -> MapImage | None:
-    """About 10 km around the user's point (rounded to ~1 km): the value at the point, labelled in its category's
-    exact colour, and the forecast points nearby with theirs. Air: the model's ~40 km cells' edges dotted and said in
-    the stamp; never interpolated. Rivers: the frame reaches the nearest river point. Fires: the detections."""
+def local_map(conn, layer: str, day: date, lat: float, lon: float, lang: str = "en", today: date | None = None,
+              label: str = "") -> MapImage | None:
+    """About 10 km around a point (rounded to ~1 km): the user's, or a place the question named (`label`, said
+    instead of 'your location'): the value at the point, labelled in its category's exact colour, and the forecast
+    points nearby with theirs. Air: the model's ~40 km cells' edges dotted and said in the stamp; never
+    interpolated. Rivers: the frame reaches the nearest river point. Fires: the detections."""
     lang = lang if lang in T else "en"
     if layer == "fires":
         return fires_map(conn, "point", lang, "", lat, lon)
     t, me = T[lang], approx(lat, lon)
-    key = ("local", layer, day, lang, me, datetime.now().strftime("%Y%m%d%H"))
+    key = ("local", layer, day, lang, me, label, datetime.now().strftime("%Y%m%d%H"))
     if (hit := _cached(key, LOCAL_TTL_S)) is not None:
         return hit
     day_word = _day_word(day, today or day, lang)
@@ -554,16 +559,18 @@ def local_map(conn, layer: str, day: date, lat: float, lon: float, lang: str = "
             bbox={"boxstyle": "round,pad=0.45", "fc": fill, "ec": INK, "lw": 1.2})
     handles = [Patch(facecolor=shade[c], edgecolor=MUTED, linewidth=0.6, label=cat.label(c, lang)) for c in order]
     handles.append(Line2D([0], [0], marker="o", color="none", markerfacecolor="#9ec5f4", markeredgecolor="#256abf",
-                          markersize=16, label=t["you"]))
+                          markersize=16, label=label or t["you"]))
     fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.075), ncol=3, frameon=False,
                fontsize=pt(16), handlelength=1.4, columnspacing=1.2)
     src = "air" if layer == "air" else "forecast"
     subtitle = t["valid"].format(day=day.strftime("%d %b %Y")) + _fetched(conn, src, read.freshness(conn, src)
                                                                           .fetched_at, lang)
-    jpeg = _finish(fig, ax, t["here_title"].format(what=t[layer], day=day_word), subtitle,
+    title = t["place_title"].format(what=t[layer], place=label, day=day_word) if label else \
+        t["here_title"].format(what=t[layer], day=day_word)
+    jpeg = _finish(fig, ax, title, subtitle,
                    f"{t[layer + '_src']}. {t['credit']}.", t["grid_air" if layer == "air" else "grid_fc"], 0.18)
-    caption = t["caption_here"].format(what=t[layer], day=day_word, lga=lga, value=value,
-                                       cat=cat.label(category, lang))
+    caption = t["caption_place" if label else "caption_here"].format(what=t[layer], day=day_word, lga=lga, value=value,
+                                                                    cat=cat.label(category, lang), place=label)
     return _keep(key, MapImage(jpeg, caption))
 
 

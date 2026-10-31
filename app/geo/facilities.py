@@ -484,4 +484,4 @@ async def search_replies(settings, lat: float, lon: float, search: FacilitySearc
             name=any_nearer.name, level=w["levels"].get(any_nearer.level, any_nearer.level),
             dist=distance_text(lang, any_nearer, search.profile))
     return [(f"{summary}\n\n{text}\n\n{link_line(lang, found[0], search.profile)}\n\n{w['follow']}", None, None),
-            ("", None, image), ("", location_payload(found[0], lang), None)]
+            (summary if image else "", None, image), ("", location_payload(found[0], lang), None)]

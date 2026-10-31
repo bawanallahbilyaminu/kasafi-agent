@@ -340,3 +340,22 @@ def test_the_near_you_map_with_a_far_facility_renders() -> None:
           Facility("y", "Wurno General Hospital", "Secondary", "", "Public", "", 13.29, 5.42, "Wurno", "Wurno", 30.2)]
     with _conn() as conn:
         _jpeg(render.near_you_map(conn, 13.44, 5.67, "Goronyo", fs, None, "ha", "x").jpeg)
+
+
+def test_a_named_town_sets_the_hazard_point_but_hazard_words_never_do(monkeypatch) -> None:
+    from app.agent import answer as ag
+    from app.geo import Place
+    seen = []
+
+    def geocode(conn, text, most=3):
+        seen.append(text)
+        return [Place("Arkilla", "ward", "NG034021", "Wamakko", 13.03, 5.2, "grid3")] if "Arkilla" in text else []
+    monkeypatch.setattr("app.geo.geocode", geocode)
+    plan = type("P", (), {"need": None})()
+    w = ag.hazard_where(object(), "How is the dust near Arkilla today?", plan, None)
+    assert w.kind == "point" and w.lga == "Wamakko" and w.name == "Arkilla"
+    assert maps_for("dust near Arkilla", HazardAnswer("t", ["air"], w, True), DAY)[0]["label"] == "Arkilla"
+    assert ag.hazard_where(object(), "Yaya kura take yau?", plan, None).kind == "state"
+    assert "kura" not in seen[-1].lower()                                 # 'kura' (dust) is also a village
+    assert ag.hazard_where(object(), "show me a dust map of Sokoto", plan, None).kind == "state"   # not looked up
+    assert len(seen) == 2

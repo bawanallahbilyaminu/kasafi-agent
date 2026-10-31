@@ -63,6 +63,7 @@ WHO = {"pm2_5": 15.0, "pm10": 45.0}            # µg/m³, WHO 2021 24-hour guide
 W = {
     "en": {
         "place_state": "Sokoto State", "place_lga": "{lga} LGA", "today": "today", "tomorrow": "tomorrow",
+        "place_named": "{place} ({lga} LGA)",
         "air": "Air quality in {place} {day} is *{cat}* on the US AQI, which the US EPA describes as “{meaning}”.",
         "air_state": "Across Sokoto State {day}, air quality is mostly *{cat}* ({n} of 23 LGAs), which the US EPA "
                      "describes as “{meaning}”; it is worst in {worst} (*{wcat}*).",
@@ -110,6 +111,7 @@ W = {
     },
     "ha": {
         "place_state": "Jihar Sokoto", "place_lga": "Ƙaramar Hukumar {lga}", "today": "yau", "tomorrow": "gobe",
+        "place_named": "{place} (Ƙaramar Hukumar {lga})",
         "air": "Ingancin iska a {place} {day} *{cat}* ne a ma'aunin US AQI; US EPA ta bayyana shi da “{meaning}” "
                "(fassarar Kasafi).",
         "air_state": "A faɗin Jihar Sokoto {day}, ingancin iska galibi *{cat}* ne (ƙananan hukumomi {n} cikin 23); "
@@ -355,7 +357,9 @@ def hazard_summary(conn, lang: str, layers: list[str], where: read.Where, day: d
     data."""
     from app.sources.lga_names import name_of
     w = _w(lang)
-    place = w["place_state"] if where.kind == "state" else w["place_lga"].format(lga=where.lga or name_of(where.lga_pcode))
+    lga = where.lga or name_of(where.lga_pcode)
+    place = (w["place_state"] if where.kind == "state" else
+             w["place_named"].format(place=where.name, lga=lga) if where.name else w["place_lga"].format(lga=lga))
     pids = read.point_ids(conn, where)
     layer = next((x for x in layers if x in ("air", "heat", "rain", "flood", "fires")), "")
     body = {"air": lambda: _air(conn, lang, where, pids, day, today, place),

@@ -1023,8 +1023,8 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         if conn is not None and (layers := hazard_route(question, plan)):
             t0 = time.perf_counter()
             q = f"{question} {plan.english_question}"
-            ha = hazard_answer(conn, q, lang, layers, where_for(plan.need.entities if plan.need else [], place),
-                               today, settings, status=False)
+            ha = hazard_answer(conn, q, lang, layers, hazard_where(conn, question, plan, place), today, settings,
+                               status=False)
             # the summary is written in code from the same data (app/hazards/summary.py): it synthesises, quotes
             # the scales' owners, and carries the official warning status the details then leave out
             summary = hazard_summary(conn, lang, ha.layers, ha.where, days_asked(q, today)[0], today) \
@@ -1357,12 +1357,36 @@ def maps_for(question: str, ha, today: date, conn=None) -> list[dict]:
             return [{"kind": "fires", "day": d, "view": "state"}]
         return [{"kind": "hazard", "layer": layer, "day": d, "highlight": w.lga_pcode if w.kind != "state" else ""}]
     if w.kind == "point" and w.lat is not None:
-        return [{"kind": "local", "layer": layer, "day": d, "lat": round(w.lat, 2), "lon": round(w.lon, 2)}]
+        return [{"kind": "local", "layer": layer, "day": d, "lat": round(w.lat, 2), "lon": round(w.lon, 2),
+                 **({"label": w.name} if w.name else {})}]
     if layer == "flood":
         return [{"kind": "river", "day": d}]
     if layer == "fires":
         return [{"kind": "fires", "day": d, "view": "lga", "pcode": w.lga_pcode}]
     return [{"kind": "hazard", "layer": layer, "day": d, "zoom": w.lga_pcode}]
+
+
+# hazard words that are also place names in the gazetteer (or could be): never read as a place
+HAZARD_TALK = re.compile(r"(?i)\b(?:ƙura|kura|zafi\w*|ruwa\w*|sama|iska|hazo|kogi\w*|gobara|ambaliya\w*|rana|"
+                         r"yau|gobe|jiya|taswira\w*)\b")
+
+
+def hazard_where(conn, question: str, plan: Plan, place: dict | None):
+    """Where a hazard question is about: a town, ward or village it names (our gazetteer; 'dust near Arkilla') as
+    a point, over the saved location; else an LGA it names, the user's point or LGA on file, or the state. A
+    question naming an LGA or the state ('Sokoto') keeps that."""
+    from app.geo import geocode
+    from app.hazards import read
+    if conn is not None and not names_place(question):
+        words = HAZARD_TALK.sub(" ", question or "")          # 'kura' is dust, and also a village called Kura
+        try:
+            found = geocode(conn, words, most=1)
+        except Exception:            # noqa: BLE001 - the gazetteer down: the usual place
+            found = []
+        if found:
+            p = found[0]
+            return read.Where("point", p.lga_pcode, p.lga, p.lat, p.lon, name=p.name)
+    return where_for(plan.need.entities if plan.need else [], place)
 
 
 def hazard_route(question: str, plan: Plan) -> list[str]:

@@ -47,6 +47,7 @@ class Where:
     lga: str = ""
     lat: float | None = field(default=None, repr=False)
     lon: float | None = field(default=None, repr=False)
+    name: str = ""                      # a place the question named ('Arkilla'): said instead of 'your location'
 
 
 def point_ids(conn, where: Where) -> list[tuple[int, str]]:
