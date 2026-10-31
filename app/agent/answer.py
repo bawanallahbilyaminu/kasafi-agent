@@ -566,8 +566,10 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
     per_query = [search(conn, q, k=6, doc_ids=scope) for q in plan.search_queries]
     if narrative_asked(plan):
         # what a report corrected, changed, explained or noted is in its narrative, not its tables: the running
-        # text leads (the tables still follow)
-        key_hits = [search(conn, q, k=4, doc_ids=scope, prose=True) for q in plan.search_queries] + key_hits
+        # text leads (the tables still follow). The planner's key terms search the prose too: its long queries
+        # ('Sokoto State ... Q3 2025 revenue performance reasons') rank a report's intro over the section asked
+        prose_queries = list(dict.fromkeys([*plan.search_queries, *[t for t in plan.key_terms if " " in t]]))
+        key_hits = [search(conn, q, k=4, doc_ids=scope, prose=True) for q in prose_queries] + key_hits
     if scope and not any(per_query) and not any(key_hits):
         key_hits = [search(conn, q, k=3, key_rows=True) for q in plan.search_queries]
         per_query = [search(conn, q, k=6) for q in plan.search_queries]
@@ -2293,6 +2295,25 @@ LEVEL_HA = {"sector total": "jimillar ɓangare", "objective inside a sector": "m
             "overhead (running costs)": "kuɗin gudanarwa", "capital": "manyan ayyuka"}
 
 
+# the reader's level and kind labels (what each line is, in its prompt), in the words a reply uses: the model
+# echoes a label now and then ("This is the ministry total including its agencies"), and the rows are plain already
+PLAIN_LEVEL = {"en": {"ministry total including its agencies": "the ministry's total, its agencies included",
+                      "one agency or unit": "that agency's own line", "all spending (total)": "total spending",
+                      "objective inside a sector": "an objective within the sector",
+                      "programme inside a sector": "a programme within the sector"},
+               "ha": {"ministry total including its agencies": "jimillar ma'aikatar tare da hukumominta",
+                      "one agency or unit": "layin hukumar kanta", "all spending (total)": "jimillar kashe kuɗi",
+                      "objective inside a sector": "manufa cikin ɓangaren",
+                      "programme inside a sector": "shiri cikin ɓangaren"}}
+
+
+def plain_level_words(summary: str, lang: str) -> str:
+    """The reader's own level labels, if its summary echoes them, in plain words (the level tags stay in the working)."""
+    for label, plain in PLAIN_LEVEL.get(lang, PLAIN_LEVEL["en"]).items():
+        summary = re.sub(r"(?i)(?:the\s+)?'?" + re.escape(label) + "'?", plain, summary)
+    return summary
+
+
 def parent_rows(plan: Plan, res: LineResult) -> tuple | None:
     """A picked row that is the asked agency's parent ministry total (its code ends 00000000 and shares the
     ministry part of the agency's own code), with the asked agency itself among no picked rows: (the asked
@@ -2324,7 +2345,7 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
     # [L#] in the model's summary -> the citation number of that line's page; other line refs are dropped
     lnum = {i: nmap.get((x.doc_id, x.page)) for i, x in enumerate(hits[:MAX_LINES], start=1)}
     summary = re.sub(r"\[L(\d+)\]", lambda m: f"[{lnum[int(m.group(1))]}]" if lnum.get(int(m.group(1))) else "",
-                     res.summary)
+                     plain_level_words(res.summary, lang))
     working = [w["head"]]
     side = {"top": " ↑", "bottom": " ↓", "both": " ↑↓"} if res.operation in ("share", "ratio") else {}
     names = Counter((s.line.doc_id, short_name(s.line)) for s in res.selections)

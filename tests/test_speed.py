@@ -193,3 +193,12 @@ def test_a_narrative_question_reads_the_whole_page_else_the_hits_and_their_neigh
     assert ag.page_chunks_wanted([0], whole=False) == [0, 1]
     assert ag.page_chunks_wanted([2, 5], whole=False) == [1, 2, 3, 4, 5, 6]
     assert ag.page_chunks_wanted([0], whole=True) is None
+
+
+def test_the_reader_level_labels_echoed_in_a_summary_become_plain_words() -> None:
+    s = "It expects ₦100.00 million in 2026. This is the ministry total including its agencies."
+    assert ag.plain_level_words(s, "en") == "It expects ₦100.00 million in 2026. This is the ministry's total, " \
+                                            "its agencies included."
+    assert "one agency or unit" not in ag.plain_level_words("the 'one agency or unit' line", "en")
+    assert "all spending (total)" not in ag.plain_level_words("Wannan all spending (total) ne", "ha")
+    assert ag.plain_level_words("No label here: ₦5.00 billion", "en") == "No label here: ₦5.00 billion"
