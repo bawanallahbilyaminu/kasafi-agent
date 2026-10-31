@@ -283,17 +283,22 @@ def s1_year(grid: Grid, units: Units, crop: np.ndarray, dry: np.ndarray, year: i
     lowest = np.full(grid.shape, np.inf, dtype="float32")
     cover: dict[tuple[str, str], int] = {}
     among = crop & dry
+    # frames of one date are one pass over the state: their coverage is joined before a unit counts the pass
+    has_by_date: dict[str, np.ndarray] = {}
     with httpx.Client(timeout=TIMEOUT * 5) as client, ThreadPoolExecutor(max_workers=workers) as ex:
-        for got in ex.map(lambda it: window(S1, it["id"], ["vv"], grid, "average", client), its):
+        for it, got in zip(its, ex.map(lambda it: window(S1, it["id"], ["vv"], grid, "average", client), its)):
             if got is None:
                 continue
             db = to_db(got["vv"])
             has = np.isfinite(db)
             lowest = np.where(has & (db < lowest), db, lowest)
-            seen = per_unit(units, lambda labels: unit_share(has, labels, among))
-            for key, (share, _) in seen.items():
-                if share >= GOOD_SHARE:
-                    cover[key] = cover.get(key, 0) + 1
+            day = it["properties"]["datetime"][:10]
+            has_by_date[day] = has_by_date[day] | has if day in has_by_date else has
+    for has in has_by_date.values():
+        seen = per_unit(units, lambda labels: unit_share(has, labels, among))
+        for key, (share, _) in seen.items():
+            if share >= GOOD_SHARE:
+                cover[key] = cover.get(key, 0) + 1
     flooded = np.isfinite(lowest) & (lowest < WATER_DB)
     shares = per_unit(units, lambda labels: unit_share(flooded, labels, among))
     out = {key: (round(share, 4) if cover.get(key, 0) > 0 else None, cover.get(key, 0)) for key, (share, _) in shares.items()}
@@ -375,11 +380,14 @@ def rain_years(units: Units, first_year: int, today: date, workers: int = 1) -> 
     back 429 at four threads, and a sequential rerun was still limited)."""
     keys = [k for k in units.centroids if k[0] in ("lga", "state")]
 
+    from datetime import timedelta
+    end = today - timedelta(days=3)          # the archive runs a few days behind: a later end date is a 400
+
     def one(key):
         lat, lon = units.centroids[key]
         for attempt in range(6):
             try:
-                daily = rain.daily_rain(lat, lon, date(first_year, 1, 1), today)
+                daily = rain.daily_rain(lat, lon, date(first_year, 1, 1), end)
                 time.sleep(0.6)
                 return key, {y: v["season_mm"] for y, v in rain.by_year(daily).items()}
             except httpx.HTTPStatusError as e:
