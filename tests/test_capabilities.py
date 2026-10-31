@@ -69,7 +69,9 @@ def test_budget_cells_are_written_by_code_with_the_change_computed() -> None:
     cells = [Cell("approved", gh, "state", "overhead", 2025, value=Decimal("4201809645.00"), source="2025 budget, p. 14"),
              Cell("approved", gh, "state", "overhead", 2026, value=Decimal("3712790422.00"), source="2026 budget, p. 21")]
     text, exact = ans.write_budget_cells(Need("q", operation="compare"), cells, "en")
-    assert text.splitlines()[0] == "*Government House* (code 011100100100):"
+    assert text.splitlines()[0] == ("For Government House, the 2025 approved budget (running costs) is "
+                                    "₦4.20 billion.")                      # one plain sentence first
+    assert "*Government House*:" in text and "011100100100" not in text and "code 011100100100" in exact
     assert "2025 approved budget ₦4.20 billion; 2026 approved budget ₦3.71 billion; change -₦489.02 million (-11.6%)" in text
     assert "4,201,809,645.00" in exact and "3,712,790,422.00" in exact and "change: -489,019,223.00" in exact
 

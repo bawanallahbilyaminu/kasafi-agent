@@ -1607,6 +1607,7 @@ STRUCT_WORDS = {
            "performance_pct": "share of the revised budget spent", "idp_count": "IDPs",
            "personnel": "Personnel (salaries)", "overhead": "Overhead (running costs)", "capital": "Capital",
            "total": "Total", "calc": "Kasafi's calculation", "change": "change", "of_total": "of its total",
+           "lead": "For {ent}, the {label} is {val}.",
            "claim_rise": "rise", "claim_fall": "fall",
            "premise_fell": "It didn't {claim}: the {m} fell from {a} to {b}, so there is no rise to explain.",
            "premise_rose": "It didn't {claim}: the {m} rose from {a} to {b}, so there is no fall to explain.",
@@ -1619,6 +1620,7 @@ STRUCT_WORDS = {
            "performance_pct": "kason kasafin da aka sabunta da aka kashe", "idp_count": "'yan gudun hijira",
            "personnel": "Albashi", "overhead": "Kuɗin gudanarwa", "capital": "Manyan ayyuka", "total": "Jimilla",
            "calc": "lissafin Kasafi", "change": "bambanci", "of_total": "na jimillarsa",
+           "lead": "Ga {ent}, {label} shi ne {val}.",
            "claim_rise": "karu", "claim_fall": "ragu",
            "premise_fell": "Bai {claim} ba: {m} ya ragu daga {a} zuwa {b}, don haka babu ƙari da za a bayyana.",
            "premise_rose": "Bai {claim} ba: {m} ya karu daga {a} zuwa {b}, don haka babu raguwa da za a bayyana.",
@@ -1734,11 +1736,14 @@ def write_budget_cells(need: Need, cells: list, lang: str, conn=None) -> tuple[s
     missing = [c for c in cells if not c.filled]
     cells = [c for c in cells if c.filled]
     out, exact, changes = [], [], []
+    first = None                                       # the first figure: the plain sentence the reply opens with
     for ent in dict.fromkeys(c.entity.resolved or c.entity.name for c in cells):
         mine = [c for c in cells if (c.entity.resolved or c.entity.name) == ent]
         code = mine[0].entity.code
         shown = re.sub(r"(?<=[a-z])\d+\b", "", ent)          # a digit printed onto a word ('Education1')
-        out.append(f"*{shown}*" + (f" (code {code})" if code else "") + ":")
+        out.append(f"*{shown}*:")                             # its code is in the working
+        exact.append(f"{ent}" + (f" (code {code})" if code else ""))
+        shown_ent = shown
         for split in dict.fromkeys(c.split or "total" for c in mine):
             row = [c for c in mine if (c.split or "total") == split]
             parts = []
@@ -1747,6 +1752,12 @@ def write_budget_cells(need: Need, cells: list, lang: str, conn=None) -> tuple[s
                 label = f"{c.year} {label}" if len({x.year for x in row}) > 1 else label
                 val = f"{c.value}%" if c.measure == "performance_pct" else _struct_money(c.value, lang)
                 parts.append(f"{label} {val}" + (f" ({w['calc']})" if c.note == "calc" else ""))
+                if first is None:
+                    plain = {"en": {"personnel": "salaries", "overhead": "running costs", "capital": "capital"},
+                             "ha": {"personnel": "albashi", "overhead": "kuɗin gudanarwa",
+                                    "capital": "manyan ayyuka"}}.get(lang, {})
+                    kind = f" ({plain.get(split, split)})" if split != "total" else ""
+                    first = (shown_ent, f"{label}{kind}", val)
                 shown = f"{c.value}%" if c.measure == "performance_pct" else fmt(Decimal(c.value))   # as printed
                 exact.append(f"{ent} | {split} | {c.measure} {c.year}{' Q' + str(c.quarter) if c.quarter else ''}: "
                              f"{shown} [{c.source}]")
@@ -1769,6 +1780,8 @@ def write_budget_cells(need: Need, cells: list, lang: str, conn=None) -> tuple[s
                 parts.append(f"{pct}% {w['of_total']} ({w['calc']})")
                 exact.append(f"{ent} | {split} share of total: {pct}%")
             out.append(f"• {w.get(split, split)}: " + "; ".join(parts))
+    if first is not None:             # budget answers open with one plain sentence, then the details
+        out.insert(0, w["lead"].format(ent=first[0], label=first[1], val=first[2]) + "\n")
     claim = claimed_direction(need)
     if claim and len(changes) == 1 and changes[0][2] and (claim == "rise") != (changes[0][2] > 0):
         # a false premise is checked like any other cell: the figures say the opposite, and that is said first
@@ -2048,7 +2061,8 @@ def fallback_line_search(plan: Plan, question: str) -> dict:
 
 
 LINE_WORDS = {
-    "en": {"head": "🧮 *Working* (the rows used):", "total": "Total", "difference": "Difference", "share": "Share",
+    "en": {"lead_row": "The {column} for {name} is {amount}.",
+           "head": "🧮 *Working* (the rows used):", "total": "Total", "difference": "Difference", "share": "Share",
            "ratio": "Ratio", "spent": "Spent, as a share of the budget",
            "calc": "Kasafi's calculation", "missing": "Not found",
            "aggregate": "⚠️ The budget doesn't show this item separately. The line above is a broader total; the "
@@ -2063,7 +2077,8 @@ LINE_WORDS = {
            "no_sum_disputed": "Not added up: on a second reading I wasn't sure which lines belong in the total, "
                               "so a total of these alone could mislead.",
            "two_totals": "The budget prints two totals for this, in different tables; the share of each:"},
-    "ha": {"head": "🧮 *Yadda aka lissafa* (layukan da aka yi amfani da su):", "total": "Jimilla",
+    "ha": {"lead_row": "{column} na {name} shi ne {amount}.",
+           "head": "🧮 *Yadda aka lissafa* (layukan da aka yi amfani da su):", "total": "Jimilla",
            "difference": "Bambanci", "share": "Kaso", "ratio": "Rabo", "spent": "Abin da aka kashe, a kason kasafin", "calc": "lissafin Kasafi",
            "missing": "Ba a samu ba",
            "aggregate": "⚠️ Kasafin bai nuna wannan abu daban ba. Layin da ke sama jimilla ce mai faɗi; takardun "
@@ -2231,8 +2246,13 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
     note = plan.assumption_for(lang)
     # the reply: plain sentences (or, without them, the computed figures), the top rows, the caveats
     summary = drop_verdicts(summary, plan.english_question)
-    lead = render_answer({"summary": summary, "items": []}, lang) if summary.strip() else \
-        readable_amounts("\n".join(calc), lang)
+    if summary.strip():
+        lead = render_answer({"summary": summary, "items": []}, lang)
+    else:                            # no summary sentences: one plain sentence from the first row, then any figures
+        s0 = res.selections[0] if res.selections else None
+        first = [w["lead_row"].format(name=plain_label(s0.line, lang), column=s0.cell.column,
+                                      amount=fmt(s0.cell.amount))] if s0 else []
+        lead = readable_amounts("\n".join(first + calc), lang)
     shown = rows[:TOP_ROWS] + ([f"• … +{len(rows) - TOP_ROWS}"] if len(rows) > TOP_ROWS else [])
     body = (f"_{note}_\n\n" if note else "") + (plain(lead) + "\n\n" if lead.strip() else "")
     body += plain(readable_amounts("\n".join(shown + notes), lang))

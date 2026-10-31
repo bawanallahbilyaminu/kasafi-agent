@@ -348,3 +348,22 @@ def test_identical_messages_and_crops_go_once_per_turn() -> None:
     turn: set = set()
     crop = CropRequest(1, "budget-2026-approved", "Budget", 16, "460,480,000.00")
     assert len(unique_crops([crop, crop], turn)) == 1 and unique_crops([crop], turn) == []
+
+
+# --- 11. budget answers open with one plain sentence --------------------------------------------------------------
+
+def test_a_line_answer_without_a_summary_opens_with_a_sentence() -> None:
+    from decimal import Decimal
+
+    from app.agent.line_answer import LineResult, Selection
+    from app.retrieval.line_search import Cell, Line
+    x = Line(1, "Budget 2026", "budget-2026-approved", 16, "Total Expenditure by Administrative Classification",
+             "Sokoto State Independent Electoral Commission", "SIEC | 2026 Approved Budget: 460480000.00",
+             "administrative", "", "", 0.0, code="014800000000", spend_kind="total")
+    cell = Cell("2026 Approved Budget", 2026, "approved", "full_year", Decimal("460480000.00"))
+    x.cells.append(cell)
+    res = LineResult(selections=[Selection(x, cell)], operation="list", summary="", found="full")
+    for lang, start in (("en", "The 2026 Approved Budget for Sokoto State Independent Electoral Commission is "),
+                        ("ha", "2026 Approved Budget na Sokoto State Independent Electoral Commission shi ne ")):
+        a = ag.line_answer(None, _plan("SIEC 2026"), res, [x], lang, {}, None)
+        assert a.text.startswith(start) and not a.text.startswith("•")
