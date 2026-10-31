@@ -216,9 +216,21 @@ def years_loaded(conn, measure: str, level: str) -> list[int]:
 
 
 def series(conn, measure: str, level: str, unit: str) -> dict[int, float]:
-    return {r[0]: float(r[1]) for r in conn.execute(
-        "SELECT year, value FROM ward_history WHERE measure = %s AND level = %s AND unit = %s AND value IS NOT NULL "
-        "AND year > 0 ORDER BY year", (measure, level, unit)).fetchall()}
+    """A unit's yearly values, without its low-data years (under 60% of its own median observation count:
+    MODIS 2025 has 5 composites against a usual 16–20, so it never enters a rain fit or a trend)."""
+    rows = conn.execute(
+        "SELECT year, value, n_obs FROM ward_history WHERE measure = %s AND level = %s AND unit = %s AND value IS NOT "
+        "NULL AND year > 0 ORDER BY year", (measure, level, unit)).fetchall()
+    return drop_low_data({r[0]: (float(r[1]), r[2]) for r in rows})
+
+
+def drop_low_data(rows: dict[int, tuple[float, int | None]]) -> dict[int, float]:
+    import math
+    counts = sorted(n for _, n in rows.values() if n is not None)
+    if not counts:
+        return {y: v for y, (v, _) in rows.items()}
+    need = max(2, math.ceil(0.6 * counts[len(counts) // 2]))
+    return {y: v for y, (v, n) in rows.items() if n is None or n >= need}
 
 
 def rain_flags(conn, level: str, units: list[str], year: int) -> dict[str, str]:

@@ -41,6 +41,15 @@ def test_the_measure_and_year_come_from_the_words() -> None:
     assert P.year_asked("floods in 2022 across the state", TODAY) == 2022 and P.year_asked("which wards", TODAY) is None
 
 
+def test_a_units_series_drops_its_low_data_years() -> None:
+    rows = {y: (0.5, 18) for y in range(2017, 2025)}
+    rows[2025] = (0.25, 5)                                  # five composites against a usual 18: out
+    rows[2026] = (0.58, 18)
+    s = P.drop_low_data(rows)
+    assert 2025 not in s and 2026 in s and len(s) == 9
+    assert P.drop_low_data({2022: (0.1, None), 2023: (0.2, None)}) == {2022: 0.1, 2023: 0.2}
+
+
 def test_low_data_cut_is_relative_to_the_median_count() -> None:
     rows = [("a", "A", 0.5, 17), ("b", "B", 0.4, 16), ("c", "C", 0.3, 5), ("d", "D", 0.2, 18), ("e", "E", None, 0)]
     assert P.low_data_cut(rows, "modis_peak") == 10               # 60% of 16.5 -> 10: at or under 10 is low data
