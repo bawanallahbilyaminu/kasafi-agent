@@ -210,7 +210,8 @@ async def read_sokoto(conn, doc_id: str, client, settings, waiting: int = 0) -> 
             "epi_week": d.get("epi_week"), "year": d.get("year"), "first": first}
 
 
-async def crawl_ncdc(conn, http: httpx.AsyncClient, client, settings) -> int:
+async def crawl_ncdc(conn, http: httpx.AsyncClient, client, settings, can_spend=lambda: True) -> int:
+    """The newest reports per disease not read yet; `can_spend()` is asked before each one (the monthly cap)."""
     from app.acquisition.library import fetch_and_index, ocr_finished
     n = 0
     for disease, (cat, name) in DISEASES.items():
@@ -219,6 +220,9 @@ async def crawl_ncdc(conn, http: httpx.AsyncClient, client, settings) -> int:
         for week, date_text, url in ncdc_listing(r.text)[:NEWEST]:
             if conn.execute("SELECT 1 FROM outbreak_cases WHERE disease = %s AND url = %s", (disease, url)).fetchone():
                 continue
+            if not can_spend():
+                log.info("NCDC crawl stopped: the monthly cap is reached")
+                return n
             # the listing's own words: measles reports are monthly though listed by week
             try:                            # one bad report (a malformed model reply) skips only that report
                 acq = await fetch_and_index(conn, url, f"NCDC {name} situation report listed as 'for week {week}', "
@@ -256,34 +260,72 @@ def _year(text: str) -> int:
     return int(m.group(1)) if m else datetime.now(timezone.utc).year
 
 
-INTERVALS = {"advisories": timedelta(hours=12), "ncdc": timedelta(hours=24)}
+LAGOS = timezone(timedelta(hours=1))
+# when each crawl falls due, Sokoto time: the text-only crawls (no model calls) daily at 06:00; the NCDC reports
+# (document check, Muse Spark vision OCR, Sokoto's row: about $0.025 a new report) weekly, Mondays at 07:00
+SCHEDULE = {"advisories": (None, 6), "ncdc": (0, 7)}           # (weekday or None for daily, hour)
 
 
-async def run_due(conn, settings) -> dict[str, int]:
-    """The advisories crawl (12 h) and the NCDC reports (24 h), each logged in hazard_fetch like the layers."""
+def last_slot(layer: str, now: datetime) -> datetime:
+    """The most recent time this crawl was due at or before `now`."""
+    weekday, hour = SCHEDULE[layer]
+    local = now.astimezone(LAGOS)
+    slot = local.replace(hour=hour, minute=0, second=0, microsecond=0)
+    if weekday is not None:
+        slot -= timedelta(days=(local.weekday() - weekday) % 7)
+    step = timedelta(days=1 if weekday is None else 7)
+    return slot - step if slot > local else slot
+
+
+def month_spent(conn, now: datetime) -> float:
+    """What the crawls have cost this calendar month (Sokoto time), from the fetch log."""
+    start = now.astimezone(LAGOS).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    row = conn.execute("SELECT coalesce(sum(usd), 0) FROM hazard_fetch WHERE layer = ANY(%s) AND started_at >= %s",
+                       (list(SCHEDULE), start)).fetchone()
+    return float(row[0] or 0)
+
+
+async def run_due(conn, settings, now: datetime | None = None) -> dict[str, int]:
+    """The crawls whose slot has passed with no successful run since, each logged in hazard_fetch with what its
+    model calls cost; the NCDC crawl stops before a report once the month's spend reaches the cap
+    (KASAFI_ADVISORIES_MONTHLY_USD, $2)."""
+    from app import usage
     from app.hazards.fetch import HEADERS, _log
     from app.providers.meta import MetaClient
+    now = now or datetime.now(timezone.utc)
+    cap = settings.kasafi_advisories_monthly_usd
     out = {}
     async with httpx.AsyncClient(headers=HEADERS, follow_redirects=False) as http:
-        for layer in INTERVALS:
-            if not _due(conn, layer):
+        for layer in SCHEDULE:
+            if not _due(conn, layer, now):
                 continue
             started = datetime.now(timezone.utc)
+            spent_before = month_spent(conn, now)
+            account = f"crawl_{layer}"
+            at_start = usage.account_dollars(settings, account)
+
+            def run_cost() -> float:
+                return usage.account_dollars(settings, account) - at_start
+            if layer == "ncdc" and spent_before >= cap:
+                log.info("NCDC crawl skipped: $%.2f spent this month (cap $%.2f)", spent_before, cap)
+                continue
             try:
-                if layer == "advisories":
-                    n = await crawl_wordpress(conn, http)
-                else:
-                    async with MetaClient(settings) as client:
-                        n = await crawl_ncdc(conn, http, client, settings)
-                _log(conn, layer, started, True, n)
+                with usage.account(account):
+                    if layer == "advisories":
+                        n = await crawl_wordpress(conn, http)
+                    else:
+                        async with MetaClient(settings) as client:
+                            n = await crawl_ncdc(conn, http, client, settings,
+                                                 can_spend=lambda: spent_before + run_cost() < cap)
+                _log(conn, layer, started, True, n, usd=run_cost())
                 out[layer] = n
             except (httpx.HTTPError, ValueError, KeyError) as e:
                 conn.rollback()
-                _log(conn, layer, started, False, 0, f"{type(e).__name__}: {str(e)[:200]}")
+                _log(conn, layer, started, False, 0, f"{type(e).__name__}: {str(e)[:200]}", usd=run_cost())
                 out[layer] = -1
     return out
 
 
-def _due(conn, layer: str) -> bool:
+def _due(conn, layer: str, now: datetime) -> bool:
     row = conn.execute("SELECT max(started_at) FROM hazard_fetch WHERE layer = %s AND ok", (layer,)).fetchone()
-    return row[0] is None or datetime.now(timezone.utc) - row[0] >= INTERVALS[layer]
+    return row[0] is None or row[0] < last_slot(layer, now)

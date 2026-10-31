@@ -75,9 +75,33 @@ def keep(key: str | None, result) -> None:
         _cache[key] = result
 
 
+# a budget a whole job's calls are charged to (the advisories crawl's monthly cap), whatever stages run inside it;
+# per task, so a user's question answered at the same time isn't charged to it
+_account: ContextVar[str] = ContextVar("kasafi_account", default="")
+by_account: dict[str, Tokens] = defaultdict(Tokens)    # "provider/account" -> tokens
+
+
+@contextmanager
+def account(name: str):
+    token = _account.set(name)
+    try:
+        yield
+    finally:
+        _account.reset(token)
+
+
+def account_dollars(settings, name: str) -> float:
+    """What the calls charged to this account have cost in this process so far."""
+    p = prices(settings)
+    return sum(dollars(t, *p[k.split("/")[0]]) for k, t in by_account.items()
+               if k.endswith(f"/{name}") and k.split("/")[0] in p)
+
+
 def record_chat(provider: str, usage: dict) -> None:
     chat[provider].add(usage)
     by_stage[f"{provider}/{_stage.get()}"].add(usage)
+    if acct := _account.get():
+        by_account[f"{provider}/{acct}"].add(usage)
 
 
 def count(what: str, n: int = 1) -> None:

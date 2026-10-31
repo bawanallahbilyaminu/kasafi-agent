@@ -97,6 +97,8 @@ class Settings(BaseSettings):
     kasafi_openmeteo_daily_cap: int = 5000
     # the official advisories crawl and NCDC reports (app/hazards/advisories.py; they use Muse Spark), off by default
     kasafi_advisories_fetch: bool = False
+    # what the advisories crawl's model calls (NCDC: document check, OCR, Sokoto's row) may cost a month, in USD
+    kasafi_advisories_monthly_usd: float = 2.0
     # Fireworks serves Muse Spark Open too: the fallback host when Baseten fails (app/providers/fireworks.py)
     fireworks_api_key: SecretStr | None = None
     fireworks_base_url: str = "https://api.fireworks.ai/inference/v1"

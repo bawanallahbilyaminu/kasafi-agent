@@ -100,7 +100,7 @@ def test_a_failed_fetch_is_logged_and_never_raises() -> None:
     s = type("S", (), {"firms_map_key": None})()
     n = asyncio.run(fetch.run_layer(conn, "air", s, httpx.AsyncClient(
         transport=httpx.MockTransport(lambda r: httpx.Response(500)))))
-    layer, started, ok, rows, calls, error = conn.fetch_log[-1]
+    layer, started, ok, rows, calls, error, usd = conn.fetch_log[-1]
     assert n == -1 and ok is False and "HTTPStatusError" in error and calls == 2        # a refused call counts too
     assert asyncio.run(fetch.run_layer(conn, "fires", s)) == 0              # no FIRMS key: the layer is off
 

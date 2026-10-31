@@ -81,9 +81,10 @@ async def _get(http: httpx.AsyncClient, url: str, params: dict | None = None, tr
     raise AssertionError("unreachable")
 
 
-def _log(conn, layer: str, started: datetime, ok: bool, rows: int, error: str = "", calls: int = 0) -> None:
-    conn.execute("INSERT INTO hazard_fetch (layer, started_at, ok, rows, calls, error) VALUES (%s, %s, %s, %s, %s, %s)",
-                 (layer, started, ok, rows, calls, error[:300]))
+def _log(conn, layer: str, started: datetime, ok: bool, rows: int, error: str = "", calls: int = 0,
+         usd: float = 0.0) -> None:
+    conn.execute("INSERT INTO hazard_fetch (layer, started_at, ok, rows, calls, error, usd) "
+                 "VALUES (%s, %s, %s, %s, %s, %s, %s)", (layer, started, ok, rows, calls, error[:300], round(usd, 4)))
 
 
 _calls: list[int] = [0]                  # Open-Meteo calls made by the current fetch (counted in _get)
