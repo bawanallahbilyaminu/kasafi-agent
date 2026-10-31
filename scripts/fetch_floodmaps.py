@@ -80,19 +80,9 @@ def main() -> None:
         logging.info("fetching %s (%s)", m["code"], m["url"])
         # unosat.org served about 17 KB/s on 31 Oct 2026 (a 15 MB file takes a quarter of an hour) and drops a
         # long download now and then: three attempts
-        content = None
-        for attempt in range(1, 4):
-            try:
-                with httpx.Client(timeout=httpx.Timeout(3600, connect=60), follow_redirects=True,
-                                  headers={"User-Agent": UA}) as c:
-                    r = c.get(m["url"])
-                    r.raise_for_status()
-                content = r.content
-                break
-            except (httpx.HTTPError, OSError) as e:
-                logging.warning("  attempt %d failed: %s", attempt, e)
+        content = download(m["url"])
         if content is None:
-            logging.warning("  %s skipped: the download failed three times", m["code"])
+            logging.warning("  %s skipped: the download kept failing", m["code"])
             continue
         with zipfile.ZipFile(io.BytesIO(content)) as z:
             for info in z.infolist():                      # no path escapes from an archive we didn't write
@@ -128,6 +118,39 @@ def main() -> None:
             shutil.rmtree(raw)
     if not a.keep_raw and (OUT / "raw").exists():
         shutil.rmtree(OUT / "raw", ignore_errors=True)
+
+
+def download(url: str, attempts: int = 20) -> bytes | None:
+    """The whole file, resuming with HTTP Range after each cut (unosat.org closed a 15 MB download at about
+    4–5 MB every time on 31 Oct 2026); a server that ignores Range starts over."""
+    buf = bytearray()
+    total = None
+    for attempt in range(1, attempts + 1):
+        headers = {"User-Agent": UA}
+        if buf:
+            headers["Range"] = f"bytes={len(buf)}-"
+        try:
+            with httpx.Client(timeout=httpx.Timeout(3600, connect=60), follow_redirects=True, headers=headers) as c:
+                with c.stream("GET", url) as r:
+                    if r.status_code == 200 and buf:
+                        buf = bytearray()                       # no Range support: from the start
+                    elif r.status_code == 416 and total and len(buf) >= total:
+                        return bytes(buf)
+                    elif r.status_code not in (200, 206):
+                        logging.warning("  HTTP %s", r.status_code)
+                        return None
+                    if total is None:
+                        rng = r.headers.get("Content-Range", "")
+                        total = int(rng.rsplit("/", 1)[1]) if "/" in rng else int(r.headers.get("Content-Length") or 0) or None
+                    for chunk in r.iter_bytes():
+                        buf += chunk
+            if total is None or len(buf) >= total:
+                return bytes(buf)
+        except (httpx.HTTPError, OSError) as e:
+            logging.warning("  attempt %d cut at %d of %s bytes: %s", attempt, len(buf), total, type(e).__name__)
+        if total is not None and len(buf) >= total:
+            return bytes(buf)
+    return None
 
 
 def pyogrio_layers(path: Path) -> list[str]:
