@@ -94,6 +94,14 @@ Add to `data/source_registry.yaml` a topic `hazards_and_advisories` with publish
 
 Table `advisories`: source, title, issued_at, valid_until, hazard, LGAs covered (or "state-wide"), verbatim text, URL, language. Answers quote the **current** advisories (valid now) first, with the issue date. Expired ones are dropped, or mentioned as "the last advisory, issued X, has expired".
 
+**Built (Oct 30–31):**
+- Crawl (`app/hazards/advisories.py`, `KASAFI_ADVISORIES_FETCH=true` on the server): text sources daily at 06:00 and NCDC Mondays at 07:00 (Lagos), capped by `KASAFI_ADVISORIES_MONTHLY_USD` ($2).
+- Official outlooks (NIHSA AFO 2026, NiMet SCP 2026 and its August update) come from `data/official_outlooks.yaml`. Every quote is verified on its page (`scripts/official_outlooks.py`). An official outlook leads over GloFAS, which is labelled a model estimate.
+- **Alert status is definitive** (`official.checked_status`):
+  - when the crawl succeeded within 24 h: "No active alert from NEMA, SEMA or the Ministry of Health for {place} as of 06:00 today";
+  - otherwise: "Last checked 2 days ago (29 Oct); no alert … then";
+  - when no check has ever succeeded, it says so. It never says "none" without a successful check.
+
 ## 6. Nearest health facility and routing
 
 `nearest_facilities(point, filters)`: a PostGIS nearest-neighbour query with optional filters for level, ownership, EmONC capability and functional status. Return the top 3 by straight-line distance, then get road distance and time for those 3.
@@ -111,6 +119,13 @@ Table `advisories`: source, title, issued_at, valid_until, hazard, LGAs covered 
 3. A **route map image** (section 8) when ORS gave a route.
 4. A Google Maps directions link built from the URL scheme (no API key) as a fallback for phones where the pin doesn't open navigation.
 
+**Built (Oct 31): facilities are a planner capability** (catalog entry `facilities`, need measures `facility_count` and `facility_lookup`; `app/geo/facility_info.py`):
+- **Counts** come from the GRID3 / NHFR registry, by type, ownership, level, LGA or ward. "How many PHCs" gives the registry's Primary Health Centres and all primary-level facilities, and offers the UNFPA EmONC figure as "the facilities it assessed". A question about building, budgets or a year is a projects question, not a count.
+- **A facility by name**, fuzzy-matched ("What about Arkilla PHC"), gives a card: type, level, ownership, ward and LGA from the registry, plus its EmONC status.
+- **Routes:** "I want to go to X" or "how far is it from me" gives the road distance and time, the pin, the directions link and the map. With no location on file, Kasafi asks for one and answers when it arrives. This works by voice too.
+- **"Hospital" / "asibiti"** means hospital-level facilities (secondary, tertiary). A facility of any kind at under half the distance gets its own line ("Nearer, but not a hospital: …"). With road times known, the list is ordered by time.
+- **Location on every path** (`app/geo/location.py`): "my LGA", "near me" and "from me" carry the LGA on file to the planner, so budget, topic and hazard questions use it. A place named in the question overrides it. The point is kept in memory for 30 minutes, the LGA in the user record.
+
 ## 7. Emergency fast path
 
 Detect emergency language in Hausa and English, text or voice. Examples: heavy bleeding, not breathing, unconscious, convulsions/fits, a snakebite, a burn, a child very hot and not waking, labour complications, a drowning or flood trapping, a fire. This is a **classifier plus a phrase list**; err on the side of triggering.
@@ -124,6 +139,8 @@ Behaviour (target: reply in under 3 seconds, before any document search):
 5. **No medical instructions.** At most, quote an official first-aid line from an approved source if one is added later. Not now.
 
 Log only that the fast path fired (no message text) for quality review.
+
+**Built (Oct 31):** with a point on file, the picks get ORS road distance and time within 1.5 s ("6 km by road, about 12 min"), plus a Google Maps driving link. If ORS is slow or down, the reply shows the straight line and says so, and the whole reply stays under 3 s (`tests/test_phone_fixes.py`). From an LGA centre only, there is no ORS call. From the dev machine ORS took 1.4–4.3 s, so the fallback is common there; check its rate on the server.
 
 ## 8. Maps and images
 
@@ -155,6 +172,16 @@ Images in Hausa or English to match the user. Colour-blind-safe palette with cle
 - "What should we watch out for this week in Goronyo?" → in-season hazards ranked by current values and advisories.
 
 All of these go through the planning loop as capabilities, not a separate bot.
+
+**Answer format (Oct 31, every answer type):**
+1. An executive summary: 1–3 plain sentences that answer directly, in the user's language.
+   - Facility and emergency summaries are written in code.
+   - Hazard, official-outlook and topic summaries are written by Muse Spark (`app/agent/summary.py`) from the answer's own details. Any figure the details don't print drops the summary.
+   - Budget answers already lead with their synthesis.
+2. The details: figures, bullets, map.
+3. One compact sources line, e.g. "📄 NiMet, 2026 Seasonal Climate Prediction p. 12–16; NiMet SCP Update p. 3".
+
+Verbatim quotes are kept back, stored with the turn and sent on "quotes" / "nuna rubutun", with their pages and no model call.
 
 ## 11. Capability catalog entries (add to `data/catalog.yaml`)
 
