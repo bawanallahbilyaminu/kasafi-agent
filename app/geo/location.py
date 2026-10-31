@@ -163,7 +163,33 @@ def area_from_text(conn, text: str, last_lga: str | None = None):
 
 # "here" in a question: the location on file is meant ("a nan", "inda nake", "wurina", "around me")
 HERE = re.compile(r"(?i)\b(?:here|near me|around me|my area|where i am|a nan|nan kusa|inda nake|wurina|"
-                  r"kusa da ni|unguwata|garinmu)\b")
+                  r"kusa da ni|unguwata|garinmu|my (?:current |own |local )?(?:lga|local government(?: area)?|"
+                  r"location|place|town|ward)|from me|ƙaramar hukumata|karamar hukumata|daga ni|daga wurina)\b")
+
+
+_STATE = re.compile(r"(?i)\bsokoto(?:'s|’s)?\b(?!\s+(?:north|south|ta\s+arewa|ta\s+kudu))")
+
+
+def names_place(question: str) -> bool:
+    """The question names a place of its own: a Sokoto LGA (any spelling) or the state ('Sokoto's rainy season';
+    'Sokoto North' is an LGA)."""
+    from app.sources.lga_names import ALIASES, CANONICAL
+    low = (question or "").lower()
+    if any(re.search(rf"\b{re.escape(n.lower())}\b", low) for n in [*CANONICAL, *ALIASES]
+           if n.lower() not in ("sokoto",)):
+        return True
+    return bool(_STATE.search(question or ""))
+
+
+def with_location(question: str, place: dict | None, names_place=names_place) -> str:
+    """The question as the planner sees it: when it refers to the user's own place ('projects in my current LGA',
+    'a nan') and names none of its own, the LGA on file is said after it, so every path (budget, topic, hazard)
+    uses it. `names_place(question)` says whether the question names a place (a named place always wins)."""
+    from app.sources.lga_names import name_of
+    if not place or not HERE.search(question or "") or names_place(question):
+        return question
+    lga = place.get("lga") or name_of(place.get("lga_pcode") or "")
+    return f"{question} [the user's LGA on file: {lga} LGA, Sokoto State]" if lga else question
 # asking to share a location ("raba wurina", "share my location"): the request button is sent
 SHARE = re.compile(r"(?i)^\s*(?:/?share (?:my )?location|send (?:my )?location|raba wurina|tura wurina|"
                    r"/location|/wuri)\s*$")

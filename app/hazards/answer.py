@@ -199,6 +199,8 @@ def where_for(entities: list, place: dict | None) -> read.Where:
     """An LGA the question names; else the user's point or LGA on file ('here'); else the whole state."""
     for e in entities or []:
         if getattr(e, "type", "") == "lga" and (code := pcode(e.resolved or e.name)):
+            if place and place.get("lat") is not None and place.get("lga_pcode") == code:    # the pin's own LGA
+                return read.Where("point", code, name_of(code), place["lat"], place["lon"])
             return read.Where("lga", code, name_of(code))
     if place and place.get("lat") is not None:
         return read.Where("point", place.get("lga_pcode", ""), place.get("lga", ""), place["lat"], place["lon"])
