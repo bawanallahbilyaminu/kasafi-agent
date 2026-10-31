@@ -167,6 +167,19 @@ def test_the_summary_uses_only_verified_figures() -> None:
     assert cut == "The Rima is low."                                                                # cut off: trimmed
 
 
+def test_the_summary_does_not_repeat_the_alert_status_line() -> None:
+    details = ("⚠️ *Official warnings*\nNo active alert from NEMA, the Sokoto State Government (SEMA) or the Ministry "
+               "of Health for Goronyo LGA as of 06:03 today.\n\nRima near Goronyo: 2.4 m³/s, low for late October.")
+    s = make_settings()
+    said = asyncio.run(summarize("q", details, "en", s, Client(
+        "There is no active flood alert for Goronyo as of 06:03 today. The Rima near Goronyo is low, at 2.4 m³/s.")))
+    assert said == "The Rima near Goronyo is low, at 2.4 m³/s."
+    ha = asyncio.run(summarize("q", details, "ha", s, Client("Babu gargaɗi mai aiki daga NEMA ko SEMA.")))
+    assert ha == ""                                                         # nothing else left: the details lead
+    plain = "Rima near Goronyo: 2.4 m³/s. No warning was issued in 2024 by the ministry."   # no status line: kept
+    assert asyncio.run(summarize("q", plain, "en", s, Client("No warning was issued in 2024."))) != ""
+
+
 def test_quotes_are_held_back_and_sent_on_request() -> None:
     full = "• October-November 2026, page 42: “Sokoto remains under High Flood Risk.”\n📄 NIHSA AFO p. 42"
     details, quotes = split_quotes(full)
