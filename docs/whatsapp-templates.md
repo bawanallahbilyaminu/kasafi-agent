@@ -6,7 +6,8 @@ an **approved template** and a payment method on the WhatsApp Business Account: 
 
 **Only `kasafi_hazard_alert` is sent as a template.** Sign-up and stop confirmations always answer a message the user
 has just sent ("Alert me about floods in Goronyo", STOP / DAINA), so they are inside the 24-hour window and go out as
-normal messages. No template is needed for them.
+normal messages. No template is needed for them (the sign-up and stop templates submitted earlier are kept in
+WhatsApp Manager, unused).
 
 **Template settings:**
 - **Category:** Utility. These messages follow up on something the user signed up for; they aren't marketing. Don't
@@ -90,7 +91,8 @@ Sent as ordinary replies, inside the 24-hour window:
 4. Under **Message validity period**, turn on the custom period and choose **6 hours**. Then **Submit**.
 5. Open the same template → **Add language → Hausa** and fill in the Hausa version, so it's one name with two
    languages.
-6. If `kasafi_alert_signup` or `kasafi_alert_stopped` were submitted earlier, delete them: they aren't used.
+6. `kasafi_alert_signup` and `kasafi_alert_stopped`, submitted earlier, stay in WhatsApp Manager (deleting a
+   template blocks its name for a month); the code never depends on them.
 7. Check **Payment methods** on the WhatsApp Business Account: utility messages outside the window are charged per
    delivered message.
 
