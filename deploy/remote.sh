@@ -191,9 +191,10 @@ sync-geo)
   INCOMING=$APP/deploy/geo.incoming.tar
   [ -s "$INCOMING" ] || { say "no $INCOMING uploaded"; exit 1; }
   if dc exec -T api sh -c 'mkdir -p /data/geo && tar -x -m -C /data/geo' < "$INCOMING" \
-     && dc exec -T api python scripts/import_geo.py --geo /data/geo > /dev/null; then
+     && dc exec -T api python scripts/import_geo.py --geo /data/geo > /dev/null \
+     && dc exec -T api python scripts/match_emonc.py --out /data/geo/emonc_matches.md > /dev/null; then
     rm -f "$INCOMING"
-    n=$(dc exec -T db psql -At -U kasafi -d kasafi -c "SELECT (SELECT count(*) FROM lga)||' LGAs, '||(SELECT count(*) FROM ward)||' wards, '||(SELECT count(*) FROM facility)||' facilities, '||(SELECT count(*) FROM place)||' places'")
+    n=$(dc exec -T db psql -At -U kasafi -d kasafi -c "SELECT (SELECT count(*) FROM lga)||' LGAs, '||(SELECT count(*) FROM ward)||' wards, '||(SELECT count(*) FROM facility)||' facilities, '||(SELECT count(*) FROM place)||' places, '||(SELECT count(*) FROM basemap)||' base map lines, '||(SELECT count(*) FROM facility_capability)||' EmONC links'")
     say "geo imported: $n"
     log "sync-geo ok: $n"
     echo "RESULT=ok COMMIT=$(git rev-parse HEAD)"

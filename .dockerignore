@@ -21,6 +21,7 @@ scripts/
 # ... except the topic prefetch, run on the server (docker compose exec api python scripts/prefetch_topics.py)
 !scripts/prefetch_topics.py
 !scripts/import_geo.py
+!scripts/match_emonc.py
 # ... and the local documents' indexing (deploy.sh --sync-advisories) and a manual hazard fetch
 !scripts/index_docs.py
 !scripts/ocr_pages.py

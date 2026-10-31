@@ -78,6 +78,9 @@ def rows(conn) -> list[dict]:
 
 
 def main() -> None:
+    global OUT
+    if "--out" in sys.argv:                      # the list's place (the server: /data/geo/emonc_matches.md)
+        OUT = Path(sys.argv[sys.argv.index("--out") + 1])
     with psycopg.connect(get_settings().db_url()) as conn:
         assessed = rows(conn)
         fac = defaultdict(list)

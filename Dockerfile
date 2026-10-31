@@ -27,7 +27,7 @@ COPY app ./app
 COPY data/source_registry.yaml data/catalog.yaml data/emergency_contacts.yaml ./data/
 COPY scripts/prefetch_topics.py ./scripts/prefetch_topics.py
 # the geo import, run on the server against data/geo files copied into the data volume (not in git or the image)
-COPY scripts/import_geo.py ./scripts/import_geo.py
+COPY scripts/import_geo.py scripts/match_emonc.py ./scripts/
 # local documents (NIHSA AFO, NiMet SCP) indexed on the server from /data/pdfs, and their official outlooks
 # (deploy.sh --sync-advisories); a manual hazard fetch
 COPY data/manifest.json data/official_outlooks.yaml ./data/
