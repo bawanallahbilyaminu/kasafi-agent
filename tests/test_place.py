@@ -69,20 +69,57 @@ def _obs(day, **kw):
     return Observation(_d.fromisoformat(day), **kw)
 
 
-def test_year_rows_need_three_clear_season_observations_and_count_water_by_month() -> None:
+def test_year_rows_show_a_figure_from_three_images_but_a_year_counts_only_from_eight() -> None:
     from app.place.history import year_rows
     obs = [_obs("2024-06-10", ndvi=0.2, ndwi=-0.3), _obs("2024-07-15", ndvi=0.5, ndwi=-0.2),
            _obs("2024-08-09", ndvi=0.6, ndwi=0.1), _obs("2024-08-24", ndvi=0.7, ndwi=0.2),
            _obs("2024-09-13", ndvi=0.65, ndwi=-0.1), _obs("2024-03-02", bsi=0.3, ndwi=0.15),
            _obs("2024-03-17", bsi=0.1, ndwi=0.05), _obs("2024-04-01", bsi=0.2, ndwi=-0.2),
            _obs("2023-07-01", ndvi=0.4, ndwi=-0.1), _obs("2023-08-01", ndvi=0.5, ndwi=-0.1)]
-    rows = year_rows(obs, [2023, 2024])
+    obs += [_obs(f"2022-07-{d:02d}", ndvi=0.3 + d / 100, ndwi=-0.2) for d in range(1, 9)]
+    rows = year_rows(obs, [2022, 2023, 2024])
     r = rows[2024]
     assert r.season_obs == 5 and r.ndvi_p90 == pytest.approx(np.percentile([0.2, 0.5, 0.6, 0.7, 0.65], 90), abs=1e-3)
+    assert not r.usable                                   # a figure to show hatched, but no fit, flag or trend from it
     assert r.water_obs == 3 and r.water_share == pytest.approx(2 / 3, abs=0.01)
     assert r.water_months == [3, 8]                       # March (median 0.10) and August (0.15) mostly water
-    assert r.dry_obs == 3 and r.bsi_dry == pytest.approx(0.2) and r.usable
+    assert r.dry_obs == 3 and r.bsi_dry == pytest.approx(0.2)
     assert rows[2023].season_obs == 2 and rows[2023].ndvi_p90 is None and not rows[2023].usable
+    assert rows[2022].season_obs == 8 and rows[2022].usable
+
+
+def test_no_greenness_claims_about_a_market_a_dune_or_a_reservoir() -> None:
+    from app.place.history import YearRow, place_kind
+    green = {y: YearRow(y, season_obs=10, ndvi_p90=0.5) for y in range(2017, 2026)}
+    low = {y: YearRow(y, season_obs=10, ndvi_p90=0.12 if y != 2020 else 0.3) for y in range(2017, 2026)}
+    assert place_kind("cropland", green) is None
+    assert place_kind("built-up", green) == "built-up area"           # the 2021 map's class wins even when greenish
+    assert place_kind("bare or sparse", low) == "bare ground"
+    assert place_kind("open water", low) == "open water"
+    assert place_kind("cropland", low) == "little vegetation"         # under 0.2 in most years
+    assert place_kind(None, green) is None
+
+
+def test_the_nearest_water_body_is_the_closest_jrc_pixel_and_the_history_point_sits_inside_it() -> None:
+    from rasterio.transform import from_origin
+    from app.place.history import water_body
+    # a 20 x 20 window of 30 m pixels around (5.0, 13.0); a 5 x 5 pond to the east, a lone wet pixel to the north
+    tr = from_origin(5.0 - 10 * 0.00028, 13.0 + 10 * 0.00027, 0.00028, 0.00027)
+    occ = np.zeros((20, 20), dtype="uint8")
+    occ[8:13, 14:19] = 90                                   # the pond: rows 8-12, cols 14-18
+    occ[7, 10] = 60                                         # a single pixel 3 rows up (~90 m), nearer than the pond (~120 m)
+    occ[0, 0] = 255                                         # no data
+    w = water_body(occ, tr, 5.0, 13.0, radius_m=2000)
+    assert w is not None and 60 < w["distance_m"] < 110
+    assert w["area_ha"] == pytest.approx(0.09, abs=0.02)   # one 30 m pixel: the body holding the nearest pixel
+    occ[7, 10] = 0
+    w = water_body(occ, tr, 5.0, 13.0, radius_m=2000)
+    assert w["area_ha"] == pytest.approx(25 * 0.09, abs=0.3) and w["occurrence"] == 90
+    col = round((w["lon"] - tr.c) / tr.a - 0.5)
+    row = round((w["lat"] - tr.f) / tr.e - 0.5)
+    assert 9 <= row <= 11 and 15 <= col <= 17              # an interior pixel of the pond, not its shore
+    assert w["outline"]["type"] == "Polygon"
+    assert water_body(occ, tr, 5.0, 13.0, radius_m=100) is None
 
 
 def test_the_cache_key_is_a_100_m_cell_and_the_grid_is_about_10_m() -> None:

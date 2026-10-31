@@ -45,12 +45,21 @@ def main() -> None:
                 conn.execute("DELETE FROM sat_cache WHERE cell = %s", (cell_id(lat, lon),))
                 conn.commit()
             t0 = time.perf_counter()
-            h = point_history(conn, lat, lon)
+            h = point_history(conn, lat, lon, water=True)
             first = time.perf_counter() - t0
             t0 = time.perf_counter()
-            h2 = point_history(conn, lat, lon)
+            h2 = point_history(conn, lat, lon, water=True)
             cached = time.perf_counter() - t0
-            print(f"\n=== {p['name']}  (cell {h.cell}; land cover: {h.landcover or '-'})")
+            print(f"\n=== {p['name']}  (cell {h.cell}; 2021 land cover: {h.landcover or '-'}; "
+                  f"kind: {h.kind or 'vegetated'}; on water: {h.on_water})")
+            if h.nearest_water:
+                nw = h.nearest_water
+                nh = nw["history"]
+                wm = {y: r.water_months for y, r in sorted(nh.years.items()) if r.water_months}
+                print(f"nearest water body: {nw['distance_m']} m from the pin at {nw['lat']},{nw['lon']} "
+                      f"({nw['area_ha']} ha, JRC occurrence {nw['occurrence']}%); its water months: {wm}")
+            elif not h.on_water:
+                print("nearest water body: none within 2 km")
             print(f"first request {first:.1f}s ({', '.join(f'{k} {v:.1f}s' for k, v in h.timing.items() if k != 'total')}); "
                   f"cached {cached:.1f}s (from cache: {h2.from_cache})")
             print(f"{'year':4} {'obs':>3} {'NDVI p90':>8} {'rain mm':>8} {'fit':>7} {'wet obs':>7} {'water':>6} "
@@ -62,7 +71,7 @@ def main() -> None:
                       f"{r.water_obs:7} {fmt(r.water_share):>6} {r.dry_obs:7} {fmt(r.bsi_dry, 3):>6}  "
                       f"{','.join(str(m) for m in r.water_months) or '-'}"
                       + ("" if r.usable else "   too few clear images"))
-            print("usable years:", h.usable_years(), "| trends:", h.trends,
+            print(f"usable years ({len(h.usable_years())}):", h.usable_years(), "| trends:", h.trends,
                   "| fit:", (f"sd {h.fit.sd:.3f}, slope {h.fit.slope * 100:.3f}/100 mm" if h.fit else "none (fewer than 5 years)"))
             j = h.jrc
             print(f"JRC: occurrence {fmt(j.get('occurrence'))}% recurrence {fmt(j.get('recurrence'))}% seasonality "
