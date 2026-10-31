@@ -86,7 +86,8 @@ button.bad{border-color:var(--bad);color:var(--bad)}.scroll{overflow-x:auto}deta
 
 def page(title: str, body: str, on: str = "") -> HTMLResponse:
     nav = "".join(f'<a href="/admin/{p}" class="{"on" if p == on else ""}">{n}</a>'
-                  for p, n in (("traces", "Traces"), ("traces?flagged=1", "Flagged"), ("review", "Review queue")))
+                  for p, n in (("traces", "Traces"), ("traces?flagged=1", "Flagged"), ("review", "Review queue"),
+                               ("alerts", "Alerts")))
     doc = (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" '
            f'content="width=device-width,initial-scale=1"><title>{e(title)} · Kasafi admin</title>'
            f'<style>{CSS}</style></head><body><main><header class="top"><b>Kasafi admin</b><nav>{nav}</nav>'
@@ -275,6 +276,35 @@ def close_gap(gid: int, request: Request, status: str, _: None = Depends(admin),
     with _conn(settings) as conn:
         conn.execute("UPDATE gaps SET status = %s WHERE id = %s", (status, gid))
     return RedirectResponse("/admin/review", 303)
+
+
+@router.get("/alerts", response_class=HTMLResponse)
+def alerts_page(_: None = Depends(admin), settings: Settings = Depends(get_settings)) -> HTMLResponse:
+    """Hazard alerts (app/alerts): each decision by hazard and LGA, with the template values that were (or in the
+    dry run would have been) sent, and how many people are signed up per hazard. No user keys."""
+    from app.alerts.dispatch import approved_langs
+    from app.sources.lga_names import name_of
+    from app.users import get_store
+    store = get_store()
+    counts = store.subscription_counts()
+    trs = "".join(
+        f'<tr><td class="small mute">{e(r["at"][:16].replace("T", " "))} UTC</td><td>{e(r["hazard"])}</td>'
+        f'<td>{e(name_of(r["lga_pcode"]) or r["lga_pcode"])}</td><td class="{e(r["status"])}">{e(r["status"])}'
+        f'{" · official" if r["official"] else ""}</td><td>{r["recipients"]}'
+        f'<div class="small mute">{e(", ".join(f"{k} {v}" for k, v in r["langs"].items()))}</div></td>'
+        f'<td>{"".join(f"<div><b>{e(lang)}</b>: {e(" | ".join(v))}</div>" for lang, v in r["message"].items())}'
+        f'<div class="small mute">{e(r["key"])} {e(r["note"] or "")}</div></td></tr>'
+        for r in store.alert_log())
+    mode = "DRY RUN: nothing is sent to users" if settings.kasafi_alerts_dry_run else "LIVE"
+    body = (f'<h1>Hazard alerts</h1><p><b>{mode}</b> · checks {"on" if settings.kasafi_alerts else "off"} '
+            f'(KASAFI_ALERTS) · daily cap {settings.kasafi_alerts_daily_cap or "not set"} · approved template '
+            f'languages: {e(", ".join(sorted(approved_langs(settings))) or "none")}</p>'
+            f'<p class="mute small">Signed up: {e(", ".join(f"{h} {n}" for h, n in counts.items()) or "nobody yet")}'
+            f'. Values are kasafi_hazard_alert {{{{1}}}} to {{{{4}}}}. Kept 90 days.</p>'
+            f'<div class="card scroll"><table><tr><th>When</th><th>Hazard</th><th>LGA</th><th>Status</th>'
+            f'<th>People</th><th>Template values</th></tr>{trs or "<tr><td colspan=6>No alerts yet.</td></tr>"}'
+            f'</table></div>')
+    return page("Alerts", body, "alerts")
 
 
 @router.post("/domains/{domain}")

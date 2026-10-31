@@ -158,10 +158,32 @@ Images in Hausa or English to match the user. Colour-blind-safe palette with cle
 
 - **Sign up**: "Sanar da ni game da ambaliya a Goronyo" / "Alert me about heat in Wamakko", or a menu: choose LGA(s) and hazards (heat, dust, floods, outbreaks).
 - Store: phone hash, LGAs, hazards, language, created_at; stop with "DAINA" / "STOP". Explicit consent text on sign-up.
-- **Triggers**: a new official advisory covering the LGA, heat index reaching Danger, dust or PM10 reaching "Very unhealthy", river discharge above the point's 95th percentile, or a new NCDC report showing an outbreak in Sokoto.
+- **Triggers**: a new official advisory covering the LGA, heat index reaching Danger, dust at "Hazardous" or high for the time of year, river discharge above the point's 95th percentile, or a new NCDC report showing an outbreak in Sokoto.
 - **Limits**: at most 1 alert per hazard per LGA per day; quiet hours 22:00–06:00 except official warnings.
 - **WhatsApp requirements**: messages sent outside the 24-hour window need **approved utility templates** (Hausa and English) and a payment method on the WhatsApp Business Account, because each delivered alert is charged. Template approval takes time, so submit templates in the first build step.
 - Alert text: hazard, LGA, time, source, and "reply MORE for details or a map".
+
+**Built (Oct 31), dry run only, not deployed** (`app/alerts/`, tests in `tests/test_alerts.py`):
+- **Sign-up** (`signup.py`, no model): "Sanar da ni game da ambaliya a Goronyo" / "alert me about heat in Wamakko",
+  or ALERTS / FAƊAKARWA for the menu (1 Heat, 2 Dust, 3 Floods, 4 Outbreaks, 5 All, then LGAs, in one reply). A
+  missing LGA comes from the LGA on file, else is asked for. A confirmation says what is kept and how to stop, with
+  three buttons: *Yes, sign me up* / *No* / *Just answer now* (the Hausa wording can also be a question). Language:
+  the user's own (HAUSA / ENGLISH changes it). Stored in the SQLite user store (`alert_subs`: user key, LGAs,
+  hazards, language, created_at), so DELETE MY DATA removes it. STOP / DAINA (typed or the template's button) deletes
+  it. MORE asks "What is the {hazard} situation in {LGA} today?" about the latest alert.
+- **Triggers** (`triggers.py`): a new official advisory (issued in the last 3 days, current) for the LGA or
+  state-wide; heat Danger today or tomorrow; dust at Hazardous, or at least Unhealthy and above the 95th percentile of
+  the LGA's last 30 days (table `air_daily`, migration 0016; needs 20 days of history); a river point above its
+  seasonal 95th percentile within 2 days; a new NCDC report whose Sokoto figures rose. Stale layers fire nothing.
+- **Limits** (`dispatch.py`): a key is never sent twice; one alert per hazard per LGA per Lagos day; quiet hours
+  22:00–06:00 hold everything but official advisories until 06:00; `KASAFI_ALERTS_DAILY_CAP` template messages a
+  day for all users (0 = none live). Values are one line with no closing full stop. A language not in
+  `KASAFI_ALERT_TEMPLATE_LANGS` (default `ha`; English is in review) is skipped and logged.
+- **Dry run** (`KASAFI_ALERTS_DRY_RUN=true`, the default; checks run only with `KASAFI_ALERTS=true`): each decision
+  goes to `alert_log` and `/admin/alerts` (template values, recipients by language, status), never to users.
+- **Open: live sending needs a recipient.** Users are stored only as HMAC(number), which can't be turned back into
+  a number, so a live alert has no address. Live mode logs `no_recipient` until Bilyaminu decides how to reach
+  subscribers (see the step 6 report).
 
 ## 10. Answer patterns (examples)
 

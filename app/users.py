@@ -79,7 +79,30 @@ CREATE TABLE IF NOT EXISTS api_calls (  -- per-day call counts for priced APIs (
     n    INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (day, name)
 );
+CREATE TABLE IF NOT EXISTS alert_subs (  -- hazard alerts a user signed up for (app/alerts): nothing else is kept
+    user_key   TEXT PRIMARY KEY,
+    lgas       TEXT NOT NULL,      -- JSON list of LGA P-codes
+    hazards    TEXT NOT NULL,      -- JSON list: heat | dust | flood | outbreak
+    lang       TEXT NOT NULL,      -- the alert template's language: 'ha' | 'en'
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS alert_log (   -- each alert decided, per hazard and LGA (no user keys), for the admin page
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    at         TEXT NOT NULL,      -- ISO time (UTC)
+    day        TEXT NOT NULL,      -- the Lagos day, for 'one per hazard per LGA per day'
+    hazard     TEXT NOT NULL,
+    lga_pcode  TEXT NOT NULL,
+    key        TEXT NOT NULL,      -- what fired: adv:<id>, heat:<lga>:<day>, ncdc:<disease>:<year>-<week> ...
+    official   INTEGER NOT NULL,   -- 1: an official warning (sent in quiet hours too)
+    status     TEXT NOT NULL,      -- dry_run | sent | quiet | capped | no_template | no_recipient
+    recipients INTEGER NOT NULL,
+    langs      TEXT,               -- JSON {"ha": 3, "en": 1}: recipients by language
+    message    TEXT,               -- JSON {"ha": [v1, v2, v3, v4], ...}: the template's variables
+    note       TEXT
+);
+CREATE INDEX IF NOT EXISTS alert_log_day_idx ON alert_log (day, hazard, lga_pcode);
 """
+ALERT_LOG_DAYS = 90
 
 
 @dataclass
@@ -130,6 +153,8 @@ class UserStore:
         for col in ("last_lga", "last_lga_at", "location_notice_at"):      # location: the LGA only (hazard step 1)
             if col not in have:
                 self._db.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
+        if "pending_alert" not in have:          # an alert sign-up waiting for the user's explicit OK (step 6)
+            self._db.execute("ALTER TABLE users ADD COLUMN pending_alert TEXT")
         turn_cols = {row[1] for row in self._db.execute("PRAGMA table_info(turns)")}
         if "working" not in turn_cols:
             self._db.execute("ALTER TABLE turns ADD COLUMN working TEXT")     # "nuna lissafi" / "show working"
@@ -240,6 +265,82 @@ class UserStore:
             self._db.execute("DELETE FROM users WHERE user_key=?", (key,))
             self._db.execute("DELETE FROM usage WHERE user_key=?", (key,))
             self._db.execute("DELETE FROM turns WHERE user_key=?", (key,))
+            self._db.execute("DELETE FROM alert_subs WHERE user_key=?", (key,))
+
+    # hazard alerts (app/alerts): the subscription is the user key, LGAs, hazards, language and created_at only
+    def set_pending_alert(self, key: str, pending: dict | None) -> None:
+        self._exec("UPDATE users SET pending_alert=? WHERE user_key=?",
+                   (json.dumps(pending, ensure_ascii=False) if pending else None, key))
+
+    def get_pending_alert(self, key: str) -> dict | None:
+        row = self._exec("SELECT pending_alert FROM users WHERE user_key=?", (key,)).fetchone()
+        return json.loads(row[0]) if row and row[0] else None
+
+    def subscribe(self, key: str, lgas: list[str], hazards: list[str], lang: str) -> dict:
+        """Add LGAs and hazards to the user's alerts (a second sign-up adds to the first); the language is the
+        latest chosen. Returns the subscription as stored."""
+        have = self.subscription(key) or {"lgas": [], "hazards": []}
+        lgas = sorted(set(have["lgas"]) | set(lgas))
+        hazards = [h for h in ("heat", "dust", "flood", "outbreak") if h in set(have["hazards"]) | set(hazards)]
+        self._exec("INSERT INTO alert_subs (user_key, lgas, hazards, lang, created_at) VALUES (?,?,?,?,?) "
+                   "ON CONFLICT(user_key) DO UPDATE SET lgas=excluded.lgas, hazards=excluded.hazards, "
+                   "lang=excluded.lang", (key, json.dumps(lgas), json.dumps(hazards), lang,
+                                          datetime.now(timezone.utc).isoformat()))
+        return {"lgas": lgas, "hazards": hazards, "lang": lang}
+
+    def subscription(self, key: str) -> dict | None:
+        row = self._exec("SELECT lgas, hazards, lang FROM alert_subs WHERE user_key=?", (key,)).fetchone()
+        return {"lgas": json.loads(row[0]), "hazards": json.loads(row[1]), "lang": row[2]} if row else None
+
+    def unsubscribe(self, key: str) -> bool:
+        """STOP / DAINA: the subscription is deleted (not flagged). True when there was one."""
+        return self._exec("DELETE FROM alert_subs WHERE user_key=?", (key,)).rowcount > 0
+
+    def subscribers(self, lga_pcode: str, hazard: str) -> list[tuple[str, str]]:
+        """(user key, language) of everyone signed up for this hazard in this LGA."""
+        rows = self._exec("SELECT user_key, lgas, hazards, lang FROM alert_subs").fetchall()
+        return [(k, lang) for k, lgas, hazards, lang in rows
+                if lga_pcode in json.loads(lgas) and hazard in json.loads(hazards)]
+
+    def log_alert(self, hazard: str, lga_pcode: str, key: str, official: bool, status: str, recipients: int,
+                  langs: dict | None = None, message: dict | None = None, note: str = "",
+                  now: datetime | None = None) -> None:
+        now = now or datetime.now(timezone.utc)
+        self._exec("INSERT INTO alert_log (at, day, hazard, lga_pcode, key, official, status, recipients, langs, "
+                   "message, note) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                   (now.isoformat(), now.astimezone(LAGOS).date().isoformat(), hazard, lga_pcode, key, int(official),
+                    status, recipients, json.dumps(langs or {}), json.dumps(message or {}, ensure_ascii=False), note))
+        self._exec("DELETE FROM alert_log WHERE at < ?", ((now - timedelta(days=ALERT_LOG_DAYS)).isoformat(),))
+
+    def alert_statuses(self, key: str) -> set[str]:
+        """The statuses logged for what fired (`key`): a key already sent (or dry-run sent) is not sent again."""
+        return {r[0] for r in self._exec("SELECT status FROM alert_log WHERE key=?", (key,)).fetchall()}
+
+    def alerted_today(self, hazard: str, lga_pcode: str, day: str) -> bool:
+        """At most one alert per hazard per LGA per (Lagos) day: sent, or sent in the dry run."""
+        return self._exec("SELECT 1 FROM alert_log WHERE day=? AND hazard=? AND lga_pcode=? AND status IN "
+                          "('sent', 'dry_run') LIMIT 1", (day, hazard, lga_pcode)).fetchone() is not None
+
+    def alerts_sent(self, day: str) -> int:
+        """Template messages sent (or dry-run sent) on a Lagos day, for the global daily cap."""
+        row = self._exec("SELECT coalesce(sum(recipients), 0) FROM alert_log WHERE day=? AND status IN "
+                         "('sent', 'dry_run')", (day,)).fetchone()
+        return int(row[0])
+
+    def alert_log(self, limit: int = 200) -> list[dict]:
+        cols = ("at", "day", "hazard", "lga_pcode", "key", "official", "status", "recipients", "langs", "message",
+                "note")
+        rows = self._exec(f"SELECT {', '.join(cols)} FROM alert_log ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return [{**dict(zip(cols, r)), "langs": json.loads(r[8] or "{}"), "message": json.loads(r[9] or "{}")}
+                for r in rows]
+
+    def subscription_counts(self) -> dict[str, int]:
+        """How many people are signed up, per hazard (the admin page; no keys shown)."""
+        out: dict[str, int] = {}
+        for (hazards,) in self._exec("SELECT hazards FROM alert_subs").fetchall():
+            for h in json.loads(hazards):
+                out[h] = out.get(h, 0) + 1
+        return out
 
     # conversation context for follow-ups
     def add_turn(self, key: str, lang: str, question: str, answer: str, sources: list[dict] | None = None,

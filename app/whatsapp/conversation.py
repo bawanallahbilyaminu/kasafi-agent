@@ -35,6 +35,7 @@ from app.geo.location import SHARE, Spot, locate_point, pin_of, place_from_text
 from app.maps.render import render_specs
 from app.geo.location import memory as location_memory
 from app.guardrails import scope
+from app.alerts.signup import reply as alerts_reply
 from app.guardrails import emergency as em
 from app.guardrails.emergency import EMERGENCY_REPLY, is_medical_emergency
 from app.language import detect_language
@@ -131,7 +132,8 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                  emergency_fn: EmergencyFn = emergency_lookup, classify_fn: ClassifyFn = em.classify) -> list[Out]:
     """Returns the replies to send. `notify` sends a message right away (the "listening" ack)."""
     sender, kind = msg.get("from", ""), msg.get("type")
-    text = (msg.get("text") or {}).get("body", "") if kind == "text" else ""
+    text = ((msg.get("text") or {}).get("body", "") if kind == "text" else
+            (msg.get("button") or {}).get("text", "") if kind == "button" else "")   # a template's MORE / STOP
     button = _button_id(msg)
 
     # 1. Safety and data rights first
@@ -301,6 +303,20 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             return [refusal]
         q = res.question[:1000]
         return await respond(q, t("corrected_prefix", lang, question=q), Out(t("corrected", lang, question=q)))
+
+    # 5. Hazard alerts (app/alerts): sign-up and its explicit OK, the menu, STOP / DAINA, MORE; no model. Only with
+    # KASAFI_ALERTS on (off on the server until step 6 is released)
+    if settings.kasafi_alerts and kind in ("text", "button", "interactive") and (step := alerts_reply(text, button, key, lang, store,
+                                                                            store.get_last_lga(key))) is not None:
+        if not step.ask:
+            return [Out(body, buttons, lang=lang) for body, buttons in step.messages]
+        if answer is not None:
+            if not exempt and questions_used >= settings.kasafi_questions_per_day:
+                return [Out(t("question_limit", lang, n=settings.kasafi_questions_per_day))]
+            store.count(key, "questions")
+        if refusal := await _guarded([step.ask], lang, guard_fn, settings):
+            return [refusal]
+        return await respond(step.ask[:1000], "", Out(t("echo", lang, text=step.ask[:500])))
 
     # 5a. Answering "replace or add?": a button or a typed choice picks one of the two versions
     options = store.get_pending_options(key) if pending else None

@@ -5,7 +5,7 @@ permalink: /privacy/
 
 # Kasafi Privacy Policy
 
-*Last updated: 30 October 2026 (location; road distances)*
+*Last updated: 31 October 2026 (hazard alerts; emergency road distances)*
 
 Kasafi is a WhatsApp assistant run by **Halal Numeriq Limited**, Sokoto, Nigeria ("we"). We are the data controller
 under the **Nigeria Data Protection Act 2023 (NDPA)**. Contact: [bilyaminu@halalnumeriq.com.ng](mailto:bilyaminu@halalnumeriq.com.ng).
@@ -36,7 +36,7 @@ won't keep it. Only your LGA is remembered for follow-ups."*
 - For **road distance, travel time and the route on the map** to the nearest health facilities, your location,
   **rounded to about 100 metres**, is sent to **OpenRouteService** (HeiGIT, Heidelberg) with the facilities'
   locations, and nothing else: no number, name or message. Without it, Kasafi gives straight-line distances. In an
-  emergency it isn't sent at all. The map Kasafi sends you marks your location only as a circle about 1 km across.
+  emergency, Kasafi first replies with straight-line distances and sends the road distance in a second message. The map Kasafi sends you marks your location only as a circle about 1 km across.
 - The **exact location** is kept only in our server's working memory for **up to 30 minutes**, for follow-up
   questions such as "the next one?", and is then forgotten. It is **never written to our database, logs or answer
   traces**. If you type coordinates into a question, they are removed before the question is logged.
@@ -45,6 +45,15 @@ won't keep it. Only your LGA is remembered for follow-ups."*
 - A location outside Sokoto State isn't used: Kasafi only covers Sokoto State.
 
 Location data is personal data under the NDPA. Kasafi uses it only for the request you made.
+
+### Hazard alerts
+
+You can ask Kasafi to alert you about heat, harmattan dust, floods or disease outbreaks in chosen LGAs ("Alert me
+about floods in Goronyo"). Nothing is saved until you tap **Yes, sign me up**. Kasafi then keeps only your **coded
+ID** (never the number), the **LGAs**, the **hazards**, your **language** and the **date you signed up**. Send
+**STOP** or **DAINA** at any time and the sign-up is deleted; GOGE BAYANAI NA or DELETE MY DATA deletes it too.
+Alerts are worked out from public data and official notices only; nothing you send is used to decide them. Kasafi
+keeps a record of each alert by hazard and LGA (what it said and how many people it went to), with no number or ID.
 
 ## Why
 
@@ -80,6 +89,8 @@ protection terms and the NDPA's rules on transfers.
   number or ID linked to you**, so our team can check that answers are accurate.
 - **Daily usage counts:** 30 days. **Consent and language settings:** until you ask us to delete them.
 - **Location:** the exact location for up to 30 minutes, in memory only; your LGA for 90 days.
+- **Alert sign-ups:** until you send STOP / DAINA or DELETE MY DATA. The record of alerts sent (by hazard and LGA,
+  with no ID) is kept 90 days.
 - **Review queue:** when Kasafi can't answer a question, or can't find a document it needs, we keep the English
   wording of the question, what was missing and which trusted sites were searched for **90 days**, so our team can add
   the missing document. This record has **no phone number or ID linked to you**, so it can't be traced back to you

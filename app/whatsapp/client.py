@@ -99,6 +99,23 @@ class WhatsAppClient:
             resp.raise_for_status()
         return resp.json()
 
+    async def send_template(self, to: str, name: str, lang: str, values: list[str]) -> dict:
+        """An approved template (outside the 24-hour window), its body variables {{1}}... in order."""
+        resp = await self._http.post(f"/{self.phone_number_id}/messages", json={
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "template",
+            "template": {"name": name, "language": {"code": lang},
+                         "components": [{"type": "body",
+                                         "parameters": [{"type": "text", "text": v} for v in values]}]},
+        })
+        if not resp.is_success:
+            log.warning("WhatsApp template %s to %s failed: HTTP %s, Graph error code %s", name, mask_phone(to),
+                        resp.status_code, _graph_code(resp))
+            resp.raise_for_status()
+        return resp.json()
+
     async def send_buttons(self, to: str, body: str, buttons: list[tuple[str, str]]) -> dict:
         """Interactive reply-buttons message: at most 3 buttons, titles of 20 characters or fewer, body of 1024 or fewer."""
         if not 1 <= len(buttons) <= 3 or any(len(title) > 20 for _, title in buttons) or len(body) > 1024:

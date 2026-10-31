@@ -99,6 +99,15 @@ class Settings(BaseSettings):
     kasafi_advisories_fetch: bool = False
     # what the advisories crawl's model calls (NCDC: document check, OCR, Sokoto's row) may cost a month, in USD
     kasafi_advisories_monthly_usd: float = 2.0
+    # hazard alerts people sign up for (app/alerts): the triggers are checked after each hazard fetch round only
+    # when this is on; in the dry run (the default) alerts go to /admin/alerts, never to users
+    kasafi_alerts: bool = False
+    kasafi_alerts_dry_run: bool = True
+    # the most kasafi_hazard_alert messages sent in a Lagos day, all users together (each delivered one is charged);
+    # 0 (unset) sends none live; the dry run applies it only when it is set
+    kasafi_alerts_daily_cap: int = 0
+    # the template languages Meta has approved (comma-separated); a send in any other language is skipped and logged
+    kasafi_alert_template_langs: str = "ha"
     # Fireworks serves Muse Spark Open too: the fallback host when Baseten fails (app/providers/fireworks.py)
     fireworks_api_key: SecretStr | None = None
     fireworks_base_url: str = "https://api.fireworks.ai/inference/v1"
