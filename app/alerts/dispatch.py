@@ -104,9 +104,12 @@ async def dispatch(candidates: list[Candidate], store, settings, now: datetime |
             continue
         if send is None:
             once(c, "no_recipient", seen, len(ready), langs=dict(langs), message=message,
-                 note="no recipient address for a user key: live sending isn't set up")
+                 note="no sender: live sending isn't set up")
             continue
         delivered = sum([await send(k, lang, message[lang]) for k, lang in ready])
+        if delivered < len(ready):
+            note = "; ".join(x for x in (note, f"{len(ready) - delivered} not delivered (no number or send failed)")
+                             if x)
         store.log_alert(c.hazard, c.lga_pcode, c.key, c.official, "sent", delivered, dict(langs), message,
                         note, now=now)
         out["sent"] += 1
@@ -114,6 +117,23 @@ async def dispatch(candidates: list[Candidate], store, settings, now: datetime |
 
 
 def run(conn, store, settings, now: datetime | None = None) -> Counter:
-    """One round, from the hazard fetch loop: the triggers, then the dispatch (dry run unless switched off)."""
+    """One round, from the hazard fetch loop: subscriptions with no message for 90 days are deleted (with their
+    encrypted numbers), then the triggers and the dispatch (dry run unless switched off; live, each subscriber's
+    number is decrypted only to send)."""
     import asyncio
-    return asyncio.run(dispatch(all_candidates(conn, now), store, settings, now))
+
+    from app.alerts.recipients import INACTIVE_DAYS, live_sender
+    if gone := store.prune_alert_subs(INACTIVE_DAYS, now):
+        log.info("alert sign-ups deleted after %d days without contact: %d", INACTIVE_DAYS, gone)
+    candidates = all_candidates(conn, now)
+
+    async def go() -> Counter:
+        if settings.kasafi_alerts_dry_run:
+            return await dispatch(candidates, store, settings, now)
+        from app.whatsapp.client import WhatsAppClient
+        client = WhatsAppClient(settings)
+        try:
+            return await dispatch(candidates, store, settings, now, live_sender(store, settings, client))
+        finally:
+            await client.aclose()
+    return asyncio.run(go())

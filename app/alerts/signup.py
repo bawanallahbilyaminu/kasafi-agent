@@ -173,8 +173,10 @@ def more_question(store, key: str, lang: str) -> str:
     return ""
 
 
-def reply(text: str, button: str | None, key: str, lang: str, store, on_file: str | None = None) -> Step | None:
-    """The alerts reply to this message, or None when it isn't about alerts (handled as usual)."""
+def reply(text: str, button: str | None, key: str, lang: str, store, on_file: str | None = None,
+          seal=lambda: None) -> Step | None:
+    """The alerts reply to this message, or None when it isn't about alerts (handled as usual). `seal()` gives the
+    user's number encrypted (app/alerts/recipients.encrypt), called only when they say yes."""
     n, w = norm(text), _w(lang)
     pending = store.get_pending_alert(key)
     # the confirmation's buttons, or a typed Eh / A'a to it
@@ -182,7 +184,7 @@ def reply(text: str, button: str | None, key: str, lang: str, store, on_file: st
                                                           or (not button and (n in YES or n in NO))):
         store.set_pending_alert(key, None)
         if button == "alert_yes" or (not button and n in YES):
-            sub = store.subscribe(key, pending["lgas"], pending["hazards"], lang if lang in WORDS else "ha")
+            sub = store.subscribe(key, pending["lgas"], pending["hazards"], lang if lang in WORDS else "ha", seal())
             return Step([(w["done"].format(hazards=hazards_text(pending["hazards"], lang),
                                            lgas=lgas_text(pending["lgas"], lang)), None)]) if sub else None
         if button == "alert_ask":

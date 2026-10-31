@@ -108,6 +108,9 @@ class Settings(BaseSettings):
     kasafi_alerts_daily_cap: int = 0
     # the template languages Meta has approved (comma-separated); a send in any other language is skipped and logged
     kasafi_alert_template_langs: str = "ha"
+    # Fernet key that encrypts the WhatsApp number of people signed up for alerts (app/alerts/recipients.py); without
+    # it, sign-ups are stored with no number and live alerts can't be sent
+    kasafi_alerts_number_key: SecretStr | None = None
     # Fireworks serves Muse Spark Open too: the fallback host when Baseten fails (app/providers/fireworks.py)
     fireworks_api_key: SecretStr | None = None
     fireworks_base_url: str = "https://api.fireworks.ai/inference/v1"

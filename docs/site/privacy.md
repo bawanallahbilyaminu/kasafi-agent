@@ -20,7 +20,8 @@ under the **Nigeria Data Protection Act 2023 (NDPA)**. Contact: [bilyaminu@halal
   numbers, email addresses and long digit strings (such as account or NIN numbers) are removed from the wording.
 - A few **settings linked to a coded ID**: whether and when you agreed to the first-contact notice, your reply language
   (Hausa or English), and how many messages you sent each day (for the daily limits). The ID is made from your number
-  with a secret key, so we don't store the number itself.
+  with a secret key, so we don't store the number itself (the one exception: if you sign up for hazard alerts, see
+  below).
 
 We don't ask for your name, ID or address. Please don't send private details about your health or anyone else's.
 
@@ -49,9 +50,12 @@ Location data is personal data under the NDPA. Kasafi uses it only for the reque
 ### Hazard alerts
 
 You can ask Kasafi to alert you about heat, harmattan dust, floods or disease outbreaks in chosen LGAs ("Alert me
-about floods in Goronyo"). Nothing is saved until you tap **Yes, sign me up**. Kasafi then keeps only your **coded
-ID** (never the number), the **LGAs**, the **hazards**, your **language** and the **date you signed up**. Send
-**STOP** or **DAINA** at any time and the sign-up is deleted; GOGE BAYANAI NA or DELETE MY DATA deletes it too.
+about floods in Goronyo"). Nothing is saved until you tap **Yes, sign me up**. Kasafi then keeps your **coded
+ID**, the **LGAs**, the **hazards**, your **language**, the **date you signed up** and the date of your last
+message. **To send you alerts, Kasafi also keeps your WhatsApp number, encrypted, for as long as you are signed
+up; it is deleted when you send STOP or DAINA, when you send DELETE MY DATA, or after 90 days with no message from
+you.** People who don't sign up for alerts never have their number stored. The number is used only to send the
+alerts and is never given to an AI service.
 Alerts are worked out from public data and official notices only; nothing you send is used to decide them. Kasafi
 keeps a record of each alert by hazard and LGA (what it said and how many people it went to), with no number or ID.
 
@@ -89,8 +93,8 @@ protection terms and the NDPA's rules on transfers.
   number or ID linked to you**, so our team can check that answers are accurate.
 - **Daily usage counts:** 30 days. **Consent and language settings:** until you ask us to delete them.
 - **Location:** the exact location for up to 30 minutes, in memory only; your LGA for 90 days.
-- **Alert sign-ups:** until you send STOP / DAINA or DELETE MY DATA. The record of alerts sent (by hazard and LGA,
-  with no ID) is kept 90 days.
+- **Alert sign-ups, with your encrypted number:** until you send STOP / DAINA or DELETE MY DATA, or 90 days after
+  your last message. The record of alerts sent (by hazard and LGA, with no ID or number) is kept 90 days.
 - **Review queue:** when Kasafi can't answer a question, or can't find a document it needs, we keep the English
   wording of the question, what was missing and which trusted sites were searched for **90 days**, so our team can add
   the missing document. This record has **no phone number or ID linked to you**, so it can't be traced back to you

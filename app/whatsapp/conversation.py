@@ -35,6 +35,7 @@ from app.geo.location import SHARE, Spot, locate_point, pin_of, place_from_text
 from app.maps.render import render_specs
 from app.geo.location import memory as location_memory
 from app.guardrails import scope
+from app.alerts.recipients import encrypt as encrypt_number
 from app.alerts.signup import reply as alerts_reply
 from app.guardrails import emergency as em
 from app.guardrails.emergency import EMERGENCY_REPLY, is_medical_emergency
@@ -142,6 +143,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         location_memory.forget(user_key(sender, settings))       # and any point still in memory
         return [Out(DELETED_REPLY)]
     key = user_key(sender, settings)
+    store.touch_alert_contact(key)             # a subscriber's sign-up lasts 90 days from their last message
     user = store.get(key)
     allowed = settings.kasafi_open_access or is_pilot(sender, settings)
     consented = bool(user and user.consented and allowed)          # the classifier (a model) only after consent
@@ -306,8 +308,9 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
 
     # 5. Hazard alerts (app/alerts): sign-up and its explicit OK, the menu, STOP / DAINA, MORE; no model. Only with
     # KASAFI_ALERTS on (off on the server until step 6 is released)
-    if settings.kasafi_alerts and kind in ("text", "button", "interactive") and (step := alerts_reply(text, button, key, lang, store,
-                                                                            store.get_last_lga(key))) is not None:
+    if settings.kasafi_alerts and kind in ("text", "button", "interactive") and (step := alerts_reply(
+            text, button, key, lang, store, store.get_last_lga(key),
+            seal=lambda: encrypt_number(sender, settings))) is not None:
         if not step.ask:
             return [Out(body, buttons, lang=lang) for body, buttons in step.messages]
         if answer is not None:

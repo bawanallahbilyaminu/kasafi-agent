@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from app.alerts import dispatch as dp
-from app.alerts import signup, triggers
+from app.alerts import recipients, signup, triggers
 from app.alerts.triggers import Candidate
 from app.config import get_settings
 from app.data_rights import delete_user_data
@@ -46,13 +46,72 @@ def test_a_hausa_sign_up_message_asks_for_an_explicit_ok_before_storing_anything
     assert store.subscription("k") == {"lgas": [GORONYO], "hazards": ["flood"], "lang": "ha"}
 
 
-def test_the_subscription_keeps_only_the_key_lgas_hazards_language_and_date() -> None:
+def test_the_subscription_keeps_the_key_lgas_hazards_language_dates_and_the_number_encrypted() -> None:
     store = _store("en")
+    s = make_settings(kasafi_alerts_number_key=SecretStr(KEY))
     signup.reply("alert me about heat in Wamakko", None, "k", "en", store)
-    signup.reply("yes", None, "k", "en", store)
+    signup.reply("yes", None, "k", "en", store, seal=lambda: recipients.encrypt("+234 800 000 0011", s))
     cols = [r[1] for r in store._db.execute("PRAGMA table_info(alert_subs)")]
-    assert cols == ["user_key", "lgas", "hazards", "lang", "created_at"]
+    assert cols == ["user_key", "lgas", "hazards", "lang", "created_at", "number_enc", "last_contact_at"]
     assert store.subscription("k") == {"lgas": [WAMAKKO], "hazards": ["heat"], "lang": "en"}
+    raw = store._db.execute("SELECT number_enc FROM alert_subs").fetchone()[0]
+    assert "8000000011" not in raw and recipients.decrypt(raw, s) == "2348000000011"
+
+
+KEY = "q0Hc3cbjUu0e8VtZJ0d6Dl5c4b1Jt8m2bS0XcN2lq3Y="
+
+
+def test_no_key_no_number_and_a_wrong_key_reads_nothing() -> None:
+    assert recipients.encrypt("2348000000011", make_settings()) is None
+    token = recipients.encrypt("2348000000011", make_settings(kasafi_alerts_number_key=SecretStr(KEY)))
+    other = "Zm9vYmFyYmF6cXV4cXV1eHF1dXhxdXV4cXV1eHF1dXg="
+    assert recipients.decrypt(token, make_settings(kasafi_alerts_number_key=SecretStr(other))) is None
+
+
+def test_the_number_goes_with_stop_delete_and_90_days_without_contact() -> None:
+    s = make_settings(kasafi_alerts_number_key=SecretStr(KEY))
+    store = UserStore(":memory:")
+    for k in ("a", "b", "c"):
+        store.create(k, "en")
+        store.subscribe(k, [GORONYO], ["flood"], "en", recipients.encrypt("2348000000011", s))
+    signup.reply("STOP", None, "a", "en", store)
+    store.delete("b")                                                          # DELETE MY DATA
+    assert store.alert_number("a") is None and store.alert_number("b") is None and store.alert_number("c")
+    later = datetime.now(timezone.utc) + timedelta(days=91)
+    store.touch_alert_contact("c")
+    assert store.prune_alert_subs(90, later) == 1 and store.alert_number("c") is None
+
+
+def test_a_message_keeps_the_sign_up_alive() -> None:
+    store = UserStore(":memory:")
+    store.subscribe("k", [GORONYO], ["flood"], "en")
+    store._db.execute("UPDATE alert_subs SET last_contact_at='2026-01-01T00:00:00+00:00'")
+    store.touch_alert_contact("k")
+    assert store.prune_alert_subs(90) == 0
+
+
+def test_live_sends_decrypt_the_number_and_never_log_it(caplog) -> None:
+    import logging
+    caplog.set_level(logging.DEBUG)
+    s = make_settings(kasafi_alerts_number_key=SecretStr(KEY))
+    store = UserStore(":memory:")
+    store.subscribe("u0", [GORONYO], ["heat"], "ha", recipients.encrypt("2348000000011", s))
+    store.subscribe("u1", [GORONYO], ["heat"], "ha")                           # signed up before a key was set
+
+    class WA:
+        sent = []
+
+        async def send_template(self, to, name, lang, values):
+            self.sent.append((to, name, lang))
+    wa = WA()
+    send = recipients.live_sender(store, s, wa)
+    s2 = make_settings(kasafi_alerts_dry_run=False, kasafi_alerts_daily_cap=10,
+                       kasafi_alerts_number_key=SecretStr(KEY))
+    out = asyncio.run(dp.dispatch([_cand()], store, s2, NOON, send))
+    assert out == {"sent": 1} and wa.sent == [("2348000000011", "kasafi_hazard_alert", "ha")]
+    row = store.alert_log()[0]
+    assert row["recipients"] == 1 and "1 not delivered" in row["note"]
+    assert "8000000011" not in caplog.text and "8000000011" not in str(store.alert_log())
 
 
 def test_a_missing_lga_comes_from_the_one_on_file_or_is_asked_for() -> None:

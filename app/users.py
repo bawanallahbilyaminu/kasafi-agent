@@ -84,7 +84,9 @@ CREATE TABLE IF NOT EXISTS alert_subs (  -- hazard alerts a user signed up for (
     lgas       TEXT NOT NULL,      -- JSON list of LGA P-codes
     hazards    TEXT NOT NULL,      -- JSON list: heat | dust | flood | outbreak
     lang       TEXT NOT NULL,      -- the alert template's language: 'ha' | 'en'
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    number_enc TEXT,               -- the WhatsApp number, encrypted (app/alerts/recipients.py), to send alerts to
+    last_contact_at TEXT           -- the user's last message: 90 days without one deletes the subscription
 );
 CREATE TABLE IF NOT EXISTS alert_log (   -- each alert decided, per hazard and LGA (no user keys), for the admin page
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -155,6 +157,10 @@ class UserStore:
                 self._db.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
         if "pending_alert" not in have:          # an alert sign-up waiting for the user's explicit OK (step 6)
             self._db.execute("ALTER TABLE users ADD COLUMN pending_alert TEXT")
+        sub_cols = {row[1] for row in self._db.execute("PRAGMA table_info(alert_subs)")}
+        for col in ("number_enc", "last_contact_at"):      # live alerts need an address (subscribers only)
+            if col not in sub_cols:
+                self._db.execute(f"ALTER TABLE alert_subs ADD COLUMN {col} TEXT")
         turn_cols = {row[1] for row in self._db.execute("PRAGMA table_info(turns)")}
         if "working" not in turn_cols:
             self._db.execute("ALTER TABLE turns ADD COLUMN working TEXT")     # "nuna lissafi" / "show working"
@@ -276,17 +282,35 @@ class UserStore:
         row = self._exec("SELECT pending_alert FROM users WHERE user_key=?", (key,)).fetchone()
         return json.loads(row[0]) if row and row[0] else None
 
-    def subscribe(self, key: str, lgas: list[str], hazards: list[str], lang: str) -> dict:
+    def subscribe(self, key: str, lgas: list[str], hazards: list[str], lang: str, number_enc: str | None = None
+                  ) -> dict:
         """Add LGAs and hazards to the user's alerts (a second sign-up adds to the first); the language is the
-        latest chosen. Returns the subscription as stored."""
+        latest chosen, and the encrypted number the latest given. Returns the subscription as stored."""
         have = self.subscription(key) or {"lgas": [], "hazards": []}
         lgas = sorted(set(have["lgas"]) | set(lgas))
         hazards = [h for h in ("heat", "dust", "flood", "outbreak") if h in set(have["hazards"]) | set(hazards)]
-        self._exec("INSERT INTO alert_subs (user_key, lgas, hazards, lang, created_at) VALUES (?,?,?,?,?) "
-                   "ON CONFLICT(user_key) DO UPDATE SET lgas=excluded.lgas, hazards=excluded.hazards, "
-                   "lang=excluded.lang", (key, json.dumps(lgas), json.dumps(hazards), lang,
-                                          datetime.now(timezone.utc).isoformat()))
+        now = datetime.now(timezone.utc).isoformat()
+        self._exec("INSERT INTO alert_subs (user_key, lgas, hazards, lang, created_at, number_enc, last_contact_at) "
+                   "VALUES (?,?,?,?,?,?,?) ON CONFLICT(user_key) DO UPDATE SET lgas=excluded.lgas, "
+                   "hazards=excluded.hazards, lang=excluded.lang, last_contact_at=excluded.last_contact_at, "
+                   "number_enc=coalesce(excluded.number_enc, alert_subs.number_enc)",
+                   (key, json.dumps(lgas), json.dumps(hazards), lang, now, number_enc, now))
         return {"lgas": lgas, "hazards": hazards, "lang": lang}
+
+    def alert_number(self, key: str) -> str | None:
+        """The subscriber's encrypted number (app/alerts/recipients.decrypt), or None."""
+        row = self._exec("SELECT number_enc FROM alert_subs WHERE user_key=?", (key,)).fetchone()
+        return row[0] if row else None
+
+    def touch_alert_contact(self, key: str) -> None:
+        """A message from the user: their subscription (if any) is active for another 90 days."""
+        self._exec("UPDATE alert_subs SET last_contact_at=? WHERE user_key=?",
+                   (datetime.now(timezone.utc).isoformat(), key))
+
+    def prune_alert_subs(self, days: int = 90, now: datetime | None = None) -> int:
+        """Delete subscriptions (and so their encrypted numbers) with no message from the user for `days` days."""
+        cutoff = ((now or datetime.now(timezone.utc)) - timedelta(days=days)).isoformat()
+        return self._exec("DELETE FROM alert_subs WHERE coalesce(last_contact_at, created_at) < ?", (cutoff,)).rowcount
 
     def subscription(self, key: str) -> dict | None:
         row = self._exec("SELECT lgas, hazards, lang FROM alert_subs WHERE user_key=?", (key,)).fetchone()

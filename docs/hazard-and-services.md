@@ -202,9 +202,11 @@ Images in Hausa or English to match the user. Colour-blind-safe palette with cle
   `KASAFI_ALERT_TEMPLATE_LANGS` (default `ha`; English is in review) is skipped and logged.
 - **Dry run** (`KASAFI_ALERTS_DRY_RUN=true`, the default; checks run only with `KASAFI_ALERTS=true`): each decision
   goes to `alert_log` and `/admin/alerts` (template values, recipients by language, status), never to users.
-- **Open: live sending needs a recipient.** Users are stored only as HMAC(number), which can't be turned back into
-  a number, so a live alert has no address. Live mode logs `no_recipient` until Bilyaminu decides how to reach
-  subscribers (see the step 6 report).
+- **Recipients (decided Oct 31):** only for people who sign up, the WhatsApp number is stored encrypted (Fernet,
+  `KASAFI_ALERTS_NUMBER_KEY`; `app/alerts/recipients.py`). It is decrypted only to send the template, and never
+  logged or shown. It is deleted with the subscription on STOP / DAINA, DELETE MY DATA, or 90 days without a message
+  (`last_contact_at`, pruned each alerts round). Everyone else stays hash-only. Sign-ups made before the key was set
+  have no number; their sends are logged as not delivered.
 
 ## 10. Answer patterns (examples)
 
