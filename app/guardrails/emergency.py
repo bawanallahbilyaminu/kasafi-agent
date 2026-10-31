@@ -211,20 +211,23 @@ async def decide(text: str, settings, consented: bool, classify_fn=classify) -> 
 WORDS = {
     "en": {"now": "🚨 This sounds like an emergency. Get help now.",
            "near_spot": "", "near_lga": " (near the centre of {lga} LGA)",
-           "cemonc": "Nearest hospital with comprehensive emergency obstetric care{near}: *{name}*, about {km} km in a "
-                     "straight line, in {lga} LGA.",
-           "hospital": "Nearest general or specialist hospital{near}: *{name}*, about {km} km in a straight line, "
-                       "in {lga} LGA.",
-           "any": "Nearest health facility{near}: *{name}* ({level}), about {km} km in a straight line.",
+           "cemonc": "Nearest hospital with comprehensive emergency obstetric care{near}: *{name}*, {dist}, in {lga} "
+                     "LGA.",
+           "hospital": "Nearest general or specialist hospital{near}: *{name}*, {dist}, in {lga} LGA.",
+           "any": "Nearest health facility{near}: *{name}* ({level}), {dist}.",
+           "link": "🧭 Directions: {link}",
+           "no_road": "(Road distance isn't available right now: straight-line distance shown.)",
            "ask": "Share your location (button below), or tell me your LGA or town, and I'll send the nearest "
                   "hospital.",
            "levels": {"Primary": "primary", "Secondary": "secondary", "Tertiary": "tertiary"}},
     "ha": {"now": "🚨 Wannan yana kama da gaggawa. Ku nemi taimako yanzu.",
            "near_spot": "", "near_lga": " (kusa da tsakiyar Ƙaramar Hukumar {lga})",
-           "cemonc": "Asibiti mafi kusa mai cikakkiyar kulawar gaggawa ta haihuwa{near}: *{name}*, kusan kilomita "
-                     "{km} a miƙe, a Ƙaramar Hukumar {lga}.",
-           "hospital": "Babban asibiti mafi kusa{near}: *{name}*, kusan kilomita {km} a miƙe, a Ƙaramar Hukumar {lga}.",
-           "any": "Cibiyar lafiya mafi kusa{near}: *{name}* ({level}), kusan kilomita {km} a miƙe.",
+           "cemonc": "Asibiti mafi kusa mai cikakkiyar kulawar gaggawa ta haihuwa{near}: *{name}*, {dist}, a "
+                     "Ƙaramar Hukumar {lga}.",
+           "hospital": "Babban asibiti mafi kusa{near}: *{name}*, {dist}, a Ƙaramar Hukumar {lga}.",
+           "any": "Cibiyar lafiya mafi kusa{near}: *{name}* ({level}), {dist}.",
+           "link": "🧭 Hanya: {link}",
+           "no_road": "(Ba a samu nisan hanya yanzu ba: an nuna nisa a miƙe.)",
            "ask": "Raba wurinka (maɓallin da ke ƙasa), ko faɗa mini ƙaramar hukumarka ko garinka, zan aiko da "
                   "asibiti mafi kusa.",
            "levels": {"Primary": "matakin farko", "Secondary": "mataki na biyu", "Tertiary": "babban asibiti"}},
@@ -237,9 +240,17 @@ def contact_lines(lang: str, contacts: list[Contact] | None = None) -> list[str]
             + ("" if c.area == "state-wide" else f" ({c.area})") for c in contacts]
 
 
-def facility_lines(lang: str, picks: list[tuple[str, object]], near: str = "spot", lga: str = "") -> list[str]:
-    """picks: (kind, Facility) with kind cemonc | hospital | any (app/geo/facilities.emergency_picks)."""
+def facility_lines(lang: str, picks: list[tuple[str, object]], near: str = "spot", lga: str = "",
+                   routed: bool = False) -> list[str]:
+    """picks: (kind, Facility) with kind cemonc | hospital | any (app/geo/facilities.emergency_picks); the road
+    distance and time when ORS answered in time (`routed`), else the straight line, said as such."""
+    from app.geo.facilities import distance_text, maps_link
     w = WORDS[lang]
     where = w["near_spot"] if near == "spot" else w["near_lga"].format(lga=lga)
-    return [w[kind].format(near=where, name=f.name, km=f"{f.km:.1f}", lga=f.lga or f.lga_attr,
-                           level=w["levels"].get(f.level, f.level)) for kind, f in picks]
+    out = [w[kind].format(near=where, name=f.name, dist=distance_text(lang, f), lga=f.lga or f.lga_attr,
+                          level=w["levels"].get(f.level, f.level)) for kind, f in picks]
+    if picks and near == "spot":
+        out.append(w["link"].format(link=maps_link(picks[0][1])))
+        if not routed:
+            out.append(w["no_road"])
+    return out
