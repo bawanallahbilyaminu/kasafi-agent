@@ -209,7 +209,7 @@ Images in Hausa or English to match the user. Colour-blind-safe palette with cle
   hazards, language, created_at), so DELETE MY DATA removes it. STOP / DAINA (typed or the template's button) deletes
   it. MORE asks "What is the {hazard} situation in {LGA} today?" about the latest alert.
 - **Triggers** (`triggers.py`): a new official advisory (issued in the last 3 days, current) for the LGA or
-  state-wide; heat Danger today or tomorrow; dust at Hazardous, or at least Unhealthy and above the 95th percentile of
+  state-wide; heat Danger today or tomorrow; dust at Hazardous, or at least Very unhealthy (AQI 201+) and above the 95th percentile of
   the LGA's last 30 days (table `air_daily`, migration 0016; needs 20 days of history); a river point above its
   seasonal 95th percentile within 2 days; a new NCDC report whose Sokoto figures rose. Stale layers fire nothing.
 - **Limits** (`dispatch.py`): a key is never sent twice; one alert per hazard per LGA per Lagos day; quiet hours

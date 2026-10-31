@@ -3,7 +3,7 @@
 - A new official advisory (NEMA, SEMA, State MoH; issued in the last 3 days and still current) covering the LGA,
   or state-wide. Official: sent in quiet hours too.
 - Heat: Danger or Extreme danger today or tomorrow, from max(air temperature, NWS heat index), as answers use.
-- Dust: US AQI "Hazardous" today, or high for the time of year: at least "Unhealthy" and above the 95th percentile
+- Dust: US AQI "Hazardous" today, or high for the time of year: at least "Very unhealthy" (AQI 201+) and above the 95th percentile
   of the LGA's daily maxima over the last 30 days (needs 20 days of history; "Very unhealthy" alone is most
   harmattan days, so it never fires on its own).
 - Rivers: a river point's forecast (today to 2 days ahead) above the 95th percentile of the same time of year in
@@ -31,7 +31,7 @@ OUTBREAK_DAYS = 7
 OUTBREAK_WEEKS = 4                # an NCDC report about an epi week older than this is a back-report, not news
 AIR_HISTORY_DAYS, AIR_MIN_DAYS, AIR_KEEP_DAYS = 30, 20, 120
 SEASONAL_PCT = 95
-SEASONAL_MIN_AQI = 151            # 'high for the time of year' needs at least Unhealthy
+SEASONAL_MIN_AQI = 201            # 'high for the time of year' needs at least Very unhealthy (Bilyaminu, Oct 31)
 # the categories that fire on their own. A simulation lowers these; it never changes a value's label (the label is
 # always the category of the value itself: 172 is Unhealthy, 38 °C is Extreme caution)
 DUST_FIRES = frozenset({"hazardous"})

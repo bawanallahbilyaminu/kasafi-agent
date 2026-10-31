@@ -398,10 +398,15 @@ def test_dust_fires_when_high_for_the_time_of_year(monkeypatch) -> None:
     history = [(float(100 + i),) for i in range(25)]                            # 100..124 over 25 days
     conn = FakeConn({"p.kind = 'lga'": [(1, "Goronyo", GORONYO)], "SELECT aqi_max FROM air_daily": history})
     monkeypatch.setattr(read, "air_day", _air(160, "unhealthy"))
+    assert triggers.dust(conn, NOON) == []                                   # above p95 but only Unhealthy
+    monkeypatch.setattr(read, "air_day", _air(215, "very_unhealthy"))
     out = triggers.dust(conn, NOON)
-    assert "higher than 95% of the last 25 days" in out[0].what["en"]
+    assert out[0].what["en"] == "US AQI up to 215 today (set by PM10), Very unhealthy, higher than 95% of the last " \
+                                "25 days"
     conn.answers["SELECT aqi_max FROM air_daily"] = history[:10]                 # too little history yet
     assert triggers.dust(conn, NOON) == []
+    conn.answers["SELECT aqi_max FROM air_daily"] = [(float(200 + i),) for i in range(25)]
+    assert triggers.dust(conn, NOON) == []                                   # Very unhealthy, but not high for the month
 
 
 def test_rivers_fire_above_the_seasonal_95th_percentile(monkeypatch) -> None:
