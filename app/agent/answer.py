@@ -153,8 +153,13 @@ PLAN_SYSTEM = (
     "budgets print it, e.g. 'Health', 'Secondary Education'>\", \"year\": YYYY}. "
     "'How much was allocated to <a sector or ministry> (and how much was spent)' is NOT a profile: normal search "
     "answers it from the sector or ministry line and the report's own % performance. "
-    "(f) revenue: how much revenue, IGR, FAAC, grants or loans the state expects or has received: {\"tool\": "
-    "\"revenue\", \"focus\": \"all\"|\"igr\"|\"faac\"|\"grants\"|\"capital_receipts\", \"year\": YYYY}. "
+    "(f) revenue: ONLY the state's whole revenue picture, how much revenue, IGR, FAAC, grants or loans the STATE "
+    "expects or has received in total: {\"tool\": "
+    "\"revenue\", \"focus\": \"all\"|\"igr\"|\"faac\"|\"grants\"|\"capital_receipts\", \"year\": YYYY}. When the "
+    "question names a ministry or agency, a donor (e.g. World Bank, UNICEF), a grant, project or revenue line, "
+    "or asks for a share, difference or ranking, analysis is null: give line_search with \"spend\": \"revenue\" "
+    "and terms with the agency's, donor's and project's names as printed plus 'Capital Receipts', 'Aid and "
+    "Grants', 'Independent Revenue'. "
     "Profiles (d, e) are overviews of one year: NOT for comparing a figure across years or documents (e.g. '2026 "
     "capital for tertiary education compared to 2025'), and NOT for a share or percentage of the budget or a "
     "benchmark (e.g. 'what % of the budget is health, does it meet 15%'): those use line_search or budget_query. "
@@ -377,6 +382,8 @@ class Plan:
     need: Need | None = None                            # the information need, checked (app/agent/need.py)
     held: "Answer | None" = None                        # a structured partial answer, kept if text does no better
     original: str = ""                                  # the message as sent (english_question is standalone)
+    period_doc: str = ""                                # the report covering a period the question names
+    skip_docs: list[str] = field(default_factory=list)  # that year's other reports: never read for this question
 
     def assumption_for(self, lang: str) -> str:
         if not self.assumption:
@@ -565,6 +572,8 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
                     if (h.doc_id, h.page, h.idx) not in seen:
                         seen.add((h.doc_id, h.page, h.idx))
                         ranked.append(h)
+    if plan.skip_docs:                    # a named period: that year's other reports are never read
+        ranked = [h for h in ranked if h.doc_id not in plan.skip_docs]
     # One evidence item per page: the best hit plus the chunks either side of every hit on that page,
     # so a sector's total row comes with the rows around it.
     by_page: dict[tuple[str, int], list[Hit]] = {}
@@ -1000,6 +1009,8 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             return Answer(plan.clarify["question"], False, True, plan=plan, timings=t,
                           clarify=plan.clarify["options"])
         prev = history[-1] if history else None
+        if conn is not None:
+            apply_period(conn, plan, question, today)        # a period named beats the newest report
         # health facilities from the registry: a count of a kind, or one facility by name (no money asked about)
         if conn is not None and (fac := facility_route(question, plan, conn, lang)):
             t["facilities"] = 0.0
@@ -1085,6 +1096,10 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         profile_compare = (plan.analysis.get("tool") in ("mda_profile", "function_profile")
                            and (len(set(question_years(question, plan.english_question))) >= 2
                                 or not PROFILE_CUE.search(f"{plan.english_question} {question}")))
+        if plan.analysis.get("tool") == "revenue" and not statewide_revenue(question, plan):
+            # an MDA, donor, grant, line or calculation named: the revenue rows, not the statewide summary
+            log.info("revenue: narrower than the statewide picture; searching the revenue rows")
+            plan.analysis, plan.line_search = {}, revenue_rows_search(plan, question)
         if plan.analysis and not plan.budget_query and not profile_compare:   # counts and sums in SQL
             t0 = time.perf_counter()
             res = run_analysis(conn, plan.analysis)
@@ -1119,6 +1134,75 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             return _not_found(conn, plan, lang, acq, a.timings)        # logs the gap once
         log.info("lines and pages side by side: kept the %s answer", "line" if a is la else "page")
         return a
+
+
+# a revenue question about something narrower than the state's whole revenue picture
+DONOR = re.compile(r"(?i)\b(?:world\s+bank|unicef|unfpa|usaid|fcdo|dfid|european\s+union|eu|afdb|african\s+"
+                   r"development\s+bank|isdb|islamic\s+development\s+bank|ifad|jica|kfw|gavi|global\s+fund|"
+                   r"gates\s+foundation|bill\s*(?:&|and)\s*melinda|undp|fao|wfp|ng-?cares|sftas|acresal|agile|raamp|"
+                   r"saphe|donors?|development\s+partners?|grants?\s+from|loans?\s+from)\b")
+AGENCY_WORD = re.compile(r"(?i)\b(?:ministry|ministries|agency|agencies|board|commission|bureau|department|office|"
+                         r"authority|college|university|polytechnic|hospital|council|directorate|corporation|"
+                         r"service|ma'?aikata\w*|hukuma\w*|mda)\b")
+CALC_WORD = re.compile(r"(?i)\b(?:share|percent\w*|proportion|difference|more\s+than|less\s+than|compar\w*|rank\w*|"
+                       r"largest|biggest|smallest|highest|lowest|top\s+\d|ratio|kaso|kashi|bambanci|mafi)\b|%")
+REVENUE_LINE = re.compile(r"(?i)\b(?:project|programme|program|scheme|fund|levy|levies|fees?|tax(?:es)?|"
+                          r"licen[cs]es?|rents?|royalt\w*|fines?|sales?|charges?|dues|tolls?|permits?|"
+                          r"registration|aikin|shiri|haraji)\b")
+
+
+def statewide_revenue(question: str, plan: Plan) -> bool:
+    """The question asks for the state's revenue picture (all sources, or FAAC / IGR / grants / capital receipts
+    statewide), so the fixed revenue summary fits. Naming an MDA, a donor, a grant, project or revenue line, or
+    asking for a share, difference or ranking, needs the rows themselves (the MDA's revenue rows, the Capital
+    Receipts schedule that names donors and projects, the BIR revenue tables by MDA)."""
+    text = f"{question} {plan.english_question}"
+    named = [e for e in (plan.need.entities if plan.need else []) if e.type in ("mda", "sub_agency", "project",
+                                                                                "programme")]
+    return not (named or DONOR.search(text) or AGENCY_WORD.search(text) or CALC_WORD.search(text)
+                or REVENUE_LINE.search(text))
+
+
+def revenue_rows_search(plan: Plan, question: str) -> dict:
+    """The line search for a narrower revenue question: revenue rows only, the planner's terms first, then the
+    tables those rows sit in (Capital Receipts names donors and projects; IGR is printed 'Independent Revenue')."""
+    base = plan.line_search or fallback_line_search(plan, question) or {
+        "terms": list(dict.fromkeys(plan.key_terms + plan.search_queries))[:6],
+        "years": sorted({int(y) for y in question_years(question, plan.english_question)})}
+    terms = [*base.get("terms", []), "Capital Receipts", "Aid and Grants", "Independent Revenue", "Revenue"]
+    return {**base, "terms": list(dict.fromkeys(terms))[:12], "spend": "revenue"}
+
+
+def apply_period(conn, plan: Plan, question: str, today: date) -> None:
+    """A question naming a period ('Q1-Q2 2026', 'first half of 2025', 'end of Q3') reads the report covering it,
+    even when a newer one exists: the newest-edition lookup is dropped, that report leads the documents and the
+    year's other reports are left out of every search. 'Latest' / 'current' / 'now' with no period: unchanged."""
+    from app.agent.periods import asked_period, other_reports, report_for
+    period = asked_period(question, plan.english_question)
+    if period is None:
+        return
+    try:
+        rep = report_for(conn, period, today)
+    except psycopg.Error:
+        conn.rollback()
+        return
+    if rep is None:
+        return
+    plan.period_doc, plan.skip_docs = rep[0], other_reports(conn, rep[0], rep[1])
+    plan.latest = {}
+    plan.doc_ids = [rep[0], *[d for d in plan.doc_ids if d != rep[0] and d not in plan.skip_docs]]
+    if plan.analysis:
+        plan.analysis["report"] = rep[0]
+    log.info("period asked: Q%d %s -> %s (left out: %s)", period.quarter, rep[1], rep[0],
+             ", ".join(plan.skip_docs) or "-")
+
+
+def line_docs(conn, plan: Plan) -> list[str] | None:
+    """The documents the line search may read: all, or all but the reports a named period leaves out."""
+    if not plan.skip_docs:
+        return None
+    from app.agent.periods import readable_docs
+    return readable_docs(conn, plan.skip_docs)
 
 
 def complete(a: "Answer | None") -> bool:
@@ -1772,7 +1856,8 @@ async def _line_path(conn, plan: Plan, question: str, lang: str, client, second,
     """Wide search over the budget lines, two readings, code verifies; None when no verified row answers."""
     t0 = time.perf_counter()
     hits = search_lines(conn, plan.line_search["terms"], years=plan.line_search["years"],
-                        spend=plan.line_search.get("spend", "any"), question=plan.english_question)
+                        spend=plan.line_search.get("spend", "any"), question=plan.english_question,
+                        docs=line_docs(conn, plan))
     t["search"] = t["line_search"] = time.perf_counter() - t0
     log.info("line search: %d terms, %d hits", len(plan.line_search["terms"]), len(hits))
     if not hits:
@@ -1925,7 +2010,7 @@ async def _search_missing(conn, plan: Plan, question: str, lang: str, res: LineR
     terms = list(dict.fromkeys(res.missing_terms + [t for t in missing_terms(res.missing)
                                                     if " " in t or not common_word(conn, t)]))
     found = search_lines(conn, terms, years=plan.line_search["years"], spend=plan.line_search.get("spend", "any"),
-                         limit=MISSING_LINES)
+                         limit=MISSING_LINES, docs=line_docs(conn, plan))
     named = [x for x in found if any(len(t) >= 4 and t.lower() in x.name.lower() for t in terms)]
     if not named:
         return res, hits

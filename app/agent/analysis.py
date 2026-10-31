@@ -521,6 +521,9 @@ def revenue(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
     res.money("prev_got_jan_sep", sum((Decimal(r[3] or 0) for r in rows.values()), Decimal(0)), doc, page)
     res.subject = rows[codes[0]][0].title() if focus != "all" else ""
     rep = latest_report(conn, year)
+    if spec.get("report"):              # a period the question names: that report, even when a newer one exists
+        q = conn.execute("SELECT max(quarter), max(year) FROM perf_items WHERE doc_id = %s", (spec["report"],)).fetchone()
+        rep = (spec["report"], q[0]) if q and q[0] and q[1] == year else rep
     if rep:
         got_now = conn.execute("SELECT sum(ytd_spent), min(page) FROM (SELECT DISTINCT ON (code) code, ytd_spent, page "
                                "FROM perf_items WHERE doc_id = %s AND classification = 'economic' AND spend_kind = "
