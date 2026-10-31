@@ -155,3 +155,35 @@ def test_crops_render_once_and_are_sent_only_if_still_cited(monkeypatch) -> None
     assert made == ["460,480,000.00"]                                        # rendered once
     # the final answer no longer cites that row: plan_crops on it plans nothing, so nothing cached is sent
     assert crops.plan_crops(ag.Answer("no figures", True, True), 2) == []
+
+
+def test_the_period_parsed_in_code_pins_the_need_quarter() -> None:
+    plan = _plan_asking("mda", "025300000000")
+    plan.need.time = {"kind": "year", "year": 2025}            # the planner read 'January to September' as the year
+    ag.pin_quarter(plan, 3, 2025)
+    assert plan.need.time == {"kind": "quarter", "year": 2025, "quarter": 3}
+    plan.need.time = {"kind": "quarter", "year": 2025, "quarter": 2}    # the planner's own quarter stays
+    ag.pin_quarter(plan, 3, 2025)
+    assert plan.need.time["quarter"] == 2
+    plan.need.time = {"kind": "range", "from": 2024, "to": 2025}        # so does a range of years
+    ag.pin_quarter(plan, 3, 2025)
+    assert plan.need.time["kind"] == "range"
+
+
+def test_a_structured_answer_for_another_period_is_dropped() -> None:
+    q = "How much did the Ministry of Lands and Housing spend from January to September 2025?"
+    plan = _plan_asking("mda", "025300000000")
+    plan.english_question = q
+
+    def from_report(doc):
+        return ag.Answer("t", True, True, cited=[ag.Evidence(1, doc, "BIR", 2025, 18, "text",
+                                                             "025300000000 Min of Lands and Housing | 51,920")])
+    assert [m.kind for m in ag.structured_mismatch(from_report("bir-2025-q4"), plan, q)] == ["period"]
+    assert ag.structured_mismatch(from_report("bir-2025-q3"), plan, q) == []
+
+
+def test_a_revenue_narrative_question_reads_the_rows_and_pages_not_the_fixed_summary() -> None:
+    q = "What does the Budget Implementation Report Q4 2025 say about Revenue Performance, and what reasons does it give?"
+    assert ag.revenue_rows_needed(q, ag.Plan(q, [], []))
+    q2 = "What was the state's total revenue in 2025?"
+    assert not ag.revenue_rows_needed(q2, ag.Plan(q2, [], []))
