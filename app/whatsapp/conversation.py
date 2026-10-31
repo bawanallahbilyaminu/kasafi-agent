@@ -111,8 +111,16 @@ ClassifyFn = Callable[..., Awaitable[Any]]        # app.guardrails.emergency.cla
 EMERGENCY_WAIT = "__emergency__:"                 # a location request sent by the fast path
 
 
+ROAD_WAIT_S = 8.0                                 # how long the emergency follow-up waits for ORS road distances
+
+
 async def _no_notify(out: Out) -> None:
     return None
+
+
+def _sender(notify: NotifyFn) -> NotifyFn | None:
+    """`notify` when it really sends (the webhook's), else None: the fast reply is then returned, not dropped."""
+    return None if notify is _no_notify else notify
 
 
 async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Settings,
@@ -139,18 +147,20 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     # the emergency fast path, for everyone: a phrase fires at once; the classifier only after consent
     if text and (d := em.detect(text)) and (d.hit or (d.health and consented)):
         if (verdict := await em.decide(text, settings, consented, classify_fn)) is not None:
-            return await _emergency(key, early_lang, verdict, store, settings, emergency_fn)
+            return await _emergency(key, early_lang, verdict, store, settings, emergency_fn,
+                                    notify=_sender(notify))
     # the answer to the fast path's location request: a pin or a typed place, even before consent (no model)
     if (waiting := location_memory.peek_question(key)) and waiting.startswith(EMERGENCY_WAIT):
         maternal = waiting.endswith("maternal")
         if kind == "location" and (pin := pin_of(msg)):
             location_memory.waiting_question(key)
             return await _emergency(key, early_lang, em.Detection(True, maternal=maternal), store, settings,
-                                    emergency_fn, Spot(pin[0], pin[1], how="pin"), first=False)
+                                    emergency_fn, Spot(pin[0], pin[1], how="pin"), first=False,
+                                    notify=_sender(notify))
         if text and (typed := await place_fn(settings, text)) is not None:
             location_memory.waiting_question(key)
             return await _emergency(key, early_lang, em.Detection(True, maternal=maternal), store, settings,
-                                    emergency_fn, typed, first=False)
+                                    emergency_fn, typed, first=False, notify=_sender(notify))
 
     # 2. Access
     if not allowed:
@@ -285,7 +295,8 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         if res.kind == "failed":
             return [Out(t("correction_failed", lang))]
         if (d := em.detect(res.question, res.english)).hit:
-            return await _emergency(key, lang, d, store, settings, emergency_fn)
+            return await _emergency(key, lang, d, store, settings, emergency_fn,
+                                    notify=_sender(notify))
         if refusal := await _guard_correction(res, lang, guard_fn, settings):
             return [refusal]
         q = res.question[:1000]
@@ -368,9 +379,11 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         store.clear_pending(key)                  # a new question replaces any pending one
         r = outcome.result
         if r and outcome.text == EMERGENCY_REPLY:  # the phrase list on the transcript: the fast path
-            return await _emergency(key, lang, em.detect(*heard_texts(r)), store, settings, emergency_fn)
+            return await _emergency(key, lang, em.detect(*heard_texts(r)), store, settings, emergency_fn,
+                                    notify=_sender(notify))
         if r and (verdict := await em.decide(" ".join(heard_texts(r)), settings, True, classify_fn)) is not None:
-            return await _emergency(key, lang, verdict, store, settings, emergency_fn)
+            return await _emergency(key, lang, verdict, store, settings, emergency_fn,
+                                    notify=_sender(notify))
         if r and outcome.text != EMERGENCY_REPLY and (refusal := await _guarded(heard_texts(r), lang, guard_fn, settings)):
             return [refusal]
         if r and r.needs_confirmation and not is_medical_emergency(*heard_texts(r)):
@@ -438,10 +451,12 @@ def _located(key: str, lang: str, store: UserStore, spot: Spot) -> list[Out]:
 
 
 async def _emergency(key: str, lang: str, d: em.Detection, store: UserStore, settings: Settings,
-                     emergency_fn: EmergencyFn, spot: Spot | None = None, first: bool = True) -> list[Out]:
+                     emergency_fn: EmergencyFn, spot: Spot | None = None, first: bool = True,
+                     notify: NotifyFn | None = None) -> list[Out]:
     """The fast path (section 7): get help now, the verified numbers only, the nearest suitable facility and its pin
     when a point or LGA is known, else the location request. No medical instructions; no model; only that it
-    fired is logged."""
+    fired is logged. From a point, the fast reply goes through `notify` at once (returned first when there is
+    none) and the road-distance follow-up is returned."""
     t0 = time.perf_counter()
     lang = lang if lang in em.WORDS else "ha"
     w = em.WORDS[lang]
@@ -457,15 +472,28 @@ async def _emergency(key: str, lang: str, d: em.Detection, store: UserStore, set
                              lga_pcode=last or ""), 2.5)
         except Exception as e:      # noqa: BLE001 - PostGIS slow or down: the help line and the request still go
             log.warning("emergency facility lookup failed: %s", type(e).__name__)
-    routed = False
-    if picks and spot is not None:   # road distance and time, given at most 1.5 s (the whole reply stays under 3 s)
+    if picks and spot is not None:
+        # the fast reply now, with the straight line; the road distance, time and driving link follow once ORS
+        # answers (up to ROAD_WAIT_S), so a slow ORS never holds up "get help now"
+        lines += em.facility_lines(lang, picks, "spot", follows=True)
+        fast = [Out("\n".join(lines), lang=lang), Out("", lang=lang, location=location_payload(picks[0][1], lang))]
+        if notify is None:
+            outs += fast
+        else:
+            for out in fast:
+                await notify(out)
+        log.info("emergency fast path fired (%s; location point) in %.2fs", "maternal" if d.maternal else "general",
+                 time.perf_counter() - t0)
+        t1, routed = time.perf_counter(), False
         try:
             routed = await asyncio.wait_for(add_routes(settings, spot.lat, spot.lon, [f for _, f in picks],
-                                                       timeout=1.5), 1.6)
-        except Exception as e:      # noqa: BLE001 - slow or down: the straight line, said as such
+                                                       timeout=ROAD_WAIT_S), ROAD_WAIT_S + 0.5)
+        except Exception as e:      # noqa: BLE001 - slow or down: the link alone, the straight line said as such
             log.info("emergency road distance unavailable: %s", type(e).__name__)
+        log.info("emergency road distance %s in %.2fs", "given" if routed else "unavailable", time.perf_counter() - t1)
+        return outs + [Out(em.road_follow_up(lang, picks, routed), lang=lang)]
     if picks:
-        lines += em.facility_lines(lang, picks, "spot" if spot else "lga", picks[0][1].lga, routed)
+        lines += em.facility_lines(lang, picks, "lga", picks[0][1].lga)
     outs.append(Out("\n".join(lines), lang=lang))
     if picks:
         outs.append(Out("", lang=lang, location=location_payload(picks[0][1], lang)))

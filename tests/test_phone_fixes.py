@@ -199,28 +199,46 @@ def _emergency(monkeypatch, routes_fn):
     async def lookup(settings, lat, lon, maternal, lga_pcode=""):
         return [("hospital", hosp)]
     monkeypatch.setattr(conv, "add_routes", routes_fn)
+    sent: list[tuple[float, conv.Out]] = []
     t0 = time.perf_counter()
+
+    async def notify(out):
+        sent.append((time.perf_counter() - t0, out))
     out = asyncio.run(conv.handle({"from": "2348000000044", "id": "w", "type": "text",
                                    "text": {"body": "My father collapsed"}}, None, store=store, settings=_db_settings(),
-                                  answer_fn=None, emergency_fn=lookup, classify_fn=lambda *a: None))
+                                  answer_fn=None, emergency_fn=lookup, classify_fn=lambda *a: None, notify=notify))
     memory.forget(key)
-    assert em.WORDS["en"]["now"] in out[0].text
-    return out[0].text, time.perf_counter() - t0
+    return sent, out
 
 
-def test_the_emergency_reply_gives_road_distance_and_directions(monkeypatch) -> None:
+def test_the_emergency_reply_goes_at_once_and_the_road_distance_follows(monkeypatch) -> None:
     async def routes(settings, lat, lon, found, profile="car", timeout=6.0):
+        await asyncio.sleep(0.3)
         for f in found:
             f.road_km, f.minutes = 6.0, 12
         return True
-    text, took = _emergency(monkeypatch, routes)
-    assert "*Specialist Hospital*, 6 km by road, about 12 min" in text and "google.com/maps/dir" in text
-    assert "straight-line" not in text and took < 3.0
+    sent, out = _emergency(monkeypatch, routes)
+    (took, fast), (_, pin) = sent
+    assert "This sounds like an emergency" in fast.text and "about 2.1 km in a straight line" in fast.text
+    assert "follow in a moment" in fast.text and "google.com" not in fast.text and took < 0.3
+    assert pin.location["name"] == "Specialist Hospital"
+    assert out[0].text.startswith("🚗 *By road:*")
+    assert "*Specialist Hospital*: 6 km by road, about 12 min" in out[0].text and "travelmode=driving" in out[0].text
 
 
-def test_a_slow_road_service_falls_back_to_the_straight_line_and_says_so(monkeypatch) -> None:
+def test_a_road_service_that_never_answers_still_sends_the_link(monkeypatch) -> None:
     async def slow(settings, lat, lon, found, profile="car", timeout=6.0):
-        await asyncio.sleep(5)
+        await asyncio.sleep(60)
         return True
-    text, took = _emergency(monkeypatch, slow)
-    assert "about 2.1 km in a straight line" in text and "straight-line distance shown" in text and took < 3.0
+    monkeypatch.setattr(conv, "ROAD_WAIT_S", 0.2)
+    sent, out = _emergency(monkeypatch, slow)
+    assert sent[0][0] < 0.2 and "straight line" in sent[0][1].text
+    assert "google.com/maps/dir" in out[0].text and "straight-line distance shown" in out[0].text
+
+
+def test_without_a_sender_the_fast_reply_is_returned_first(monkeypatch) -> None:
+    async def routes(settings, lat, lon, found, profile="car", timeout=6.0):
+        return False
+    monkeypatch.setattr(conv, "_sender", lambda notify: None)
+    sent, out = _emergency(monkeypatch, routes)
+    assert not sent and "emergency" in out[0].text and out[1].location and "google.com" in out[2].text

@@ -217,6 +217,8 @@ WORDS = {
            "any": "Nearest health facility{near}: *{name}* ({level}), {dist}.",
            "link": "🧭 Directions: {link}",
            "no_road": "(Road distance isn't available right now: straight-line distance shown.)",
+           "road_next": "Road distance and directions follow in a moment.",
+           "road_head": "🚗 *By road:*", "by_road": "*{name}*: {dist}",
            "ask": "Share your location (button below), or tell me your LGA or town, and I'll send the nearest "
                   "hospital.",
            "levels": {"Primary": "primary", "Secondary": "secondary", "Tertiary": "tertiary"}},
@@ -228,6 +230,8 @@ WORDS = {
            "any": "Cibiyar lafiya mafi kusa{near}: *{name}* ({level}), {dist}.",
            "link": "🧭 Hanya: {link}",
            "no_road": "(Ba a samu nisan hanya yanzu ba: an nuna nisa a miƙe.)",
+           "road_next": "Nisan hanya da kwatance suna zuwa nan da ɗan lokaci.",
+           "road_head": "🚗 *Ta hanya:*", "by_road": "*{name}*: {dist}",
            "ask": "Raba wurinka (maɓallin da ke ƙasa), ko faɗa mini ƙaramar hukumarka ko garinka, zan aiko da "
                   "asibiti mafi kusa.",
            "levels": {"Primary": "matakin farko", "Secondary": "mataki na biyu", "Tertiary": "babban asibiti"}},
@@ -241,16 +245,30 @@ def contact_lines(lang: str, contacts: list[Contact] | None = None) -> list[str]
 
 
 def facility_lines(lang: str, picks: list[tuple[str, object]], near: str = "spot", lga: str = "",
-                   routed: bool = False) -> list[str]:
+                   routed: bool = False, follows: bool = False) -> list[str]:
     """picks: (kind, Facility) with kind cemonc | hospital | any (app/geo/facilities.emergency_picks); the road
-    distance and time when ORS answered in time (`routed`), else the straight line, said as such."""
+    distance and time when ORS answered in time (`routed`), else the straight line, said as such. `follows`: the
+    straight line now, and the road distance and directions come in a follow-up (`road_follow_up`)."""
     from app.geo.facilities import distance_text, maps_link
     w = WORDS[lang]
     where = w["near_spot"] if near == "spot" else w["near_lga"].format(lga=lga)
     out = [w[kind].format(near=where, name=f.name, dist=distance_text(lang, f), lga=f.lga or f.lga_attr,
                           level=w["levels"].get(f.level, f.level)) for kind, f in picks]
     if picks and near == "spot":
+        if follows:
+            return out + [w["road_next"]]
         out.append(w["link"].format(link=maps_link(picks[0][1])))
         if not routed:
             out.append(w["no_road"])
     return out
+
+
+def road_follow_up(lang: str, picks: list[tuple[str, object]], routed: bool) -> str:
+    """The second emergency message: road distance and time for each pick ORS reached, and the driving link to the
+    first; with no road distance, the link and the straight-line note."""
+    from app.geo.facilities import distance_text, maps_link
+    w = WORDS[lang]
+    rows = [w["by_road"].format(name=f.name, dist=distance_text(lang, f)) for _, f in picks
+            if routed and f.road_km is not None]
+    link = w["link"].format(link=maps_link(picks[0][1]))
+    return "\n".join([w["road_head"], *rows, link] if rows else [link, w["no_road"]])
