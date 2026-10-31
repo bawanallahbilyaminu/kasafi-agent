@@ -12,6 +12,7 @@ facility's LGA; its ward is kept only when the ward's own LGA agrees. Re-running
 
     uv run python scripts/import_geo.py            -> tables filled, report at data/geo/quality_report.md
     python scripts/import_geo.py --geo /data/geo   (on the server: the files copied into the data volume)
+    python scripts/import_geo.py --corrections     (only apply data/geo/facility_corrections.yaml, app/geo/corrections.py)
 """
 
 from __future__ import annotations
@@ -233,6 +234,12 @@ def main() -> None:
     if "--geo" in sys.argv:                      # the folder with the files (default data/geo/)
         GEO = Path(sys.argv[sys.argv.index("--geo") + 1])
         REPORT = GEO / "quality_report.md"
+    from app.geo import corrections as fixes
+    fixed = fixes.load(GEO / "facility_corrections.yaml")      # refused (and nothing imported) when one is invalid
+    if "--corrections" in sys.argv:              # only (re)apply data/geo/facility_corrections.yaml
+        with psycopg.connect(get_settings().db_url()) as conn:
+            print("\n".join(fixes.apply(conn, fixed)) or "no corrections in the file")
+        return
     codab, wards = load("sokoto_lga_codab.geojson"), load("sokoto_wards_grid3.geojson")
     national = load("health_facilities_nga.geojson")
     if not codab or not wards:
@@ -246,9 +253,12 @@ def main() -> None:
         import_lgas(conn, codab, wards, facilities)
         import_wards(conn, wards)
         import_facilities(conn, facilities)
+        applied = fixes.apply(conn, fixed)
         places = import_places(conn)
         lines = import_basemap(conn)
         report = quality_report(conn, len(national), places) + f"\nBase map: {lines} road and river lines (OSM)\n"
+        report += (f"\nVerified corrections applied (data/geo/facility_corrections.yaml): {len(applied)}\n"
+                   + "\n".join(applied) + "\n")
     REPORT.write_text(report, encoding="utf-8")
     print(report)
     print("report:", REPORT)

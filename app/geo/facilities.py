@@ -23,6 +23,7 @@ from datetime import date
 
 import httpx
 
+from app.geo.corrections import checked_on
 from app.sources.lga_names import canonical
 
 log = logging.getLogger(__name__)
@@ -65,6 +66,7 @@ class Facility:
     emonc: str = ""
     road_km: float | None = None
     minutes: float | None = None
+    checked: str = ""           # the date a person checked its location (data/geo/facility_corrections.yaml)
 
     @property
     def lga_differs(self) -> bool:
@@ -99,13 +101,22 @@ def nearest_facilities(conn, lat: float, lon: float, filters: Filters = Filters(
         "SELECT f.fid, f.name, f.level, coalesce(f.level_option, ''), coalesce(f.ownership, ''), "
         "coalesce(f.ownership_type, ''), ST_Y(f.geom), ST_X(f.geom), coalesce(l.name, ''), coalesce(f.lga_attr, ''), "
         "(SELECT string_agg(c.capability, ',') FROM facility_capability c WHERE c.fid = f.fid "
-        " AND (c.confirmed OR c.score >= 1.0)) "
+        " AND (c.confirmed OR c.score >= 1.0)), f.correction "
         "FROM facility f LEFT JOIN lga l ON l.pcode = f.lga_pcode WHERE " + " AND ".join(where) +
         " ORDER BY f.geom <-> ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s), 4326) LIMIT %(n)s", args).fetchall()
     exact = sorted((_sphere_km(lat, lon, r[6], r[7]), r[0], r) for r in rows)      # sort before rounding: no ties
     return [Facility(r[0], r[1], r[2] or "", r[3].replace("\xa0", " "), r[4], r[5], r[6], r[7], r[8], r[9],
-                     round(d, 2), "cemonc" if "cemonc" in (r[10] or "") else "bemonc" if r[10] else "")
+                     round(d, 2), "cemonc" if "cemonc" in (r[10] or "") else "bemonc" if r[10] else "",
+                     checked=checked_on(r[11] if len(r) > 11 else None))
             for d, _, r in exact[skip:skip + k]]
+
+
+def checked_text(lang: str, f) -> str:
+    """' (location checked 1 Nov 2026)' for a facility whose location a person verified, else ''."""
+    if not getattr(f, "checked", ""):
+        return ""
+    d = date.fromisoformat(f.checked)
+    return WORDS[lang]["checked"].format(d=f"{d.day} {d:%b %Y}")
 
 
 class OrsBudget:
@@ -216,7 +227,8 @@ WORDS = {
            "next_none": "There are no more facilities matching that in the list.",
            "need_location": "To find the nearest facility, share your location, or tell me your LGA or town.",
            "address": "{lga} LGA, Sokoto State", "mins_h": "{h} h {m} min", "mins": "{m} min",
-           "route_head": "🧭 *Route to {name}*: {dist}.",
+           "route_head": "🧭 *Route to {name}*{checked}: {dist}.",
+           "checked": " (location checked {d})",
            "nearer": "Nearer, but not a hospital: *{name}* ({level}), about {km} km in a straight line.",
            "summary": "The nearest health facility is {name}, {dist}.",
            "summary_hospital": "The nearest hospital is {name}, {dist}.",
@@ -238,7 +250,8 @@ WORDS = {
            "need_location": "Don nemo cibiyar lafiya mafi kusa, raba wurinka, ko faɗa mini ƙaramar hukumarka ko "
                             "garinka.",
            "address": "Ƙaramar Hukumar {lga}, Jihar Sokoto", "mins_h": "awa {h} da minti {m}", "mins": "minti {m}",
-           "route_head": "🧭 *Hanya zuwa {name}*: {dist}.",
+           "route_head": "🧭 *Hanya zuwa {name}*{checked}: {dist}.",
+           "checked": " (an tabbatar da wurin {d})",
            "nearer": "Akwai mafi kusa, amma ba asibiti ba: *{name}* ({level}), kusan kilomita {km} a miƙe.",
            "summary": "Cibiyar lafiya mafi kusa ita ce {name}, {dist}.",
            "summary_hospital": "Asibiti mafi kusa shi ne {name}, {dist}.",
@@ -272,7 +285,8 @@ def facilities_text(lang: str, found: list[Facility], filters: Filters, profile:
             kind = ", ".join(x for x in (kind, w["emonc_tag"][f.emonc]) if x)
         place = w["lga_differs"].format(lga=f.lga, attr=f.lga_attr) if f.lga_differs else w["lga"].format(lga=f.lga)
         rows.append(w["row"].format(n=n, name=f.name, level=w["levels"].get(f.level, f.level), kind=kind or "-",
-                                    place=place, dist=distance_text(lang, f, profile)).replace(" (-)", ""))
+                                    place=place, dist=distance_text(lang, f, profile)).replace(" (-)", "")
+                    + checked_text(lang, f))
     tail = [] if routed else [w["road_note"]]
     return "\n".join([head, *rows, *tail, "", w["caution"]])
 
@@ -360,7 +374,8 @@ def link_line(lang: str, f: Facility, profile: str = "car") -> str:
 
 def route_text(lang: str, f: Facility, profile: str, routed: bool) -> str:
     w = WORDS[lang]
-    return "\n".join([w["route_head"].format(name=f.name, dist=distance_text(lang, f, profile)),
+    return "\n".join([w["route_head"].format(name=f.name, checked=checked_text(lang, f),
+                                             dist=distance_text(lang, f, profile)),
                       *([] if routed else [w["road_note"]]), link_line(lang, f, profile)])
 
 
