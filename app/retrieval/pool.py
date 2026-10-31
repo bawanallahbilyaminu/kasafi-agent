@@ -49,7 +49,7 @@ def available(settings) -> bool:
     return not _off and bool(url) and getattr(settings, "has_database", False) and _open(url()) is not None
 
 
-async def run(settings, fn: Callable[..., Any], conn, *args, **kw) -> Any:
+async def run(settings, fn: Callable[..., Any], conn, /, *args, **kw) -> Any:
     """`fn(conn, *args, **kw)` in a worker thread on a pooled connection; in the calling thread on `conn` when
     there is no pool."""
     if not available(settings):
@@ -66,7 +66,7 @@ async def run(settings, fn: Callable[..., Any], conn, *args, **kw) -> Any:
         return fn(conn, *args, **kw)
 
 
-def run_sync(settings, fn: Callable[..., Any], conn, *args, **kw):
+def run_sync(settings, fn: Callable[..., Any], conn, /, *args, **kw):
     """Like `run`, for a caller that is itself in a worker thread: a future to wait on (or the result at once when
     there is no pool), so two synchronous searches can overlap."""
     if not available(settings):

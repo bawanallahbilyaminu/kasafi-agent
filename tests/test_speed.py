@@ -27,3 +27,12 @@ def test_a_pool_that_cannot_open_turns_itself_off_and_stays_off(monkeypatch) -> 
     assert asyncio.run(pool.run(s, lambda conn: conn, "C")) == "C"           # falls back to the caller's conn
     assert pool._off and not pool.available(s)                               # and stays off
     pool.close()
+
+
+def test_the_pool_passes_a_settings_keyword_through_to_the_search() -> None:
+    """search_lines takes settings= for its own parallel vector search: the pool's own first parameter must not
+    swallow it (positional-only), with or without a pool."""
+    s = make_settings()
+    got = asyncio.run(pool.run(s, lambda conn, terms, settings=None: (terms, settings is s), "C", ["x"], settings=s))
+    assert got == (["x"], True)
+    assert pool.run_sync(s, lambda conn, settings=None: settings is s, "C", settings=s).result() is True
