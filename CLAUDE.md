@@ -56,7 +56,39 @@ Some details are not confirmed yet. Look them up (dev.meta.ai docs, provider doc
 - Bilyaminu's working language is English and his first language is Hausa. User-facing bot text is in **Hausa**, with English as a fallback. Code, comments and docs are in English.
 - When something needs a human (API keys, Meta dashboard settings, WhatsApp setup), stop and give Bilyaminu exact click-by-click steps.
 
-## Status (as of Oct 26, 2026)
+## Status (as of Oct 31, 2026)
+
+**Live: `8ba4a9e`** at https://kasafi-api.halalnumeriq.com.ng, deployed with `deploy/deploy.sh`.
+- **Documents:** budgets and performance reports (structured core plus line search), topic sweeps across publishers (`app/agent/topics.py`, L32), fetching on demand, the admin trace and review pages.
+- **Hazard steps 1–5 of 7 are live** (`docs/hazard-and-services.md`):
+  - location intake (the point in memory for 30 min, only the LGA stored);
+  - hazard layers (Open-Meteo, GloFAS, FIRMS);
+  - official advisories, outlooks and NCDC (the crawl is on, capped at $2/month);
+  - facilities and routing (ORS), plus the emergency fast path;
+  - maps.
+- **Oct 31 phone fixes:**
+  - the location on file reaches every path, and a named place overrides it;
+  - facilities as a planner capability (counts, lookup by name, route to a named facility);
+  - "hospital" means hospitals;
+  - a summary-first answer format, with quotes on "quotes" / "nuna rubutun";
+  - a definitive alert status;
+  - emergency road distance within 1.5 s.
+- **Decisions (Oct 30–31):**
+  - An official outlook leads over GloFAS (a model estimate).
+  - Only one template is used, `kasafi_hazard_alert`. The sign-up and stop templates stay in WhatsApp Manager but are unused.
+  - The advisories crawl runs daily at 06:00, with NCDC on Mondays at 07:00 (Lagos).
+  - EmONC links: exact matches are used; the emergency path uses only links Bilyaminu confirmed.
+  - Never write `.env`: give Bilyaminu the exact line to add.
+- **Next: hazard step 6 (alerts people sign up for), dry run first, not deployed until Bilyaminu says.** Then step 7 (evals, docs, demo). The full 39 eval runs on Tue Nov 3 only (`evals/`).
+- **Open items:**
+  - ORS from the dev machine took 1.4–4.3 s, so the emergency reply often falls back to the straight line there. Check the rate on the server.
+  - The Goronyo river point needs Bilyaminu's confirmation.
+  - The server has measles for August, not September; the NCDC crawl retries Mondays.
+  - ReliefWeb search is off until `RELIEFWEB_APPNAME` is set.
+  - Citation printed vs PDF page numbers (L16).
+  - Gaps admin page; landing-page fetching.
+  - The appropriation-law-2026 schedules aren't labelled.
+  - Topic set t02 (Hausa MPI) once went to the search path and timed out (planner variance; right on the rerun).
 
 - Meta Model API: $150 hackathon credits applied, payment method verified. Set a $150 spend limit.
 - Baseten ($100 + 2M TPM): **confirmed (Oct 27)**. `BASETEN_API_KEY` is set and Muse Spark Open works via `app/providers/baseten.py`.
