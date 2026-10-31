@@ -211,7 +211,7 @@ def test_the_seasonal_prediction_by_place_with_its_months() -> None:
     assert "• April 2026, page 26: “warmer than normal”" in s.text            # past months kept, said as such
 
 
-def test_the_eval_checks_hold_on_the_code_built_answers() -> None:
+def test_the_eval_checks_hold_on_the_code_built_answers(monkeypatch) -> None:
     """evals/topics/advisories_checks.json against the answers built from the crawled rows (no planner, no model)."""
     import json
     from pathlib import Path
@@ -230,10 +230,32 @@ def test_the_eval_checks_hold_on_the_code_built_answers() -> None:
     text = official.outlook_answer(Conn([ONSET, length]), "climate", "en", Where("state"), NOW,
                                    "What did NiMet predict for Sokoto's rainy season?").text
     assert wrong(checks["a03"], SimpleNamespace(text=text, exact=text)) == ""
-    from app.hazards.summary import status
     for cid, lang in [("a01", "en"), ("a05", "ha")]:
-        # as answers are built now: the summary ends with the warning status; the details quote what exists
-        text = "\n".join([status(conn, lang, ["flood"], GORONYO, NOW),
-                          *official.official_lines(conn, lang, ["flood"], GORONYO, NOW, status=False),
-                          "These are model forecasts, not official warnings.", "Rima near Goronyo"])
+        text = flood_answer(monkeypatch, conn, lang)            # the answer as the agent builds it
         assert wrong(checks[cid], SimpleNamespace(text=text, exact=text)) == "", cid
+    # safety: a reply claiming a live warning the advisories table doesn't hold fails, in both languages
+    claim = SimpleNamespace(text="An official NEMA warning is in force (issued 29 Oct), quoted below.\nmodel "
+                                 "forecasts\nRima near Goronyo", exact="")
+    assert "claims a warning" in wrong(checks["a01"], claim)
+    claim_ha = SimpleNamespace(text="Akwai gargaɗin hukuma daga NEMA mai aiki.\nHasashen samfuri (ba na hukuma ba)\n"
+                                    "Rima near Goronyo", exact="")
+    assert "claims a warning" in wrong(checks["a05"], claim_ha)
+
+
+def flood_answer(monkeypatch, conn, lang: str) -> str:
+    """'Is there a flood warning for Goronyo?' built the way the agent builds it: the code-written summary (its
+    last sentence the warning status), then hazard_answer's details without the status line."""
+    from app.agent.summary import lead, split_quotes
+    from app.hazards import read
+    from app.hazards.answer import hazard_answer
+    from app.hazards.summary import hazard_summary
+    today = NOW.date()
+    river = read.RiverDay("Rima near Goronyo", "Goronyo", today, 2.4, 0.3, date(1997, 1, 1), NOW, "low", 3, 910,
+                          913, "Goronyo Dam")
+    monkeypatch.setattr(read, "point_ids", lambda c, where: [(1, "Goronyo")])
+    monkeypatch.setattr(read, "river_days", lambda c, d, lga_pcode="": [river])
+    monkeypatch.setattr(read, "freshness", lambda c, layer, now=None: read.Freshness(layer, NOW, False, 1.0))
+    ha = hazard_answer(conn, "Is there a flood warning for Goronyo?", lang, ["flood"], GORONYO, today, None,
+                       status=False)
+    details, _ = split_quotes(ha.text)
+    return lead(hazard_summary(conn, lang, ha.layers, ha.where, today, today, NOW), details)

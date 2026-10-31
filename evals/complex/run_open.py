@@ -33,12 +33,29 @@ STAGES = ("plan", "acquire", "line_search", "read", "read1", "read2", "reread", 
           "answer", "calls1", "calls2")
 
 
-def wrong(check: dict | None, a) -> str:
-    """Why a reply fails its checked facts (evals/complex/mid_tier_checks.json), or '' (also when unchecked)."""
+def live_warning(conn, hazards: list[str], lga: str) -> bool:
+    """The advisories table holds a current (non-outlook) advisory for the hazard and LGA, or state-wide."""
+    if conn is None:
+        return False
+    from datetime import datetime, timezone
+
+    from app.hazards import read
+    from app.hazards.official import advisories_for
+    live, _ = advisories_for(conn, hazards, read.Where("lga", lga, ""), datetime.now(timezone.utc))
+    return any(a.kind != "outlook" for a in live)
+
+
+def wrong(check: dict | None, a, conn=None) -> str:
+    """Why a reply fails its checked facts (evals/complex/mid_tier_checks.json), or '' (also when unchecked).
+    `warning_claim`: a reply claiming a live official warning fails unless the advisories table has one (safety:
+    Kasafi must never announce a warning that isn't published)."""
     if not check:
         return ""
     if check.get("must_not") and re.search(check["must_not"], a.text):
         return f"says {re.search(check['must_not'], a.text).group(0)!r}"
+    if (wc := check.get("warning_claim")) and (m := re.search(wc["pattern"], a.text)) and \
+            not live_warning(conn, wc["hazards"], wc["lga"]):
+        return f"claims a warning the advisories table doesn't hold: {m.group(0)!r}"
     exact = f"{a.exact}\n{a.text}"
     if check.get("any") and not any(all(n in exact for n in group) for group in check["any"]):
         return f"none of {check['any']}"
@@ -92,7 +109,7 @@ async def main(path: Path, ids: list[str] | None, out: Path, resume: bool = Fals
                       f"query_budget:{a.budget.operation}" if a.budget is not None else
                       "latest" if a.latest else "fetch" if a.acquired else "search")
         res = [q["id"], outcome(a), a.verified, len(a.cited), bool(getattr(a, "working", "")), path_taken, dt]
-        why = wrong(checks.get(q["id"]), a)
+        why = wrong(checks.get(q["id"]), a, conn)
         parts = " ".join(f"{k}={v:.1f}" for k, v in a.timings.items() if k in STAGES)
         print(f"{q['id']:>4} {res[1]:<10} {'WRONG ' if why else ''}cites={res[3]} {path_taken:<22} "
               f"{dt:5.1f}s  [{parts}]" + (f"  {why}" if why else ""))

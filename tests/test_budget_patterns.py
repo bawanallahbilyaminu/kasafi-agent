@@ -158,7 +158,11 @@ def test_prose_search_leaves_out_table_rows() -> None:
         hits = search(conn, "capital expenditure performance reasons", k=6, prose=True)
         if not hits:
             pytest.skip("no indexed narrative")
-        assert all(not h.text.startswith("[Table:") and " | " not in h.text for h in hits)
+        import re
+
+        from app.retrieval.search import SENTENCES
+        # running text (a BIR's narrative keeps the carried-over '[Table:' title), never a table of contents
+        assert all(re.search(SENTENCES, h.text) and not re.search(r"\.{6,}", h.text) for h in hits)
 
 
 # --- 8. names: no footnote digits, no internal labels in the reply ------------------------------------------------

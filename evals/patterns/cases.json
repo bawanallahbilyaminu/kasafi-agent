@@ -181,24 +181,44 @@
   {
    "id": "p4_narrative-01",
    "pattern": "p4_narrative",
-   "text": "What does the Sokoto State Budget Implementation Report Q3 2025 say about education expenditure economic classification? What reasons does it give?",
+   "text": "What does the Sokoto State Budget Implementation Report Q3 2025 say about the budget performance, and what reasons does it give?",
    "lang": "en",
-   "expect": [],
+   "expect": [
+    "136,177,564.29"
+   ],
    "cites": [
     "bir-2025-q3",
-    3
-   ]
+    48
+   ],
+   "narrative": true
   },
   {
    "id": "p4_narrative-02",
    "pattern": "p4_narrative",
-   "text": "What does the Budget Implementation Report Q4 2025 say about education performance overview reports? What reasons does it give?",
+   "text": "What does the Sokoto State Budget Implementation Report Q3 2025 say about Primary Healthcare Budget Performance, and what reasons does it give?",
    "lang": "en",
-   "expect": [],
+   "expect": [
+    "13,196,854,692.00"
+   ],
+   "cites": [
+    "bir-2025-q3",
+    78
+   ],
+   "narrative": true
+  },
+  {
+   "id": "p4_narrative-03",
+   "pattern": "p4_narrative",
+   "text": "What does the Budget Implementation Report Q4 2025 say about the budget performance, and what reasons does it give?",
+   "lang": "en",
+   "expect": [
+    "1,099,136.01"
+   ],
    "cites": [
     "bir-2025-q4",
-    2
-   ]
+    48
+   ],
+   "narrative": true
   },
   {
    "id": "p5_not_published-01",

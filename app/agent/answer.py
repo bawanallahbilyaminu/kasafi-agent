@@ -1568,7 +1568,7 @@ def hazard_route(question: str, plan: Plan) -> list[str]:
     measures = list(plan.need.measures) if plan.need else []
     others = [m for m in measures if m not in HAZARD_MEASURES and m != "other"]
     text = f"{question} {plan.english_question}"
-    layers = layers_asked(text, measures)
+    layers = layers_asked(text, measures, own=question)      # the user's own words decide a named layer
     if not layers or MONEY_WORDS.search(text) or (others and not set(measures) & HAZARD_MEASURES):
         return []
     return layers

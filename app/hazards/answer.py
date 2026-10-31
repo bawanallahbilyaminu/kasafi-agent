@@ -23,12 +23,15 @@ LAYERS = ("heat", "rain", "air", "flood", "fires")
 MEASURE_LAYERS = {"heat": "heat", "temperature": "heat", "humidity": "heat", "uv_index": "heat", "wind": "heat",
                   "rain": "rain", "air_quality": "air", "dust": "air", "river_discharge": "flood",
                   "fire_detections": "fires", "hazard_overview": "overview"}
+# whole words (layers_asked wraps each pattern in word boundaries): 'hot' is not 'hotel', 'wuta' is not
+# 'wutar lantarki' (electricity), 'hadari' alone (danger, in unhooked spelling) is no longer a rain word
 WORDS = {
-    "heat": r"heat|hot|temperature|feels? like|uv\b|sunburn|zafi|zafin rana|ɗumi|dumi|rana mai tsanani",
-    "rain": r"\brain|rainfall|storm|downpour|wet\b|ruwan sama|ruwa zai|hadari\b|guguwa",
-    "air": r"dust|harmattan|haze|air quality|pollution|pm ?10|pm ?2\.?5|ƙura|kura\b|hazo|iska mai|bushewar iska",
-    "flood": r"flood|river|discharge|overflow|ambaliya|kogi|kogin|ruwa ya cika",
-    "fires": r"\bfires?\b|burning|bush ?fire|smoke|gobara|wuta|ƙone|kone|hayaƙi|hayaki",
+    "heat": r"heat|heatwave|hot|hotter|temperatures?|feels? like|uv|sunburn|zafi|zafin rana|ɗumi|dumi|rana mai tsanani",
+    "rain": r"rains?|rainy|rainfall|storms?|downpour|wet|ruwan sama|ruwa zai|hadarin ruwa|guguwa",
+    "air": r"dust|dusty|harmattan|haze|air quality|pollution|pm ?10|pm ?2\.?5|ƙura|kura|ƙurar hunturu|hazo|iska mai|"
+           r"bushewar iska",
+    "flood": r"floods?|flooding|rivers?|discharge|overflow|ambaliya|kogi|kogin|koguna|ruwa ya cika",
+    "fires": r"fires?|burning|bush ?fires?|smoke|gobara|wuta|ƙone|kone|hayaƙi|hayaki",
     "overview": r"watch out|look out|be careful|what should (?:i|we) (?:expect|watch|look)|any (?:hazards?|danger)|"
                 r"weather (?:risks?|hazards?)|me (?:za|ya kamata) (?:mu|in|a|ka) kula|abin da (?:za|ya kamata) "
                 r"(?:mu|a) kula|haɗarin yanayi|hadarin yanayi",
@@ -41,15 +44,19 @@ SEASON = {1: ("air", "heat"), 2: ("air", "heat"), 3: ("heat", "air"), 4: ("heat"
           10: ("flood", "rain"), 11: ("air",), 12: ("air",)}
 
 
-def layers_asked(question: str, measures: list[str] | None = None) -> list[str]:
+def layers_asked(question: str, measures: list[str] | None = None, own: str | None = None) -> list[str]:
     """The hazard layers a question asks about (its words and the planner's measures), or [] (a budget question
-    about floods is a budget question). 'overview' alone means every layer, in season first."""
+    about floods is a budget question). 'overview' alone means every layer, in season first. A layer named in the
+    user's own words (`own`, whole words only; `question` when not given) beats an overview the planner adds:
+    'is there a flood warning?' answers floods, never an overview that leads with heat."""
     if MONEY.search(question or ""):
         return []
-    found = [layer for layer, pat in WORDS.items() if re.search(rf"(?i){pat}", question or "")]
-    named = [x for x in found if x != "overview"]
+    found = [layer for layer, pat in WORDS.items() if re.search(rf"(?i)(?<![\w'ƙɓɗƴ])(?:{pat})(?![\w'ƙɓɗƴ])", question or "")]
     planned = [MEASURE_LAYERS[m] for m in measures or [] if m in MEASURE_LAYERS]
-    if named and "overview" not in found:        # 'is there a flood warning?': the layer named, not an overview
+    said = own if own is not None else question
+    named = [layer for layer, pat in WORDS.items() if layer != "overview"
+             and re.search(rf"(?i)(?<![\w'ƙɓɗƴ])(?:{pat})(?![\w'ƙɓɗƴ])", said or "")]
+    if named and "overview" not in found:
         planned = [x for x in planned if x != "overview"]
     return list(dict.fromkeys(found + planned))
 

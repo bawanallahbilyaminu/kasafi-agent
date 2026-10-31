@@ -97,17 +97,14 @@ Some details are not confirmed yet. Look them up (dev.meta.ai docs, provider doc
   - facility first line = the pin's facility;
   - Wajake merged (…/0049 point, not marked checked);
   - alert key and cap synced to the server.
-- **Nov 1 (early), live at `b32a607`:**
+- **Oct 31 (late), live at `b32a607` then `3ea68e0`:**
   - guardrails: 80-case Hausa/English eval at 80/80 (`evals/guardrails/`);
-  - alert sign-ups keep exact (LGA, hazard) pairs;
-  - outbreak alerts fire only on recent epi weeks;
-  - Hausa summary templates for correction in `docs/hazard-summaries-ha.md`.
-  - Waiting on Bilyaminu: `KASAFI_ALERTS=true` in the local .env, then `--sync-env`; the correct types for Hussaini Medical Center and Noma Hospital.
-- **Nov 1, live at `3ea68e0`:**
+  - alert sign-ups keep exact (LGA, hazard) pairs; outbreak alerts fire only on recent epi weeks;
+  - Hausa summary templates for correction in `docs/hazard-summaries-ha.md`;
   - the eleven Oct 31 phone-test answer patterns are fixed (lesson L33; `evals/patterns`, 21 generated cases, 0 wrong);
   - pre-deploy eval: fresh 52 at 0 wrong (median 5.4 s), topics 12 at 0 wrong, advisories 5 at 0 wrong.
-  - Alerts are ON in dry run on the server (`KASAFI_ALERTS=true` via `--sync-env`); season dust needs AQI 201+.
-- **Hazard step 6 (alerts) is built and in the live code, but off** (`KASAFI_ALERTS` unset; dry run by default; `/admin/alerts`). Don't turn it on until Bilyaminu says. Recipients: only subscribers' numbers are stored, encrypted (`KASAFI_ALERTS_NUMBER_KEY`), and deleted on STOP, DELETE MY DATA or 90 days without contact. Bilyaminu adds the key and `KASAFI_ALERTS_DAILY_CAP` to `.env` himself.
+  - Still waiting on Bilyaminu: the correct types for Hussaini Medical Center and Noma Hospital.
+- **Hazard step 6 (alerts): ON in dry-run mode on the server** since Oct 31 (`KASAFI_ALERTS=true` and the number key came through `--sync-env` from Bilyaminu's `.env`; `KASAFI_ALERTS_DRY_RUN` stays at its default true). Alerts go to `/admin/alerts`, never to users. Bilyaminu switches dry run off himself once the English template is approved. Recipients: only subscribers' numbers are stored, encrypted (`KASAFI_ALERTS_NUMBER_KEY`), and deleted on STOP, DELETE MY DATA or 90 days without contact. Season dust needs AQI 201+ and the last 30 days' 95th percentile.
 - **Next:** step 7 (evals, docs, demo). The full 39 eval runs on Tue Nov 3 only (`evals/`).
 - **Open items:**
   - Bilyaminu to fill `data/geo/facility_corrections.yaml` (Alheri Clinic and Sarda Quarters share one registry point).

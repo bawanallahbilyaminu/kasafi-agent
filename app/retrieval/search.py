@@ -35,7 +35,7 @@ all_terms AS (
       AND (%(docs)s::text[] IS NULL OR c.doc_id = ANY(%(docs)s::text[]))
       AND (NOT %(key_rows)s OR (c.text LIKE '%% | %%'
            AND length(c.text) - length(replace(c.text, chr(10), '')) <= 1))
-      AND (NOT %(prose)s OR (c.text NOT LIKE '[Table:%%' AND c.text NOT LIKE '%% | %%'))
+      AND (NOT %(prose)s OR (c.text ~ %(sentences)s AND c.text !~ '\\.{6,}'))
     ORDER BY rank DESC LIMIT %(k)s
 ),
 any_term AS (
@@ -44,7 +44,7 @@ any_term AS (
       AND (%(docs)s::text[] IS NULL OR c.doc_id = ANY(%(docs)s::text[]))
       AND (NOT %(key_rows)s OR (c.text LIKE '%% | %%'
            AND length(c.text) - length(replace(c.text, chr(10), '')) <= 1))
-      AND (NOT %(prose)s OR (c.text NOT LIKE '[Table:%%' AND c.text NOT LIKE '%% | %%'))
+      AND (NOT %(prose)s OR (c.text ~ %(sentences)s AND c.text !~ '\\.{6,}'))
       AND (SELECT count(*) FROM all_terms) < %(k)s
     ORDER BY rank DESC LIMIT %(k)s
 ),
@@ -90,16 +90,21 @@ def printed_query(query: str) -> str:
     return out if out != query else ""
 
 
+# running text: six lower-case words in a row (a BIR's narrative sits under the table title the indexer carries
+# over, so '[Table:' can't tell prose from a table); dotted leaders mark a table of contents
+SENTENCES = r"[a-z]{3,} [a-z]{3,} [a-z]{3,} [a-z]{3,} [a-z]{3,} [a-z]{3,}"
+
+
 def search(conn: psycopg.Connection, query: str, *, k: int = 8, doc_ids: list[str] | None = None,
            key_rows: bool = False, prose: bool = False) -> list[Hit]:
     """key_rows=True searches only labelled single-row chunks ("[Table: ...]" + one table row): exact facts
     such as a ministry's total, which keyword ranking over whole pages tends to bury. A query naming an indicator
     in everyday words also runs with its printed name, and the best hits of both are kept. prose=True searches only
     running text (no table rows): a report's narrative, for what it explains, corrects or notes."""
-    rows = conn.execute(SQL, {"q": query, "k": k, "docs": doc_ids, "key_rows": key_rows, "prose": prose}).fetchall()
+    rows = conn.execute(SQL, {"q": query, "k": k, "docs": doc_ids, "key_rows": key_rows, "prose": prose, "sentences": SENTENCES}).fetchall()
     if alt := printed_query(query):
         seen = {(r[0], r[3], r[6]) for r in rows}
-        more = [r for r in conn.execute(SQL, {"q": alt, "k": k, "docs": doc_ids, "key_rows": key_rows, "prose": prose}).fetchall()
+        more = [r for r in conn.execute(SQL, {"q": alt, "k": k, "docs": doc_ids, "key_rows": key_rows, "prose": prose, "sentences": SENTENCES}).fetchall()
                 if (r[0], r[3], r[6]) not in seen]
         rows = sorted(rows + more, key=lambda r: -r[5])[:k]
     return [Hit(*r) for r in rows]

@@ -136,16 +136,22 @@ def generate(conn, rng: random.Random) -> list[dict]:
         add("p3_project", f"How much is budgeted for {asked} in 2026?", [money(amount)])
 
     # p4: a BIR narrative paragraph: the reply must cite its page
+    # (running text, never a table of contents; the narrative sits under the table title the indexer carries over,
+    # so '[Table:' is no sign of a table. The reply must cite the page AND give a figure the paragraph prints.)
+    from app.retrieval.search import SENTENCES
     prose = conn.execute("""SELECT c.doc_id, c.page, c.text, d.title FROM chunks c JOIN documents d ON d.id = c.doc_id
-        WHERE c.doc_id LIKE 'bir-%%' AND c.text NOT LIKE '[Table:%%' AND c.text NOT LIKE '%% | %%'
-          AND length(c.text) > 250 AND c.text ~* '(increase|decrease|reason|due to|attribut|variance|explain|performance|revenue|expenditure)'
-        """).fetchall()
-    for doc, page, text, doc_title in rng.sample(prose, min(2, len(prose))):
-        words = [w for w in re.findall(r"[A-Za-z]{6,}", text) if w.lower() not in {"budget", "implementation",
-                                                                                   "report", "quarter", "sokoto"}]
-        topic = " ".join(dict.fromkeys(w.lower() for w in words[:4]))
-        add("p4_narrative", f"What does the {doc_title} say about {topic}? What reasons does it give?", [],
-            cites=[doc, page])
+        WHERE c.doc_id LIKE 'bir-%%' AND c.text ~ %s AND c.text !~ '\\.{6,}' AND length(c.text) > 400
+          AND c.text ~* '(increase|decrease|reason|due to|attribut|variance|explain|however|as a result)'
+          AND c.text ~ '[0-9]{1,3},[0-9]{3},[0-9]{3}'""", (SENTENCES,)).fetchall()
+    for doc, page, text, doc_title in rng.sample(prose, min(3, len(prose))):
+        body = re.sub(r"^\[Table:[^\]]*\]\n", "", text)
+        m = re.search(r"(?m)^\s*\d+(?:\.[A-Z])?\s+([A-Z][A-Za-z ]{6,60}?)\s*$", body)        # the section heading
+        phrases = [p for p in re.findall(r"(?:[A-Z][a-z]+ ){2,}[A-Z][a-z]+", body)
+                   if not re.search(r"Sokoto State Government|Budget Implementation Report", p)]
+        topic = m.group(1).strip() if m else (max(phrases, key=len) if phrases else "the budget performance")
+        figure = re.search(r"\d{1,3}(?:,\d{3}){2,}(?:\.\d{2})?", body).group(0)
+        add("p4_narrative", f"What does the {doc_title} say about {topic}, and what reasons does it give?",
+            [figure], cites=[doc, page], narrative=True)
 
     # p5: staff numbers aren't published: say so and give the agency's personnel figure
     pers = conn.execute("""SELECT DISTINCT ON (code) code, name, approved_2026 FROM budget_items WHERE
@@ -170,6 +176,12 @@ INTERNAL = re.compile(r"(?i)one agency or unit|all spending \(total\)|ministry t
 FOOTNOTE = re.compile(r"\b[A-Za-z][a-z]{2,}\d{1,2}\b(?!\s*(?:Q|%))")
 
 
+NO_TEXT = re.compile(r"(?i)(?:excerpts?|evidence|documents?|pages?)[^.\n]{0,40}(?:do|does|did)\s*n[o']t\s+"
+                     r"(?:include|contain|show|give|provide)|not (?:shown|included|provided|available)|"
+                     r"isn['’]t (?:available|shown|included)|no (?:narrative|overview|explanation) (?:text|is|was)|"
+                     r"ba a (?:samu|nuna|bayar da) (?:bayani|rubutu)|babu (?:bayani|rubutu)")
+
+
 def judge(case: dict, a) -> tuple[str, list[str]]:
     """(why the pattern case is wrong or '', the output checks that failed)."""
     text = f"{a.text}"
@@ -184,6 +196,8 @@ def judge(case: dict, a) -> tuple[str, list[str]]:
             why = f"didn't cite {doc} p{page}"
     if not why and case.get("must_say") and not re.search(case["must_say"], text):
         why = "didn't say it isn't published"
+    if not why and case.get("narrative") and (m := NO_TEXT.search(text)):
+        why = f"says the narrative isn't there: {m.group(0)!r}"           # even with the right page cited
     if not why and case.get("avoid") and any(any(f in text for f in accepted(x)) for x in case["avoid"]) and \
             not any(any(f in text for f in accepted(x)) for x in case["expect"]):
         why = "gave the newer report's figure"

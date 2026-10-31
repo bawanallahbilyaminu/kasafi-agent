@@ -1,5 +1,5 @@
 {
- "_about": "Checked facts for evals/topics/advisories.json (drafted Oct 30 2026 from the local crawl; for Bilyaminu to check). any: one group's figures all in the reply; all_re: patterns that must match; must_not: a pattern that must not. Figures change as NCDC publishes: recheck against outbreak_cases before a run. Updated Oct 31 2026 for the agreed format: the warning status is the summary's last sentence (no 'Official warnings' heading without a warning), and verbatim quotes are sent on 'quotes', so the reply cites their pages.",
+ "_about": "Checked facts for evals/topics/advisories.json (drafted Oct 30 2026 from the local crawl; for Bilyaminu to check). any: one group's figures all in the reply; all_re: patterns that must match; must_not: a pattern that must not. Figures change as NCDC publishes: recheck against outbreak_cases before a run. Updated Oct 31 2026 for the agreed format: the warning status is the summary's last sentence; quotes are sent on 'quotes', so the reply cites pages; `warning_claim` fails any claimed live warning the advisories table doesn't hold (evals/complex/run_open.py).",
  "checks": {
   "a01": {
    "all_re": [
@@ -8,7 +8,16 @@
     "Rima near Goronyo"
    ],
    "must_not": "(?i)there is (?:a|an official) flood warning for Goronyo",
-   "source": "advisories table (NEMA, Sokoto portal, Ministry of Health WordPress posts, crawled Oct 30 2026): no current Sokoto flood warning; GloFAS discharge at NG034006 'low for late October'"
+   "source": "advisories table (NEMA, Sokoto portal, Ministry of Health WordPress posts, crawled Oct 30 2026): no current Sokoto flood warning; GloFAS discharge at NG034006 'low for late October'",
+   "warning_claim": {
+    "pattern": "An official [^\\n]*warning is in force|there is an official [^\\n]*warning",
+    "hazards": [
+     "flood",
+     "rain"
+    ],
+    "lga": "NG034006",
+    "note": "a claimed live warning fails unless the advisories table has a current non-outlook advisory for the hazard and LGA (or state-wide) at run time"
+   }
   },
   "a02": {
    "any": [
@@ -29,7 +38,8 @@
   "a03": {
    "all_re": [
     "Seasonal Climate Prediction",
-    "(?:p\\.|shafi|page)\\s*12"
+    "(?:p\\.|shafi|page)\\s*12\\b",
+    "(?:p\\.|shafi|page)\\s*14\\b"
    ],
    "must_not": "(?i)GloFAS|Open-Meteo|model forecast",
    "source": "NiMet 2026 SCP (nimet-scp-2026, Bilyaminu's copy, Oct 30 2026): onset p12, cessation p13, length p14, rainfall p15, dry spells p16-17, per-LGA Table 7 p105-106; update (nimet-scp-update-2026) p3 for August-October. Quoted verbatim from data/official_outlooks.yaml"
@@ -51,10 +61,21 @@
   },
   "a05": {
    "all_re": [
-    "Babu gargaɗin hukuma mai aiki|Akwai gargaɗin hukuma daga|bai samu damar duba|Babu gargaɗin hukuma mai aiki lokacin",
+    "Babu gargaɗin hukuma mai aiki|Akwai gargaɗin hukuma daga|bai samu damar duba",
+    "(?i)hasashen samfuri|ƙiyasin samfuri|ba na hukuma ba|ba gargaɗin hukuma ba",
     "Rima near Goronyo"
    ],
-   "source": "as a01"
+   "source": "as a01",
+   "must_not": "(?i)akwai gargaɗin ambaliya (?:na hukuma )?(?:ga|a) Goronyo",
+   "warning_claim": {
+    "pattern": "Akwai gargaɗin hukuma daga",
+    "hazards": [
+     "flood",
+     "rain"
+    ],
+    "lga": "NG034006",
+    "note": "as a01"
+   }
   }
  }
 }
