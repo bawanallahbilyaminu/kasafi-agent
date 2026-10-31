@@ -121,6 +121,39 @@ capabilities:
     cites: NCDC report, epi week, page
     note: official guidance only (a current Ministry of Health or NCDC notice, verbatim); no other health advice
 
+  # Place history (docs/place-history.md): what the satellite record shows for a pin, answered in code
+  # (app/place/answer.py) from Sentinel-2 windows, the JRC water record, WorldCover and Open-Meteo rain
+  - id: place_history_point
+    what: "the history of a spot from satellite images since 2017: peak rainy-season greenness per year against that season's rain (rain-adjusted, the plot's own years), months with open water, dry-season bare soil, the nearest water body; needs the user's pin"
+    kind: structured
+    measures: [greenness, surface_water, bare_soil, place_history]
+    entity_types: [other]
+    geo_levels: [point]
+    operations: [lookup, trend, compare]
+    time: yearly from 2017 (2015–2016 where a year has enough clear images); the current year to date; cached per ~100 m cell
+    cites: Copernicus Sentinel-2 L2A (Planetary Computer), JRC Global Surface Water v1.3, ESA WorldCover 2021, Open-Meteo archive
+    note: observation only; no causes, inputs, varieties or dates (the ADP extension service is referred to); no land ownership, boundaries or certificates
+
+  - id: plot_outline
+    what: "the approximate outline of the field at a pin, drawn by SAM 3.1 on a Sentinel-2 true-colour chip (accepted at 0.1–50 ha containing the pin; else a 1 ha circle, said so); never a boundary"
+    kind: structured
+    measures: [plot_outline]
+    entity_types: [other]
+    geo_levels: [point]
+    operations: [lookup]
+    time: the clearest recent dry-season scene
+    cites: Copernicus Sentinel-2 L2A; SAM 3.1 (Meta)
+
+  - id: rainfall_history
+    what: daily rain since 2015 at a point, summed per June–October season and per year
+    kind: structured
+    measures: [rainfall]
+    entity_types: [other, lga]
+    geo_levels: [point, lga]
+    operations: [lookup, trend, compare]
+    time: 2015 to yesterday
+    cites: Open-Meteo archive (ERA5-Land, ~9 km grid)
+
   - id: analysis_tools
     what: counts and sums in SQL over projects and budget lines (project status, LGA projects, rankings, ministry and function profiles, revenue)
     kind: structured

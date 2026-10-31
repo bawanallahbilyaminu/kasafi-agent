@@ -1,0 +1,445 @@
+"""The farmer's place-history answer (docs/place-history.md §5), written in code from the numbers, like the hazard
+summaries: nothing a model could invent.
+
+1. A progress line for a first request (the satellite images take about a minute).
+2. The summary, two or three sentences in the user's language: how green the plot was this season against its
+   own history and the rain; whether water was seen (never "never flooded"); the trends when there are enough
+   years. A place that isn't vegetation (built-up, bare, water) is said to be what the 2021 land-cover map
+   labels it, with no greenness claim.
+3. The plot outline (approximate, from the image; or the 1 ha circle, said so), the resolution, the years and
+   the clear-image counts.
+4. Context from the library: NiMet's seasonal prediction for the LGA, the NIHSA outlook, and this year's
+   agriculture, irrigation and erosion lines for the LGA from the structured core.
+5. The referral line (the ADP extension service). No causes, inputs, varieties or dates.
+The per-year figures go once into "show working".
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import re
+import time
+from dataclasses import dataclass, field
+from datetime import date
+
+from app.place import history as H
+from app.place.fit import MIN_YEARS
+from app.place.outline import Outline, plot_outline
+
+log = logging.getLogger(__name__)
+
+# a place-history question: a place word with a history word, or the feature's own name
+PLACE_WORDS = re.compile(r"(?i)\b(?:farm\w*|plots?|fields?|land|fadama|pond|dam|lake|reservoir|river\s*bank|spot|"
+                         r"gona\w*|gonata|fili\w*|tafki\w*|madatsa\w*|dam[iu]n?|wuri\w*|ƙasa|kasa|kogi)\b")
+HISTORY_WORDS = re.compile(r"(?i)\b(?:how green|greenness|green\b|vegetation|history|over the years|years?\b|"
+                           r"since\s+20\d\d|20(?:1[5-9]|2\d)\b|satellite|flooded|under water|flood history|"
+                           r"bare soil|erosion|dried?\s+up|drying|koriya\w*|ciyayi|tarihi\w*|shekar\w*|tun\s+20\d\d|"
+                           r"tauraron?\s+ɗan\s+adam|tauraron?\s+dan\s+adam|ambaliya\w*|ruwa\s+ya\s+(?:rufe|kama)|"
+                           r"ya\s+bushe|ƙasa\s+mara|hamada)\b")
+EXPLICIT = re.compile(r"(?i)\b(?:place history|tarihin wuri|tarihin gona\w*|tarihin fili\w*)\b")
+WATER_WORDS = re.compile(r"(?i)\b(?:pond|dam\b|lake|reservoir|flood\w*|under water|water\b|fadama|wet\b|"
+                         r"tafki\w*|madatsa\w*|ambaliya\w*|ruwa\w*|kogi)\b")
+NOT_PLACE = re.compile(r"(?i)\b(?:budget\w*|allocat\w*|kasafi\w*|naira|spen[dt]\w*|expenditure|project\w*|aikin?|"
+                       r"ware|kashe|kuɗi|kudi|forecast|tomorrow|gobe|today|yau|hospital|asibiti|clinic|idp|"
+                       r"displac\w*)\b|₦")
+
+
+def place_route(question: str, english: str = "") -> str:
+    """'place' for a question about what the satellite record shows of a spot over the years; '' otherwise (a
+    budget line for farms, tomorrow's rain, a facility stay on their own paths)."""
+    text = f"{question} {english}"
+    if NOT_PLACE.search(text):
+        return ""
+    if EXPLICIT.search(text):
+        return "place"
+    if PLACE_WORDS.search(text) and HISTORY_WORDS.search(text):
+        return "place"
+    return ""
+
+
+def water_asked(text: str) -> bool:
+    return bool(WATER_WORDS.search(text or ""))
+
+
+@dataclass
+class PlaceAnswer:
+    text: str
+    found: bool
+    working: str = ""
+    partial: bool = False
+    specs: list[dict] = field(default_factory=list)      # the chart and the map (app/place/images.py)
+    needs_pin: bool = False                               # no point known: ask for the pin
+    history: H.History | None = None
+    outline: Outline | None = None
+    timing: dict[str, float] = field(default_factory=dict)
+
+
+MONTHS = {
+    "en": ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
+           "November", "December"),
+    "ha": ("Janairu", "Fabrairu", "Maris", "Afrilu", "Mayu", "Yuni", "Yuli", "Agusta", "Satumba", "Oktoba",
+           "Nuwamba", "Disamba"),
+}
+
+W = {
+    "en": {
+        "need_pin": "To look at a place's history I need the spot itself: tap the button below and send the pin of "
+                    "your farm or plot (or the pond, dam or field you mean).",
+        "progress": "🛰️ I'm checking about {n} years of satellite images for this spot. I'll send it in about a "
+                    "minute.",
+        "head": "*What the satellite record shows for this spot ({lga} LGA)*",
+        "peak": "In the {year} rainy season this plot's peak greenness was {p90} on the NDVI scale, {cmp} its usual "
+                "{median} over the {n} years with enough clear images ({first}–{last}); with {rain} mm of June–October "
+                "rain, that is {verdict}.",
+        "cmp": {"above": "above", "near": "near", "below": "below"},
+        "verdict": {"normal": "normal variation", "below": "below what the rain predicts",
+                    "none": "not compared (the rain fit needs 5 years)"},
+        "peak_thin": "The {year} rainy season had too few clear satellite images at this spot ({obs}; 8 are needed) "
+                     "to judge it; over the {n} years with enough ({first}–{last}) the plot's peak greenness was "
+                     "usually {median} on the NDVI scale.",
+        "few_years": "Only {n} of the years since {first} have enough clear images at this spot (8 or more in the "
+                     "season), so Kasafi makes no comparison with the rain and no trend; the figures are in the "
+                     "details.",
+        "trend": "Since {first}, peak greenness {g}{bsi}.",
+        "trend_words": {"rising": "has been rising", "falling": "has been falling",
+                        "no clear change": "shows no clear change"},
+        "bsi_words": {"rising": " and dry-season bare soil has been spreading", "falling":
+                      " and dry-season bare soil has been shrinking", "no clear change":
+                      " and dry-season bare soil shows no clear change"},
+        "kind_map": "The 2021 satellite land-cover map (ESA WorldCover) labels this spot *{kind}*, so Kasafi makes "
+                    "no greenness comparison for it.",
+        "kind_low": "This spot's peak greenness stayed under 0.2 on the NDVI scale in most years (little "
+                    "vegetation; the 2021 land-cover map labels it {lc}), so Kasafi makes no greenness comparison "
+                    "for it.",
+        "kinds": {"built-up area": "built-up", "bare ground": "bare ground", "open water": "open water",
+                  "little vegetation": "little vegetation"},
+        "on_water": "This spot is open water: the JRC record (1984–2020) saw water in {occ}% of the months it "
+                    "observed, and Sentinel-2 saw water there in {when}.",
+        "water_seen": "Open water was seen at this spot in {when}.",
+        "water_none": "No open water was seen at this spot in the satellite images (February–October, "
+                      "{first}–{last}).",
+        "water_caveat": "Floods under crops, short floods and floods under cloud can be missed.",
+        "nearest": "The nearest water body is {km} km from your pin ({ha} ha; water in {occ}% of the months JRC "
+                   "observed, 1984–2020); Sentinel-2 saw water there in {when}.",
+        "nearest_none": "No water body (water in half the months JRC observed, 1984–2020) lies within 2 km of "
+                        "your pin.",
+        "outline_sam": "Plot outline: about {ha} ha, drawn from the satellite image (SAM 3.1, 10 m): approximate, "
+                       "not a boundary.",
+        "outline_circle": "No plot outline could be drawn from the satellite image, so the figures are for a "
+                          "circle of about 1 ha around your pin.",
+        "resolution": "Sentinel-2: greenness (NDVI) and water (NDWI) at 10 m, bare soil (BSI) and the cloud mask "
+                      "at 20 m; water record (JRC) at 30 m; rain from Open-Meteo's ~9 km grid.",
+        "years": "Years {first}–{last}; clear rainy-season images per year: {counts}.",
+        "context": "*From the documents*",
+        "no_context": "No seasonal prediction, flood outlook or {year} budget line for {lga} LGA is in the "
+                      "library for this.",
+        "budget": "{year} budget lines for {lga} LGA (agriculture, irrigation, erosion):",
+        "budget_row": "• {name}: ₦{amount} ({title}, p. {page})",
+        "referral": "For advice on what to plant or apply, ask the agricultural extension workers (Sokoto ADP). "
+                    "Kasafi only reports what the images show.",
+        "sources": "Sources: Copernicus Sentinel-2 L2A via Microsoft Planetary Computer; JRC Global Surface Water "
+                   "v1.3; ESA WorldCover 2021; Open-Meteo archive (ERA5-Land).",
+        "working_head": "Per year (rainy season June–October): clear images, peak greenness (NDVI 90th "
+                        "percentile), June–October rain, rain-adjusted flag, months with open water, dry-season "
+                        "bare soil (BSI median, February–April).",
+        "working_row": "{year}: {obs} clear images, NDVI {p90}, rain {rain} mm, {flag}; water months: {months}; "
+                       "BSI {bsi}",
+        "flag_words": {"normal": "normal variation", "below": "below what the rain predicts", "": "no rain fit",
+                       "thin": "too few clear images"},
+        "none": "–",
+        "fit_line": "Rain fit over {years}: greenness = {a} + {b} × rain (mm); residual SD {sd}.",
+        "turbid": "Note: Sentinel-2's cloud mask also hides bright, muddy water, so water in the rainy months can "
+                  "be under-counted here.",
+        "nearest_working": "Nearest water body ({km} km, {ha} ha): water months per year {months}.",
+        "and": " and ", "in": "in ",
+    },
+    "ha": {
+        "need_pin": "Don in duba tarihin wuri ina buƙatar wurin kansa: danna maɓallin da ke ƙasa ka aiko da wurin "
+                    "gonarka ko filinka (ko tafki, madatsar ruwa ko filin da kake nufi).",
+        "progress": "🛰️ Ina duba hotunan tauraron ɗan adam na kusan shekaru {n} na wannan wuri. Zan aiko nan da "
+                    "kusan minti ɗaya.",
+        "head": "*Abin da hotunan tauraron ɗan adam suka nuna game da wannan wuri (Ƙaramar Hukumar {lga})*",
+        "peak": "A daminar {year}, koriyar wannan gona a ƙololuwa ta kai {p90} a ma'aunin NDVI, {cmp} matsakaicinta "
+                "{median} na shekaru {n} masu isassun hotuna bayyanannu ({first}–{last}); da ruwan sama mm {rain} "
+                "na Yuni–Oktoba, wannan {verdict}.",
+        "cmp": {"above": "sama da", "near": "kusa da", "below": "ƙasa da"},
+        "verdict": {"normal": "bambanci ne na yau da kullum", "below": "ƙasa ne da abin da ruwan saman ya nuna",
+                    "none": "ba a kwatanta ba (kwatancen ruwan sama na buƙatar shekaru 5)"},
+        "peak_thin": "Daminar {year} ba ta da isassun hotuna bayyanannu na tauraron ɗan adam a wannan wuri ({obs}; "
+                     "ana buƙatar 8) don a yanke hukunci; a shekaru {n} masu isassun hotuna ({first}–{last}) "
+                     "koriyar gonar a ƙololuwa galibi {median} ce a ma'aunin NDVI.",
+        "few_years": "Shekaru {n} ne kawai tun {first} suke da isassun hotuna bayyanannu a wannan wuri (8 ko fiye a "
+                     "damina), saboda haka Kasafi bai kwatanta da ruwan sama ba, bai kuma bayyana yanayin canji ba; "
+                     "alƙaluman suna cikin bayanin.",
+        "trend": "Tun {first}, koriyar ƙololuwa {g}{bsi}.",
+        "trend_words": {"rising": "tana ƙaruwa", "falling": "tana raguwa", "no clear change": "ba ta nuna canji a fili"},
+        "bsi_words": {"rising": ", ƙasa mara ciyayi ta rani kuma tana faɗaɗa", "falling":
+                      ", ƙasa mara ciyayi ta rani kuma tana raguwa", "no clear change":
+                      ", ƙasa mara ciyayi ta rani kuma ba ta nuna canji a fili"},
+        "kind_map": "Taswirar yanayin ƙasa ta tauraron ɗan adam ta 2021 (ESA WorldCover) ta nuna wannan wuri a "
+                    "matsayin *{kind}*, saboda haka Kasafi bai kwatanta koriyarsa ba.",
+        "kind_low": "Koriyar wannan wuri a ƙololuwa ta kasance ƙasa da 0.2 a ma'aunin NDVI a mafi yawan shekaru "
+                    "(ciyayi kaɗan; taswirar yanayin ƙasa ta 2021 ta nuna shi a matsayin {lc}), saboda haka Kasafi "
+                    "bai kwatanta koriyarsa ba.",
+        "kinds": {"built-up area": "wurin gine-gine", "bare ground": "ƙasa mara ciyayi", "open water": "ruwa a fili",
+                  "little vegetation": "ciyayi kaɗan"},
+        "on_water": "Wannan wuri ruwa ne a fili: bayanan JRC (1984–2020) sun ga ruwa a kashi {occ}% na watannin da "
+                    "aka lura, kuma Sentinel-2 ta ga ruwa a nan a {when}.",
+        "water_seen": "An ga ruwa a fili a wannan wuri a {when}.",
+        "water_none": "Ba a ga ruwa a fili a wannan wuri a hotunan tauraron ɗan adam ba (Fabrairu–Oktoba, "
+                      "{first}–{last}).",
+        "water_caveat": "Ambaliya a ƙarƙashin shuke-shuke, gajeriyar ambaliya da ambaliya a ƙarƙashin gajimare na "
+                        "iya ɓacewa.",
+        "nearest": "Tafkin ruwa mafi kusa yana da nisan kilomita {km} daga wurinka (hekta {ha}; ruwa a kashi {occ}% na "
+                   "watannin da JRC ta lura, 1984–2020); Sentinel-2 ta ga ruwa a can a {when}.",
+        "nearest_none": "Babu tafkin ruwa (ruwa a rabin watannin da JRC ta lura, 1984–2020) a cikin kilomita 2 daga "
+                        "wurinka.",
+        "outline_sam": "Iyakar gona: kusan hekta {ha}, an zana ta daga hoton tauraron ɗan adam (SAM 3.1, mita 10): "
+                       "kiyasi ce, ba iyakar mallaka ba.",
+        "outline_circle": "Ba a iya zana iyakar gona daga hoton tauraron ɗan adam ba, saboda haka alƙaluman na "
+                          "da'ira ce ta kusan hekta 1 kewaye da wurinka.",
+        "resolution": "Sentinel-2: koriya (NDVI) da ruwa (NDWI) a mita 10, ƙasa mara ciyayi (BSI) da matakin "
+                      "gajimare a mita 20; bayanan ruwa (JRC) a mita 30; ruwan sama daga ragar Open-Meteo ta kusan "
+                      "kilomita 9.",
+        "years": "Shekaru {first}–{last}; hotuna bayyanannu na damina a kowace shekara: {counts}.",
+        "context": "*Daga takardu*",
+        "no_context": "Babu hasashen damina, hasashen ambaliya ko layin kasafin {year} na Ƙaramar Hukumar {lga} "
+                      "a ɗakin karatu kan wannan.",
+        "budget": "Layukan kasafin {year} na Ƙaramar Hukumar {lga} (noma, ban ruwa, zaizayar ƙasa):",
+        "budget_row": "• {name}: ₦{amount} ({title}, shafi na {page})",
+        "referral": "Don shawara kan abin da za a shuka ko abin da za a yi amfani da shi, ka tuntuɓi ma'aikatan "
+                    "hidimar noma (Sokoto ADP). Kasafi yana bayyana abin da hotunan suka nuna ne kawai.",
+        "sources": "Madogara: Copernicus Sentinel-2 L2A ta Microsoft Planetary Computer; JRC Global Surface Water "
+                   "v1.3; ESA WorldCover 2021; Open-Meteo archive (ERA5-Land).",
+        "working_head": "Kowace shekara (damina Yuni–Oktoba): hotuna bayyanannu, koriya a ƙololuwa (NDVI kashi 90), "
+                        "ruwan sama na Yuni–Oktoba, alamar kwatancen ruwan sama, watannin da aka ga ruwa, ƙasa mara "
+                        "ciyayi ta rani (matsakaicin BSI, Fabrairu–Afrilu).",
+        "working_row": "{year}: hotuna bayyanannu {obs}, NDVI {p90}, ruwan sama mm {rain}, {flag}; watannin ruwa: "
+                       "{months}; BSI {bsi}",
+        "flag_words": {"normal": "bambanci na yau da kullum", "below": "ƙasa da abin da ruwan saman ya nuna",
+                       "": "babu kwatancen ruwan sama", "thin": "hotuna bayyanannu kaɗan ne"},
+        "none": "–",
+        "fit_line": "Kwatancen ruwan sama a {years}: koriya = {a} + {b} × ruwan sama (mm); SD na saura {sd}.",
+        "turbid": "Lura: matakin gajimare na Sentinel-2 yana ɓoye ruwa mai laka mai haske ma, saboda haka ana iya "
+                  "ƙidaya ruwan watannin damina ƙasa da yadda yake a nan.",
+        "nearest_working": "Tafkin ruwa mafi kusa (kilomita {km}, hekta {ha}): watannin ruwa a kowace shekara {months}.",
+        "and": " da ", "in": "a ",
+    },
+}
+
+BUDGET_TERMS = ["agric", "irrigat", "erosion", "fadama", "farm", "dam ", "dams", "flood", "gully", "seed"]
+
+
+def _t(lang: str) -> dict:
+    return W["ha" if lang == "ha" else "en"]
+
+
+def _fmt(v, nd: int = 2) -> str:
+    return "–" if v is None else f"{v:.{nd}f}"
+
+
+def months_text(months: list[int], lang: str) -> str:
+    """'February–April and September–October' from [2, 3, 4, 9, 10]."""
+    names = MONTHS["ha" if lang == "ha" else "en"]
+    if not months:
+        return ""
+    runs: list[list[int]] = [[months[0]]]
+    for m in months[1:]:
+        if m == runs[-1][-1] + 1:
+            runs[-1].append(m)
+        else:
+            runs.append([m])
+    parts = [names[r[0] - 1] if len(r) == 1 else f"{names[r[0] - 1]}–{names[r[-1] - 1]}" for r in runs]
+    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + _t(lang)["and"] + parts[-1]
+
+
+def when_text(years: dict[int, H.YearRow], lang: str) -> str:
+    """'February–April and September–October in 2019–2026' when the months repeat; else per year."""
+    seen = {y: r.water_months for y, r in sorted(years.items()) if r.water_months}
+    if not seen:
+        return ""
+    ys = sorted(seen)
+    common = set(ys[-1] and seen[ys[-1]])
+    for y in ys:
+        common &= set(seen[y])
+    span = f"{ys[0]}–{ys[-1]}" if len(ys) > 2 and ys[-1] - ys[0] == len(ys) - 1 else ", ".join(str(y) for y in ys)
+    if common and len(ys) >= 3:
+        return f"{months_text(sorted(common), lang)} {_t(lang)['in']}{span}"
+    return "; ".join(f"{y} ({months_text(ms, lang)})" for y, ms in seen.items())
+
+
+# --- the summary ------------------------------------------------------------------------------------------------
+
+def summary(h: H.History, lang: str, today: date) -> str:
+    t = _t(lang)
+    lines: list[str] = []
+    usable = h.usable_years()
+    this = today.year
+    if not h.vegetated:
+        if h.kind == "little vegetation":
+            lines.append(t["kind_low"].format(lc=h.landcover or "–"))
+        else:
+            lines.append(t["kind_map"].format(kind=t["kinds"][h.kind]))
+    elif len(usable) < MIN_YEARS:                         # fewer than 5: no fit, no trend
+        lines.append(t["few_years"].format(n=len(usable), first=min(h.years)))
+    else:
+        median = sorted(h.years[y].ndvi_p90 for y in usable)[len(usable) // 2]
+        latest = max(usable)
+        r = h.years[this] if this in h.years else h.years[latest]
+        if this in usable and r.rain_season_mm is not None:
+            cmp = "above" if r.ndvi_p90 > median + 0.05 else "below" if r.ndvi_p90 < median - 0.05 else "near"
+            flag = h.fit.flags.get(this, "none") if h.fit else "none"
+            lines.append(t["peak"].format(year=this, p90=_fmt(r.ndvi_p90), cmp=t["cmp"][cmp], median=_fmt(median),
+                                          n=len(usable), first=usable[0], last=usable[-1], rain=f"{r.rain_season_mm:.0f}",
+                                          verdict=t["verdict"][flag]))
+        else:
+            lines.append(t["peak_thin"].format(year=this, obs=h.years[this].season_obs if this in h.years else 0,
+                                               n=len(usable), first=usable[0], last=usable[-1], median=_fmt(median)))
+        if "greenness" in h.trends:
+            g = t["trend_words"][h.trends["greenness"][0]]
+            bsi = t["bsi_words"][h.trends["bare_soil"][0]] if "bare_soil" in h.trends else ""
+            lines.append(t["trend"].format(first=usable[0], g=g, bsi=bsi))
+    lines.append(water_sentence(h, lang))
+    return " ".join(lines)
+
+
+def water_sentence(h: H.History, lang: str) -> str:
+    t = _t(lang)
+    years = sorted(h.years)
+    when = when_text(h.years, lang)
+    if h.on_water:
+        occ = h.jrc.get("occurrence")
+        s = t["on_water"].format(occ=f"{occ:.0f}" if occ is not None else "–", when=when or t["none"])
+    elif when:
+        s = t["water_seen"].format(when=when) + " " + t["water_caveat"]
+    else:
+        s = t["water_none"].format(first=years[0] + (1 if h.years[years[0]].season_obs == 0 else 0), last=years[-1]) \
+            + " " + t["water_caveat"]
+    if h.nearest_water:
+        nw = h.nearest_water
+        nh = nw.get("history")
+        nwhen = when_text(nh.years, lang) if nh else ""
+        s += " " + t["nearest"].format(km=f"{nw['distance_m'] / 1000:.1f}", ha=nw["area_ha"], occ=nw["occurrence"],
+                                       when=nwhen or t["none"])
+    return s
+
+
+def details(h: H.History, lang: str) -> str:
+    """The per-year figures, once, for 'show working'."""
+    t = _t(lang)
+    out = [t["working_head"]]
+    for y in sorted(h.years):
+        r = h.years[y]
+        if r.season_obs == 0 and r.dry_obs == 0 and not r.water_months:
+            continue
+        flag = ("thin" if not r.usable else (h.fit.flags.get(y, "") if h.fit else ""))
+        out.append(t["working_row"].format(
+            year=y, obs=r.season_obs, p90=_fmt(r.ndvi_p90, 3), rain=f"{r.rain_season_mm:.0f}" if r.rain_season_mm
+            is not None else t["none"], flag=t["flag_words"][flag], months=months_text(r.water_months, lang) or
+            t["none"], bsi=_fmt(r.bsi_dry, 3)))
+    if h.fit:
+        out.append(t["fit_line"].format(years=f"{h.fit.years[0]}–{h.fit.years[-1]}", a=_fmt(h.fit.intercept, 3),
+                                        b=f"{h.fit.slope * 100:.3f}/100", sd=_fmt(h.fit.sd, 3)))
+    if h.water_seen:
+        out.append(t["turbid"])
+    if h.nearest_water and h.nearest_water.get("history"):
+        nw = h.nearest_water
+        months = "; ".join(f"{y} ({months_text(r.water_months, lang)})" for y, r in sorted(nw["history"].years.items())
+                           if r.water_months) or t["none"]
+        out.append(t["nearest_working"].format(km=f"{nw['distance_m'] / 1000:.1f}", ha=nw["area_ha"], months=months))
+    out.append(t["sources"])
+    return "\n".join(out)
+
+
+def outline_line(o: Outline | None, lang: str) -> str:
+    t = _t(lang)
+    if o is not None and o.is_plot:
+        return t["outline_sam"].format(ha=f"{o.area_ha:.1f}")
+    return t["outline_circle"]
+
+
+def facts_line(h: H.History, lang: str) -> str:
+    t = _t(lang)
+    years = [y for y in sorted(h.years) if h.years[y].season_obs or h.years[y].dry_obs]
+    counts = ", ".join(f"{y} {h.years[y].season_obs}" for y in years)
+    return t["resolution"] + "\n" + t["years"].format(first=years[0] if years else "–", last=years[-1] if years
+                                                       else "–", counts=counts)
+
+
+# --- context from the library ----------------------------------------------------------------------------------
+
+def library_context(conn, lang: str, lga: str, lga_pcode: str, today: date) -> str:
+    """NiMet's seasonal prediction for the LGA, the NIHSA outlook, and this year's agriculture, irrigation and
+    erosion lines for the LGA from the structured core; quoted and cited, no verdicts."""
+    from app.agent.analysis import lga_projects
+    from app.hazards import read
+    from app.hazards.official import outlook_answer
+    t = _t(lang)
+    parts: list[str] = []
+    where = read.Where("lga", lga_pcode, lga) if lga_pcode else read.Where("state")
+    for which, most in (("climate", 5), ("flood", 3)):
+        try:
+            oa = outlook_answer(conn, which, lang, where, question="rainfall season" if which == "climate" else "")
+        except Exception as e:                      # noqa: BLE001 - the context is extra
+            log.warning("place: outlook context failed: %s", type(e).__name__)
+            oa = None
+        if oa is not None and oa.found:
+            lines = [ln for ln in oa.text.splitlines() if ln.strip()]
+            cite = [ln for ln in lines if ln.startswith("📄")]
+            body = [ln for ln in lines if not ln.startswith("📄")][: most + 2]
+            parts.append("\n".join(body + cite[:1]))
+    if lga:
+        try:
+            res = lga_projects(conn, {"lga": lga, "terms": BUDGET_TERMS})
+        except Exception as e:                      # noqa: BLE001
+            log.warning("place: budget context failed: %s", type(e).__name__)
+            res = None
+        if res is not None and res.found and res.rows:
+            rows = [t["budget_row"].format(name=r.name, amount=f"{r.amount:,.0f}", title=res.titles.get(r.doc_id, r.doc_id),
+                                           page=r.page) for r in res.rows[:5]]
+            parts.append(t["budget"].format(year=res.year, lga=res.subject) + "\n" + "\n".join(rows))
+    if not parts:
+        return t["no_context"].format(year=today.year, lga=lga or "–")
+    return t["context"] + "\n" + "\n\n".join(parts)
+
+
+# --- the whole answer -------------------------------------------------------------------------------------------
+
+def first_request(conn, lat: float, lon: float, today: date) -> bool:
+    if conn is None:
+        return True
+    cached = H._load(conn, H.cell_id(lat, lon))
+    return any(not H._fresh(cached.get(("s2", y)), y, today) for y in range(H.GOOD_FROM, today.year + 1))
+
+
+async def place_answer(conn, settings, question: str, english: str, lang: str, place: dict | None,
+                       today: date, notify=None) -> PlaceAnswer:
+    t = _t(lang)
+    if not place or place.get("lat") is None or place.get("lon") is None:
+        return PlaceAnswer(t["need_pin"], False, needs_pin=True)
+    lat, lon = float(place["lat"]), float(place["lon"])
+    lga, pcode = str(place.get("lga") or ""), str(place.get("lga_pcode") or "")
+    timing: dict[str, float] = {}
+    t0 = time.perf_counter()
+    if notify is not None and first_request(conn, lat, lon, today):
+        await notify(t["progress"].format(n=today.year - H.GOOD_FROM + 1))
+    outline = await plot_outline(conn, settings, lat, lon, today=today)
+    timing["outline"] = time.perf_counter() - t0
+    t1 = time.perf_counter()
+    h = await asyncio.to_thread(H.point_history, conn, lat, lon, today=today,
+                                polygon=outline.geometry if outline.is_plot else None,
+                                water=water_asked(f"{question} {english}"))
+    timing["history"] = time.perf_counter() - t1
+    t2 = time.perf_counter()
+    context = library_context(conn, lang, lga, pcode, today) if conn is not None else ""
+    timing["context"] = time.perf_counter() - t2
+    text = "\n\n".join(x for x in [t["head"].format(lga=lga or "–"), summary(h, lang, today),
+                                   outline_line(outline, lang) + "\n" + facts_line(h, lang), context,
+                                   t["referral"], t["sources"]] if x)
+    specs = [{"kind": "place_chart", "lat": lat, "lon": lon, "lga": lga},
+             {"kind": "place_map", "lat": lat, "lon": lon, "lga": lga}]
+    timing["total"] = time.perf_counter() - t0
+    log.info("place answer: %s LGA, %s, %d usable years, outline %s, %.1fs", lga or "?", h.kind or "vegetated",
+             len(h.usable_years()), outline.method, timing["total"])
+    return PlaceAnswer(text, True, details(h, lang), specs=specs, history=h, outline=outline, timing=timing)

@@ -246,9 +246,11 @@ def _place_labels(ax, items: list[tuple[float, float, str]], fontsize: float = p
                     arrowprops={"arrowstyle": "-", "color": INK, "linewidth": 0.9, "shrinkA": 0, "shrinkB": 9})
 
 
-def _finish(fig, ax, title: str, subtitle: str, footer: str, legend_line: str = "", legend_y: float = 0.0) -> bytes:
-    ax.set_axis_off()
-    ax.set_aspect(1.0 / 0.974)            # degrees near 13° N: a longitude degree is ~0.97 of a latitude degree
+def _finish(fig, ax, title: str, subtitle: str, footer: str, legend_line: str = "", legend_y: float = 0.0,
+            aspect: bool = True) -> bytes:
+    if aspect:                            # a map; a chart keeps its axes
+        ax.set_axis_off()
+        ax.set_aspect(1.0 / 0.974)        # degrees near 13° N: a longitude degree is ~0.97 of a latitude degree
     lines = textwrap.wrap(title, 48)
     fig.text(0.03, 0.972, "\n".join(lines), fontsize=TITLE, fontweight="bold", color=INK, va="top", linespacing=1.15)
     if subtitle:
@@ -452,6 +454,9 @@ def draw(conn, s: dict, lang: str, today: date | None = None) -> MapImage | None
         return local_map(conn, s["layer"], day, s["lat"], s["lon"], lang, today, s.get("label", ""))
     if s["kind"] == "fires":
         return fires_map(conn, s.get("view", "state"), lang, s.get("pcode", ""), s.get("lat"), s.get("lon"))
+    if s["kind"] in ("place_chart", "place_map"):          # place history (app/place/images.py)
+        from app.place.images import draw_place
+        return draw_place(conn, s, lang, today)
     return None
 
 

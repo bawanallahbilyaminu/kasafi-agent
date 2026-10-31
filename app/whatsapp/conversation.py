@@ -32,6 +32,7 @@ from app.geo.facilities import (FacilitySearch, add_routes, emergency_lookup, fi
 from app.geo.facilities import FACILITY as FACILITY_WORD
 from app.geo.facility_info import NAMED, ROUTE_TO, as_facility, card, counted, is_count, lookup
 from app.geo.location import SHARE, Spot, locate_point, pin_of, place_from_text
+from app.place.answer import place_route
 from app.maps.render import render_specs
 from app.geo.location import memory as location_memory
 from app.guardrails import scope
@@ -125,6 +126,9 @@ def searching_key(question: str) -> str:
     money for them), documents otherwise. Words only: the planner hasn't run yet."""
     from app.agent.answer import MONEY_WORDS
     from app.hazards.answer import layers_asked
+    from app.place.answer import place_route
+    if place_route(question):
+        return "searching_satellite"
     return "searching_forecasts" if layers_asked(question) and not MONEY_WORDS.search(question or "") else "searching"
 
 
@@ -209,11 +213,15 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     # 5. Consented: limits (skipped for our own test numbers), then work
     lang = user.lang or "ha"
     # a location pin, or "share my location": handled here (PostGIS, no model); the point stays in memory only
+    resume = ""                                  # a place-history question that waited for this pin
     if kind == "location" or (text and SHARE.search(text)):
         outs = await _location(msg, key, lang, store, settings, locate_fn)
         if pin_of(msg) and (spot := location_memory.recall(key)) and (q := location_memory.waiting_question(key)):
             outs += await _after_location(q, key, lang, settings, facility_fn, spot)    # the question that asked
-        return outs
+            if place_route(q) and not is_facility_query(q):
+                resume = q
+        if not resume:
+            return outs
     # the reply to "share your location, or tell me your LGA or town": a typed place, from our own gazetteer
     if text and (waiting := location_memory.waiting_question(key)) is not None:
         if (typed := await place_fn(settings, text)) is not None:
@@ -291,6 +299,9 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         if options := getattr(result, "clarify", None):     # two readings: ask which one, with buttons
             store.set_pending_clarify(key, options)
             return [Out(text_out, [(f"clar_{i}", o["title"][:20]) for i, o in enumerate(options[:3])])]   # split when sent
+        if getattr(result, "needs_pin", False):             # a place-history question: the pin first, then the answer
+            location_memory.wait_for_location(key, question)
+            return [Out(text_out, lang=lang, location_request=True)]
         crops = (plan_crops(result, settings.kasafi_max_images)
                  if result is not None and settings.kasafi_evidence_images and store.images_on(key) else None)
         outs = [Out(text_out, CALC_BUTTONS.get(lang, CALC_BUTTONS["en"]) if offer else None, crops or None, lang)]
@@ -301,6 +312,9 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             if len(drawn) < len(specs):            # the answer always has its map; when it can't be drawn, say so
                 outs.append(Out(t("map_failed", lang), lang=lang))
         return outs
+
+    if resume:                                   # the pin arrived: the place-history question now has its point
+        return outs + await respond(resume, "", Out(t("echo", lang, text=resume[:500])))
 
     async def resolution_reply(res: Resolution, pending_q: str, reply: str = "") -> list[Out]:
         if res.kind == "ambiguous":            # replace or add? Ask once; the pending question stays

@@ -22,6 +22,7 @@ dependencies = [
     "cryptography>=43",
     "psycopg-pool>=3.2",
     "rasterio>=1.5.2",
+    "meta-sam-parser>=0.1.0",
 ]
 
 [dependency-groups]

@@ -34,14 +34,17 @@ def _headers() -> dict[str, str]:
 
 
 def search(collection: str, lon: float, lat: float, start: str, end: str, *, max_cloud: float | None = None,
-           fields: list[str] | None = None, limit: int = 2000) -> list[dict]:
+           fields: list[str] | None = None, limit: int = 2000, ids: list[str] | None = None) -> list[dict]:
     """Items of a collection whose footprint holds the point, dated start/end (ISO dates), oldest first.
-    Pages are followed; `fields` keeps the response small (properties.datetime, assets.B04.href, ...)."""
+    Pages are followed; `fields` keeps the response small (properties.datetime, assets.B04.href, ...); `ids`
+    narrows to named items (a scene cached by id)."""
     body: dict = {"collections": [collection], "intersects": {"type": "Point", "coordinates": [lon, lat]},
                   "datetime": f"{start}/{end}", "limit": min(PAGE, limit),
                   "sortby": [{"field": "properties.datetime", "direction": "asc"}]}
     if max_cloud is not None:
         body["query"] = {"eo:cloud_cover": {"lt": max_cloud}}
+    if ids:
+        body["ids"] = list(ids)
     if fields:
         body["fields"] = {"include": fields, "exclude": ["geometry", "links"]}
     out: list[dict] = []

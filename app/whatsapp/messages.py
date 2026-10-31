@@ -215,6 +215,14 @@ TEXTS = {
         "ha": "Kasafi ba ya ba da shawarar magani ko ta abinci mai gina jiki.\n\nDon Allah ka tuntuɓi ma'aikacin lafiya. Zan iya taimaka maka da alƙaluman kasafin lafiya, misali: «Nawa aka ware wa lafiya a 2026?»",
         "en": "Kasafi doesn't give medical or nutrition advice.\n\nPlease speak to a health worker. I can help with health budget figures, for example: «How much was allocated to health in 2026?»",
     },
+    "guard_land": {
+        "ha": "Kasafi ba ya tabbatar da mallakar ƙasa ko iyakokin gona, kuma ba ya ba da takardar shaida.\n\nZan iya nuna maka abin da hotunan tauraron ɗan adam suka nuna game da koriyar gona, ruwa ko ƙasa mara ciyayi a shekarun baya, misali: «Yaya koriyar gonata ta kasance a 2024?»",
+        "en": "Kasafi can't confirm who owns land, where a farm's boundary runs, or issue any certificate.\n\nI can show what the satellite images say about a farm's greenness, water or bare soil over the years, for example: «How green was my farm in 2024?»",
+    },
+    "searching_satellite": {          # a place-history question: satellite images, not documents
+        "ha": "🛰️ Ina duba hotunan tauraron ɗan adam…",
+        "en": "🛰️ Checking the satellite images…",
+    },
     "images_off": {
         "ha": "To, daga yanzu ba zan riƙa aiko da hotunan shaida ba.\n\nRubuta *kunna hotuna* idan kana so a dawo da su.",
         "en": "OK, I won't send evidence images from now on.\n\nSend *images on* to turn them back on.",
