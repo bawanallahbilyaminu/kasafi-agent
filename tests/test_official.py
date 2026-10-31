@@ -230,6 +230,10 @@ def test_the_eval_checks_hold_on_the_code_built_answers() -> None:
     text = official.outlook_answer(Conn([ONSET, length]), "climate", "en", Where("state"), NOW,
                                    "What did NiMet predict for Sokoto's rainy season?").text
     assert wrong(checks["a03"], SimpleNamespace(text=text, exact=text)) == ""
+    from app.hazards.summary import status
     for cid, lang in [("a01", "en"), ("a05", "ha")]:
-        text = "\n".join(official.official_lines(conn, lang, ["flood"], GORONYO, NOW)) + "\nRima near Goronyo"
+        # as answers are built now: the summary ends with the warning status; the details quote what exists
+        text = "\n".join([status(conn, lang, ["flood"], GORONYO, NOW),
+                          *official.official_lines(conn, lang, ["flood"], GORONYO, NOW, status=False),
+                          "These are model forecasts, not official warnings.", "Rima near Goronyo"])
         assert wrong(checks[cid], SimpleNamespace(text=text, exact=text)) == "", cid
