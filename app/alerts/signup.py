@@ -45,14 +45,15 @@ WORDS = {
         "menu": "🔔 *Kasafi alerts*\n{have}Choose what and where in one reply, e.g. *1 3 Goronyo* or *floods Goronyo, "
                 "Wurno*:\n1 Heat\n2 Harmattan dust\n3 Floods\n4 Disease outbreaks\n5 All four\nThen the LGA or LGAs: "
                 "any of Sokoto's 23.",
-        "have": "You're signed up for {hazards} in {lgas}. To add more:\n",
+        "have": "You're signed up for {pairs}. To add more:\n", "pair": "{hazard} in {lga}",
         "ask_lga": "Which LGA or LGAs should the {hazards} alerts cover? E.g. *Goronyo* or *Goronyo, Wurno*.",
         "confirm": "🔔 *Kasafi alerts*: {hazards} in {lgas}.\n"
                    "• At most one alert per hazard per LGA a day, and none from 22:00 to 06:00 except official "
                    "warnings.\n"
                    "• Each alert names its source. Alerts are information, not emergency response.\n"
-                   "• Kasafi keeps only a code made from your number (never the number), the LGAs, the hazards, your "
-                   "language and the date you signed up. Reply STOP at any time to stop and delete them.\n"
+                   "• To send you alerts, Kasafi keeps your WhatsApp number encrypted, with the LGAs, the hazards, "
+                   "your language and the date you signed up; nothing else. Reply STOP at any time to stop and "
+                   "delete it all.\n"
                    "• Alerts will be in English (reply HAUSA for Hausa).\n\nSign up?",
         "done": "You're signed up for Kasafi alerts about {hazards} in {lgas}. You'll get at most one alert per hazard "
                 "per day, and none at night except official warnings. Each alert names its source. Reply STOP at any "
@@ -68,16 +69,16 @@ WORDS = {
         "menu": "🔔 *Faɗakarwar Kasafi*\n{have}Zaɓi abin da kuma inda a saƙo ɗaya, misali *1 3 Goronyo* ko *ambaliya "
                 "Goronyo, Wurno*:\n1 Zafin rana\n2 Ƙurar hunturu\n3 Ambaliya\n4 Ɓarkewar cututtuka\n5 Duka huɗun\n"
                 "Sannan ƙaramar hukuma ɗaya ko fiye: kowace daga cikin 23 na Jihar Sokoto.",
-        "have": "Kana da rajistar {hazards} a {lgas}. Don ƙara wasu:\n",
+        "have": "Kana da rajistar {pairs}. Don ƙara wasu:\n", "pair": "{hazard} a {lga}",
         "ask_lga": "Wace ƙaramar hukuma (ɗaya ko fiye) faɗakarwar {hazards} za ta shafa? Misali *Goronyo* ko "
                    "*Goronyo, Wurno*.",
         "confirm": "🔔 *Faɗakarwar Kasafi*: {hazards} a {lgas}.\n"
                    "• Faɗakarwa ɗaya kawai ga kowane haɗari a kowace ƙaramar hukuma a rana, kuma babu daga 22:00 zuwa "
                    "06:00 sai gargaɗin hukuma.\n"
                    "• Kowace faɗakarwa tana faɗin majiyarta. Bayani ne, ba agajin gaggawa ba.\n"
-                   "• Kasafi zai ajiye lambar sirri da aka yi daga lambar wayarka kawai (ba lambar kanta ba), "
-                   "ƙananan hukumomin, haɗurran, harshenka da ranar rajista. Rubuta DAINA a kowane lokaci don dainawa "
-                   "da goge su.\n"
+                   "• Don aiko maka da faɗakarwa, Kasafi zai ajiye lambar WhatsApp ɗinka a ɓoye (an rufe ta da "
+                   "makulli), tare da ƙananan hukumomin, haɗurran, harshenka da ranar rajista; babu wani abu kuma. "
+                   "Rubuta DAINA a kowane lokaci don dainawa da goge su duka.\n"
                    "• Faɗakarwar za ta zo da Hausa (rubuta ENGLISH don Turanci).\n\nA yi rajista?",
         "done": "An yi maka rajistar faɗakarwar Kasafi game da {hazards} a {lgas}. Ba za ka samu fiye da faɗakarwa "
                 "ɗaya ga kowane haɗari a rana ba, kuma babu da daddare sai sanarwar hukuma. Kowace faɗakarwa tana "
@@ -154,7 +155,12 @@ def _gather(store, key: str, lang: str, hazards: list[str], lgas: list[str], tex
 
 def _menu(store, key: str, lang: str) -> Step:
     w, sub = _w(lang), store.subscription(key)
-    have = w["have"].format(hazards=hazards_text(sub["hazards"], lang), lgas=lgas_text(sub["lgas"], lang)) if sub else ""
+    by_lga: dict[str, list[str]] = {}
+    for lga, h in (sub["pairs"] if sub else []):
+        by_lga.setdefault(lga, []).append(h)
+    pairs = "; ".join(w["pair"].format(hazard=hazards_text(hs, lang), lga=lgas_text([lga], lang))
+                      for lga, hs in by_lga.items())
+    have = w["have"].format(pairs=pairs) if pairs else ""
     return Step([(w["menu"].format(have=have), None)])
 
 
@@ -164,7 +170,7 @@ def more_question(store, key: str, lang: str) -> str:
     if not sub:
         return ""
     for row in store.alert_log(500):
-        if row["status"] in ("sent", "dry_run") and row["hazard"] in sub["hazards"] and row["lga_pcode"] in sub["lgas"]:
+        if row["status"] in ("sent", "dry_run") and [row["lga_pcode"], row["hazard"]] in sub["pairs"]:
             w = _w(lang)
             if row["hazard"] == "outbreak":
                 return w["more_outbreak"]

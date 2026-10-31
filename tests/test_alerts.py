@@ -37,13 +37,15 @@ def test_a_hausa_sign_up_message_asks_for_an_explicit_ok_before_storing_anything
     store = _store()
     step = signup.reply("Sanar da ni game da ambaliya a Goronyo", None, "k", "ha", store)
     text, buttons = step.messages[0]
-    assert "ambaliya a Ƙaramar Hukumar Goronyo" in text and "DAINA" in text and "ba lambar kanta ba" in text
+    assert "ambaliya a Ƙaramar Hukumar Goronyo" in text and "DAINA" in text
+    assert "lambar WhatsApp ɗinka a ɓoye" in text and "ba lambar kanta ba" not in text   # the number, encrypted
     assert [b[0] for b in buttons] == ["alert_yes", "alert_no", "alert_ask"]
     assert all(len(title) <= 20 for _, title in buttons)
     assert store.subscription("k") is None                                     # nothing until the OK
     done = signup.reply("", "alert_yes", "k", "ha", store)
     assert "An yi maka rajistar" in done.messages[0][0]
-    assert store.subscription("k") == {"lgas": [GORONYO], "hazards": ["flood"], "lang": "ha"}
+    assert store.subscription("k") == {"lgas": [GORONYO], "hazards": ["flood"], "lang": "ha",
+                                       "pairs": [[GORONYO, "flood"]]}
 
 
 def test_the_subscription_keeps_the_key_lgas_hazards_language_dates_and_the_number_encrypted() -> None:
@@ -52,8 +54,9 @@ def test_the_subscription_keeps_the_key_lgas_hazards_language_dates_and_the_numb
     signup.reply("alert me about heat in Wamakko", None, "k", "en", store)
     signup.reply("yes", None, "k", "en", store, seal=lambda: recipients.encrypt("+234 800 000 0011", s))
     cols = [r[1] for r in store._db.execute("PRAGMA table_info(alert_subs)")]
-    assert cols == ["user_key", "lgas", "hazards", "lang", "created_at", "number_enc", "last_contact_at"]
-    assert store.subscription("k") == {"lgas": [WAMAKKO], "hazards": ["heat"], "lang": "en"}
+    assert cols == ["user_key", "lgas", "hazards", "lang", "created_at", "number_enc", "last_contact_at", "pairs"]
+    assert store.subscription("k") == {"lgas": [WAMAKKO], "hazards": ["heat"], "lang": "en",
+                                       "pairs": [[WAMAKKO, "heat"]]}
     raw = store._db.execute("SELECT number_enc FROM alert_subs").fetchone()[0]
     assert "8000000011" not in raw and recipients.decrypt(raw, s) == "2348000000011"
 
@@ -141,7 +144,11 @@ def test_a_second_sign_up_adds_to_the_first() -> None:
     store = _store("en")
     store.subscribe("k", [GORONYO], ["flood"], "en")
     store.subscribe("k", [WURNO], ["heat"], "ha")
-    assert store.subscription("k") == {"lgas": [GORONYO, WURNO], "hazards": ["heat", "flood"], "lang": "ha"}
+    assert store.subscription("k") == {"lgas": [GORONYO, WURNO], "hazards": ["heat", "flood"], "lang": "ha",
+                                       "pairs": [[GORONYO, "flood"], [WURNO, "heat"]]}
+    # exactly what was signed up for: floods in Goronyo and heat in Wurno, not heat in Goronyo
+    assert store.subscribers(GORONYO, "flood") == [("k", "ha")] and store.subscribers(GORONYO, "heat") == []
+    assert store.subscribers(WURNO, "heat") == [("k", "ha")] and store.subscribers(WURNO, "flood") == []
 
 
 def test_just_answer_now_answers_the_message_and_no_declines() -> None:

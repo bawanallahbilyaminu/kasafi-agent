@@ -86,7 +86,8 @@ CREATE TABLE IF NOT EXISTS alert_subs (  -- hazard alerts a user signed up for (
     lang       TEXT NOT NULL,      -- the alert template's language: 'ha' | 'en'
     created_at TEXT NOT NULL,
     number_enc TEXT,               -- the WhatsApp number, encrypted (app/alerts/recipients.py), to send alerts to
-    last_contact_at TEXT           -- the user's last message: 90 days without one deletes the subscription
+    last_contact_at TEXT,          -- the user's last message: 90 days without one deletes the subscription
+    pairs      TEXT                -- JSON [[LGA P-code, hazard], ...]: exactly what was signed up for
 );
 CREATE TABLE IF NOT EXISTS alert_log (   -- each alert decided, per hazard and LGA (no user keys), for the admin page
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -158,7 +159,7 @@ class UserStore:
         if "pending_alert" not in have:          # an alert sign-up waiting for the user's explicit OK (step 6)
             self._db.execute("ALTER TABLE users ADD COLUMN pending_alert TEXT")
         sub_cols = {row[1] for row in self._db.execute("PRAGMA table_info(alert_subs)")}
-        for col in ("number_enc", "last_contact_at"):      # live alerts need an address (subscribers only)
+        for col in ("number_enc", "last_contact_at", "pairs"):    # an address (subscribers only); exact pairs
             if col not in sub_cols:
                 self._db.execute(f"ALTER TABLE alert_subs ADD COLUMN {col} TEXT")
         turn_cols = {row[1] for row in self._db.execute("PRAGMA table_info(turns)")}
@@ -284,18 +285,23 @@ class UserStore:
 
     def subscribe(self, key: str, lgas: list[str], hazards: list[str], lang: str, number_enc: str | None = None
                   ) -> dict:
-        """Add LGAs and hazards to the user's alerts (a second sign-up adds to the first); the language is the
-        latest chosen, and the encrypted number the latest given. Returns the subscription as stored."""
-        have = self.subscription(key) or {"lgas": [], "hazards": []}
-        lgas = sorted(set(have["lgas"]) | set(lgas))
-        hazards = [h for h in ("heat", "dust", "flood", "outbreak") if h in set(have["hazards"]) | set(hazards)]
+        """Add this sign-up's (LGA, hazard) pairs to the user's alerts: 'dust in Wamakko' then 'heat in Goronyo'
+        is those two, never dust in Goronyo too. The language is the latest chosen, the encrypted number the latest
+        given. Returns the subscription as stored."""
+        have = self.subscription(key) or {"pairs": []}
+        order = ("heat", "dust", "flood", "outbreak")
+        pairs = sorted({tuple(p) for p in have["pairs"]} | {(lga, h) for lga in lgas for h in hazards},
+                       key=lambda p: (p[0], order.index(p[1]) if p[1] in order else 9))
+        lgas = sorted({lga for lga, _ in pairs})
+        hazards = [h for h in order if any(p[1] == h for p in pairs)]
         now = datetime.now(timezone.utc).isoformat()
-        self._exec("INSERT INTO alert_subs (user_key, lgas, hazards, lang, created_at, number_enc, last_contact_at) "
-                   "VALUES (?,?,?,?,?,?,?) ON CONFLICT(user_key) DO UPDATE SET lgas=excluded.lgas, "
+        self._exec("INSERT INTO alert_subs (user_key, lgas, hazards, lang, created_at, number_enc, last_contact_at, "
+                   "pairs) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(user_key) DO UPDATE SET lgas=excluded.lgas, "
                    "hazards=excluded.hazards, lang=excluded.lang, last_contact_at=excluded.last_contact_at, "
-                   "number_enc=coalesce(excluded.number_enc, alert_subs.number_enc)",
-                   (key, json.dumps(lgas), json.dumps(hazards), lang, now, number_enc, now))
-        return {"lgas": lgas, "hazards": hazards, "lang": lang}
+                   "pairs=excluded.pairs, number_enc=coalesce(excluded.number_enc, alert_subs.number_enc)",
+                   (key, json.dumps(lgas), json.dumps(hazards), lang, now, number_enc, now,
+                    json.dumps([list(p) for p in pairs])))
+        return {"lgas": lgas, "hazards": hazards, "lang": lang, "pairs": [list(p) for p in pairs]}
 
     def alert_number(self, key: str) -> str | None:
         """The subscriber's encrypted number (app/alerts/recipients.decrypt), or None."""
@@ -312,9 +318,19 @@ class UserStore:
         cutoff = ((now or datetime.now(timezone.utc)) - timedelta(days=days)).isoformat()
         return self._exec("DELETE FROM alert_subs WHERE coalesce(last_contact_at, created_at) < ?", (cutoff,)).rowcount
 
+    @staticmethod
+    def _pairs(lgas: str, hazards: str, pairs: str | None) -> list[list[str]]:
+        """The (LGA, hazard) pairs signed up for (a row from before pairs were kept: every LGA with every hazard)."""
+        if pairs:
+            return json.loads(pairs)
+        return [[lga, h] for lga in json.loads(lgas) for h in json.loads(hazards)]
+
     def subscription(self, key: str) -> dict | None:
-        row = self._exec("SELECT lgas, hazards, lang FROM alert_subs WHERE user_key=?", (key,)).fetchone()
-        return {"lgas": json.loads(row[0]), "hazards": json.loads(row[1]), "lang": row[2]} if row else None
+        row = self._exec("SELECT lgas, hazards, lang, pairs FROM alert_subs WHERE user_key=?", (key,)).fetchone()
+        if not row:
+            return None
+        return {"lgas": json.loads(row[0]), "hazards": json.loads(row[1]), "lang": row[2],
+                "pairs": self._pairs(row[0], row[1], row[3])}
 
     def unsubscribe(self, key: str) -> bool:
         """STOP / DAINA: the subscription is deleted (not flagged). True when there was one."""
@@ -322,9 +338,9 @@ class UserStore:
 
     def subscribers(self, lga_pcode: str, hazard: str) -> list[tuple[str, str]]:
         """(user key, language) of everyone signed up for this hazard in this LGA."""
-        rows = self._exec("SELECT user_key, lgas, hazards, lang FROM alert_subs").fetchall()
-        return [(k, lang) for k, lgas, hazards, lang in rows
-                if lga_pcode in json.loads(lgas) and hazard in json.loads(hazards)]
+        rows = self._exec("SELECT user_key, lgas, hazards, lang, pairs FROM alert_subs").fetchall()
+        return [(k, lang) for k, lgas, hazards, lang, pairs in rows
+                if [lga_pcode, hazard] in self._pairs(lgas, hazards, pairs)]
 
     def log_alert(self, hazard: str, lga_pcode: str, key: str, official: bool, status: str, recipients: int,
                   langs: dict | None = None, message: dict | None = None, note: str = "",
