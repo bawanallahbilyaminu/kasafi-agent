@@ -30,6 +30,7 @@ from app.geo.facilities import WORDS as FAC_WORDS
 from app.geo.facilities import (FacilitySearch, emergency_lookup, filters_from, follow_up, is_facility_query,
                                 location_payload, profile_from, search_replies)
 from app.geo.location import SHARE, Spot, locate_point, pin_of, place_from_text
+from app.maps.render import render_specs
 from app.geo.location import memory as location_memory
 from app.guardrails import scope
 from app.guardrails import emergency as em
@@ -73,6 +74,7 @@ class Out:
     lang: str = "ha"
     location_request: bool = False     # sent as WhatsApp's location request message ("Share location" button)
     location: dict | None = None       # sent as a location message (a facility's pin): latitude, longitude, name...
+    image: bytes | None = None         # a map (JPEG), sent with `text` as its caption
 
 
 def _norm(text: str) -> str:
@@ -190,6 +192,9 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     if text and settings.has_database and (outs := await _facilities(text, key, lang, store, settings, place_fn,
                                                                          facility_fn)) is not None:
         return outs
+    # "show me a map" / "nuna min taswira" on its own: the map for what was just asked, no model
+    if text and settings.has_database and MAP_ONLY.match(text):
+        return await _map_only(key, lang, store, settings)
     if (images := IMAGE_COMMANDS.get(_norm(text))) is not None:     # "images off" / "kashe hotuna": no model needed
         store.set_images(key, images)
         return [Out(t("images_on" if images else "images_off", lang))]
@@ -252,7 +257,11 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             return [Out(text_out[:1024], [(f"clar_{i}", o["title"][:20]) for i, o in enumerate(options[:3])])]
         crops = (plan_crops(result, settings.kasafi_max_images)
                  if result is not None and settings.kasafi_evidence_images and store.images_on(key) else None)
-        return [Out(text_out, CALC_BUTTONS.get(lang, CALC_BUTTONS["en"]) if offer else None, crops or None, lang)]
+        outs = [Out(text_out, CALC_BUTTONS.get(lang, CALC_BUTTONS["en"]) if offer else None, crops or None, lang)]
+        if (specs := getattr(result, "maps", None)) and store.images_on(key) and settings.has_database:
+            outs += [Out(m.caption, lang=lang, image=m.jpeg)
+                     for m in await asyncio.to_thread(render_specs, settings, specs, lang)]
+        return outs
 
     async def resolution_reply(res: Resolution, pending_q: str, reply: str = "") -> list[Out]:
         if res.kind == "ambiguous":            # replace or add? Ask once; the pending question stays
@@ -447,6 +456,38 @@ async def _emergency(key: str, lang: str, d: em.Detection, store: UserStore, set
     return outs
 
 
+MAP_ONLY = re.compile(r"(?i)^\s*(?:(?:please\s+)?(?:show|send|give)\s+(?:me\s+)?(?:a|the)\s+maps?|(?:a\s+)?maps?|"
+                      r"(?:don allah\s+)?(?:nuna|turo|aiko)(?:\s+min|\s+mini)?\s+(?:da\s+)?taswira\w*|taswira\w*)"
+                      r"\s*[?.!]*\s*$")
+MAP_NONE = {"en": "There's no map for that yet: ask about heat, dust, rain, rivers or the nearest health facility.",
+            "ha": "Babu taswira ga haka tukuna: tambayi game da zafin rana, ƙura, ruwan sama, koguna ko cibiyar lafiya "
+                  "mafi kusa."}
+
+
+async def _map_only(key: str, lang: str, store: UserStore, settings: Settings) -> list[Out]:
+    """'Show me a map' on its own: after a facility search, the near-you map; else the map of the hazard the last
+    question asked about (what is in season when it named none), the user's LGA outlined."""
+    from app.geo.facilities import _near_map, route_line
+    from app.hazards.answer import SEASON, layers_asked
+    from app.agent.answer import lagos_today
+    spot, search = location_memory.recall(key), location_memory.last_search(key)
+    if spot is not None and search is not None and search.shown:
+        line = await route_line(settings, spot.lat, spot.lon, search.shown[0], search.profile)
+        image = await asyncio.to_thread(_near_map, settings, spot.lat, spot.lon, search.shown[0].lga, search.shown,
+                                        line, lang, "")
+        return [Out("", lang=lang, image=image)] if image else [Out(MAP_NONE.get(lang, MAP_NONE["en"]))]
+    turns = store.recent_turns(key)
+    asked = [x for x in layers_asked(turns[-1].get("question", "") if turns else "") if x in ("heat", "air", "rain",
+                                                                                             "flood")]
+    today = lagos_today()
+    layer = (asked or [x for x in SEASON[today.month] if x in ("heat", "air", "rain", "flood")])[0]
+    highlight = spot.lga_pcode if spot else (store.get_last_lga(key) or "")
+    spec = {"kind": "river", "day": today.isoformat()} if layer == "flood" else \
+        {"kind": "hazard", "layer": layer, "day": today.isoformat(), "highlight": highlight}
+    maps = await asyncio.to_thread(render_specs, settings, [spec], lang, today)
+    return [Out(m.caption, lang=lang, image=m.jpeg) for m in maps] or [Out(MAP_NONE.get(lang, MAP_NONE["en"]))]
+
+
 async def _facilities(text: str, key: str, lang: str, store: UserStore, settings: Settings, place_fn: PlaceFn,
                       facility_fn: FacilityFn) -> list[Out] | None:
     """A facility question or a follow-up to one; None when the message is neither. Without a point: a place the
@@ -490,7 +531,12 @@ async def _facility_replies(spot: Spot, search: FacilitySearch, lang: str, setti
         log.warning("facility search failed: %s", type(e).__name__)
         return [Out(t("location_unavailable", lang))]
     log.info("facility search: %s LGA, %d shown, %s", spot.lga, len(search.shown), mode)
-    return [Out(text, lang=lang, location=loc) for text, loc in pairs]
+    outs = []
+    for text, loc, *rest in pairs:
+        image = rest[0] if rest else None
+        if text or loc or image:
+            outs.append(Out(text, lang=lang, location=loc, image=image))
+    return outs
 
 
 async def _guarded(texts: list[str], lang: str, guard_fn: GuardFn, settings: Settings) -> Out | None:

@@ -139,6 +139,24 @@ def import_places(conn) -> Counter:
     return n
 
 
+def import_basemap(conn) -> int:
+    """Main roads and rivers (osm_base_sokoto.geojson) clipped to the state and a 5 km margin, simplified to about
+    50 m: the maps' base layer (no third-party tiles). Absent file: the maps draw LGA boundaries only."""
+    feats = load("osm_base_sokoto.geojson")
+    conn.execute("TRUNCATE basemap")
+    for f in feats:
+        g = f.get("geometry") or {}
+        if g.get("type") != "LineString":
+            continue
+        conn.execute(
+            "INSERT INTO basemap (kind, name, geom) SELECT %s, %s, ST_Multi(clipped) FROM (SELECT "
+            "ST_CollectionExtract(ST_Intersection(ST_Simplify(ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326), 0.0005), "
+            "s.area), 2) AS clipped FROM (SELECT ST_Buffer(ST_Union(geom), 0.05) AS area FROM lga) s) c "
+            "WHERE NOT ST_IsEmpty(clipped)",
+            (f["properties"].get("kind"), f["properties"].get("name"), json.dumps(g)))
+    return conn.execute("SELECT count(*) FROM basemap").fetchone()[0]
+
+
 def quality_report(conn, national: int, places: Counter) -> str:
     q = lambda sql, *a: conn.execute(sql, a).fetchall()        # noqa: E731
     total = q("SELECT count(*) FROM facility")[0][0]
@@ -226,7 +244,8 @@ def main() -> None:
         import_wards(conn, wards)
         import_facilities(conn, facilities)
         places = import_places(conn)
-        report = quality_report(conn, len(national), places)
+        lines = import_basemap(conn)
+        report = quality_report(conn, len(national), places) + f"\nBase map: {lines} road and river lines (OSM)\n"
     REPORT.write_text(report, encoding="utf-8")
     print(report)
     print("report:", REPORT)

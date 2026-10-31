@@ -157,6 +157,36 @@ async def add_routes(settings, lat: float, lon: float, facilities: list[Facility
     return any(f.road_km is not None for f in facilities)
 
 
+ORS_DIRECTIONS = "https://api.openrouteservice.org/v2/directions/{profile}/geojson"
+directions_budget = OrsBudget(per_day=1500)          # the free Directions plan allows 2,000 a day
+
+
+async def route_line(settings, lat: float, lon: float, f: Facility, profile: str = "car",
+                     http: httpx.AsyncClient | None = None, timeout: float = 6.0) -> list[tuple[float, float]]:
+    """The road route's (lon, lat) points to the facility from ORS Directions, for the near-you map; [] when there
+    is no key, the call fails or today's budget is spent. The start is rounded to about 100 m, as for the Matrix."""
+    key = getattr(settings, "ors_api_key", None)
+    if key is None or not key.get_secret_value() or not directions_budget.take():
+        return []
+    own = http is None
+    http = http or httpx.AsyncClient()
+    try:
+        r = await http.post(ORS_DIRECTIONS.format(profile=PROFILES.get(profile, PROFILES["car"])),
+                            # a rural pin is often further than ORS's default 350 m from a road: snap at any distance
+                            json={"coordinates": [[round(lon, 3), round(lat, 3)], [f.lon, f.lat]],
+                                  "radiuses": [-1, -1]},
+                            headers={"Authorization": key.get_secret_value()}, timeout=timeout)
+        r.raise_for_status()
+        coords = r.json()["features"][0]["geometry"]["coordinates"]
+        return [(float(x), float(y)) for x, y, *_ in coords]
+    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as e:
+        log.warning("ORS directions failed: %s", type(e).__name__)
+        return []
+    finally:
+        if own:
+            await http.aclose()
+
+
 def maps_link(f: Facility, profile: str = "car") -> str:
     """Google Maps directions to the facility (the URL scheme, no API key); the phone supplies the start."""
     mode = "walking" if profile == "foot" else "driving"
@@ -368,22 +398,49 @@ def _query(settings, lat: float, lon: float, filters: Filters, skip: int) -> lis
         return nearest_facilities(conn, lat, lon, filters, skip=skip)
 
 
+def _near_map(settings, lat: float, lon: float, lga: str, found: list[Facility], line: list, lang: str,
+              caption: str) -> bytes | None:
+    """The near-you map's JPEG, or None when it can't be drawn (no PostGIS): the text answer stands alone."""
+    import psycopg
+
+    from app.maps.render import near_you_map
+    try:
+        with psycopg.connect(settings.db_url(), connect_timeout=5) as conn:
+            return near_you_map(conn, lat, lon, lga, found, line, lang, caption).jpeg
+    except Exception as e:                       # noqa: BLE001 - a map is extra; never lose the answer over it
+        log.warning("near-you map failed: %s", type(e).__name__)
+        return None
+
+
 async def search_replies(settings, lat: float, lon: float, search: FacilitySearch, lang: str, *, mode: str = "list",
-                         where: str = "spot", lga: str = "", route: bool = True) -> list[tuple[str, dict | None]]:
-    """The messages to send, as (text, location message or None): the list with the nearest one's directions link,
-    then its location pin; or ('route') the route to the facility shown first. `search.shown` is updated.
-    `route=False` skips ORS (the emergency fast path answers in under 3 seconds)."""
+                         where: str = "spot", lga: str = "", route: bool = True, drawn: bool = True
+                         ) -> list[tuple[str, dict | None, bytes | None]]:
+    """The messages to send, as (text, location message or None, map image or None): the list with the nearest
+    one's directions link, the near-you map (the route to 1 drawn when ORS gives it), then its location pin; or
+    ('route') the route to the facility shown first. `search.shown` is updated. `route=False` skips ORS (the
+    emergency fast path answers in under 3 seconds); `drawn=False` sends no map."""
     import asyncio
     w = WORDS[lang]
+    lga = lga or (search.shown[0].lga if search.shown else "")
     if mode == "route" and search.shown:
         f = search.shown[0]
         routed = route and await add_routes(settings, lat, lon, [f], search.profile)
-        return [(route_text(lang, f, search.profile, routed), None), ("", location_payload(f, lang))]
+        text = route_text(lang, f, search.profile, routed)
+        line = await route_line(settings, lat, lon, f, search.profile) if route and drawn else []
+        image = await asyncio.to_thread(_near_map, settings, lat, lon, f.lga, [f], line, lang,
+                                        text.splitlines()[0]) if drawn else None
+        return [(text, None, None), ("", None, image), ("", location_payload(f, lang), None)]
     found = await asyncio.to_thread(_query, settings, lat, lon, search.filters, search.skip)
     if not found:
-        return [(w["next_none"] if search.skip else w["none"].format(what=search.filters.describe(lang) or "-"), None)]
+        return [(w["next_none"] if search.skip else w["none"].format(what=search.filters.describe(lang) or "-"), None,
+                 None)]
     routed = route and await add_routes(settings, lat, lon, found, search.profile)
     search.shown = found
     text = facilities_text(lang, found, search.filters, search.profile, routed, where, lga, start=search.skip + 1)
-    return [(f"{text}\n\n{link_line(lang, found[0], search.profile)}\n\n{w['follow']}", None),
-            ("", location_payload(found[0], lang))]
+    image = None
+    if drawn:
+        line = await route_line(settings, lat, lon, found[0], search.profile) if route else []
+        caption = "\n".join(text.splitlines()[1:len(found) + 1])          # the numbered rows: names and distances
+        image = await asyncio.to_thread(_near_map, settings, lat, lon, found[0].lga, found, line, lang, caption)
+    return [(f"{text}\n\n{link_line(lang, found[0], search.profile)}\n\n{w['follow']}", None, None),
+            ("", None, image), ("", location_payload(found[0], lang), None)]

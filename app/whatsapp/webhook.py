@@ -78,7 +78,9 @@ async def _reply(messages: list[dict[str, Any]]) -> None:
     try:
         for msg in messages:
             async def send(out, to=msg["from"]) -> None:
-                if getattr(out, "location", None):
+                if getattr(out, "image", None):
+                    await client.send_image(to, out.image, out.text[:1024])
+                elif getattr(out, "location", None):
                     await client.send_location(to, **out.location)
                 elif getattr(out, "location_request", False):
                     await client.send_location_request(to, out.text)

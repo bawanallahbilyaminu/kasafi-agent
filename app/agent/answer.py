@@ -48,7 +48,7 @@ from app.agent.capabilities import available_capabilities, catalog, cover
 from app.agent.tools import APPROVED_YEARS, budget_fill, dtm_fill
 from app.agent.topics import TopicResult, topic_answer
 from app.hazards import official
-from app.hazards.answer import MEASURE_LAYERS, hazard_answer, layers_asked, where_for
+from app.hazards.answer import MEASURE_LAYERS, days_asked, hazard_answer, layers_asked, where_for
 from app.agent.topics import note_of as topic_note
 from app.agent.topics import local_documents as topics_local
 from app.agent.topics import named_publishers
@@ -416,6 +416,7 @@ class Answer:
     analysis: AnalysisResult | None = None     # the structured-core tool result behind an analysis answer
     working: str = ""                          # rows and arithmetic, sent on "nuna lissafi" / "show working"
     topic: TopicResult | None = None           # the sources behind a multi-source topic answer
+    maps: list[dict] = field(default_factory=list)      # maps to send after the text (app/maps/render.py)
 
 
 def load_catalog(conn: psycopg.Connection) -> list[dict]:
@@ -1011,7 +1012,8 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             t["hazard"] = time.perf_counter() - t0
             log.info("hazard answer: layers %s, %s, found=%s", ",".join(layers), ha.where.kind, ha.found)
             # no data for the day asked is still an answer ("not available now"), only partial
-            return Answer(ha.text, True, True, plan=plan, timings=t, exact=ha.text, partial=not ha.found)
+            return Answer(ha.text, True, True, plan=plan, timings=t, exact=ha.text, partial=not ha.found,
+                          maps=maps_for(f"{question} {plan.english_question}", ha, today) if ha.found else [])
         # every cell of the need fillable by one structured tool (budget_core, dtm_api): answered from the data
         if (a := await structured_answer(conn, plan, lang, settings, t, today)) is not None:
             return a
@@ -1265,6 +1267,26 @@ MONEY_WORDS = re.compile(r"(?i)\b(?:budget\w*|allocat\w*|kasafi\w*|naira|spen[dt
 
 # the official sources' measures are hazard questions too ('akwai gargaɗin ambaliya?' tagged flood_outlook)
 HAZARD_MEASURES = set(MEASURE_LAYERS) | {"flood_outlook", "seasonal_outlook", "outbreak_cases"}
+
+
+MAP_WORDS = re.compile(r"(?i)\b(?:maps?|taswira\w*|on a map)\b")
+MAPPED = {"heat": "heat", "air": "air", "rain": "rain", "flood": "river"}
+
+
+def maps_for(question: str, ha, today: date) -> list[dict]:
+    """The maps a hazard answer sends: the ones asked for ('show me a map', 'taswira'), else the useful ones: the
+    state's heat, dust or rain by LGA, the rivers, and for 'what should we watch out for' the most severe layer's.
+    An LGA's answer gets its map only when asked, with the LGA outlined."""
+    asked = bool(MAP_WORDS.search(question or ""))
+    layers = [x for x in ha.layers if x in MAPPED]
+    if not asked and ha.where.kind != "state" and "flood" not in layers:
+        return []
+    if not asked and len(layers) > 1:                      # an overview: the most severe layer only
+        layers = layers[:1]
+    highlight = ha.where.lga_pcode if ha.where.kind in ("lga", "point") else ""
+    day = days_asked(question, today)[0].isoformat()
+    return [{"kind": "river", "day": day} if MAPPED[x] == "river" else
+            {"kind": "hazard", "layer": x, "day": day, "highlight": highlight} for x in layers[:2]]
 
 
 def hazard_route(question: str, plan: Plan) -> list[str]:
