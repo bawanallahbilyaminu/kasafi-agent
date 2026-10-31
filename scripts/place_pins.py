@@ -53,12 +53,14 @@ def main() -> None:
             print(f"\n=== {p['name']}  (cell {h.cell}; land cover: {h.landcover or '-'})")
             print(f"first request {first:.1f}s ({', '.join(f'{k} {v:.1f}s' for k, v in h.timing.items() if k != 'total')}); "
                   f"cached {cached:.1f}s (from cache: {h2.from_cache})")
-            print(f"{'year':4} {'obs':>3} {'NDVI p90':>8} {'rain mm':>8} {'fit':>7} {'wet obs':>7} {'water':>6} {'dry obs':>7} {'BSI':>6}")
+            print(f"{'year':4} {'obs':>3} {'NDVI p90':>8} {'rain mm':>8} {'fit':>7} {'wet obs':>7} {'water':>6} "
+                  f"{'dry obs':>7} {'BSI':>6}  water months")
             for y in sorted(h.years):
                 r = h.years[y]
                 flag = (h.fit.flags.get(y, "") if h.fit else "")
                 print(f"{y:4} {r.season_obs:3} {fmt(r.ndvi_p90, 3):>8} {fmt(r.rain_season_mm, 0):>8} {flag:>7} "
-                      f"{r.water_obs:7} {fmt(r.water_share):>6} {r.dry_obs:7} {fmt(r.bsi_dry, 3):>6}"
+                      f"{r.water_obs:7} {fmt(r.water_share):>6} {r.dry_obs:7} {fmt(r.bsi_dry, 3):>6}  "
+                      f"{','.join(str(m) for m in r.water_months) or '-'}"
                       + ("" if r.usable else "   too few clear images"))
             print("usable years:", h.usable_years(), "| trends:", h.trends,
                   "| fit:", (f"sd {h.fit.sd:.3f}, slope {h.fit.slope * 100:.3f}/100 mm" if h.fit else "none (fewer than 5 years)"))

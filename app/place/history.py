@@ -25,8 +25,13 @@ from pathlib import Path
 
 import httpx
 import numpy as np
+from rasterio.errors import NotGeoreferencedWarning
 from rasterio.features import geometry_mask
 from rasterio.io import MemoryFile
+
+import warnings
+
+warnings.filterwarnings("ignore", category=NotGeoreferencedWarning)     # geometry_mask's scratch dataset
 
 from app.place import fit as fitting
 from app.place import indices, rain, stac
@@ -73,6 +78,7 @@ class YearRow:
     ndvi_p90: float | None = None
     water_obs: int = 0                  # clear observations, August–September
     water_share: float | None = None    # share of them with the plot under water
+    water_months: list[int] = field(default_factory=list)   # months (Feb–Oct) whose clear observations were mostly water
     dry_obs: int = 0
     bsi_dry: float | None = None        # February–April median
     rain_season_mm: float | None = None
@@ -122,13 +128,11 @@ def grid_shape(bbox: tuple[float, float, float, float], lat: float) -> tuple[int
 
 
 def assets_for(month: int) -> list[str]:
-    """The bands a scene needs by month: NDVI in the rainy season, NDWI too in August–September, BSI in the dry
-    season. SCL always."""
+    """The bands a scene needs by month: NDVI and NDWI all year (a reservoir or a fadama pond is wet in the dry
+    season, not only in August–September), BSI in the dry season. SCL always. One request either way."""
     if DRY[0] <= month <= DRY[1]:
-        return ["B02", "B04", "B08", "B11", "SCL"]
-    if WATER_MONTHS[0] <= month <= WATER_MONTHS[1]:
-        return ["B03", "B04", "B08", "SCL"]
-    return ["B04", "B08", "SCL"]
+        return ["B02", "B03", "B04", "B08", "B11", "SCL"]
+    return ["B03", "B04", "B08", "SCL"]
 
 
 def scenes(lon: float, lat: float, start: date, end: date) -> list[Scene]:
@@ -200,6 +204,11 @@ def year_rows(observations: list[Observation], years: list[int]) -> dict[int, Ye
         r.water_obs = len(water)
         if water:
             r.water_share = round(sum(1 for v in water if v > indices.NDWI_WATER) / len(water), 2)
+        by_month: dict[int, list[float]] = {}
+        for o in observations:
+            if o.day.year == y and o.ndwi is not None:
+                by_month.setdefault(o.day.month, []).append(o.ndwi)
+        r.water_months = sorted(m for m, vs in by_month.items() if float(np.median(vs)) > indices.NDWI_WATER)
         r.dry_obs = len(dry)
         if dry:
             r.bsi_dry = round(float(np.median(dry)), 3)
