@@ -123,3 +123,44 @@ def optical_years(h: History) -> list[int]:
     """Years in which Sentinel-2 saw water at the plot in the flood months (July–October)."""
     return sorted(y for y, r in h.years.items() if any(radar.FLOOD_MONTHS[0] <= m <= radar.FLOOD_MONTHS[1]
                                                         for m in r.water_months))
+
+
+def dry_season_years(h: History) -> list[int]:
+    """Years in which Sentinel-2 saw water at the plot in the dry season (February–April)."""
+    return sorted(y for y, r in h.years.items() if any(2 <= m <= 4 for m in r.water_months))
+
+
+# --- what kind of water a cell is -------------------------------------------------------------------------------
+
+PERMANENT, SEASONAL, FLOOD = "permanent", "seasonal", "flood"
+
+
+def classify_water(h: History, ev: FloodEvidence | None = None) -> str | None:
+    """permanent: water in the dry season and the wet season in most years (or JRC/WorldCover call it water);
+    seasonal: water in most wet seasons, dry in the dry season; flood: water in a wet season at a cell that is
+    normally dry (fewer than half the years); None: no water seen. Only a flood is called a flood."""
+    data_years = sorted(y for y, r in h.years.items() if r.season_obs or r.dry_obs or r.water_months)
+    if not data_years:
+        return PERMANENT if h.on_water else None
+    wet = set(optical_years(h))
+    if ev is not None:
+        wet |= set(ev.radar_years_with_water())
+    dry = set(dry_season_years(h))
+    half = len(data_years) / 2
+    if h.on_water or (len(dry) >= half and len(wet) >= half):
+        return PERMANENT
+    if len(wet) >= half:
+        return SEASONAL
+    if wet:
+        return FLOOD
+    return None
+
+
+def flood_years(h: History, ev: FloodEvidence | None) -> list[int]:
+    """The years with flood water at a normally dry cell (optical or radar); [] for water bodies."""
+    if classify_water(h, ev) != FLOOD:
+        return []
+    wet = set(optical_years(h))
+    if ev is not None:
+        wet |= set(ev.radar_years_with_water())
+    return sorted(wet)

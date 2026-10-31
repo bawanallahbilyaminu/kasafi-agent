@@ -64,26 +64,37 @@ def test_official_maps_report_the_maps_whose_water_touches_the_plot(tmp_path: Pa
     assert floods.official_maps_at(circle(5.50, 13.50), tmp_path / "none") == []
 
 
-def test_flood_wording_never_says_never_flooded() -> None:
-    from app.place import answer as A
+def _dry_history(water_months=None, jrc=0.0, landcover="cropland"):
     from app.place.history import History, YearRow, cell_id
-    rows = {y: YearRow(y, season_obs=12, ndvi_p90=0.5, water_months=[8] if y == 2022 else []) for y in range(2017, 2027)}
-    h = History(cell_id(13.128, 5.235), 13.128, 5.235, rows, landcover="cropland")
+    rows = {y: YearRow(y, season_obs=12, ndvi_p90=0.5, dry_obs=8, water_months=(water_months or {}).get(y, []))
+            for y in range(2017, 2027)}
+    return History(cell_id(13.128, 5.235), 13.128, 5.235, rows, landcover=landcover,
+                   jrc={"occurrence": jrc, "recurrence": 0.0, "seasonality": 0.0})
+
+
+def test_only_a_normally_dry_cell_with_wet_season_water_is_a_flood() -> None:
+    from app.place import answer as A
+    h = _dry_history(water_months={2022: [8]})
     ev = floods.FloodEvidence(radar={y: radar.RadarYear(y, 12, ["2024-09-02", "2024-09-14"] if y == 2024 else [])
                                      for y in range(2017, 2027)},
                               official=[{"source": "UNOSAT", "code": "FL20240902NGA_sep", "period_start": "2024-09-05",
                                          "period_end": "2024-09-09", "licence": "CC BY-SA"}])
+    assert floods.classify_water(h, ev) == "flood" and floods.flood_years(h, ev) == [2022, 2024]
     h.floods = ev
     s = A.flood_sentence(h, "en")
+    assert s.startswith("This spot is normally dry; flood water was seen in 2022, 2024:")
     assert "flood water seen on 2 of 12 radar passes in 2024 (2 Sep, 14 Sep)" in s
     assert "inside the UN satellite flood map of 5–9 September 2024" in s
-    assert "Sentinel-2 saw water in 2022 (August)" in s
-    assert "never" not in s.lower()
+    assert "Sentinel-2 saw water in 2022 (August)" in s and "never" not in s.lower()
     ha = A.flood_sentence(h, "ha")
-    assert "2 cikin 12" in ha and "taswirar ambaliya ta tauraron ɗan adam ta MDD" in ha
+    assert "a kullum bushe yake" in ha and "2 cikin 12" in ha and "taswirar ambaliya ta tauraron ɗan adam ta MDD" in ha
+
+
+def test_no_flood_water_seen_is_said_with_the_reason_never_never_flooded() -> None:
+    from app.place import answer as A
+    h = _dry_history()
     h.floods = floods.FloodEvidence(radar={y: radar.RadarYear(y, 10, []) for y in range(2017, 2027)})
-    for y in rows.values():
-        y.water_months = []
+    assert floods.classify_water(h, h.floods) is None
     s = A.flood_sentence(h, "en")
     assert s.startswith("No flood water was seen at this spot") and "under crops" in s and "never" not in s.lower()
     assert "none of the 100 July–October radar passes" in s and "2017–2026" in s
@@ -91,11 +102,58 @@ def test_flood_wording_never_says_never_flooded() -> None:
     assert "covering Sokoto" not in s
     h.floods.maps_loaded = True
     assert "UNOSAT, October 2022" in A.flood_sentence(h, "en")
-    # a water body: every pass under water is said once, not listed pass by pass
-    h.floods = floods.FloodEvidence(radar={y: radar.RadarYear(y, 10, [f"{y}-07-{d:02d}" for d in range(1, 11)])
-                                           for y in range(2017, 2027)})
+    # inside a UN map's water extent yet never seen as water here: said as the map's extent, not a flood
+    h.floods.official = [{"source": "UNOSAT", "code": "x", "period_start": "2022-10-01", "period_end": "2022-10-25"}]
     s = A.flood_sentence(h, "en")
-    assert "water on every July–October radar pass in 2017–2026 (100 of 100)" in s and "1 Jul" not in s
-    # many dates in one year: the first and the last
-    h.floods = floods.FloodEvidence(radar={2024: radar.RadarYear(2024, 12, [f"2024-08-{d:02d}" for d in (3, 9, 15, 21, 27)])})
-    assert "5 of 12 radar passes in 2024 (3 Aug – 27 Aug)" in A.flood_sentence(h, "en")
+    assert s.startswith("No flood water was seen") and "inside the UN flood map's water extent of 1–25 October 2022" in s
+
+
+def test_permanent_and_seasonal_water_are_never_called_floods() -> None:
+    from app.place import answer as A
+    wet_all = {y: [2, 3, 8, 9, 10] for y in range(2019, 2027)}
+    h = _dry_history(water_months=wet_all, jrc=88.0)
+    ev = floods.FloodEvidence(radar={y: radar.RadarYear(y, 10, [f"{y}-07-{d:02d}" for d in range(1, 11)])
+                                     for y in range(2017, 2027)},
+                              official=[{"source": "UNOSAT", "code": "x", "period_start": "2022-10-01",
+                                         "period_end": "2022-10-25"}])
+    assert floods.classify_water(h, ev) == "permanent" and floods.flood_years(h, ev) == []
+    h.floods, h.water_type, h.water_name = ev, "permanent", "Goronyo Dam reservoir"
+    s = A.flood_sentence(h, "en")
+    assert s.startswith("This spot is permanent open water (Goronyo Dam reservoir): water in the dry season and the "
+                        "rainy season in most years; JRC saw water in 88% of the months it observed (1984–2020)")
+    assert "radar saw water on 100 of 100 July–October passes in 2017–2026" in s
+    assert "inside the UN flood map's water extent of 1–25 October 2022" in s
+    assert "flood water" not in s and "1 Jul" not in s
+    assert "ruwa ne na dindindin a fili" in A.flood_sentence(h, "ha")
+    # seasonal: wet most years, dry in the dry season
+    h2 = _dry_history(water_months={y: [8, 9] for y in range(2019, 2027)})
+    ev2 = floods.FloodEvidence(radar={y: radar.RadarYear(y, 10, [f"{y}-08-0{d}" for d in (1, 5)] if y >= 2019 else [])
+                                      for y in range(2017, 2027)})
+    assert floods.classify_water(h2, ev2) == "seasonal"
+    h2.floods = ev2
+    s2 = A.flood_sentence(h2, "en")
+    assert s2.startswith("This spot is seasonal water: under water in most rainy seasons (2019, 2020") and "flood" not in s2
+
+
+def test_radar_text_lists_at_most_four_dates() -> None:
+    from app.place import answer as A
+    rows = {2024: radar.RadarYear(2024, 12, [f"2024-08-{d:02d}" for d in (3, 9, 15, 21, 27)])}
+    assert "5 of 12 radar passes in 2024 (3 Aug – 27 Aug)" in A.radar_text(rows, "en")
+    rows = {y: radar.RadarYear(y, 10, [f"{y}-07-{d:02d}" for d in range(1, 11)]) for y in range(2017, 2027)}
+    assert A.radar_text(rows, "en") == "water on every July–October radar pass in 2017–2026 (100 of 100)"
+
+
+def test_the_outlook_block_marks_statewide_lines_as_statewide() -> None:
+    from app.place import answer as A
+    text = ("🌦️ *Official seasonal prediction* — Wurno LGA\n*NiMet, 2026 SCP* (issued February 2026)\n"
+            "• the 2026 rainy season, page 106: “Wurno: Onset date: 10-Jul; Season end: 17-Sept”\n"
+            "• the 2026 rainy season (onset), page 12: “most of the northern states 18th–23rd June”\n"
+            "📄 NiMet, 2026 SCP p. 12, 106")
+    out = A.outlook_block(text, "Wurno", "en", 5)
+    assert out.splitlines()[0] == "🌦️ *Official seasonal prediction* — Wurno LGA"
+    assert "Wurno: Onset" in out and "northern states" not in out and out.endswith("📄 NiMet, 2026 SCP p. 12, 106")
+    out = A.outlook_block(text, "Gada", "en", 5)
+    assert "for Sokoto State (the document gives no line for Gada LGA)" in out and "northern states" in out
+    assert "Wurno: Onset" in out                     # the statewide block keeps the document's items as they are
+    out = A.outlook_block(text.replace("Wurno:", "Wamako:"), "Wamakko", "ha", 5)
+    assert "Ƙaramar Hukumar Wamakko" in out and "Wamako: Onset" in out

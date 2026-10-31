@@ -19,18 +19,21 @@ from app.place.history import History, YearRow, cell_id
 TODAY = date(2026, 10, 31)
 
 
-def _history(kind=None, landcover="cropland", water_months=None, nearest=None, years=range(2016, 2027), thin=()):
+def _history(kind=None, landcover="cropland", water_months=None, nearest=None, years=range(2016, 2027), thin=(),
+             thin_obs=5, jrc=0.0):
+    from app.place.history import mark_usable
     rows = {}
     rain = {2016: 572, 2017: 408, 2018: 373, 2019: 344, 2020: 451, 2021: 172, 2022: 540, 2023: 341, 2024: 575,
             2025: 435, 2026: 297}
     ndvi = {2016: 0.49, 2017: 0.505, 2018: 0.498, 2019: 0.535, 2020: 0.638, 2021: 0.532, 2022: 0.529, 2023: 0.495,
             2024: 0.561, 2025: 0.531, 2026: 0.488}
     for y in years:
-        rows[y] = YearRow(y, season_obs=5 if y in thin else 12, ndvi_p90=ndvi[y], water_obs=4, water_share=0.0,
+        rows[y] = YearRow(y, season_obs=thin_obs if y in thin else 12, ndvi_p90=ndvi[y], water_obs=4, water_share=0.0,
                           water_months=(water_months or {}).get(y, []), dry_obs=10, bsi_dry=0.25,
                           rain_season_mm=float(rain[y]), rain_year_mm=float(rain[y]) + 40, rain_days=153)
     h = History(cell_id(13.1095, 5.2115), 13.1095, 5.2115, rows, landcover=landcover, kind=kind,
-                jrc={"occurrence": 0.0, "recurrence": 0.0, "seasonality": 0.0}, nearest_water=nearest)
+                jrc={"occurrence": jrc, "recurrence": 0.0, "seasonality": 0.0}, nearest_water=nearest)
+    h.obs_needed = mark_usable(rows)
     usable = h.usable_years()
     if h.vegetated:
         h.fit = rain_fit({y: (rows[y].ndvi_p90, rows[y].rain_season_mm) for y in usable})
@@ -76,22 +79,26 @@ def test_a_budget_line_about_land_or_boundaries_is_still_a_figure() -> None:
 
 # --- the summary -------------------------------------------------------------------------------------------------
 
-def test_the_summary_states_the_year_against_the_plots_own_history_and_the_rain() -> None:
+def test_the_summary_uses_plain_words_and_keeps_the_figures_for_show_working() -> None:
     h = _history()
     s = A.summary(h, "en", TODAY)
-    assert "In the 2026 rainy season this plot's peak greenness was 0.49" in s
-    assert "11 years with enough clear images (2016–2026)" in s and "297 mm" in s
-    assert "normal variation" in s and "shows no clear change" in s
+    assert "This rainy season (2026) the plot was about as green as in normal years (11 years with enough clear " \
+           "images, 2016–2026). June–October rain was less than usual, and the greenness is normal for the rain it got." in s
+    assert "shows no clear change" in s
     assert "No open water was seen at this spot" in s and "can be missed" in s
-    assert "never" not in s.lower()
+    assert "never" not in s.lower() and "NDVI" not in s and "0.49" not in s and "mm" not in s
     ha = A.summary(h, "ha", TODAY)
-    assert "A daminar 2026" in ha and "bambanci ne na yau da kullum" in ha and "Ba a ga ruwa a fili" in ha
+    assert "A daminar 2026 gonar ta kasance kamar yadda take a shekarun da aka saba" in ha
+    assert "ƙasa da yadda aka saba" in ha and "ta dace da ruwan saman da aka samu" in ha and "Ba a ga ruwa a fili" in ha
+    assert "NDVI" not in ha
+    w = A.details(h, "en")
+    assert "2026: 12 clear images, NDVI 0.488, rain 297 mm" in w            # the figures live here
 
 
 def test_a_thin_current_year_is_said_to_have_too_few_images_not_judged() -> None:
     h = _history(thin=(2026,))
     s = A.summary(h, "en", TODAY)
-    assert "too few clear satellite images at this spot (5; 8 are needed)" in s
+    assert "too few clear satellite images at this spot (5; 8 are needed here)" in s    # 60% of the cell's median 12
     assert "below" not in s.split("No open water")[0]
 
 
@@ -118,9 +125,9 @@ def test_water_months_and_the_nearest_water_body_are_reported_honestly() -> None
 
 
 def test_too_few_usable_years_means_no_comparison_and_no_trend() -> None:
-    h = _history(thin=tuple(range(2016, 2024)))
+    h = _history(thin=tuple(range(2016, 2024)), thin_obs=3)
     s = A.summary(h, "en", TODAY)
-    assert "Only 3 of the years since 2016 have enough clear images" in s
+    assert "Only 3 of the years since 2016 have enough clear images" in s and "(5 or more" in s
 
 
 def test_the_outline_rule_accepts_a_plot_holding_the_pin_within_0_1_to_50_ha() -> None:

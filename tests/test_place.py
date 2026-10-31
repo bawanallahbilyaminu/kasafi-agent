@@ -80,12 +80,21 @@ def test_year_rows_show_a_figure_from_three_images_but_a_year_counts_only_from_e
     rows = year_rows(obs, [2022, 2023, 2024])
     r = rows[2024]
     assert r.season_obs == 5 and r.ndvi_p90 == pytest.approx(np.percentile([0.2, 0.5, 0.6, 0.7, 0.65], 90), abs=1e-3)
-    assert not r.usable                                   # a figure to show hatched, but no fit, flag or trend from it
     assert r.water_obs == 3 and r.water_share == pytest.approx(2 / 3, abs=0.01)
     assert r.water_months == [3, 8]                       # March (median 0.10) and August (0.15) mostly water
     assert r.dry_obs == 3 and r.bsi_dry == pytest.approx(0.2)
-    assert rows[2023].season_obs == 2 and rows[2023].ndvi_p90 is None and not rows[2023].usable
-    assert rows[2022].season_obs == 8 and rows[2022].usable
+    assert rows[2023].season_obs == 2 and rows[2023].ndvi_p90 is None
+    # the clear-image rule is relative to the cell: 60% of its median count, never under 5
+    from app.place.history import YearRow, mark_usable, obs_threshold
+    assert mark_usable(rows) == 5 and rows[2024].usable and rows[2022].usable and not rows[2023].usable
+    two_tiles = {y: YearRow(y, season_obs=n, ndvi_p90=0.4) for y, n in zip(range(2016, 2027),
+                                                                           (9, 16, 15, 12, 13, 18, 15, 9, 14, 20, 19))}
+    assert obs_threshold(two_tiles) == 9                  # median 15 -> 60% = 9
+    one_tile = {y: YearRow(y, season_obs=n, ndvi_p90=0.4) for y, n in zip(range(2017, 2027),
+                                                                          (5, 5, 5, 3, 5, 3, 5, 6, 7, 7))}
+    assert obs_threshold(one_tile) == 5                   # median 5 -> 3, floored at 5
+    mark_usable(one_tile)
+    assert [y for y, r in one_tile.items() if r.usable] == [2017, 2018, 2019, 2021, 2023, 2024, 2025, 2026]
 
 
 def test_no_greenness_claims_about_a_market_a_dune_or_a_reservoir() -> None:

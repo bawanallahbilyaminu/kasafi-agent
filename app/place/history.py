@@ -41,7 +41,8 @@ log = logging.getLogger(__name__)
 
 DATA_API = "https://planetarycomputer.microsoft.com/api/data/v1/item/bbox"
 SEASON, WATER_MONTHS, DRY = (6, 10), (8, 9), (2, 4)
-MIN_OBS = 8                  # clear season observations before a year enters the fit, the flags and the trends
+MIN_OBS = 5                  # the fewest clear season observations for a year to enter the fit, flags and trends ...
+OBS_SHARE = 0.6              # ... and at least this share of the cell's own median clear count (one tile vs two)
 MIN_P90 = 3                  # clear season observations before a peak-greenness figure is shown at all (hatched)
 MAX_CLOUD = 70.0             # tile-level cloud cover above which a scene isn't even looked at
 FIRST_YEAR, GOOD_FROM = 2015, 2017     # 2015–2016 (one satellite) count only where a year passes the threshold
@@ -89,12 +90,23 @@ class YearRow:
     rain_season_mm: float | None = None
     rain_year_mm: float | None = None
     rain_days: int = 0                  # season days with data (an incomplete season shows)
+    usable: bool = False                # enough clear images for the cell (mark_usable); else shown hatched
 
-    @property
-    def usable(self) -> bool:
-        """Enough clear images for the year to enter the fit, the flags and the trends; otherwise the year is
-        shown hatched as 'too few clear images' (its figure, if any, is from MIN_P90+ observations)."""
-        return self.season_obs >= MIN_OBS and self.ndvi_p90 is not None
+
+def obs_threshold(years: dict[int, "YearRow"]) -> int:
+    """The clear-image count a year needs at this cell: OBS_SHARE of the cell's median count over the years
+    with any clear image, never under MIN_OBS (a cell under one tile gets half the images of one under two)."""
+    import math
+    counts = sorted(r.season_obs for r in years.values() if r.season_obs > 0)
+    median = counts[len(counts) // 2] if counts else 0
+    return max(MIN_OBS, math.ceil(OBS_SHARE * median))
+
+
+def mark_usable(years: dict[int, "YearRow"]) -> int:
+    need = obs_threshold(years)
+    for r in years.values():
+        r.usable = r.season_obs >= need and r.ndvi_p90 is not None
+    return need
 
 
 @dataclass
@@ -110,6 +122,9 @@ class History:
     kind: str | None = None                      # 'built-up area' | 'bare ground' | 'open water' | 'little vegetation' | None (vegetated)
     nearest_water: dict | None = None            # the nearest JRC water body when asked for and the place isn't water
     floods: object | None = None                 # app.place.floods.FloodEvidence (radar passes, official maps)
+    water_type: str | None = None                # permanent | seasonal | flood | None (app.place.floods.classify_water)
+    water_name: str = ""                         # a named water body the plot sits in (data/geo/water_bodies.yaml)
+    obs_needed: int = MIN_OBS                    # the clear-image count a year needs at this cell
     resolution: str = RESOLUTION
     timing: dict[str, float] = field(default_factory=dict)
     from_cache: bool = False
@@ -491,13 +506,14 @@ def _point_history(conn, lat: float, lon: float, *, today: date, polygon: dict |
     rows: dict[int, YearRow] = {}
     for y in years:
         if y not in missing:
-            rows[y] = YearRow(**cached[("s2", y)][0])
+            rows[y] = YearRow(**{k: v for k, v in cached[("s2", y)][0].items() if k != "usable"})
     if missing:
         fresh = compute_years(lat, lon, geom, missing, workers=workers, progress=progress)
         for y, r in fresh.items():
             rows[y] = r
             if conn is not None:
-                _save(conn, cell, "s2", y, {k: v for k, v in asdict(r).items() if not k.startswith("rain")},
+                _save(conn, cell, "s2", y, {k: v for k, v in asdict(r).items() if not k.startswith("rain")
+                                            and k != "usable"},
                       "Sentinel-2 L2A, Planetary Computer", r.season_obs, today)
     timing["sentinel2"] = time.perf_counter() - t0
     # rain: one call for every year when any year is missing or the current one is stale
@@ -535,6 +551,7 @@ def _point_history(conn, lat: float, lon: float, *, today: date, polygon: dict |
                 landcover=(cached.get(("landcover", 0), ({}, today))[0] or {}).get("class"), timing=timing,
                 from_cache=not missing)
     h.kind = place_kind(h.landcover, rows)
+    h.obs_needed = mark_usable(rows)
     usable = h.usable_years()
     if h.vegetated:
         # greenness claims only about vegetation: a market, a dune or a reservoir has no 'decline'

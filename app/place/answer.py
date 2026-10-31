@@ -22,12 +22,31 @@ import re
 import time
 from dataclasses import dataclass, field
 from datetime import date
+from pathlib import Path
 
 from app.place import history as H
 from app.place.fit import MIN_YEARS
-from app.place.floods import flood_evidence
+from app.place.floods import classify_water, flood_evidence
 from app.place.outline import Outline, plot_outline
 from app.place.raster import circle
+
+WATER_BODIES = Path("data/geo/water_bodies.yaml")
+
+
+def water_body_name(lat: float, lon: float, lang: str, path: Path = WATER_BODIES) -> str:
+    """The named water body (data/geo/water_bodies.yaml) the pin lies in, or ''."""
+    import math
+    import yaml
+    try:
+        rows = yaml.safe_load(path.read_text(encoding="utf-8")) or []
+    except OSError:
+        return ""
+    best, best_d = "", None
+    for r in rows:
+        d = math.hypot((lon - float(r["lon"])) * 111.32 * math.cos(math.radians(lat)), (lat - float(r["lat"])) * 111.32)
+        if d <= float(r.get("radius_km", 1)) and (best_d is None or d < best_d):
+            best, best_d = str(r.get("name_ha" if lang == "ha" else "name") or r.get("name") or ""), d
+    return best
 
 log = logging.getLogger(__name__)
 
@@ -91,16 +110,16 @@ W = {
         "progress": "🛰️ I'm checking about {n} years of satellite images for this spot. I'll send it in about a "
                     "minute.",
         "head": "*What the satellite record shows for this spot ({lga} LGA)*",
-        "peak": "In the {year} rainy season this plot's peak greenness was {p90} on the NDVI scale, {cmp} its usual "
-                "{median} over the {n} years with enough clear images ({first}–{last}); with {rain} mm of June–October "
-                "rain, that is {verdict}.",
-        "cmp": {"above": "above", "near": "near", "below": "below"},
-        "verdict": {"normal": "normal variation", "below": "below what the rain predicts",
-                    "none": "not compared (the rain fit needs 5 years)"},
-        "peak_thin": "The {year} rainy season had too few clear satellite images at this spot ({obs}; 8 are needed) "
-                     "to judge it; over the {n} years with enough ({first}–{last}) the plot's peak greenness was "
-                     "usually {median} on the NDVI scale.",
-        "few_years": "Only {n} of the years since {first} have enough clear images at this spot (8 or more in the "
+        "peak": "This rainy season ({year}) the plot was {green} ({n} years with enough clear images, {first}–{last}). "
+                "June–October rain was {rain}, and the greenness is {verdict}.",
+        "green_words": {"above": "greener than usual", "near": "about as green as in normal years",
+                        "below": "less green than usual"},
+        "rain_words": {"above": "more than usual", "near": "about the usual", "below": "less than usual"},
+        "verdict": {"normal": "normal for the rain it got", "below": "less than the rain would suggest",
+                    "none": "not compared with the rain (5 years are needed)"},
+        "peak_thin": "This rainy season ({year}) had too few clear satellite images at this spot ({obs}; {need} are "
+                     "needed here) to judge it; the {n} years with enough ({first}–{last}) are in the details.",
+        "few_years": "Only {n} of the years since {first} have enough clear images at this spot ({need} or more in the "
                      "season), so Kasafi makes no comparison with the rain and no trend; the figures are in the "
                      "details.",
         "trend": "Since {first}, peak greenness {g}{bsi}.",
@@ -134,6 +153,8 @@ W = {
                       "at 20 m; water record (JRC) at 30 m; rain from Open-Meteo's ~9 km grid.",
         "years": "Years {first}–{last}; clear rainy-season images per year: {counts}.",
         "context": "*From the documents*",
+        "scope_local": " — {lga} LGA",
+        "scope_state": " — for Sokoto State (the document gives no line for {lga} LGA)",
         "no_context": "No seasonal prediction, flood outlook or {year} budget line for {lga} LGA is in the "
                       "library for this.",
         "budget": "{year} budget lines for {lga} LGA (agriculture, irrigation, erosion):",
@@ -159,6 +180,14 @@ W = {
         "flood_radar": "Radar (Sentinel-1) saw flood water at this spot: {items}",
         "flood_radar_item": "flood water seen on {n} of {total} radar passes in {year} ({dates})",
         "flood_radar_all": "water on every July–October radar pass in {first}–{last} ({n} of {n})",
+        "flood_head": "This spot is normally dry; flood water was seen in {years}: {items}.",
+        "permanent": "This spot is permanent open water{name}: water in the dry season and the rainy season in most "
+                     "years; JRC saw water in {occ}% of the months it observed (1984–2020){radar}{maps}.",
+        "seasonal": "This spot is seasonal water: under water in most rainy seasons ({years}) and dry in the dry "
+                    "season{radar}{maps}.",
+        "water_radar": "; radar saw water on {n} of {total} July–October passes in {first}–{last}",
+        "water_maps": "; it is inside the UN flood map's water extent of {periods}",
+        "name_in": " ({name})",
         "flood_none_nomaps": "No flood water was seen at this spot in {first}–{last}: on none of the {passes} "
                              "July–October radar passes (Sentinel-1) and in no clear Sentinel-2 image; no official "
                              "satellite flood map for Sokoto is loaded yet.",
@@ -180,18 +209,19 @@ W = {
         "progress": "🛰️ Ina duba hotunan tauraron ɗan adam na kusan shekaru {n} na wannan wuri. Zan aiko nan da "
                     "kusan minti ɗaya.",
         "head": "*Abin da hotunan tauraron ɗan adam suka nuna game da wannan wuri (Ƙaramar Hukumar {lga})*",
-        "peak": "A daminar {year}, koriyar wannan gona a ƙololuwa ta kai {p90} a ma'aunin NDVI, {cmp} matsakaicinta "
-                "{median} na shekaru {n} masu isassun hotuna bayyanannu ({first}–{last}); da ruwan sama mm {rain} "
-                "na Yuni–Oktoba, wannan {verdict}.",
-        "cmp": {"above": "sama da", "near": "kusa da", "below": "ƙasa da"},
-        "verdict": {"normal": "bambanci ne na yau da kullum", "below": "ƙasa ne da abin da ruwan saman ya nuna",
-                    "none": "ba a kwatanta ba (kwatancen ruwan sama na buƙatar shekaru 5)"},
+        "peak": "A daminar {year} gonar ta kasance {green} (shekaru {n} masu isassun hotuna bayyanannu, "
+                "{first}–{last}). Ruwan saman Yuni–Oktoba ya kasance {rain}, kuma koriyar {verdict}.",
+        "green_words": {"above": "ta fi koriya fiye da yadda aka saba", "near": "kamar yadda take a shekarun da aka saba",
+                        "below": "ba ta yi koriya kamar yadda aka saba ba"},
+        "rain_words": {"above": "fiye da yadda aka saba", "near": "kamar yadda aka saba", "below": "ƙasa da yadda aka saba"},
+        "verdict": {"normal": "ta dace da ruwan saman da aka samu", "below": "ta yi ƙasa da abin da ruwan saman ya nuna",
+                    "none": "ba a kwatanta ta da ruwan sama ba (ana buƙatar shekaru 5)"},
         "peak_thin": "Daminar {year} ba ta da isassun hotuna bayyanannu na tauraron ɗan adam a wannan wuri ({obs}; "
-                     "ana buƙatar 8) don a yanke hukunci; a shekaru {n} masu isassun hotuna ({first}–{last}) "
-                     "koriyar gonar a ƙololuwa galibi {median} ce a ma'aunin NDVI.",
-        "few_years": "Shekaru {n} ne kawai tun {first} suke da isassun hotuna bayyanannu a wannan wuri (8 ko fiye a "
-                     "damina), saboda haka Kasafi bai kwatanta da ruwan sama ba, bai kuma bayyana yanayin canji ba; "
-                     "alƙaluman suna cikin bayanin.",
+                     "ana buƙatar {need} a nan) don a yanke hukunci; shekaru {n} masu isassun hotuna ({first}–{last}) "
+                     "suna cikin bayanin.",
+        "few_years": "Shekaru {n} ne kawai tun {first} suke da isassun hotuna bayyanannu a wannan wuri ({need} ko "
+                     "fiye a damina), saboda haka Kasafi bai kwatanta da ruwan sama ba, bai kuma bayyana yanayin "
+                     "canji ba; alƙaluman suna cikin bayanin.",
         "trend": "Tun {first}, koriyar ƙololuwa {g}{bsi}.",
         "trend_words": {"rising": "tana ƙaruwa", "falling": "tana raguwa", "no clear change": "ba ta nuna canji a fili"},
         "bsi_words": {"rising": ", ƙasa mara ciyayi ta rani kuma tana faɗaɗa", "falling":
@@ -224,6 +254,8 @@ W = {
                       "kilomita 9.",
         "years": "Shekaru {first}–{last}; hotuna bayyanannu na damina a kowace shekara: {counts}.",
         "context": "*Daga takardu*",
+        "scope_local": " — Ƙaramar Hukumar {lga}",
+        "scope_state": " — na Jihar Sokoto (takardar ba ta da layi na Ƙaramar Hukumar {lga})",
         "no_context": "Babu hasashen damina, hasashen ambaliya ko layin kasafin {year} na Ƙaramar Hukumar {lga} "
                       "a ɗakin karatu kan wannan.",
         "budget": "Layukan kasafin {year} na Ƙaramar Hukumar {lga} (noma, ban ruwa, zaizayar ƙasa):",
@@ -249,6 +281,14 @@ W = {
         "flood_radar": "Radar (Sentinel-1) ta ga ruwan ambaliya a wannan wuri: {items}",
         "flood_radar_item": "an ga ruwan ambaliya a {n} cikin {total} na hotunan radar a {year} ({dates})",
         "flood_radar_all": "ruwa a kowane hoton radar na Yuli–Oktoba a {first}–{last} ({n} cikin {n})",
+        "flood_head": "Wannan wuri a kullum bushe yake; an ga ruwan ambaliya a {years}: {items}.",
+        "permanent": "Wannan wuri ruwa ne na dindindin a fili{name}: ruwa a rani da damina a mafi yawan shekaru; JRC "
+                     "ta ga ruwa a kashi {occ}% na watannin da ta lura (1984–2020){radar}{maps}.",
+        "seasonal": "Wannan wuri ruwan damina ne: yana ƙarƙashin ruwa a mafi yawan daminoni ({years}) kuma ya bushe "
+                    "a rani{radar}{maps}.",
+        "water_radar": "; radar ta ga ruwa a {n} cikin {total} na hotunan Yuli–Oktoba a {first}–{last}",
+        "water_maps": "; yana cikin faɗin ruwan taswirar ambaliya ta MDD ta {periods}",
+        "name_in": " ({name})",
         "flood_none_nomaps": "Ba a ga ruwan ambaliya a wannan wuri ba a {first}–{last}: ba a cikin ɗaya daga cikin "
                              "hotunan radar {passes} na Yuli–Oktoba (Sentinel-1) ba, ba kuma a cikin wani hoton "
                              "Sentinel-2 bayyananne ba; ba a riga an ɗora wata taswirar ambaliya ta tauraron ɗan adam "
@@ -320,26 +360,32 @@ def summary(h: H.History, lang: str, today: date) -> str:
     lines: list[str] = []
     usable = h.usable_years()
     this = today.year
-    if not h.vegetated:
+    if h.water_type == "permanent" or (h.water_type is None and h.on_water):
+        pass                                              # the water sentence says what it is
+    elif not h.vegetated:
         if h.kind == "little vegetation":
             lines.append(t["kind_low"].format(lc=h.landcover or "–"))
         else:
             lines.append(t["kind_map"].format(kind=t["kinds"][h.kind]))
     elif len(usable) < MIN_YEARS:                         # fewer than 5: no fit, no trend
-        lines.append(t["few_years"].format(n=len(usable), first=min(h.years)))
+        lines.append(t["few_years"].format(n=len(usable), first=min(h.years), need=h.obs_needed))
     else:
         median = sorted(h.years[y].ndvi_p90 for y in usable)[len(usable) // 2]
+        rains = sorted(h.years[y].rain_season_mm for y in usable if h.years[y].rain_season_mm is not None)
+        rain_median = rains[len(rains) // 2] if rains else None
         latest = max(usable)
         r = h.years[this] if this in h.years else h.years[latest]
-        if this in usable and r.rain_season_mm is not None:
-            cmp = "above" if r.ndvi_p90 > median + 0.05 else "below" if r.ndvi_p90 < median - 0.05 else "near"
+        if this in usable and r.rain_season_mm is not None and rain_median:
+            # plain words only: the figures are in the details
+            green = "above" if r.ndvi_p90 > median + 0.05 else "below" if r.ndvi_p90 < median - 0.05 else "near"
+            rain = ("above" if r.rain_season_mm > rain_median * 1.15 else
+                    "below" if r.rain_season_mm < rain_median * 0.85 else "near")
             flag = h.fit.flags.get(this, "none") if h.fit else "none"
-            lines.append(t["peak"].format(year=this, p90=_fmt(r.ndvi_p90), cmp=t["cmp"][cmp], median=_fmt(median),
-                                          n=len(usable), first=usable[0], last=usable[-1], rain=f"{r.rain_season_mm:.0f}",
-                                          verdict=t["verdict"][flag]))
+            lines.append(t["peak"].format(year=this, green=t["green_words"][green], n=len(usable), first=usable[0],
+                                          last=usable[-1], rain=t["rain_words"][rain], verdict=t["verdict"][flag]))
         else:
             lines.append(t["peak_thin"].format(year=this, obs=h.years[this].season_obs if this in h.years else 0,
-                                               n=len(usable), first=usable[0], last=usable[-1], median=_fmt(median)))
+                                               need=h.obs_needed, n=len(usable), first=usable[0], last=usable[-1]))
         if "greenness" in h.trends:
             g = t["trend_words"][h.trends["greenness"][0]]
             bsi = t["bsi_words"][h.trends["bare_soil"][0]] if "bare_soil" in h.trends else ""
@@ -363,32 +409,50 @@ def period_text(start: str, end: str, lang: str) -> str:
 
 
 def flood_sentence(h: H.History, lang: str) -> str:
-    """Radar passes, optical water and official maps together; 'no flood water seen' with the reason, never
-    'never flooded'."""
-    from app.place.floods import FloodEvidence, optical_years
+    """By the cell's water type (app.place.floods.classify_water): permanent or seasonal water is said to be that,
+    with its radar passes and the UN maps' water extent; only a normally dry cell with water in a wet season is
+    called a flood; otherwise 'no flood water seen' with the reason, never 'never flooded'."""
+    from app.place.floods import FloodEvidence, classify_water, flood_years, optical_years
     t = _t(lang)
     ev: FloodEvidence = h.floods
+    kind = h.water_type or classify_water(h, ev)
     years = sorted(h.years)
-    parts: list[str] = []
-    radar_items = radar_text(ev.radar, lang)
-    if radar_items:
-        parts.append(t["flood_radar"].format(items=radar_items))
-    for m in ev.official:
-        parts.append(t["flood_official"].format(period=period_text(m["period_start"], m["period_end"], lang)))
-    when = when_text({y: r for y, r in h.years.items() if y in optical_years(h)}, lang)
-    if when and not h.on_water:                      # a water body's optical months are in its own sentence
-        parts.append(t["flood_optical"].format(when=when))
-    if parts:
-        s = "; ".join(parts) + ". " + t["flood_reason"]
+    radar_all = [r for r in ev.radar.values() if r.passes]
+    radar_part = ""
+    if radar_all and any(r.water for r in radar_all):
+        ry = sorted(ev.radar)
+        radar_part = t["water_radar"].format(n=sum(r.water_passes for r in radar_all), total=sum(r.passes for r in radar_all),
+                                             first=ry[0], last=ry[-1])
+    maps_part = t["water_maps"].format(periods=", ".join(period_text(m["period_start"], m["period_end"], lang)
+                                                          for m in ev.official)) if ev.official else ""
+    if kind == "permanent":
+        occ = h.jrc.get("occurrence")
+        s = t["permanent"].format(name=t["name_in"].format(name=h.water_name) if h.water_name else "",
+                                  occ=f"{occ:.0f}" if occ is not None else "–", radar=radar_part, maps=maps_part)
+    elif kind == "seasonal":
+        wet = sorted(set(optical_years(h)) | set(ev.radar_years_with_water()))
+        s = t["seasonal"].format(years=", ".join(str(y) for y in wet), radar=radar_part, maps=maps_part)
+    elif kind == "flood":
+        parts: list[str] = []
+        radar_items = radar_text(ev.radar, lang)
+        if radar_items:
+            parts.append(t["flood_radar"].format(items=radar_items))
+        when = when_text({y: r for y, r in h.years.items() if y in optical_years(h)}, lang)
+        if when:
+            parts.append(t["flood_optical"].format(when=when))
+        for m in ev.official:
+            parts.append(t["flood_official"].format(period=period_text(m["period_start"], m["period_end"], lang)))
+        s = t["flood_head"].format(years=", ".join(str(y) for y in flood_years(h, ev)), items="; ".join(parts)) + \
+            " " + t["flood_reason"]
     else:
         passes = sum(r.passes for r in ev.radar.values())
         ry = sorted(ev.radar) or years
         s = t["flood_none" if ev.maps_loaded else "flood_none_nomaps"].format(
             first=ry[0], last=ry[-1], passes=passes, maps=t["maps_covered"]) + " " + t["flood_reason"]
-    if h.on_water:
-        occ = h.jrc.get("occurrence")
-        s = t["on_water"].format(occ=f"{occ:.0f}" if occ is not None else "–", when=when_text(h.years, lang) or
-                                 t["none"]) + " " + s
+        if ev.official:                                   # inside a UN map's water extent, yet never water here
+            extent = t["water_maps"].format(periods=", ".join(period_text(m["period_start"], m["period_end"], lang)
+                                                               for m in ev.official)).lstrip("; ")
+            s += " " + extent[0].upper() + extent[1:] + "."
     return s + nearest_sentence(h, lang)
 
 
@@ -510,10 +574,7 @@ def library_context(conn, lang: str, lga: str, lga_pcode: str, today: date) -> s
             log.warning("place: outlook context failed: %s", type(e).__name__)
             oa = None
         if oa is not None and oa.found:
-            lines = [ln for ln in oa.text.splitlines() if ln.strip()]
-            cite = [ln for ln in lines if ln.startswith("📄")]
-            body = [ln for ln in lines if not ln.startswith("📄")][: most + 2]
-            parts.append("\n".join(body + cite[:1]))
+            parts.append(outlook_block(oa.text, lga, lang, most))
     if lga:
         try:
             res = lga_projects(conn, {"lga": lga, "terms": BUDGET_TERMS})
@@ -527,6 +588,23 @@ def library_context(conn, lang: str, lga: str, lga_pcode: str, today: date) -> s
     if not parts:
         return t["no_context"].format(year=today.year, lga=lga or "–")
     return t["context"] + "\n" + "\n\n".join(parts)
+
+
+def outlook_block(text: str, lga: str, lang: str, most: int) -> str:
+    """An outlook answer's lines, kept honest about scope: the items that name the LGA (or its zone) under the
+    LGA's heading; when the document only speaks of the state, the statewide items under 'for Sokoto State',
+    never presented as local."""
+    t = _t(lang)
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    head = lines[0].split(" — ")[0] if lines else ""
+    source = [ln for ln in lines[1:] if ln.startswith("*")][:1]
+    items = [ln for ln in lines if ln.startswith("•")]
+    cite = [ln for ln in lines if ln.startswith("📄")][:1]
+    key = re.sub(r"[^a-z]", "", lga.lower())[:5]
+    local = [ln for ln in items if key and key in re.sub(r"[^a-z]", "", ln.lower())] if lga else []
+    if local:
+        return "\n".join([head + t["scope_local"].format(lga=lga)] + source + local[:most] + cite)
+    return "\n".join([head + t["scope_state"].format(lga=lga or "–")] + source + items[:most] + cite)
 
 
 # --- the whole answer -------------------------------------------------------------------------------------------
@@ -559,6 +637,9 @@ async def place_answer(conn, settings, question: str, english: str, lang: str, p
     t3 = time.perf_counter()
     h.floods = await asyncio.to_thread(flood_evidence, conn, lat, lon,
                                        outline.geometry if outline.is_plot else circle(lon, lat), today=today)
+    h.water_type = classify_water(h, h.floods)
+    if h.water_type in ("permanent", "seasonal"):
+        h.water_name = water_body_name(lat, lon, lang)
     timing["floods"] = time.perf_counter() - t3
     t2 = time.perf_counter()
     context = library_context(conn, lang, lga, pcode, today) if conn is not None else ""

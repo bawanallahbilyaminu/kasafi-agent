@@ -71,7 +71,8 @@ def main() -> None:
                       f"{r.water_obs:7} {fmt(r.water_share):>6} {r.dry_obs:7} {fmt(r.bsi_dry, 3):>6}  "
                       f"{','.join(str(m) for m in r.water_months) or '-'}"
                       + ("" if r.usable else "   too few clear images"))
-            print(f"usable years ({len(h.usable_years())}):", h.usable_years(), "| trends:", h.trends,
+            print(f"usable years ({len(h.usable_years())}, {h.obs_needed}+ clear images needed here):",
+                  h.usable_years(), "| trends:", h.trends,
                   "| fit:", (f"sd {h.fit.sd:.3f}, slope {h.fit.slope * 100:.3f}/100 mm" if h.fit else "none (fewer than 5 years)"))
             j = h.jrc
             print(f"JRC: occurrence {fmt(j.get('occurrence'))}% recurrence {fmt(j.get('recurrence'))}% seasonality "
