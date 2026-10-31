@@ -78,11 +78,23 @@ def main() -> None:
             shutil.rmtree(raw)
         raw.mkdir(parents=True)
         logging.info("fetching %s (%s)", m["code"], m["url"])
-        # unosat.org served about 17 KB/s on 31 Oct 2026: a 15 MB file takes a quarter of an hour
-        with httpx.Client(timeout=httpx.Timeout(3600, connect=60), follow_redirects=True, headers={"User-Agent": UA}) as c:
-            r = c.get(m["url"])
-            r.raise_for_status()
-        with zipfile.ZipFile(io.BytesIO(r.content)) as z:
+        # unosat.org served about 17 KB/s on 31 Oct 2026 (a 15 MB file takes a quarter of an hour) and drops a
+        # long download now and then: three attempts
+        content = None
+        for attempt in range(1, 4):
+            try:
+                with httpx.Client(timeout=httpx.Timeout(3600, connect=60), follow_redirects=True,
+                                  headers={"User-Agent": UA}) as c:
+                    r = c.get(m["url"])
+                    r.raise_for_status()
+                content = r.content
+                break
+            except (httpx.HTTPError, OSError) as e:
+                logging.warning("  attempt %d failed: %s", attempt, e)
+        if content is None:
+            logging.warning("  %s skipped: the download failed three times", m["code"])
+            continue
+        with zipfile.ZipFile(io.BytesIO(content)) as z:
             for info in z.infolist():                      # no path escapes from an archive we didn't write
                 if ".." in info.filename or info.filename.startswith(("/", "\\")):
                     continue
