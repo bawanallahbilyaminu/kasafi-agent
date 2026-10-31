@@ -438,6 +438,17 @@ def test_a_new_ncdc_report_fires_only_when_sokoto_figures_rose() -> None:
     assert out[0].what["en"].startswith("NCDC week 44 2026 report: Cholera in Sokoto, 30 suspected, 4 confirmed")
 
 
+def test_back_reports_the_crawl_just_read_are_not_news() -> None:
+    # the first crawl loads old reports (cholera 2025 week 5 ...): fetched this week, but not a new outbreak
+    rows = [("cholera", 2025, 5, "week 5", 12, 3, 0), ("cholera", 2025, 6, "week 6", 15, 3, 0),
+            ("cholera", 2026, 44, "week 44", 30, 4, 1)]
+    conn = FakeConn({"WHERE listed AND fetched_at": rows, "(year, epi_week) <": [(20, 4)]})
+    out = triggers.outbreaks(conn, NOON)
+    assert {c.key for c in out} == {"ncdc:cholera:2026-44"}                  # only the newest, recent one
+    assert triggers.outbreaks(FakeConn({"WHERE listed AND fetched_at": rows[:2]}), NOON) == []
+    assert triggers.recent_week(2026, 44, NOON) and not triggers.recent_week(2026, 30, NOON)
+
+
 # --- the admin page --------------------------------------------------------------------------------------------
 
 def test_the_admin_page_shows_the_dry_run(monkeypatch) -> None:

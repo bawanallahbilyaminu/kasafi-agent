@@ -28,6 +28,7 @@ from app.sources.lga_names import PCODES, pcode
 LAGOS = timezone(timedelta(hours=1))
 ADVISORY_DAYS = 3                 # only advisories issued this recently are "new" (no flood of old ones on day 1)
 OUTBREAK_DAYS = 7
+OUTBREAK_WEEKS = 4                # an NCDC report about an epi week older than this is a back-report, not news
 AIR_HISTORY_DAYS, AIR_MIN_DAYS, AIR_KEEP_DAYS = 30, 20, 120
 SEASONAL_PCT = 95
 ADVISORY_HAZARDS = {"flood": "flood", "rain": "flood", "heat": "heat", "dust": "dust", "cholera": "outbreak",
@@ -168,12 +169,25 @@ def _figs(lang: str, s, c, d) -> str:
     return ", ".join(f[k].format(n=n) for k, n in (("suspected", s), ("confirmed", c), ("deaths", d)) if n is not None)
 
 
+def recent_week(year: int, week: int, now: datetime, weeks: int = OUTBREAK_WEEKS) -> bool:
+    """The epi week is within the last `weeks` weeks of now (a back-report the crawl just read is not news)."""
+    try:
+        start = date.fromisocalendar(year, week, 1)
+    except ValueError:
+        return False
+    return timedelta(0) <= now.astimezone(LAGOS).date() - start <= timedelta(weeks=weeks)
+
+
 def outbreaks(conn, now: datetime) -> list[Candidate]:
     rows = conn.execute("SELECT disease, year, epi_week, period, suspected, confirmed, deaths FROM outbreak_cases "
                         "WHERE listed AND fetched_at >= %s ORDER BY year, epi_week",
                         (now - timedelta(days=OUTBREAK_DAYS),)).fetchall()
+    latest = {}                                  # only each disease's newest report, and only a recent one
+    for row in rows:
+        if recent_week(row[1], row[2], now):
+            latest[row[0]] = row
     out = []
-    for disease, year, week, period, s, c, d in rows:
+    for disease, year, week, period, s, c, d in latest.values():
         prev = conn.execute("SELECT suspected, confirmed FROM outbreak_cases WHERE disease = %s AND listed AND "
                             "(year, epi_week) < (%s, %s) ORDER BY year DESC, epi_week DESC LIMIT 1",
                             (disease, year, week)).fetchone()
