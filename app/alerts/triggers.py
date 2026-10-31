@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
 from app.hazards import read
-from app.hazards.categories import label
+from app.hazards.categories import aqi_category, heat_category, label
 from app.hazards.official import CURRENT, SOURCE_NAMES, current, period_label, _t
 from app.sources.lga_names import PCODES, pcode
 
@@ -31,6 +31,11 @@ OUTBREAK_DAYS = 7
 OUTBREAK_WEEKS = 4                # an NCDC report about an epi week older than this is a back-report, not news
 AIR_HISTORY_DAYS, AIR_MIN_DAYS, AIR_KEEP_DAYS = 30, 20, 120
 SEASONAL_PCT = 95
+SEASONAL_MIN_AQI = 151            # 'high for the time of year' needs at least Unhealthy
+# the categories that fire on their own. A simulation lowers these; it never changes a value's label (the label is
+# always the category of the value itself: 172 is Unhealthy, 38 °C is Extreme caution)
+DUST_FIRES = frozenset({"hazardous"})
+HEAT_FIRES = frozenset({"danger", "extreme_danger"})
 ADVISORY_HAZARDS = {"flood": "flood", "rain": "flood", "heat": "heat", "dust": "dust", "cholera": "outbreak",
                     "csm": "outbreak", "lassa": "outbreak", "measles": "outbreak", "diphtheria": "outbreak"}
 
@@ -92,15 +97,18 @@ def heat(conn, now: datetime) -> list[Candidate]:
     for pid, lga, code in _lgas(conn):
         for day in (today, today + timedelta(days=1)):
             h = read.heat_day(conn, pid, lga, day)
-            if h is None or h.category not in ("danger", "extreme_danger"):
+            if h is None:
+                continue
+            category = heat_category(h.category_value)   # from the value: the label always matches the figure
+            if category not in HEAT_FIRES:
                 continue
             v = f"{h.category_value:.0f}"
             basis = {"en": "air temperature" if h.basis == "air_temperature" else "heat index",
                      "ha": "zafin iska" if h.basis == "air_temperature" else "ma'aunin zafi"}
             out.append(Candidate("heat", code, f"heat:{code}:{day}", False, {
-                "en": f"up to {v} °C {_when(day, today, 'en')} ({basis['en']}), {label(h.category, 'en')} on the "
+                "en": f"up to {v} °C {_when(day, today, 'en')} ({basis['en']}), {label(category, 'en')} on the "
                       f"US National Weather Service heat index scale",
-                "ha": f"har zuwa {v} °C {_when(day, today, 'ha')} ({basis['ha']}), matakin {label(h.category, 'ha')} "
+                "ha": f"har zuwa {v} °C {_when(day, today, 'ha')} ({basis['ha']}), matakin {label(category, 'ha')} "
                       f"a ma'aunin zafi na NWS"},
                 {"en": f"Open-Meteo forecast, {_stamp(h.fetched_at)}", "ha": f"Hasashen Open-Meteo, {_stamp(h.fetched_at)}"}))
             break
@@ -126,16 +134,17 @@ def dust(conn, now: datetime) -> list[Candidate]:
         past = [float(r[0]) for r in conn.execute(
             "SELECT aqi_max FROM air_daily WHERE lga_pcode = %s AND day >= %s AND day < %s",
             (code, today - timedelta(days=AIR_HISTORY_DAYS), today))]
-        seasonal = len(past) >= AIR_MIN_DAYS and a.aqi_max >= 151 and a.aqi_max > _p95(past)
-        if a.category != "hazardous" and not seasonal:
+        category = aqi_category(a.aqi_max)             # from the value: the label always matches the figure
+        seasonal = len(past) >= AIR_MIN_DAYS and a.aqi_max >= SEASONAL_MIN_AQI and a.aqi_max > _p95(past)
+        if category not in DUST_FIRES and not seasonal:
             continue
         v = f"{a.aqi_max:.0f}"
         high = ({"en": f", higher than {SEASONAL_PCT}% of the last {len(past)} days",
                  "ha": f", fiye da kashi {SEASONAL_PCT} na kwanaki {len(past)} da suka gabata"}
-                if a.category != "hazardous" else {"en": "", "ha": ""})
+                if category not in DUST_FIRES else {"en": "", "ha": ""})
         out.append(Candidate("dust", code, f"dust:{code}:{today}", False, {
-            "en": f"US AQI up to {v} today (set by {a.aqi_by}), {label(a.category, 'en')}{high['en']}",
-            "ha": f"US AQI har zuwa {v} yau ({a.aqi_by}), {label(a.category, 'ha')}{high['ha']}"},
+            "en": f"US AQI up to {v} today (set by {a.aqi_by}), {label(category, 'en')}{high['en']}",
+            "ha": f"US AQI har zuwa {v} yau ({a.aqi_by}), {label(category, 'ha')}{high['ha']}"},
             {"en": f"Open-Meteo Air Quality (Copernicus CAMS), {_stamp(a.fetched_at)}",
              "ha": f"Ingancin iska na Open-Meteo (Copernicus CAMS), {_stamp(a.fetched_at)}"}))
     conn.execute("DELETE FROM air_daily WHERE day < %s", (today - timedelta(days=AIR_KEEP_DAYS),))

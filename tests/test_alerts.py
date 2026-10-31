@@ -464,3 +464,31 @@ def test_the_admin_page_shows_the_dry_run(monkeypatch) -> None:
         app.dependency_overrides.clear()
     assert r.status_code == 200 and "DRY RUN" in r.text and "zafin rana | Goronyo" in r.text
     assert "u0" not in r.text                                                    # no user keys shown
+
+
+def test_a_forced_category_never_changes_the_label(monkeypatch) -> None:
+    """The label is the category of the value itself: AQI 172 is Unhealthy, 38 °C is Extreme caution, whatever a
+    simulation forces; a simulation lowers the firing threshold instead."""
+    _fresh(monkeypatch)
+    conn = FakeConn({"p.kind = 'lga'": [(1, "Wamakko", WAMAKKO)]})
+    monkeypatch.setattr(read, "air_day", _air(172, "hazardous"))            # a forced, wrong category
+    assert triggers.dust(conn, NOON) == []                                   # 172 doesn't fire
+    monkeypatch.setattr(triggers, "DUST_FIRES", frozenset({"unhealthy"}))   # the simulation's way
+    out = triggers.dust(conn, NOON)
+    assert out[0].what["en"].endswith("Unhealthy") and out[0].what["ha"].endswith("Mara kyau")
+    assert "haɗari" not in out[0].what["ha"].lower()
+
+    from app.hazards.categories import heat_category
+    monkeypatch.setattr(read, "heat_day", lambda conn, pid, lga, day: read.HeatDay(
+        lga, day, 38.0, 37.0, 36.0, "danger", 7, 12, 24, 0, 0, "none", 0, NOON, "air_temperature"))
+    assert triggers.heat(conn, NOON) == []                                   # 38 °C is not Danger
+    monkeypatch.setattr(triggers, "HEAT_FIRES", frozenset({"extreme_caution"}))
+    out = triggers.heat(conn, NOON)
+    assert "Extreme caution on the US National Weather Service" in out[0].what["en"]
+    assert "matakin A kula sosai" in out[0].what["ha"] and heat_category(38.0) == "extreme_caution"
+
+
+def test_hadari_is_only_for_hazardous_danger_and_extreme_danger() -> None:
+    from app.hazards.categories import LABELS
+    with_hadari = {k for k, v in LABELS["ha"].items() if "haɗari" in v.lower()}
+    assert with_hadari == {"hazardous", "danger", "extreme_danger"}
