@@ -191,11 +191,12 @@ if __name__ == "__main__":
     p.add_argument("--resume", action="store_true", help="continue the stopped run with this --out (same draw and "
                                                          "seed), running only the cases it hadn't finished")
     p.add_argument("--concurrency", type=int, default=1, choices=[1, 2])
+    p.add_argument("--cases", help="run this cases file (e.g. runs/cases-741719.json) instead of a new draw")
     p.add_argument("--hazards", type=int, metavar="N", help="draw N LGAs per hazard family (evals/generated/"
                                                              "hazards.py: expected values from hazard_values now) "
                                                              "and run them")
     a = p.parse_args()
-    cases_path = CASES
+    cases_path = Path(a.cases) if a.cases else CASES   # --cases: an earlier draw again (before/after comparisons)
     header = {"forms": a.forms, "seed": a.seed, "families": a.families}
     ckpt = Checkpoint(a.out.stem, header, resume=True) if a.resume else None
     if ckpt and ckpt.header.get("cases"):
