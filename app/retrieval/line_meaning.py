@@ -123,10 +123,19 @@ def meaning_text(row_text: str, context: str) -> str:
     return " ".join(f"{name}. {context}".split())[:500]
 
 
+_model_lock = __import__("threading").Lock()
+
+
 @lru_cache(maxsize=1)
 def _model():
     from fastembed import TextEmbedding
     return TextEmbedding(MODEL)
+
+
+def model():
+    """The embedding model, loaded once even when several search threads ask for it at the same moment."""
+    with _model_lock:
+        return _model()
 
 
 def _literal(v) -> str:
@@ -135,7 +144,7 @@ def _literal(v) -> str:
 
 def embed_texts(texts: list[str]) -> list[str]:
     """Passage vectors as pgvector literals."""
-    return [_literal(v) for v in _model().embed(texts, batch_size=32)]   # small batches: the API runs in 1 GB
+    return [_literal(v) for v in model().embed(texts, batch_size=32)]   # small batches: the API runs in 1 GB
 
 
 def embed_queries(texts: list[str]) -> list[str]:
@@ -144,7 +153,7 @@ def embed_queries(texts: list[str]) -> list[str]:
     if not texts:
         return []
     try:
-        return [_literal(v) for v in _model().query_embed(texts)]
+        return [_literal(v) for v in model().query_embed(texts)]
     except Exception as e:  # model files missing or unreadable: never take search down with it
         log.warning("meaning search off: %s", e)
         return []

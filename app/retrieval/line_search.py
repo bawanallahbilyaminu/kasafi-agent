@@ -22,6 +22,7 @@ from decimal import Decimal
 
 import psycopg
 
+from app.retrieval import pool
 from app.retrieval.line_meaning import embed_queries
 from app.sources.lga_names import city_terms
 
@@ -298,9 +299,9 @@ def cover(lines: list[Line], terms: list[str], per_term: int = PER_TERM,
 
 def search_lines(conn: psycopg.Connection, terms: list[str], *, year: int | None = None, years: list[int] | None = None,
                  docs: list[str] | None = None, spend: str = "any", limit: int = CANDIDATES,
-                 per_doc_name: int = PER_DOC_NAME, question: str | None = None) -> list[Line]:
+                 per_doc_name: int = PER_DOC_NAME, question: str | None = None, settings=None) -> list[Line]:
     """Lines matching any term or nearest in meaning to the question and terms, best first, with their cells;
-    `spend` is expenditure, revenue or any.
+    `spend` is expenditure, revenue or any. With `settings` (a pool), the keyword and vector searches overlap.
 
     At most `per_doc_name` copies of one line per document (the same agency is printed in many tables), so one
     item can't fill the list the model reads.
@@ -314,12 +315,16 @@ def search_lines(conn: psycopg.Connection, terms: list[str], *, year: int | None
     years = list(years or []) + ([year] if year else [])
     weights = [max(0.3, 1.0 - 0.15 * i) for i in range(len(terms))]
     params = {"years": years, "docs": docs, "spend": spend if spend in ("expenditure", "revenue") else "any"}
+    # the vector search (embedding plus HNSW) on a pooled connection in another thread while the keyword SQL
+    # runs here; without a pool (tests, no `settings`) it runs first, as before
+    meaning = pool.run_sync(settings, nearest, conn, [question, *terms], years=years, docs=docs,
+                            spend=spend) if question else None
     rows = conn.execute(_SQL, {**params, "terms": terms, "weights": weights, "pats": [f"%{t}%" for t in terms],
                                "cap": max(limit, 1) * 4}).fetchall()
     lines = [_line(r) for r in rows]
     lines.sort(key=lambda x: (-x.score, *_newest_first(x)))
-    if question:
-        lines = fuse(lines, nearest(conn, [question, *terms], years=years, docs=docs, spend=spend))
+    if meaning is not None:
+        lines = fuse(lines, meaning.result())
     lines = lift_kind(lines, asked_kind(" ".join([question or "", *terms])))
     kept, copies = [], Counter()
     for x in lines:

@@ -20,6 +20,7 @@ dependencies = [
     "geopandas>=1.0",
     "matplotlib>=3.9",
     "cryptography>=43",
+    "psycopg-pool>=3.2",
 ]
 
 [dependency-groups]
