@@ -130,3 +130,32 @@ def test_misspelt_project_names_are_found_in_the_project_lists() -> None:
             pytest.skip("no 2026 budget lines")
         got = project_lines(conn, "constraction of water supply at rugar liman", years=[2026])
         assert any("Rugar Liman" in x.name and x.cells for x in got)
+
+
+# --- 4. narrative questions read the narrative ------------------------------------------------------------------
+
+@pytest.mark.parametrize("q,want", [
+    ("What did the Q2 2026 report say was corrected in the revenue figures?", True),
+    ("What reasons does the BIR give for the low capital performance?", True),
+    ("What explanation was noted for the variance in personnel costs?", True),
+    ("Me ya sa aka samu ƙarancin kashe kuɗi a manyan ayyuka?", True),
+    ("How much was allocated to health in 2026?", False),
+    ("What is the percentage change in education between 2025 and 2026?", False)])
+def test_narrative_questions(q, want) -> None:
+    assert ag.narrative_asked(_plan(q, original=q)) is want
+
+
+def test_prose_search_leaves_out_table_rows() -> None:
+    import psycopg
+
+    from app.config import get_settings
+    from app.retrieval.search import search
+    try:
+        conn = psycopg.connect(get_settings().db_url(), connect_timeout=3)
+    except Exception:
+        pytest.skip("no database")
+    with conn:
+        hits = search(conn, "capital expenditure performance reasons", k=6, prose=True)
+        if not hits:
+            pytest.skip("no indexed narrative")
+        assert all(not h.text.startswith("[Table:") and " | " not in h.text for h in hits)

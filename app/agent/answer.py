@@ -555,6 +555,10 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
     # them under tables of contents and long project lists.
     key_hits = [search(conn, q, k=3, doc_ids=scope, key_rows=True) for q in plan.search_queries]
     per_query = [search(conn, q, k=6, doc_ids=scope) for q in plan.search_queries]
+    if narrative_asked(plan):
+        # what a report corrected, changed, explained or noted is in its narrative, not its tables: the running
+        # text leads (the tables still follow)
+        key_hits = [search(conn, q, k=4, doc_ids=scope, prose=True) for q in plan.search_queries] + key_hits
     if scope and not any(per_query) and not any(key_hits):
         key_hits = [search(conn, q, k=3, key_rows=True) for q in plan.search_queries]
         per_query = [search(conn, q, k=6) for q in plan.search_queries]
@@ -1127,7 +1131,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             return await page(t)
         # Every budget question: the budget lines and the pages are searched side by side, not one after the other
         # (the planner leaves line_search out now and then: m19, m37). The more complete answer is kept.
-        planned = bool(plan.line_search)
+        planned = bool(plan.line_search) and not narrative_asked(plan)   # a narrative question: the pages lead
         plan.line_search = lines
         tl, tp = dict(t), dict(t)
         la, pa = await first_complete(_line_path(conn, plan, question, lang, client, second, settings, tl, acq),
@@ -1175,6 +1179,17 @@ def revenue_rows_search(plan: Plan, question: str) -> dict:
         "years": sorted({int(y) for y in question_years(question, plan.english_question)})}
     terms = [*base.get("terms", []), "Capital Receipts", "Aid and Grants", "Independent Revenue", "Revenue"]
     return {**base, "terms": list(dict.fromkeys(terms))[:12], "spend": "revenue"}
+
+
+NARRATIVE = re.compile(r"(?i)\b(?:correct(?:ed|ion|ions)|explain\w*|explanation|noted|observ(?:ed|ation|ations)|"
+                       r"remarks?|comments?|reasons?|why|attribut\w*|challenges?|recommend\w*|narrative|"
+                       r"says?\s+about|what\s+(?:was|were|has|have)\s+(?:been\s+)?(?:changed|revised|adjusted)|"
+                       r"me\s+ya\s+sa|dalili\w*|an\s+gyara|gyare-?gyare|bayanin)\b")
+
+
+def narrative_asked(plan: Plan) -> bool:
+    """The question asks what a document explained, corrected, changed or noted (its narrative sections)."""
+    return bool(NARRATIVE.search(f"{plan.original} {plan.english_question}"))
 
 
 def apply_period(conn, plan: Plan, question: str, today: date) -> None:
