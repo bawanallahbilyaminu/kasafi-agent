@@ -27,8 +27,10 @@ import httpx
 from app.config import Settings
 from app.data_rights import DELETED_REPLY, delete_user_data, is_delete_command
 from app.geo.facilities import WORDS as FAC_WORDS
-from app.geo.facilities import (FacilitySearch, emergency_lookup, filters_from, follow_up, is_facility_query,
-                                location_payload, profile_from, search_replies)
+from app.geo.facilities import (FacilitySearch, add_routes, emergency_lookup, filters_from, follow_up,
+                                is_facility_query, location_payload, profile_from, search_replies)
+from app.geo.facilities import FACILITY as FACILITY_WORD
+from app.geo.facility_info import NAMED, ROUTE_TO, as_facility, card, counted, is_count, lookup
 from app.geo.location import SHARE, Spot, locate_point, pin_of, place_from_text
 from app.maps.render import render_specs
 from app.geo.location import memory as location_memory
@@ -61,6 +63,9 @@ IMAGE_COMMANDS = {"images off": False, "/images off": False, "no images": False,
 CONSENT_TEXTS = {"ok", "okay", "na yarda", "na amince", "i agree", "agree", "ok na yarda"}
 SLOW_ANSWER_S = 12.0        # after this, a "still checking" note (unless a fetch note was already sent)
 # the rows and arithmetic behind the last answer, kept with the turn: sent from the store, no model call
+SHOW_QUOTES = {"quotes", "quote", "show quotes", "show the quotes", "/quotes", "nuna rubutun", "nuna min rubutun",
+               "rubutun", "nuna rubutu", "/rubutu"}
+QUOTES_NONE = {"en": "That answer quoted no document text.", "ha": "Wannan amsar ba ta ambaci rubutun takarda ba."}
 SHOW_WORKING = {"nuna lissafi", "nuna min lissafi", "nuna lissafin", "yadda aka lissafa", "lissafi",
                 "show working", "show the working", "show me the working", "show calculation", "working", "/lissafi",
                 "/working"}
@@ -181,13 +186,13 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     if kind == "location" or (text and SHARE.search(text)):
         outs = await _location(msg, key, lang, store, settings, locate_fn)
         if pin_of(msg) and (spot := location_memory.recall(key)) and (q := location_memory.waiting_question(key)):
-            outs += await _facility_search(q, key, lang, settings, facility_fn, spot)   # the question that asked
+            outs += await _after_location(q, key, lang, settings, facility_fn, spot)    # the question that asked
         return outs
     # the reply to "share your location, or tell me your LGA or town": a typed place, from our own gazetteer
     if text and (waiting := location_memory.waiting_question(key)) is not None:
         if (typed := await place_fn(settings, text)) is not None:
-            return _located(key, lang, store, typed) + await _facility_search(waiting, key, lang, settings,
-                                                                              facility_fn, typed)
+            return _located(key, lang, store, typed) + await _after_location(waiting, key, lang, settings,
+                                                                             facility_fn, typed)
     # "nearest hospital?" and its follow-ups ("next", "route?", "only government hospitals"): PostGIS and ORS, no model
     if text and settings.has_database and (outs := await _facilities(text, key, lang, store, settings, place_fn,
                                                                          facility_fn)) is not None:
@@ -198,6 +203,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     if (images := IMAGE_COMMANDS.get(_norm(text))) is not None:     # "images off" / "kashe hotuna": no model needed
         store.set_images(key, images)
         return [Out(t("images_on" if images else "images_off", lang))]
+    if text and _norm(text) in SHOW_QUOTES:                         # "nuna rubutun": the stored quotes, no model
+        turns = store.recent_turns(key)
+        quotes = turns[-1].get("quotes", "") if turns else ""
+        return [Out(quotes or QUOTES_NONE.get(lang, QUOTES_NONE["en"]))]
     if text and _norm(text) in SHOW_WORKING:                        # "nuna lissafi": the stored working, no model
         turns = store.recent_turns(key)
         working = turns[-1].get("working", "") if turns else ""
@@ -245,7 +254,8 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                 slow.cancel()
             body = result if isinstance(result, str) else result.text
             # Keep the turn for follow-ups ("check again", "what about 2024?"): 5 turns, 90 days, no number.
-            store.add_turn(key, lang, question, body, getattr(result, "sources", []), getattr(result, "working", ""))
+            store.add_turn(key, lang, question, body, getattr(result, "sources", []), getattr(result, "working", ""),
+                           getattr(result, "quotes", ""))
         except Exception as e:  # DB or model down: tell the user rather than go silent
             log.exception("answer failed: %s", type(e).__name__)
             body, result = t("answer_failed", lang), None
@@ -367,6 +377,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             store.set_pending(key, r.transcript, r.english)
             return [Out(outcome.text)]            # read-back: answer after Eh or a correction
         if r and outcome.text != EMERGENCY_REPLY:  # heard clearly: answer now
+            # a facility question by voice ('ina asibiti mafi kusa', 'how far is Arkilla PHC') as by text
+            if settings.has_database and (outs := await _facilities(r.english or r.transcript, key, lang, store,
+                                                                    settings, place_fn, facility_fn)) is not None:
+                return [Out(t("heard_prefix", lang, transcript=r.transcript[:1000]))] + outs
             return await respond(r.transcript, t("heard_prefix", lang, transcript=r.transcript[:1000]),
                                  Out(outcome.text))
         return [Out(outcome.text)]                # emergency referral, not heard, too long
@@ -443,8 +457,15 @@ async def _emergency(key: str, lang: str, d: em.Detection, store: UserStore, set
                              lga_pcode=last or ""), 2.5)
         except Exception as e:      # noqa: BLE001 - PostGIS slow or down: the help line and the request still go
             log.warning("emergency facility lookup failed: %s", type(e).__name__)
+    routed = False
+    if picks and spot is not None:   # road distance and time, given at most 1.5 s (the whole reply stays under 3 s)
+        try:
+            routed = await asyncio.wait_for(add_routes(settings, spot.lat, spot.lon, [f for _, f in picks],
+                                                       timeout=1.5), 1.6)
+        except Exception as e:      # noqa: BLE001 - slow or down: the straight line, said as such
+            log.info("emergency road distance unavailable: %s", type(e).__name__)
     if picks:
-        lines += em.facility_lines(lang, picks, "spot" if spot else "lga", picks[0][1].lga)
+        lines += em.facility_lines(lang, picks, "spot" if spot else "lga", picks[0][1].lga, routed)
     outs.append(Out("\n".join(lines), lang=lang))
     if picks:
         outs.append(Out("", lang=lang, location=location_payload(picks[0][1], lang)))
@@ -493,7 +514,10 @@ async def _facilities(text: str, key: str, lang: str, store: UserStore, settings
     """A facility question or a follow-up to one; None when the message is neither. Without a point: a place the
     question names ("nearest clinic in Gwadabawa"), else the location request, the question kept for the pin."""
     spot, search = location_memory.recall(key), location_memory.last_search(key)
-    if spot is not None and search is not None and (step := follow_up(text)):
+    if search is not None and (step := follow_up(text)):
+        if spot is None:                 # 'how far is it from me?' with no point: ask, the question kept for the pin
+            location_memory.wait_for_location(key, text)
+            return [Out(FAC_WORDS.get(lang, FAC_WORDS["en"])["need_location"], lang=lang, location_request=True)]
         if step == "next":
             search.skip += len(search.shown) or 3
         elif step == "filter":
@@ -501,6 +525,10 @@ async def _facilities(text: str, key: str, lang: str, store: UserStore, settings
         search.profile = profile_from(text, search.profile)
         log.info("facility follow-up: %s", step)
         return await _facility_replies(spot, search, lang, settings, facility_fn, "route" if step == "route" else "list")
+    if is_count(text):                   # 'how many PHCs in Sokoto?': the registry's count
+        return [Out(await asyncio.to_thread(counted, settings, text, lang), lang=lang)]
+    if not is_facility_query(text) and (named := await _named_facility(text, key, lang, settings, facility_fn, spot)):
+        return named
     if not is_facility_query(text):
         return None
     if (typed := await place_fn(settings, text)) is not None:      # a place named wins over the point in memory
@@ -511,6 +539,45 @@ async def _facilities(text: str, key: str, lang: str, store: UserStore, settings
         location_memory.wait_for_location(key, text)
         return [Out(FAC_WORDS.get(lang, FAC_WORDS["en"])["need_location"], lang=lang, location_request=True)]
     return await _facility_search(text, key, lang, settings, facility_fn, spot)
+
+
+async def _named_facility(text: str, key: str, lang: str, settings: Settings, facility_fn: FacilityFn,
+                          spot: Spot | None) -> list[Out] | None:
+    """A facility the message names ('What about Arkilla PHC'): its registry card, kept as the facility a follow-up
+    means; with 'go to' / 'how far': the route to it from the point, or the location request when there is none."""
+    if not (text or "").strip() or not settings.has_database or not (FACILITY_WORD.search(text) or ROUTE_TO.search(text)):
+        return None
+    try:
+        hits = await asyncio.to_thread(lookup, settings, text)
+    except Exception as e:          # noqa: BLE001 - PostGIS down: the message goes on as usual
+        log.warning("facility lookup failed: %s", type(e).__name__)
+        return None
+    if not hits or hits[0].score < NAMED:
+        return None
+    f, others = hits[0], [h for h in hits[1:] if h.score >= NAMED - 0.05][:3]
+    search = FacilitySearch(shown=[as_facility(f, spot.lat if spot else None, spot.lon if spot else None)])
+    location_memory.remember_search(key, search)
+    log.info("facility named: %s LGA", f.lga)
+    if not ROUTE_TO.search(text):
+        return [Out(card(f, lang, others), lang=lang)]
+    if spot is None:
+        location_memory.wait_for_location(key, text)
+        return [Out(FAC_WORDS.get(lang, FAC_WORDS["en"])["need_location"], lang=lang, location_request=True)]
+    return await _facility_replies(spot, search, lang, settings, facility_fn, "route")
+
+
+async def _after_location(question: str, key: str, lang: str, settings: Settings, facility_fn: FacilityFn,
+                          spot: Spot) -> list[Out]:
+    """The question that asked for a location, answered now that there is one: a nearest-facility search, a route
+    to a named facility, or 'how far is it' for the facility last shown."""
+    if is_facility_query(question):
+        return await _facility_search(question, key, lang, settings, facility_fn, spot)
+    if (named := await _named_facility(question, key, lang, settings, facility_fn, spot)):
+        return named
+    search = location_memory.last_search(key)
+    if search is not None and search.shown and follow_up(question) == "route":
+        return await _facility_replies(spot, search, lang, settings, facility_fn, "route")
+    return []
 
 
 async def _facility_search(question: str, key: str, lang: str, settings: Settings, facility_fn: FacilityFn,

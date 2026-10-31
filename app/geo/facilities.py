@@ -217,6 +217,9 @@ WORDS = {
            "need_location": "To find the nearest facility, share your location, or tell me your LGA or town.",
            "address": "{lga} LGA, Sokoto State", "mins_h": "{h} h {m} min", "mins": "{m} min",
            "route_head": "🧭 *Route to {name}*: {dist}.",
+           "nearer": "Nearer, but not a hospital: *{name}* ({level}), about {km} km in a straight line.",
+           "summary": "The nearest health facility is {name}, {dist}.",
+           "summary_hospital": "The nearest hospital is {name}, {dist}.",
            "follow": "Reply “next” for the next one, “route”, “only government”, “only hospitals” or “on foot”."},
     "ha": {"head": "🏥 *Cibiyoyin lafiya mafi kusa*{what}{where}:", "where_spot": " da inda kake",
            "where_lga": " kusa da tsakiyar Ƙaramar Hukumar {lga}",
@@ -236,6 +239,9 @@ WORDS = {
                             "garinka.",
            "address": "Ƙaramar Hukumar {lga}, Jihar Sokoto", "mins_h": "awa {h} da minti {m}", "mins": "minti {m}",
            "route_head": "🧭 *Hanya zuwa {name}*: {dist}.",
+           "nearer": "Akwai mafi kusa, amma ba asibiti ba: *{name}* ({level}), kusan kilomita {km} a miƙe.",
+           "summary": "Cibiyar lafiya mafi kusa ita ce {name}, {dist}.",
+           "summary_hospital": "Asibiti mafi kusa shi ne {name}, {dist}.",
            "follow": "Rubuta “na gaba” don na gaba, “hanya”, “na gwamnati kawai”, “asibitoci kawai” ko “da ƙafa”."},
 }
 
@@ -274,18 +280,22 @@ def facilities_text(lang: str, found: list[Facility], filters: Filters, profile:
 # --- what a message asks ---------------------------------------------------------------------------------------
 
 FACILITY = re.compile(
-    r"(?i)\b(?:hospitals?|clinics?|health ?(?:cent(?:er|re)|facilit\w+|post)s?|phc|dispensar\w+|maternit\w+|"
+    r"(?i)\b(?:hospitals?|clinics?|health ?(?:cent(?:er|re)|facilit\w+|post)s?|phcs?|dispensar\w+|maternit\w+|"
     r"asibiti\w*|cibiyar lafiya|cibiyoyin lafiya|ɗakin shan magani|dakin shan magani|gidan haihuwa)\b")
 NEAR = re.compile(r"(?i)\b(?:nearest|near(?:by| me| here)?|closest|close to|around|where is|where can|kusa|mafi kusa|"
                   r"ina\b|a ina)\b")
 NEXT = re.compile(r"(?i)^\s*(?:(?:the )?next(?: one)?|another( one)?|na gaba|wani(?:n)?|wata)\s*[?.!]*\s*$")
-ROUTE = re.compile(r"(?i)\b(?:route|directions?|how (?:do|can) i get|way there|hanya(?:r)?|yaya zan je|ta ina zan bi)\b")
+ROUTE = re.compile(r"(?i)\b(?:route|directions?|how (?:do|can) i get|way there|how far|distance|from me|hanya(?:r)?|"
+                   r"yaya zan je|ta ina zan bi|nisan?\w*)\b")
 FOOT = re.compile(r"(?i)\b(?:on foot|walk(?:ing)?|da ƙafa|da kafa|tafiya a ƙasa)\b")
 CAR = re.compile(r"(?i)\b(?:by car|driving|drive|da mota|a mota)\b")
 GOV = re.compile(r"(?i)\b(?:government|public|state|gwamnati)\b")
 PRIVATE = re.compile(r"(?i)\b(?:private|masu zaman kansu|na kai|mai zaman kansa)\b")
 HOSPITAL_ONLY = re.compile(r"(?i)\b(?:only\b.{0,25}\bhospitals?|hospitals? only|(?:general|big|main) hospitals?|"
                            r"asibitoci kawai|babban asibiti|manyan asibitoci)\b")
+HOSPITAL_WORD = re.compile(r"(?i)\b(?:hospitals?|asibiti\w*)\b")
+ANY_KIND = re.compile(r"(?i)\b(?:clinics?|health ?(?:cent(?:er|re)|facilit\w+|post)s?|phcs?|dispensar\w+|"
+                      r"cibiyar lafiya|cibiyoyin lafiya|any)\b")
 MATERNAL = re.compile(r"(?i)\b(?:emonc|maternity|labou?r|deliver(?:y|ing)|childbirth|obstetric|pregnan\w+|"
                       r"haihuwa|naƙuda|nakuda|mai ciki)\b")
 MONEY = re.compile(r"(?i)\b(?:budget\w*|allocat\w*|spent|spend\w*|naira|₦|kasafi\w*|kuɗi|kudi|how many|nawa|"
@@ -306,7 +316,8 @@ def filters_from(text: str, base: Filters = Filters()) -> Filters:
         f = replace(f, ownership="Public")
     elif PRIVATE.search(text or ""):
         f = replace(f, ownership="Private")
-    if HOSPITAL_ONLY.search(text or ""):
+    # 'hospital' / 'asibiti' means a hospital (general, specialist, teaching), not any health facility
+    if HOSPITAL_ONLY.search(text or "") or (HOSPITAL_WORD.search(text or "") and not ANY_KIND.search(text or "")):
         f = replace(f, levels=("Secondary", "Tertiary"))
     if MATERNAL.search(text or ""):
         f = replace(f, emonc=f.emonc or "bemonc")
@@ -435,12 +446,23 @@ async def search_replies(settings, lat: float, lon: float, search: FacilitySearc
         return [(w["next_none"] if search.skip else w["none"].format(what=search.filters.describe(lang) or "-"), None,
                  None)]
     routed = route and await add_routes(settings, lat, lon, found, search.profile)
+    if routed:                           # nearest by road when the road distances are known
+        found.sort(key=lambda f: (f.minutes is None, f.minutes or 0, f.road_km or 0, f.km))
     search.shown = found
     text = facilities_text(lang, found, search.filters, search.profile, routed, where, lga, start=search.skip + 1)
+    # hospitals asked for: a facility of any kind much nearer than the nearest hospital gets its own line
+    if search.filters.levels and not search.skip:
+        nearer = await asyncio.to_thread(_query, settings, lat, lon, Filters(), 0)
+        if nearer and nearer[0].fid not in {f.fid for f in found} and nearer[0].km < 0.5 * found[0].km:
+            n = nearer[0]
+            text = text.replace(f"\n\n{w['caution']}", "\n" + w["nearer"].format(
+                name=n.name, level=w["levels"].get(n.level, n.level), km=f"{n.km:.1f}") + f"\n\n{w['caution']}")
     image = None
     if drawn:
         line = await route_line(settings, lat, lon, found[0], search.profile) if route else []
         caption = "\n".join(text.splitlines()[1:len(found) + 1])          # the numbered rows: names and distances
         image = await asyncio.to_thread(_near_map, settings, lat, lon, found[0].lga, found, line, lang, caption)
-    return [(f"{text}\n\n{link_line(lang, found[0], search.profile)}\n\n{w['follow']}", None, None),
+    summary = w["summary_hospital" if search.filters.levels else "summary"].format(
+        name=found[0].name, dist=distance_text(lang, found[0], search.profile))
+    return [(f"{summary}\n\n{text}\n\n{link_line(lang, found[0], search.profile)}\n\n{w['follow']}", None, None),
             ("", None, image), ("", location_payload(found[0], lang), None)]

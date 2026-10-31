@@ -28,6 +28,8 @@ MEASURES = (
     "fire_detections", "hazard_overview",
     # official sources (section 5): NCDC outbreak figures, NIHSA's flood outlook, NiMet's seasonal prediction
     "outbreak_cases", "flood_outlook", "seasonal_outlook",
+    # health facilities (the GRID3 / NHFR registry): how many of a kind, or one facility by name
+    "facility_count", "facility_lookup",
     "other",
 )
 OPERATIONS = ("lookup", "breakdown", "compare", "rank", "share", "trend", "list", "explain", "verify_claim")
@@ -54,6 +56,8 @@ NEED_PROMPT = (
     "the state as the entity and time kind none (the day is read from the question). Disease cases and outbreaks "
     "now (cholera, meningitis, Lassa, measles, diphtheria) are outbreak_cases; NIHSA's Annual Flood Outlook is "
     "flood_outlook; NiMet's Seasonal Climate Prediction (rainy season onset, cessation) is seasonal_outlook. "
+    "How many health facilities of a kind (PHCs, hospitals) is facility_count; one facility by name is "
+    "facility_lookup. "
 )
 
 

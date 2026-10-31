@@ -47,6 +47,7 @@ from app.agent.need import NEED_PROMPT, Names, Need, names_for, parse_need
 from app.agent.capabilities import available_capabilities, catalog, cover
 from app.agent.tools import APPROVED_YEARS, budget_fill, dtm_fill
 from app.agent.topics import TopicResult, topic_answer
+from app.geo.location import names_place, with_location
 from app.hazards import official
 from app.hazards.answer import MEASURE_LAYERS, days_asked, hazard_answer, layers_asked, where_for
 from app.agent.topics import note_of as topic_note
@@ -417,6 +418,7 @@ class Answer:
     working: str = ""                          # rows and arithmetic, sent on "nuna lissafi" / "show working"
     topic: TopicResult | None = None           # the sources behind a multi-source topic answer
     maps: list[dict] = field(default_factory=list)      # maps to send after the text (app/maps/render.py)
+    quotes: str = ""                                    # verbatim quotes, sent on "quotes" / "nuna rubutun"
 
 
 def load_catalog(conn: psycopg.Connection) -> list[dict]:
@@ -980,9 +982,14 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
     acq: Acquired | None = None
     latest: Latest | None = None
     recheck_note, context = "", ""
+    # the user's own place ('my current LGA', 'a nan') is the LGA on file for every path; a place the question
+    # names wins over it ('Sokoto's rainy season' is the state's, not the pin's LGA)
+    planned_q = with_location(question, place)
+    if place and names_place(question):
+        place = None
     async with client_factory(settings) as client, open_reader(settings) as second:
         t0 = time.perf_counter()
-        plan = await plan_question(question, load_catalog(conn), client, settings, today, history, lang,
+        plan = await plan_question(planned_q, load_catalog(conn), client, settings, today, history, lang,
                                    names_for(conn) if conn is not None else None, second=second)
         t["plan"] = time.perf_counter() - t0
         if box is not None:
@@ -991,6 +998,10 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             return Answer(plan.clarify["question"], False, True, plan=plan, timings=t,
                           clarify=plan.clarify["options"])
         prev = history[-1] if history else None
+        # health facilities from the registry: a count of a kind, or one facility by name (no money asked about)
+        if conn is not None and (fac := facility_route(question, plan, conn, lang)):
+            t["facilities"] = 0.0
+            return Answer(fac, True, True, plan=plan, timings=t, exact=fac)
         # NCDC outbreak figures and official outlooks (NIHSA, NiMet): answered in code from the crawled tables; an
         # outlook in the library goes on to the document path
         if conn is not None and (kind := official.route(f"{question} {plan.english_question}",
@@ -1003,7 +1014,9 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             t["official"] = time.perf_counter() - t0
             if oa is not None:
                 log.info("official answer: %s, found=%s", kind, oa.found)
-                return Answer(oa.text, True, True, plan=plan, timings=t, exact=oa.text, partial=not oa.found)
+                text, quotes, summary = await _led(question, oa.text, lang, settings, client)
+                return Answer(text, True, True, plan=plan, timings=t, exact=f"{summary}\n{oa.text}",
+                              partial=not oa.found, quotes=quotes)
         # weather and hazards (heat, dust, rain, rivers, fires): answered in code from the fetched layers
         if conn is not None and (layers := hazard_route(question, plan)):
             t0 = time.perf_counter()
@@ -1012,7 +1025,9 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             t["hazard"] = time.perf_counter() - t0
             log.info("hazard answer: layers %s, %s, found=%s", ",".join(layers), ha.where.kind, ha.found)
             # no data for the day asked is still an answer ("not available now"), only partial
-            return Answer(ha.text, True, True, plan=plan, timings=t, exact=ha.text, partial=not ha.found,
+            text, quotes, summary = await _led(question, ha.text, lang, settings, client)
+            return Answer(text, True, True, plan=plan, timings=t, exact=f"{summary}\n{ha.text}",
+                          partial=not ha.found, quotes=quotes,
                           maps=maps_for(f"{question} {plan.english_question}", ha, today) if ha.found else [])
         # every cell of the need fillable by one structured tool (budget_core, dtm_api): answered from the data
         if (a := await structured_answer(conn, plan, lang, settings, t, today)) is not None:
@@ -1030,9 +1045,10 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
                                     previous=str(prev.get("question") or "")[:300] if hint else "")
             t["topic"] = time.perf_counter() - t0
             if tr.found:
-                return Answer(tr.text, True, True, [Evidence(i, d, title, None, p, "text", "")
-                                                    for i, (d, title, p) in enumerate(tr.cited, 1)],
-                              plan, t, partial=tr.partial, exact=tr.text, topic=tr)
+                text, quotes, summary = await _led(question, tr.text, lang, settings, client)
+                return Answer(text, True, True, [Evidence(i, d, title, None, p, "text", "")
+                                                 for i, (d, title, p) in enumerate(tr.cited, 1)],
+                              plan, t, partial=tr.partial, exact=f"{summary}\n{tr.text}", topic=tr, quotes=quotes)
             log.info("topic sources gave no figure; falling back")
         if plan.followup == "recheck" and prev:
             t0 = time.perf_counter()
@@ -1267,6 +1283,37 @@ MONEY_WORDS = re.compile(r"(?i)\b(?:budget\w*|allocat\w*|kasafi\w*|naira|spen[dt
 
 # the official sources' measures are hazard questions too ('akwai gargaɗin ambaliya?' tagged flood_outlook)
 HAZARD_MEASURES = set(MEASURE_LAYERS) | {"flood_outlook", "seasonal_outlook", "outbreak_cases"}
+
+
+def facility_route(question: str, plan: Plan, conn, lang: str) -> str:
+    """The registry's answer to a facility count or a facility named, or '' (a budget question about hospitals is a
+    budget question)."""
+    from app.geo.facility_info import NAMED, card, count_answer, find_by_name, is_count
+    from app.hazards.advisories import lgas_in
+    text = f"{question} {plan.english_question}"
+    measures = set(plan.need.measures) if plan.need else set()
+    if MONEY_WORDS.search(text):
+        return ""
+    if is_count(text) or "facility_count" in measures and is_count(f"how many {text}"):
+        return count_answer(conn, text, lang)
+    if "facility_lookup" in measures or FACILITY_NAMED.search(text):
+        hits = find_by_name(conn, text, lgas_in(text) or None)
+        if hits and hits[0].score >= NAMED:
+            return card(hits[0], lang, [h for h in hits[1:] if h.score >= NAMED - 0.05][:3])
+    return ""
+
+
+FACILITY_NAMED = re.compile(r"(?i)\b(?:phcs?|primary health cent(?:er|re)|health post|health clinic|general hospital|"
+                            r"specialist hospital|clinic|dispensary|asibitin)\b")
+
+
+async def _led(question: str, full: str, lang: str, settings, client) -> tuple[str, str, str]:
+    """(the answer led by its executive summary, without verbatim quotes; the quotes, for 'quotes' / 'nuna
+    rubutun'; the summary). The summary is written from the full text (quotes included) and checked against it."""
+    from app.agent.summary import lead, split_quotes, summarize
+    summary = await summarize(question, full, lang, settings, client)
+    details, quotes = split_quotes(full)
+    return lead(summary, details), quotes, summary
 
 
 MAP_WORDS = re.compile(r"(?i)\b(?:maps?|taswira\w*|on a map)\b")

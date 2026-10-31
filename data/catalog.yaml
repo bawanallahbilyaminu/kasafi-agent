@@ -74,6 +74,19 @@ capabilities:
     needs_key: FIRMS_MAP_KEY
     cites: NASA FIRMS, fetch time
 
+  # Health facilities (docs/hazard-and-services.md section 6): the GRID3 / NHFR registry in PostGIS
+  # (app/geo/facility_info.py, app/geo/facilities.py)
+  - id: facilities
+    what: "health facilities in Sokoto: count and list by type (PHC, health post, clinic, hospital), ownership, level, LGA or ward; look a facility up by name (its type, level, ward, LGA and EmONC status); the nearest ones and the route to a named one from the user's location"
+    kind: structured
+    measures: [facility_count, facility_lookup]
+    entity_types: [state, lga, other]
+    geo_levels: [state, lga, town]
+    operations: [lookup, list, rank]
+    time: the registry's date (Nov 2024)
+    cites: GRID3 Nigeria / NHFR facility registry
+    note: a count comes from the registry; the UNFPA EmONC assessment's count is of the facilities it assessed
+
   # Official sources (docs/hazard-and-services.md section 5): crawled into the advisories and outbreak_cases tables
   # (app/hazards/advisories.py, KASAFI_ADVISORIES_FETCH); answered in code (app/hazards/official.py)
   - id: advisories

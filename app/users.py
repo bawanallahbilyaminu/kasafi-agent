@@ -130,8 +130,11 @@ class UserStore:
         for col in ("last_lga", "last_lga_at", "location_notice_at"):      # location: the LGA only (hazard step 1)
             if col not in have:
                 self._db.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
-        if "working" not in {row[1] for row in self._db.execute("PRAGMA table_info(turns)")}:
+        turn_cols = {row[1] for row in self._db.execute("PRAGMA table_info(turns)")}
+        if "working" not in turn_cols:
             self._db.execute("ALTER TABLE turns ADD COLUMN working TEXT")     # "nuna lissafi" / "show working"
+        if "quotes" not in turn_cols:
+            self._db.execute("ALTER TABLE turns ADD COLUMN quotes TEXT")      # "quotes" / "nuna rubutun"
 
     def _exec(self, sql: str, args: tuple = ()) -> sqlite3.Cursor:
         with self._lock:
@@ -240,13 +243,14 @@ class UserStore:
 
     # conversation context for follow-ups
     def add_turn(self, key: str, lang: str, question: str, answer: str, sources: list[dict] | None = None,
-                 working: str = "") -> None:
+                 working: str = "", quotes: str = "") -> None:
         now = datetime.now(timezone.utc)
         with self._lock:
-            self._db.execute("INSERT INTO turns (user_key, at, lang, question, answer, sources, working) "
-                             "VALUES (?,?,?,?,?,?,?)",
+            self._db.execute("INSERT INTO turns (user_key, at, lang, question, answer, sources, working, quotes) "
+                             "VALUES (?,?,?,?,?,?,?,?)",
                              (key, now.isoformat(), lang, question[:1000], answer[:TURN_ANSWER_CHARS],
-                              json.dumps(sources or [], ensure_ascii=False), working[:WORKING_CHARS] or None))
+                              json.dumps(sources or [], ensure_ascii=False), working[:WORKING_CHARS] or None,
+                              quotes[:WORKING_CHARS] or None))
             # keep only the last few turns per user, and nothing older than the retention period
             self._db.execute("DELETE FROM turns WHERE user_key=? AND at NOT IN (SELECT at FROM turns WHERE user_key=? "
                              "ORDER BY at DESC LIMIT ?)", (key, key, TURNS_KEPT))
@@ -256,10 +260,10 @@ class UserStore:
     def recent_turns(self, key: str) -> list[dict]:
         """Oldest first, at most TURNS_KEPT, within the retention period."""
         cutoff = (datetime.now(timezone.utc) - timedelta(days=TURN_RETENTION_DAYS)).isoformat()
-        rows = self._exec("SELECT at, lang, question, answer, sources, working FROM turns WHERE user_key=? AND "
-                          "at >= ? ORDER BY at DESC LIMIT ?", (key, cutoff, TURNS_KEPT)).fetchall()
+        rows = self._exec("SELECT at, lang, question, answer, sources, working, quotes FROM turns WHERE user_key=? "
+                          "AND at >= ? ORDER BY at DESC LIMIT ?", (key, cutoff, TURNS_KEPT)).fetchall()
         return [{"at": r[0], "lang": r[1], "question": r[2], "answer": r[3], "sources": json.loads(r[4] or "[]"),
-                 "working": r[5] or ""} for r in reversed(rows)]
+                 "working": r[5] or "", "quotes": r[6] or ""} for r in reversed(rows)]
 
     # limits
     def usage(self, key: str, day: str | None = None) -> tuple[int, int]:
