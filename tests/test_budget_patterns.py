@@ -183,3 +183,21 @@ def test_the_reply_shows_plain_names_and_the_working_keeps_the_labels() -> None:
                "Ministry of Health", "Ministry of Health | 2026: 9", "administrative", "", "", 0.0, code="052100000000",
                spend_kind="capital")
     assert plain_label(cap) == "Ministry of Health (capital)" and plain_label(cap, "ha").endswith("(manyan ayyuka)")
+
+
+# --- 5. not published: the nearest figure that is -------------------------------------------------------------
+
+def test_a_headcount_question_also_searches_the_agencys_personnel_rows() -> None:
+    q = "How many staff does the Ministry of Health employ?"
+    plan = _plan(q)
+    lines = ag.with_nearest_terms(plan, q, {"terms": ["Ministry of Health"], "years": [2026]})
+    assert {"Personnel", "Salaries and Wages"} <= set(lines["terms"]) and lines["terms"][0] == "Ministry of Health"
+    assert any(s.startswith("Personnel Expenditure") for s in plan.search_queries)
+    other = ag.with_nearest_terms(_plan("Health budget 2026"), "Health budget 2026", {"terms": ["Health"]})
+    assert other == {"terms": ["Health"]}
+
+
+def test_both_prompts_say_not_published_and_give_the_nearest() -> None:
+    from app.agent.line_answer import SELECT_SYSTEM
+    assert "isn't published in these documents" in ag.ANSWER_SYSTEM
+    assert "don't publish it" in SELECT_SYSTEM and "personnel (salaries) line" in SELECT_SYSTEM

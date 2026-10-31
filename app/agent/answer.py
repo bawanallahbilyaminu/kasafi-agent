@@ -215,7 +215,10 @@ ANSWER_SYSTEM = (
     "2. Copy figures exactly as written in the evidence (same digits and units, e.g. '₦45,012,345,678.00'). "
     "Don't calculate, round, convert or total anything, and don't use figures that aren't in the evidence.\n"
     "3. If the evidence answers only part of the question, give that part and say in one sentence what wasn't "
-    "found (found=\"partial\"). If it answers nothing, say so plainly (found=\"none\"). Never guess.\n"
+    "found (found=\"partial\"). If it answers nothing, say so plainly (found=\"none\"). Never guess. When the exact "
+    "item isn't published in these documents (e.g. staff numbers, headcounts, grade levels), say exactly that "
+    "('isn't published in these documents') and give the nearest figure the evidence does print, named as what "
+    "it is (e.g. that agency's personnel budget and spending) (found=\"partial\").\n"
     "3b. Excerpts may start with [Table: <title>]: that's the table the figures belong to. For how much was "
     "allocated, use a 'Total Expenditure' table and the labelled column for the asked year (e.g. '2026 Approved "
     "Budget: ...'): 'by Programme' or 'by Functional Classification' for a sector (Hausa 'fanni'), 'by "
@@ -1127,6 +1130,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         if not lines and not plan.budget_query and (named := project_phrases(question, plan.english_question)):
             lines = {"terms": named[:3], "spend": "expenditure",       # a named project: its rows, by fuzzy name
                      "years": sorted({int(y) for y in question_years(question, plan.english_question)})}
+        lines = with_nearest_terms(plan, question, lines)
         if not lines:
             return await page(t)
         # Every budget question: the budget lines and the pages are searched side by side, not one after the other
@@ -1191,6 +1195,23 @@ NARRATIVE = re.compile(r"(?i)\b(?:correct(?:ed|ion|ions)|explain\w*|explanation|
 def narrative_asked(plan: Plan) -> bool:
     """The question asks what a document explained, corrected, changed or noted (its narrative sections)."""
     return bool(NARRATIVE.search(f"{plan.original} {plan.english_question}"))
+
+
+HEADCOUNT = re.compile(r"(?i)\b(?:staff|staffing|headcount|head\s+count|employees?|workers?|workforce|personnel\s+"
+                       r"numbers?|number\s+of\s+(?:staff|employees|workers|teachers|nurses|doctors)|grade\s+levels?|"
+                       r"posts?|vacanc\w+|ma'?aikata\s+nawa|yawan\s+ma'?aikata)\b")
+
+
+def with_nearest_terms(plan: Plan, question: str, lines: dict) -> dict:
+    """Staff numbers, headcounts and grade levels aren't printed in budgets: the agency's personnel rows are
+    searched too, so a 'not published' answer can give the nearest figure that is (its salaries, budgeted and
+    spent)."""
+    if not lines or not HEADCOUNT.search(f"{question} {plan.english_question}"):
+        return lines
+    terms = [*lines.get("terms", []), "Personnel", "Personnel Cost", "Salaries and Wages"]
+    plan.search_queries = list(dict.fromkeys([*plan.search_queries, "Personnel Expenditure by Administrative "
+                                              "Classification " + (lines.get("terms") or [""])[0]]))
+    return {**lines, "terms": list(dict.fromkeys(terms))[:12]}
 
 
 def apply_period(conn, plan: Plan, question: str, today: date) -> None:
