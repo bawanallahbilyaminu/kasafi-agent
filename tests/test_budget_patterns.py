@@ -159,3 +159,27 @@ def test_prose_search_leaves_out_table_rows() -> None:
         if not hits:
             pytest.skip("no indexed narrative")
         assert all(not h.text.startswith("[Table:") and " | " not in h.text for h in hits)
+
+
+# --- 8. names: no footnote digits, no internal labels in the reply ------------------------------------------------
+
+@pytest.mark.parametrize("raw,want", [("Normadic Education1", "Normadic Education"), ("Height-for-age1", "Height-for-age"),
+                                      ("Q4 Performance", "Q4 Performance"), ("COVID19 Response", "COVID19 Response"),
+                                      ("SDG4 Unit", "SDG4 Unit")])
+def test_footnote_digits_are_stripped_from_names(raw, want) -> None:
+    from app.agent.line_answer import clean_name
+    assert clean_name(raw) == want
+
+
+def test_the_reply_shows_plain_names_and_the_working_keeps_the_labels() -> None:
+    from app.agent.line_answer import plain_label
+    from app.retrieval.line_search import Line
+    x = Line(1, "Budget 2026", "budget-2026-approved", 16, "Total Expenditure by Administrative Classification",
+             "Agency for Normadic Education1", "Agency for Normadic Education1 | 2026: 5", "administrative", "", "", 0.0,
+             code="051700300100")
+    assert plain_label(x) == "Agency for Normadic Education"
+    assert "one agency or unit" not in plain_label(x) and "code" not in plain_label(x)
+    cap = Line(2, "Budget 2026", "budget-2026-approved", 30, "Capital Expenditure by Administrative Classification",
+               "Ministry of Health", "Ministry of Health | 2026: 9", "administrative", "", "", 0.0, code="052100000000",
+               spend_kind="capital")
+    assert plain_label(cap) == "Ministry of Health (capital)" and plain_label(cap, "ha").endswith("(manyan ayyuka)")

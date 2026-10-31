@@ -210,7 +210,10 @@ def test_the_code_of_a_line_is_shown_to_the_model_and_the_reader() -> None:
     assert "code 014800000000" in listing([siec])
     res, _ = verify({"selected": [{"line": "L1", "column": "2026 Approved Budget"}], "found": "full"}, [siec])
     a = ans.line_answer(None, ans.Plan("q", [], []), res, [siec], "en", {}, None)
-    assert "(code 014800000000)" in a.text and "p. 16" in a.text
+    assert "014800000000" not in a.text and "(code 014800000000)" in a.working and "p. 16" in a.text  # working
+    asked = ans.line_answer(None, ans.Plan("What is the exact code and amount for SIEC?", [], []), res, [siec], "en",
+                            {}, None)
+    assert "(code 014800000000)" in asked.text                               # a code asked for is in the reply
 
 
 def _c(i, name, page, col, amount, doc="budget-2026-approved", measure=None):

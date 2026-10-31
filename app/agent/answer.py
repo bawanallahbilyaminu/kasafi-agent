@@ -61,8 +61,8 @@ from app.agent import trace
 from app import usage
 from app.agent.category import TOP_UNITS, CategoryResult, pct, run_category
 from app.agent.calculate import MIXED, CalcError, Calculation, MixedBases, offer_text, validate
-from app.agent.line_answer import (TOTAL_ASKED, WHOLE_BUDGET, LineResult, fmt, is_location, item_of, kind_of, level,
-                                   read_lines, short_name)
+from app.agent.line_answer import (TOTAL_ASKED, WHOLE_BUDGET, LineResult, clean_name, fmt, is_location, item_of,
+                                   kind_of, level, plain_label, read_lines, short_name)
 from app.retrieval.line_search import (MAX_LINES, name_key, names_a_kind, nearest, project_lines, project_phrases,
                                        search_lines)
 from app.config import Settings, get_settings
@@ -1181,6 +1181,7 @@ def revenue_rows_search(plan: Plan, question: str) -> dict:
     return {**base, "terms": list(dict.fromkeys(terms))[:12], "spend": "revenue"}
 
 
+CODE_ASKED = re.compile(r"(?i)\b(?:codes?|lamba(?:r|n)?)\b")
 NARRATIVE = re.compile(r"(?i)\b(?:correct(?:ed|ion|ions)|explain\w*|explanation|noted|observ(?:ed|ation|ations)|"
                        r"remarks?|comments?|reasons?|why|attribut\w*|challenges?|recommend\w*|narrative|"
                        r"says?\s+about|what\s+(?:was|were|has|have)\s+(?:been\s+)?(?:changed|revised|adjusted)|"
@@ -1955,14 +1956,16 @@ def nearest_answer(conn, plan: Plan, res: LineResult, lang: str, t: dict, acq) -
         if names[short_name(x)] > 1 and x.table_title:
             tags.append(x.table_title.rsplit(" - ", 1)[-1])
         return short_name(x) + (f" ({', '.join(tags)})" if tags else "")
-    rows = [f"• {label(s.line)}, {s.cell.column}: {fmt(s.cell.amount)} [{pages.index((s.line.doc_id, s.line.page)) + 1}]"
-            for s in res.nearest]
+    def row(s, name: str) -> str:
+        return f"• {name}, {s.cell.column}: {fmt(s.cell.amount)} [{pages.index((s.line.doc_id, s.line.page)) + 1}]"
+    rows = [row(s, plain_label(s.line, lang)) for s in res.nearest]         # plain names in the reply
     what = w["what"].format(m=res.missing) if res.missing else ""
     body = "\n".join([w["head"].format(what=what), *rows])
+    working = "\n".join([w["head"].format(what=what), *[row(s, label(s.line)) for s in res.nearest]])
     log.info("no line answers; %d nearest lines named", len(rows))
     return Answer(f"{readable_amounts(body, lang)}\n\n{sources_line(evidence, lang)}", True, True, evidence, plan, t,
-                  partial=True, exact=body, acquired=acq, sources=cited_sources(conn, evidence), lines=res,
-                  working=body)
+                  partial=True, exact=working, acquired=acq, sources=cited_sources(conn, evidence), lines=res,
+                  working=working)
 
 
 def fallback_line_search(plan: Plan, question: str) -> dict:
@@ -2109,6 +2112,13 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
     rows = [f"• {label(s.line)}, {s.cell.column}: {fmt(s.cell.amount)} [{nmap[(s.line.doc_id, s.line.page)]}]"
             + side.get(s.part, "") for s in res.selections]
     working += rows
+    # the reply's rows: plain names (the level, code and table labels stay in the working; a code the question
+    # asks for is shown)
+    code_asked = bool(CODE_ASKED.search(f"{plan.original} {plan.english_question}"))
+    rows = [f"• {plain_label(s.line, lang)}"
+            + (f" (code {s.line.code})" if code_asked and s.line.code else "")
+            + f", {s.cell.column}: {fmt(s.cell.amount)} [{nmap[(s.line.doc_id, s.line.page)]}]"
+            + side.get(s.part, "") for s in res.selections]
     notes = []                       # caveats stay in the reply, not only in the working
     if res.aggregate_only:
         notes.append(w["aggregate"])

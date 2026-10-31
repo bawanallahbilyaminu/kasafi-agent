@@ -156,11 +156,33 @@ def fmt(x: Decimal) -> str:
     return f"{x.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP):,.2f}"
 
 
+# a footnote mark glued to a printed name: 'Normadic Education1', 'Height-for-age1' (a word of 3+ letters, lower
+# case before the digits: 'Q4', 'COVID19' and 'SDG4' are left alone)
+_FOOTNOTE = re.compile(r"\b([A-Za-z][a-z]{2,})\d{1,2}\b")
+
+
+def clean_name(name: str) -> str:
+    return _FOOTNOTE.sub(r"\1", name)
+
+
 def short_name(line: Line) -> str:
     """'Counterpart Funds for BHCPF- EMT (Ministry of Health)': the line's own words, then its agency."""
-    head = re.split(r"\s\d{8,}\s*-", line.name, maxsplit=1)[0].strip(" -")
-    agency = ministry_of(line)
-    return head if agency == line.name or agency.lower() in head.lower() else f"{head} ({agency})"
+    head = clean_name(re.split(r"\s\d{8,}\s*-", line.name, maxsplit=1)[0].strip(" -"))
+    agency = clean_name(ministry_of(line))
+    return head if agency == clean_name(line.name) or agency.lower() in head.lower() else f"{head} ({agency})"
+
+
+PLAIN_KIND = {"en": {"personnel (salaries)": "salaries", "overhead (running costs)": "running costs",
+                     "capital": "capital"},
+              "ha": {"personnel (salaries)": "albashi", "overhead (running costs)": "kuɗin gudanarwa",
+                     "capital": "manyan ayyuka"}}
+
+
+def plain_label(x: Line, lang: str = "en") -> str:
+    """A row's name as the reply shows it: its own name, and the kind of spending when it isn't the total. The
+    level, code and table ('one agency or unit, all spending (total), code …') are in the working only."""
+    kind = PLAIN_KIND.get(lang, PLAIN_KIND["en"]).get(kind_of(x), "")
+    return short_name(x) + (f" ({kind})" if kind else "")
 
 
 _ITEM = re.compile(r"\b\d{8}\s*-\s*([A-Z][A-Z0-9 /&,().'-]{3,90}?)\s*\d{5}")
