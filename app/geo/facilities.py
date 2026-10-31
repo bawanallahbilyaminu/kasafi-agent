@@ -229,9 +229,9 @@ WORDS = {
            "address": "{lga} LGA, Sokoto State", "mins_h": "{h} h {m} min", "mins": "{m} min",
            "route_head": "🧭 *Route to {name}*{checked}: {dist}.",
            "checked": " (location checked {d})",
-           "nearer": "Nearer, but not a hospital: *{name}* ({level}), about {km} km in a straight line.",
+           "any_nearer": "; nearest facility of any kind: {name} ({level}), {dist}.",
            "summary": "The nearest health facility is {name}, {dist}.",
-           "summary_hospital": "The nearest hospital is {name}, {dist}.",
+           "summary_hospital": "Nearest hospital: {name}, {dist}.",
            "follow": "Reply “next” for the next one, “route”, “only government”, “only hospitals” or “on foot”."},
     "ha": {"head": "🏥 *Cibiyoyin lafiya mafi kusa*{what}{where}:", "where_spot": " da inda kake",
            "where_lga": " kusa da tsakiyar Ƙaramar Hukumar {lga}",
@@ -252,9 +252,9 @@ WORDS = {
            "address": "Ƙaramar Hukumar {lga}, Jihar Sokoto", "mins_h": "awa {h} da minti {m}", "mins": "minti {m}",
            "route_head": "🧭 *Hanya zuwa {name}*{checked}: {dist}.",
            "checked": " (an tabbatar da wurin {d})",
-           "nearer": "Akwai mafi kusa, amma ba asibiti ba: *{name}* ({level}), kusan kilomita {km} a miƙe.",
+           "any_nearer": "; cibiyar lafiya mafi kusa ta kowace iri: {name} ({level}), {dist}.",
            "summary": "Cibiyar lafiya mafi kusa ita ce {name}, {dist}.",
-           "summary_hospital": "Asibiti mafi kusa shi ne {name}, {dist}.",
+           "summary_hospital": "Asibiti mafi kusa: {name}, {dist}.",
            "follow": "Rubuta “na gaba” don na gaba, “hanya”, “na gwamnati kawai”, “asibitoci kawai” ko “da ƙafa”."},
 }
 
@@ -465,13 +465,13 @@ async def search_replies(settings, lat: float, lon: float, search: FacilitySearc
         found.sort(key=lambda f: (f.minutes is None, f.minutes or 0, f.road_km or 0, f.km))
     search.shown = found
     text = facilities_text(lang, found, search.filters, search.profile, routed, where, lga, start=search.skip + 1)
-    # hospitals asked for: a facility of any kind much nearer than the nearest hospital gets its own line
+    # the first line names the facility the pin goes to; hospitals asked for and a facility of any kind nearer
+    # than the first: the first line says so ("Nearest hospital: X ...; nearest facility of any kind: Y ...")
+    any_nearer = None
     if search.filters.levels and not search.skip:
         nearer = await asyncio.to_thread(_query, settings, lat, lon, Filters(), 0)
-        if nearer and nearer[0].fid not in {f.fid for f in found} and nearer[0].km < 0.5 * found[0].km:
-            n = nearer[0]
-            text = text.replace(f"\n\n{w['caution']}", "\n" + w["nearer"].format(
-                name=n.name, level=w["levels"].get(n.level, n.level), km=f"{n.km:.1f}") + f"\n\n{w['caution']}")
+        if nearer and nearer[0].fid not in {f.fid for f in found} and nearer[0].km < found[0].km:
+            any_nearer = nearer[0]
     image = None
     if drawn:
         line = await route_line(settings, lat, lon, found[0], search.profile) if route else []
@@ -479,5 +479,9 @@ async def search_replies(settings, lat: float, lon: float, search: FacilitySearc
         image = await asyncio.to_thread(_near_map, settings, lat, lon, found[0].lga, found, line, lang, caption)
     summary = w["summary_hospital" if search.filters.levels else "summary"].format(
         name=found[0].name, dist=distance_text(lang, found[0], search.profile))
+    if any_nearer is not None:
+        summary = summary.rstrip(".") + w["any_nearer"].format(
+            name=any_nearer.name, level=w["levels"].get(any_nearer.level, any_nearer.level),
+            dist=distance_text(lang, any_nearer, search.profile))
     return [(f"{summary}\n\n{text}\n\n{link_line(lang, found[0], search.profile)}\n\n{w['follow']}", None, None),
             ("", None, image), ("", location_payload(found[0], lang), None)]

@@ -179,20 +179,25 @@ def test_hospital_means_hospital_level_facilities() -> None:
     assert fac.filters_from("nearest health facility or hospital").levels == ()   # any kind asked
 
 
-def test_a_much_nearer_facility_of_any_kind_gets_its_own_line(monkeypatch) -> None:
+def test_the_first_line_names_the_pins_facility_and_a_nearer_one_of_any_kind(monkeypatch) -> None:
     def f(fid, name, level, km):
         return fac.Facility(fid, name, level, "", "Public", "", 13.1, 5.2, "Wamakko", "Wamakko", km)
 
     def query(settings, lat, lon, filters, skip):
         return [f("h", "Kware General Hospital", "Secondary", 9.0)] if filters.levels else \
-            [f("p", "Rinin Tawaye PHC", "Primary", 0.8)]
+            [f("p", "Rinin Tawaye PHC", "Primary", 3.0)]
     monkeypatch.setattr(fac, "_query", query)
     s = make_settings()
     out = asyncio.run(fac.search_replies(s, 13.06, 5.17, fac.FacilitySearch(fac.filters_from("nearest hospital")),
                                          "en", route=False, drawn=False))
-    text = out[0][0]
-    assert text.startswith("The nearest hospital is Kware General Hospital, about 9.0 km in a straight line.")
-    assert "Nearer, but not a hospital: *Rinin Tawaye PHC* (primary), about 0.8 km in a straight line." in text
+    first = out[0][0].splitlines()[0]
+    assert first == ("Nearest hospital: Kware General Hospital, about 9.0 km in a straight line; nearest facility "
+                     "of any kind: Rinin Tawaye PHC (primary), about 3.0 km in a straight line.")
+    assert out[-1][1]["name"] == "Kware General Hospital"                   # the pin: the facility the line names
+    assert out[0][0].count("Rinin Tawaye") == 1                             # said once, in the first line
+    plain = asyncio.run(fac.search_replies(s, 13.06, 5.17, fac.FacilitySearch(), "en", route=False, drawn=False))
+    assert plain[0][0].startswith("The nearest health facility is Rinin Tawaye PHC")
+    assert plain[-1][1]["name"] == "Rinin Tawaye PHC"
 
 
 # --- 4. executive summary first, quotes on request ------------------------------------------------------------

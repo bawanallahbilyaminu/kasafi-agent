@@ -71,7 +71,9 @@ def test_with_a_point_the_nearest_suitable_facility_and_its_pin_come_at_once() -
     text = outs[0].text
     assert text.startswith("🚨 This sounds like an emergency. Get help now.")
     assert "Nearest hospital with comprehensive emergency obstetric care: *Kware General Hospital*" in text
-    assert "Nearest health facility: *Rinin Tawaye PHC* (primary)" in text
+    # one line names the pin's hospital first, then the nearer facility of any kind
+    assert "*Kware General Hospital*" in text.splitlines()[1]
+    assert "; nearest facility of any kind: *Rinin Tawaye PHC* (primary)" in text.splitlines()[1]
     assert outs[1].location["name"] == "Kware General Hospital" and len(outs) == 3
     assert "google.com/maps/dir" in outs[2].text      # the follow-up: no ORS key here, so the link alone
     assert lookup.calls == [(True, True, "")] and took < 3.0

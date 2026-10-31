@@ -226,6 +226,7 @@ WORDS = {
                      "LGA.",
            "hospital": "Nearest general or specialist hospital{near}: *{name}*, {dist}, in {lga} LGA.",
            "any": "Nearest health facility{near}: *{name}* ({level}), {dist}.",
+           "any_too": "; nearest facility of any kind: *{name}* ({level}), {dist}.",
            "link": "🧭 Directions: {link}",
            "no_road": "(Road distance isn't available right now: straight-line distance shown.)",
            "road_next": "Road distance and directions follow in a moment.",
@@ -239,6 +240,7 @@ WORDS = {
                      "Ƙaramar Hukumar {lga}.",
            "hospital": "Babban asibiti mafi kusa{near}: *{name}*, {dist}, a Ƙaramar Hukumar {lga}.",
            "any": "Cibiyar lafiya mafi kusa{near}: *{name}* ({level}), {dist}.",
+           "any_too": "; cibiyar lafiya mafi kusa ta kowace iri: *{name}* ({level}), {dist}.",
            "link": "🧭 Hanya: {link}",
            "no_road": "(Ba a samu nisan hanya yanzu ba: an nuna nisa a miƙe.)",
            "road_next": "Nisan hanya da kwatance suna zuwa nan da ɗan lokaci.",
@@ -274,6 +276,10 @@ def facility_lines(lang: str, picks: list[tuple[str, object]], near: str = "spot
     where = w["near_spot"] if near == "spot" else w["near_lga"].format(lga=lga)
     out = [w[kind].format(near=where, name=f.name, dist=distance_text(lang, f), lga=f.lga or f.lga_attr,
                           level=w["levels"].get(f.level, f.level)) for kind, f in picks]
+    if len(picks) == 2 and picks[1][0] == "any":     # the pin goes to the first: one line names both, first first
+        f = picks[1][1]
+        out = [out[0].rstrip(".") + w["any_too"].format(name=f.name, level=w["levels"].get(f.level, f.level),
+                                                        dist=distance_text(lang, f))]
     if picks and near == "spot":
         if follows:
             return out + [w["road_next"]]
