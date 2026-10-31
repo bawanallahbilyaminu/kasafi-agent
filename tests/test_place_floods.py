@@ -87,7 +87,8 @@ def test_flood_wording_never_says_never_flooded() -> None:
     s = A.flood_sentence(h, "en")
     assert s.startswith("No flood water was seen at this spot") and "under crops" in s and "never" not in s.lower()
     assert "none of the 100 July–October radar passes" in s and "2017–2026" in s
-    assert "no official satellite flood map is loaded" in s             # the clipped maps aren't on this machine
+    assert "no official satellite flood map for Sokoto is loaded yet" in s     # the clipped maps aren't on this machine
+    assert "covering Sokoto" not in s
     h.floods.maps_loaded = True
     assert "UNOSAT, October 2022" in A.flood_sentence(h, "en")
     # a water body: every pass under water is said once, not listed pass by pass

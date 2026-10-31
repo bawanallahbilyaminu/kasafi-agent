@@ -122,14 +122,15 @@ def place_chart(h: H.History, lang: str, lga: str) -> MapImage:
             ax.text(y, 0.01, "–", ha="center", va="bottom", fontsize=LABEL, color=MUTED)
             continue
         if r.usable:
-            ax.bar(y, max(v, 0), width=0.72, color=GREEN, edgecolor=GREEN_EDGE, linewidth=0.8, zorder=3)
+            ax.bar(y, v, width=0.72, color=GREEN, edgecolor=GREEN_EDGE, linewidth=0.8, zorder=3)
         else:
-            ax.bar(y, max(v, 0), width=0.72, facecolor=THIN_FILL, edgecolor=THIN_EDGE, hatch="///", linewidth=0.8,
-                   zorder=3)
+            ax.bar(y, v, width=0.72, facecolor=THIN_FILL, edgecolor=THIN_EDGE, hatch="///", linewidth=0.8, zorder=3)
         if h.fit and h.fit.flags.get(y) == "below":
             ax.plot([y], [max(v, 0) + 0.03], marker="v", markersize=11, color=FLAG, zorder=5, linestyle="none")
-    ymax = max([max(r.ndvi_p90 or 0, 0) for r in rows] + [0.3])
-    ax.set_ylim(0, ymax * 1.25)
+    ymax = max([r.ndvi_p90 or 0 for r in rows] + [0.3])
+    ymin = min([r.ndvi_p90 or 0 for r in rows] + [0.0])          # open water has a negative NDVI: shown as it is
+    ax.set_ylim(ymin - (0.05 if ymin < 0 else 0), ymax * 1.25)
+    ax.axhline(0, color="#c9c6bf", linewidth=0.8, zorder=1)
     ax.set_ylabel(t["y_green"], fontsize=LABEL, color=INK)
     ax.tick_params(axis="y", labelsize=LABEL, colors=INK, length=0)
     ax.grid(axis="y", color="#e4e2dd", linewidth=0.8, zorder=0)
@@ -160,8 +161,8 @@ def place_chart(h: H.History, lang: str, lga: str) -> MapImage:
     for y, r in zip(years, rows):
         ax2.annotate(str(r.season_obs), (y, 0), xytext=(0, -34), textcoords="offset points", ha="center", va="top",
                      fontsize=SMALL, color=MUTED, annotation_clip=False)
-    ax2.annotate(t["clear"], (years[0] - 0.7, 0), xytext=(-4, -34), textcoords="offset points", ha="right", va="top",
-                 fontsize=SMALL, color=MUTED, annotation_clip=False)
+    ax2.annotate("\n".join(t["clear"].split()), (years[0] - 0.7, 0), xytext=(-4, -34), textcoords="offset points",
+                 ha="right", va="top", fontsize=SMALL, color=MUTED, annotation_clip=False, linespacing=1.1)
     handles = [Patch(facecolor=GREEN, edgecolor=GREEN_EDGE, label=t["leg_green"]),
                Patch(facecolor=THIN_FILL, edgecolor=THIN_EDGE, hatch="///", label=t["leg_thin"]),
                Line2D([], [], color=FLAG, marker="v", markersize=10, linestyle="none", label=t["leg_flag"]),

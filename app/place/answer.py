@@ -159,7 +159,9 @@ W = {
         "flood_radar": "Radar (Sentinel-1) saw flood water at this spot: {items}",
         "flood_radar_item": "flood water seen on {n} of {total} radar passes in {year} ({dates})",
         "flood_radar_all": "water on every July–October radar pass in {first}–{last} ({n} of {n})",
-        "maps_none": "no official satellite flood map is loaded for Sokoto yet",
+        "flood_none_nomaps": "No flood water was seen at this spot in {first}–{last}: on none of the {passes} "
+                             "July–October radar passes (Sentinel-1) and in no clear Sentinel-2 image; no official "
+                             "satellite flood map for Sokoto is loaded yet.",
         "flood_official": "it lies inside the UN satellite flood map of {period} (UNOSAT)",
         "flood_optical": "Sentinel-2 saw water in {when}",
         "flood_none": "No flood water was seen at this spot in {first}–{last}: on none of the {passes} July–October "
@@ -247,7 +249,10 @@ W = {
         "flood_radar": "Radar (Sentinel-1) ta ga ruwan ambaliya a wannan wuri: {items}",
         "flood_radar_item": "an ga ruwan ambaliya a {n} cikin {total} na hotunan radar a {year} ({dates})",
         "flood_radar_all": "ruwa a kowane hoton radar na Yuli–Oktoba a {first}–{last} ({n} cikin {n})",
-        "maps_none": "ba a riga an ɗora wata taswirar ambaliya ta tauraron ɗan adam ta hukuma ta Sokoto ba",
+        "flood_none_nomaps": "Ba a ga ruwan ambaliya a wannan wuri ba a {first}–{last}: ba a cikin ɗaya daga cikin "
+                             "hotunan radar {passes} na Yuli–Oktoba (Sentinel-1) ba, ba kuma a cikin wani hoton "
+                             "Sentinel-2 bayyananne ba; ba a riga an ɗora wata taswirar ambaliya ta tauraron ɗan adam "
+                             "ta hukuma ta Sokoto ba.",
         "flood_official": "yana cikin taswirar ambaliya ta tauraron ɗan adam ta MDD (UNOSAT) ta {period}",
         "flood_optical": "Sentinel-2 ta ga ruwa a {when}",
         "flood_none": "Ba a ga ruwan ambaliya a wannan wuri ba a {first}–{last}: ba a cikin ɗaya daga cikin hotunan "
@@ -371,16 +376,15 @@ def flood_sentence(h: H.History, lang: str) -> str:
     for m in ev.official:
         parts.append(t["flood_official"].format(period=period_text(m["period_start"], m["period_end"], lang)))
     when = when_text({y: r for y, r in h.years.items() if y in optical_years(h)}, lang)
-    if when:
+    if when and not h.on_water:                      # a water body's optical months are in its own sentence
         parts.append(t["flood_optical"].format(when=when))
     if parts:
         s = "; ".join(parts) + ". " + t["flood_reason"]
     else:
         passes = sum(r.passes for r in ev.radar.values())
         ry = sorted(ev.radar) or years
-        s = t["flood_none"].format(first=ry[0], last=ry[-1], passes=passes,
-                                   maps=t["maps_covered"] if ev.maps_loaded else t["maps_none"]) + " " + \
-            t["flood_reason"]
+        s = t["flood_none" if ev.maps_loaded else "flood_none_nomaps"].format(
+            first=ry[0], last=ry[-1], passes=passes, maps=t["maps_covered"]) + " " + t["flood_reason"]
     if h.on_water:
         occ = h.jrc.get("occurrence")
         s = t["on_water"].format(occ=f"{occ:.0f}" if occ is not None else "–", when=when_text(h.years, lang) or
