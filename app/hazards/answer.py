@@ -94,6 +94,9 @@ W = {
            "parts": {"early": "early", "mid": "mid", "late": "late"},
            "months": ("January", "February", "March", "April", "May", "June", "July", "August", "September",
                       "October", "November", "December"),
+           "river_conflict": "⚠️ The official outlook above expects flooding or a wet season for these months, but "
+                             "this model estimate shows the rivers low: follow the official outlook. The model "
+                             "includes neither dam releases nor local rain-fed flooding.",
            "river_note": "River figures are a GloFAS model forecast compared with the same time of year in each "
                          "point's own history, not an official flood warning.",
            "fire_line": "Satellite heat detections (could be bush, farm or other fires) in the last 24 hours: {n} "
@@ -149,6 +152,9 @@ W = {
            "parts": {"early": "farkon", "mid": "tsakiyar", "late": "ƙarshen"},
            "months": ("Janairu", "Fabrairu", "Maris", "Afrilu", "Mayu", "Yuni", "Yuli", "Agusta", "Satumba",
                       "Oktoba", "Nuwamba", "Disamba"),
+           "river_conflict": "⚠️ Hasashen hukuma da ke sama yana sa ran ambaliya ko damina mai yawan ruwa a waɗannan "
+                             "watanni, amma wannan ƙiyasin samfuri ya nuna koguna ƙasa: a bi hasashen hukuma. Samfurin "
+                             "bai haɗa da ruwan da ake sakowa daga madatsun ruwa ko ambaliyar ruwan sama ba.",
            "river_note": "Alƙaluman koguna hasashen GloFAS ne idan aka kwatanta da wannan lokaci na shekara a "
                          "tarihin kowane wuri, ba gargaɗin ambaliya na hukuma ba.",
            "fire_line": "Alamun zafi da tauraron ɗan adam ya gano (na iya zama gobarar daji, gona ko wata) a awa 24 "
@@ -243,6 +249,10 @@ def hazard_answer(conn, question: str, lang: str, layers: list[str], where: read
         used[src] = fresh.fetched_at
     if "flood" in layers and found:
         out += ["", w["river_note"]]
+        # an official outlook for these months expects floods or a wet season while the model shows the rivers
+        # low or normal: the official outlook leads, the model is an estimate
+        if conn is not None and outlook_conflict(conn, where, today):
+            out.append(w["river_conflict"])
     if used:
         if any(s in used for s in ("forecast", "air", "flood")):
             out += ["", w["forecast_note"]]
@@ -278,6 +288,22 @@ def severity(conn, layer: str, where: read.Where, pids: list, day: date) -> int:
         scale = 1 if where.kind == "lga" else 3
         return 0 if n == 0 else 1 if n < 5 * scale else 2 if n < 20 * scale else 3
     return -1
+
+
+HIGH_OUTLOOK = re.compile(r"(?i)high flood risk|above[- ]normal rainfall|wetter[- ]than[- ]normal|burst their banks|"
+                          r"elevated flood risk")
+
+
+def outlook_conflict(conn, where: read.Where, today: date) -> bool:
+    """A current official outlook for the place expects floods or a wet season, and no river point the answer
+    reads is high for the time of year (GloFAS sees neither the dams nor what the outlook does)."""
+    from datetime import datetime, timezone
+    from app.hazards.official import advisories_for
+    live, _ = advisories_for(conn, ("flood", "rain"), where, datetime.now(timezone.utc))
+    if not any(a.kind == "outlook" and HIGH_OUTLOOK.search(a.text) for a in live):
+        return False
+    rivers = read.river_days(conn, today, where.lga_pcode if where.kind == "lga" else "")
+    return bool(rivers) and all(r.level in ("low", "normal") for r in rivers)
 
 
 def discharge(q: float) -> str:

@@ -111,6 +111,24 @@ def test_the_aqi_names_its_pollutant_and_each_pm_has_its_own_guideline(monkeypat
     assert "US AQI har zuwa 204, saboda PM2.5" in a.text and "iyakar WHO ta awa 24: 15" in a.text
 
 
+def test_an_official_outlook_beats_a_low_model_river(monkeypatch) -> None:
+    from datetime import date as d
+
+    from app.hazards import official
+    high = official.Adv("nihsa_afo", "outlook", datetime(2026, 4, 1, tzinfo=timezone.utc), None,
+                        "Kebbi, Niger, Sokoto, and Zamfara states remain under High Flood Risk", "", [], True)
+    low = read.RiverDay("Rima near Goronyo", "Goronyo", TODAY, 2.4, 0.3, d(1997, 1, 1), None, "low")
+    monkeypatch.setattr(official, "advisories_for", lambda *a, **k: ([high], None))
+    monkeypatch.setattr(read, "river_days", lambda *a, **k: [low])
+    where = read.Where("lga", "NG034006", "Goronyo")
+    assert ha.outlook_conflict(object(), where, TODAY)
+    monkeypatch.setattr(read, "river_days", lambda *a, **k: [read.RiverDay("R", "G", TODAY, 900, 97, d(1997, 1, 1),
+                                                                            None, "very_high")])
+    assert not ha.outlook_conflict(object(), where, TODAY)          # the model agrees: no note
+    monkeypatch.setattr(official, "advisories_for", lambda *a, **k: ([], None))
+    assert not ha.outlook_conflict(object(), where, TODAY)          # no outlook: no note
+
+
 def test_a_pin_without_grid_data_gets_its_lgas_forecast_said_as_such(monkeypatch) -> None:
     _patch(monkeypatch, _fresh())
     monkeypatch.setattr(read, "point_ids", lambda conn, where: [(7 if where.kind == "point" else 1, "Wamakko")])
