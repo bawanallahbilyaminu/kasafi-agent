@@ -25,7 +25,9 @@ from datetime import date
 
 from app.place import history as H
 from app.place.fit import MIN_YEARS
+from app.place.floods import flood_evidence
 from app.place.outline import Outline, plot_outline
+from app.place.raster import circle
 
 log = logging.getLogger(__name__)
 
@@ -138,8 +140,9 @@ W = {
         "budget_row": "• {name}: ₦{amount} ({title}, p. {page})",
         "referral": "For advice on what to plant or apply, ask the agricultural extension workers (Sokoto ADP). "
                     "Kasafi only reports what the images show.",
-        "sources": "Sources: Copernicus Sentinel-2 L2A via Microsoft Planetary Computer; JRC Global Surface Water "
-                   "v1.3; ESA WorldCover 2021; Open-Meteo archive (ERA5-Land).",
+        "sources": "Sources: Copernicus Sentinel-2 L2A and Sentinel-1 RTC via Microsoft Planetary Computer; JRC "
+                   "Global Surface Water v1.3; ESA WorldCover 2021; Open-Meteo archive (ERA5-Land); UNOSAT flood "
+                   "maps via HDX (CC BY-SA).",
         "working_head": "Per year (rainy season June–October): clear images, peak greenness (NDVI 90th "
                         "percentile), June–October rain, rain-adjusted flag, months with open water, dry-season "
                         "bare soil (BSI median, February–April).",
@@ -153,6 +156,19 @@ W = {
                   "be under-counted here.",
         "nearest_working": "Nearest water body ({km} km, {ha} ha): water months per year {months}.",
         "and": " and ", "in": "in ",
+        "flood_radar": "Radar (Sentinel-1) saw flood water at this spot: {items}",
+        "flood_radar_item": "flood water seen on {n} of {total} radar passes in {year} ({dates})",
+        "flood_official": "it lies inside the UN satellite flood map of {period} (UNOSAT)",
+        "flood_optical": "Sentinel-2 saw water in {when}",
+        "flood_none": "No flood water was seen at this spot in {first}–{last}: on none of the {passes} July–October "
+                      "radar passes (Sentinel-1), in no clear Sentinel-2 image, and in no official satellite flood "
+                      "map covering Sokoto ({maps}).",
+        "flood_reason": "Floods under crops read bright on radar and green in optical images, short floods fall "
+                        "between passes, and optical water under cloud is masked, so a flood can still be missed.",
+        "maps_covered": "UNOSAT, October 2022, September and November 2024",
+        "radar_working": "{year}: {total} radar passes July–October, under water on {dates}; VV dB per pass {db}",
+        "official_working": "Official flood maps touching the plot: {items}",
+        "short_months": ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"),
     },
     "ha": {
         "need_pin": "Don in duba tarihin wuri ina buƙatar wurin kansa: danna maɓallin da ke ƙasa ka aiko da wurin "
@@ -210,8 +226,9 @@ W = {
         "budget_row": "• {name}: ₦{amount} ({title}, shafi na {page})",
         "referral": "Don shawara kan abin da za a shuka ko abin da za a yi amfani da shi, ka tuntuɓi ma'aikatan "
                     "hidimar noma (Sokoto ADP). Kasafi yana bayyana abin da hotunan suka nuna ne kawai.",
-        "sources": "Madogara: Copernicus Sentinel-2 L2A ta Microsoft Planetary Computer; JRC Global Surface Water "
-                   "v1.3; ESA WorldCover 2021; Open-Meteo archive (ERA5-Land).",
+        "sources": "Madogara: Copernicus Sentinel-2 L2A da Sentinel-1 RTC ta Microsoft Planetary Computer; JRC "
+                   "Global Surface Water v1.3; ESA WorldCover 2021; Open-Meteo archive (ERA5-Land); taswirorin "
+                   "ambaliya na UNOSAT ta HDX (CC BY-SA).",
         "working_head": "Kowace shekara (damina Yuni–Oktoba): hotuna bayyanannu, koriya a ƙololuwa (NDVI kashi 90), "
                         "ruwan sama na Yuni–Oktoba, alamar kwatancen ruwan sama, watannin da aka ga ruwa, ƙasa mara "
                         "ciyayi ta rani (matsakaicin BSI, Fabrairu–Afrilu).",
@@ -225,6 +242,21 @@ W = {
                   "ƙidaya ruwan watannin damina ƙasa da yadda yake a nan.",
         "nearest_working": "Tafkin ruwa mafi kusa (kilomita {km}, hekta {ha}): watannin ruwa a kowace shekara {months}.",
         "and": " da ", "in": "a ",
+        "flood_radar": "Radar (Sentinel-1) ta ga ruwan ambaliya a wannan wuri: {items}",
+        "flood_radar_item": "an ga ruwan ambaliya a {n} cikin {total} na hotunan radar a {year} ({dates})",
+        "flood_official": "yana cikin taswirar ambaliya ta tauraron ɗan adam ta MDD (UNOSAT) ta {period}",
+        "flood_optical": "Sentinel-2 ta ga ruwa a {when}",
+        "flood_none": "Ba a ga ruwan ambaliya a wannan wuri ba a {first}–{last}: ba a cikin ɗaya daga cikin hotunan "
+                      "radar {passes} na Yuli–Oktoba (Sentinel-1) ba, ba a cikin wani hoton Sentinel-2 bayyananne "
+                      "ba, ba kuma a cikin wata taswirar ambaliya ta hukuma da ta rufe Sokoto ba ({maps}).",
+        "flood_reason": "Ambaliya a ƙarƙashin shuke-shuke tana bayyana da haske a radar da kuma kore a hotunan "
+                        "gani, gajeriyar ambaliya tana faɗuwa tsakanin hotuna, kuma ruwa a ƙarƙashin gajimare yana "
+                        "ɓoyuwa, saboda haka ambaliya na iya ɓacewa.",
+        "maps_covered": "UNOSAT, Oktoba 2022, Satumba da Nuwamba 2024",
+        "radar_working": "{year}: hotunan radar {total} na Yuli–Oktoba, ƙarƙashin ruwa a {dates}; VV dB a kowane "
+                         "hoto {db}",
+        "official_working": "Taswirorin ambaliya na hukuma da suka taɓa gonar: {items}",
+        "short_months": ("Jan", "Fab", "Mar", "Afr", "May", "Yun", "Yul", "Agu", "Sat", "Okt", "Nuw", "Dis"),
     },
 }
 
@@ -304,7 +336,55 @@ def summary(h: H.History, lang: str, today: date) -> str:
     return " ".join(lines)
 
 
+def _short_date(iso: str, lang: str) -> str:
+    d = date.fromisoformat(iso)
+    return f"{d.day} {_t(lang)['short_months'][d.month - 1]}"
+
+
+def period_text(start: str, end: str, lang: str) -> str:
+    """'5–9 September 2024', or '27 October – 13 November 2024' across months."""
+    a, b = date.fromisoformat(start), date.fromisoformat(end)
+    names = MONTHS["ha" if lang == "ha" else "en"]
+    if a.month == b.month and a.year == b.year:
+        return f"{a.day}–{b.day} {names[a.month - 1]} {a.year}"
+    return f"{a.day} {names[a.month - 1]} – {b.day} {names[b.month - 1]} {b.year}"
+
+
+def flood_sentence(h: H.History, lang: str) -> str:
+    """Radar passes, optical water and official maps together; 'no flood water seen' with the reason, never
+    'never flooded'."""
+    from app.place.floods import FloodEvidence, optical_years
+    t = _t(lang)
+    ev: FloodEvidence = h.floods
+    years = sorted(h.years)
+    parts: list[str] = []
+    radar_items = [t["flood_radar_item"].format(n=r.water_passes, total=r.passes, year=y,
+                                                dates=", ".join(_short_date(d, lang) for d in r.water))
+                   for y, r in sorted(ev.radar.items()) if r.water]
+    if radar_items:
+        parts.append(t["flood_radar"].format(items="; ".join(radar_items)))
+    for m in ev.official:
+        parts.append(t["flood_official"].format(period=period_text(m["period_start"], m["period_end"], lang)))
+    when = when_text({y: r for y, r in h.years.items() if y in optical_years(h)}, lang)
+    if when:
+        parts.append(t["flood_optical"].format(when=when))
+    if parts:
+        s = "; ".join(parts) + ". " + t["flood_reason"]
+    else:
+        passes = sum(r.passes for r in ev.radar.values())
+        ry = sorted(ev.radar) or years
+        s = t["flood_none"].format(first=ry[0], last=ry[-1], passes=passes, maps=t["maps_covered"]) + " " + \
+            t["flood_reason"]
+    if h.on_water:
+        occ = h.jrc.get("occurrence")
+        s = t["on_water"].format(occ=f"{occ:.0f}" if occ is not None else "–", when=when_text(h.years, lang) or
+                                 t["none"]) + " " + s
+    return s + nearest_sentence(h, lang)
+
+
 def water_sentence(h: H.History, lang: str) -> str:
+    if h.floods is not None:
+        return flood_sentence(h, lang)
     t = _t(lang)
     years = sorted(h.years)
     when = when_text(h.years, lang)
@@ -316,6 +396,12 @@ def water_sentence(h: H.History, lang: str) -> str:
     else:
         s = t["water_none"].format(first=years[0] + (1 if h.years[years[0]].season_obs == 0 else 0), last=years[-1]) \
             + " " + t["water_caveat"]
+    return s + nearest_sentence(h, lang)
+
+
+def nearest_sentence(h: H.History, lang: str) -> str:
+    t = _t(lang)
+    s = ""
     if h.nearest_water:
         nw = h.nearest_water
         nh = nw.get("history")
@@ -343,6 +429,16 @@ def details(h: H.History, lang: str) -> str:
                                         b=f"{h.fit.slope * 100:.3f}/100", sd=_fmt(h.fit.sd, 3)))
     if h.water_seen:
         out.append(t["turbid"])
+    if h.floods is not None:
+        for y, r in sorted(h.floods.radar.items()):
+            if r.passes:
+                out.append(t["radar_working"].format(
+                    year=y, total=r.passes, dates=", ".join(_short_date(d, lang) for d in r.water) or t["none"],
+                    db=", ".join(f"{_short_date(d, lang)} {v:.0f}" for d, v in sorted(r.vv_db.items()))))
+        if h.floods.official:
+            out.append(t["official_working"].format(items="; ".join(
+                f"{m['source']} {m['code']} ({period_text(m['period_start'], m['period_end'], lang)}, {m.get('licence', '')})"
+                for m in h.floods.official)))
     if h.nearest_water and h.nearest_water.get("history"):
         nw = h.nearest_water
         months = "; ".join(f"{y} ({months_text(r.water_months, lang)})" for y, r in sorted(nw["history"].years.items())
@@ -431,6 +527,10 @@ async def place_answer(conn, settings, question: str, english: str, lang: str, p
                                 polygon=outline.geometry if outline.is_plot else None,
                                 water=water_asked(f"{question} {english}"))
     timing["history"] = time.perf_counter() - t1
+    t3 = time.perf_counter()
+    h.floods = await asyncio.to_thread(flood_evidence, conn, lat, lon,
+                                       outline.geometry if outline.is_plot else circle(lon, lat), today=today)
+    timing["floods"] = time.perf_counter() - t3
     t2 = time.perf_counter()
     context = library_context(conn, lang, lga, pcode, today) if conn is not None else ""
     timing["context"] = time.perf_counter() - t2

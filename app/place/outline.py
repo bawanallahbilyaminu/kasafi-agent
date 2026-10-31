@@ -105,14 +105,17 @@ def dry_scene(lon: float, lat: float, today: date) -> dict | None:
                                     -int(it["properties"]["datetime"][:10].replace("-", ""))))
 
 
-def true_colour(lon: float, lat: float, today: date | None = None, item: dict | None = None) -> Chip | None:
-    """The chip: B04, B03, B02 reflectance stretched to 8 bits (one data API request)."""
+def true_colour(lon: float, lat: float, today: date | None = None, item: dict | None = None,
+                side_m: float = CHIP_M) -> Chip | None:
+    """The chip: B04, B03, B02 reflectance stretched to 8 bits (one data API request); `side_m` widens it for a
+    map that must also show a water body farther away (at 10 m a pixel either way)."""
     today = today or date.today()
     item = item or dry_scene(lon, lat, today)
     if item is None:
         return None
-    bbox = chip_bbox(lon, lat)
-    url = f"{DATA_API}/{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}/{CHIP_PX}x{CHIP_PX}.tif"
+    bbox = chip_bbox(lon, lat, side_m)
+    px = max(CHIP_PX, int(round(side_m / 10.0)))
+    url = f"{DATA_API}/{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}/{px}x{px}.tif"
     assets = ["B04", "B03", "B02"]
     params = [("collection", stac.S2), ("item", item["id"]), ("resampling", "bilinear")] + \
              [("assets", a) for a in assets]

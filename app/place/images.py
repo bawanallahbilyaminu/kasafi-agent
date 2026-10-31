@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import math
+import textwrap
 from datetime import date
 
 import matplotlib
@@ -31,9 +32,11 @@ from app.maps.render import DPI, FIGSIZE, FOOT, INK, LABEL, LEGEND, MUTED, SMALL
 from app.maps.render import _finish, _scale_bar  # noqa: E402
 from app.place import history as H  # noqa: E402
 from app.place import stac  # noqa: E402
-from app.place.outline import Chip, Outline, true_colour  # noqa: E402
+from app.place.outline import CHIP_M, Chip, Outline, true_colour  # noqa: E402
 
 log = logging.getLogger(__name__)
+
+MAX_MAP_M = 4600.0          # the widest map (the nearest water body is looked for within 2 km)
 
 GREEN, GREEN_EDGE = "#2f7d5b", "#1f5a40"          # one hue for greenness
 THIN_FILL, THIN_EDGE = "#ece9e3", "#8f8c85"       # a year with too few clear images: hatched neutral
@@ -57,7 +60,7 @@ T = {
         "chart_caption": "Peak rainy-season greenness per year at this spot ({first}–{last}) with June–October "
                          "rain; hatched years had too few clear images.",
         "map_title": "Your plot on the satellite image, {lga} LGA",
-        "map_sub": "Sentinel-2 true colour, {day} (10 m), about 1 km across",
+        "map_sub": "Sentinel-2 true colour, {day} (10 m), about {km} km across",
         "leg_outline": "Approximate plot outline (from the image; not a boundary)",
         "leg_circle": "Circle of about 1 ha around your pin (no outline could be drawn)",
         "leg_water": "How often water was seen, 1984–2020 (JRC): light = rarely, dark = most months",
@@ -83,7 +86,7 @@ T = {
         "chart_caption": "Koriyar damina a ƙololuwa a kowace shekara a wannan wuri ({first}–{last}) tare da ruwan "
                          "sama na Yuni–Oktoba; shekarun da aka zana da layuka ba su da isassun hotuna bayyanannu.",
         "map_title": "Gonarka a hoton tauraron ɗan adam, Ƙaramar Hukumar {lga}",
-        "map_sub": "Sentinel-2, launin gaske, {day} (mita 10), kusan kilomita 1 faɗi",
+        "map_sub": "Sentinel-2, launin gaske, {day} (mita 10), kusan kilomita {km} faɗi",
         "leg_outline": "Iyakar gona ta kiyasi (daga hoton; ba iyakar mallaka ba)",
         "leg_circle": "Da'ira ta kusan hekta 1 kewaye da wurinka (ba a iya zana iyaka ba)",
         "leg_water": "Yawan ganin ruwa, 1984–2020 (JRC): mai haske = da wuya, mai duhu = mafi yawan watanni",
@@ -223,10 +226,13 @@ def place_map(chip: Chip, outline: Outline | None, h: H.History, lang: str, lga:
     _scale_bar(ax, (minx + maxx) / 2, (miny + maxy) / 2, side, lat)
     ax.set_xlim(minx, maxx)
     ax.set_ylim(miny, maxy)
+    for hd in handles:                                     # a long Hausa label wraps instead of running off the image
+        hd.set_label(textwrap.fill(hd.get_label(), 58))
     fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.075), ncol=1, fontsize=LEGEND, frameon=False,
                handlelength=1.8, borderaxespad=0.0)
-    jpeg = _finish(fig, ax, t["map_title"].format(lga=lga or "–"), t["map_sub"].format(day=_day(chip.day, lang)),
-                   t["map_foot"])
+    km = side * 111.32 * math.cos(math.radians(lat))
+    jpeg = _finish(fig, ax, t["map_title"].format(lga=lga or "–"),
+                   t["map_sub"].format(day=_day(chip.day, lang), km=f"{km:.0f}" if km >= 1.5 else "1"), t["map_foot"])
     how = t["how_sam"].format(ha=f"{outline.area_ha:.1f}") if outline is not None and outline.is_plot else t["how_circle"]
     return MapImage(jpeg, t["map_caption"].format(how=how, day=_day(chip.day, lang)))
 
@@ -236,11 +242,10 @@ def place_map(chip: Chip, outline: Outline | None, h: H.History, lang: str, lga:
 def draw_place(conn, s: dict, lang: str, today: date | None = None) -> MapImage | None:
     """{"kind": "place_chart" | "place_map", "lat", "lon", "lga"}: from the caches the answer just filled (the
     history, the outline), plus the chip and the JRC window for the map (two small requests)."""
-    import asyncio
-    from app.place.outline import plot_outline
+    from app.place.outline import _load, fallback
     today = today or date.today()
     lat, lon, lga = float(s["lat"]), float(s["lon"]), str(s.get("lga") or "")
-    outline = asyncio.run(plot_outline(conn, None, lat, lon, today=today))
+    outline = (_load(conn, H.cell_id(lat, lon)) if conn is not None else None) or fallback(lon, lat, "no_segment")
     h = H.point_history(conn, lat, lon, today=today, polygon=outline.geometry if outline.is_plot else None,
                         water=bool(s.get("water")))
     if s["kind"] == "place_chart":
@@ -249,7 +254,11 @@ def draw_place(conn, s: dict, lang: str, today: date | None = None) -> MapImage 
     if outline.scene:
         found = stac.search(stac.S2, lon, lat, "2015-01-01", "2030-01-01", limit=1, ids=[outline.scene])
         item = found[0] if found else None
-    chip = true_colour(lon, lat, today, item=item)
+    # the map shows the nearest water body too: widen the chip when it lies beyond the usual 1 km
+    side_m = CHIP_M
+    if h.nearest_water:
+        side_m = min(MAX_MAP_M, max(CHIP_M, 2.0 * (float(h.nearest_water["distance_m"]) + 250.0)))
+    chip = true_colour(lon, lat, today, item=item, side_m=side_m)
     if chip is None:
         return None
     occ = jrc_window(lon, lat, chip.bbox)

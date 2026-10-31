@@ -109,6 +109,7 @@ class History:
     landcover: str | None = None                 # ESA WorldCover 2021 majority class: a 2021 snapshot, said as such
     kind: str | None = None                      # 'built-up area' | 'bare ground' | 'open water' | 'little vegetation' | None (vegetated)
     nearest_water: dict | None = None            # the nearest JRC water body when asked for and the place isn't water
+    floods: object | None = None                 # app.place.floods.FloodEvidence (radar passes, official maps)
     resolution: str = RESOLUTION
     timing: dict[str, float] = field(default_factory=dict)
     from_cache: bool = False

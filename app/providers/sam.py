@@ -116,7 +116,8 @@ async def raw_output(jpeg: bytes, prompt: str, *, settings: Settings, timeout: f
         raise SamError("META_API_KEY is not set")
     body = {"model": settings.sam_model, "stream": True, "input": [{"type": "message", "role": "user", "content": [
         {"type": "input_text", "text": prompt},
-        {"type": "input_image", "image_url": "data:image/jpeg;base64," + base64.b64encode(jpeg).decode("ascii")}]}]}
+        {"type": "input_image", "image_url": "data:image/jpeg;base64," + base64.b64encode(jpeg).decode("ascii")}]}],
+            "metadata": {"mask_encoding": "one_bit"}}       # the compact mask (several times smaller, faster)
     parts: list[str] = []
     async with httpx.AsyncClient(timeout=timeout, transport=transport) as http:
         async with http.stream("POST", settings.meta_base_url.rstrip("/") + "/responses", json=body,
