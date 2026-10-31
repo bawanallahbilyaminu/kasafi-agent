@@ -201,3 +201,71 @@ def test_both_prompts_say_not_published_and_give_the_nearest() -> None:
     from app.agent.line_answer import SELECT_SYSTEM
     assert "isn't published in these documents" in ag.ANSWER_SYSTEM
     assert "don't publish it" in SELECT_SYSTEM and "personnel (salaries) line" in SELECT_SYSTEM
+
+
+# --- 6. completeness: every part answered or marked not found ------------------------------------------------
+
+class CheckClient:
+    def __init__(self, replies):
+        self.replies = list(replies)
+
+    async def chat(self, messages, **kw):
+        from app.providers.chat import ChatResult
+        return ChatResult(content=self.replies.pop(0), model="m", finish_reason="stop")
+
+
+def _ans(text: str) -> ag.Answer:
+    return ag.Answer(text + "\n\n📄 *Sources:* Budget p. 3", True, True, exact=text)
+
+
+def test_a_complete_answer_is_sent_as_it_is() -> None:
+    import asyncio
+
+    from tests.helpers import make_settings
+    client = CheckClient(['{"parts": [{"part": "2026 allocation", "status": "answered"}]}'])
+    redone = []
+
+    async def redo():
+        redone.append(1)
+        return _ans("x")
+    a = asyncio.run(ag.completed(_ans("₦1 bn"), "q", _plan("q"), "en", client, make_settings(), redo))
+    assert not redone and "Not found" not in a.text
+
+
+def test_a_wrong_period_is_redone_and_what_is_still_missing_is_said() -> None:
+    import asyncio
+
+    from tests.helpers import make_settings
+    client = CheckClient([
+        '{"parts": [{"part": "Q1 2026 spending", "status": "wrong", "note": "Q2 2026 given"}, '
+        '{"part": "2026 allocation", "status": "answered"}]}',
+        '{"parts": [{"part": "Q1 2026 spending", "status": "answered"}, '
+        '{"part": "staff numbers", "status": "missing"}, {"part": "2026 allocation", "status": "answered"}]}'])
+    hints = []
+    plan = _plan("Allocation 2026 and spending by end of Q1 2026 and staff numbers?")
+
+    async def redo():
+        hints.append(plan.english_question)
+        return _ans("Q1 figure")
+    # the redo fixes the wrong period but leaves one part out: a missing part beats a wrong figure, so it's kept
+    a = asyncio.run(ag.completed(_ans("Q2 figure"), plan.english_question, plan, "en", client, make_settings(), redo))
+    assert "Answer every part: Q1 2026 spending (not: Q2 2026 given)" in hints[0]
+    assert plan.english_question.endswith("staff numbers?")                  # restored after the redo
+    assert a.text.startswith("Q1 figure") and a.partial
+    assert "Not found in these documents: staff numbers." in a.text
+    assert a.text.index("Not found") < a.text.index("📄")                    # the note before the sources
+
+
+def test_a_failing_check_never_holds_the_answer_back() -> None:
+    import asyncio
+
+    from tests.helpers import make_settings
+
+    class Boom:
+        async def chat(self, *a, **k):
+            raise ValueError("down")
+
+    async def redo():
+        raise AssertionError("no redo without a verdict")
+    a = asyncio.run(ag.completed(_ans("₦1 bn"), "q", _plan("q"), "en", Boom(), make_settings(), redo))
+    assert a.text.startswith("₦1 bn")

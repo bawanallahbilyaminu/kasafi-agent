@@ -1137,14 +1137,20 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         # (the planner leaves line_search out now and then: m19, m37). The more complete answer is kept.
         planned = bool(plan.line_search) and not narrative_asked(plan)   # a narrative question: the pages lead
         plan.line_search = lines
-        tl, tp = dict(t), dict(t)
-        la, pa = await first_complete(_line_path(conn, plan, question, lang, client, second, settings, tl, acq),
-                                      page(tp, gap=False), prefer_lines=planned)
-        a = better_answer(la, pa, prefer_lines=planned)
-        a.timings = {**tp, **tl, "both": 1.0} if a is la else {**tl, **tp, "both": 1.0}
+
+        async def both() -> Answer:
+            tl, tp = dict(t), dict(t)
+            la, pa = await first_complete(_line_path(conn, plan, question, lang, client, second, settings, tl, acq),
+                                          page(tp, gap=False), prefer_lines=planned)
+            got = better_answer(la, pa, prefer_lines=planned)
+            got.timings = {**tp, **tl, "both": 1.0} if got is la else {**tl, **tp, "both": 1.0}
+            return got
+        a = await both()
+        if a.found and not a.clarify:
+            a = await completed(a, question, plan, lang, client, settings, both)
         if not a.found and not a.clarify:
             return _not_found(conn, plan, lang, acq, a.timings)        # logs the gap once
-        log.info("lines and pages side by side: kept the %s answer", "line" if a is la else "page")
+        log.info("lines and pages side by side: kept the %s answer", "line" if a.lines is not None else "page")
         return a
 
 
@@ -1244,6 +1250,45 @@ def line_docs(conn, plan: Plan) -> list[str] | None:
         return None
     from app.agent.periods import readable_docs
     return readable_docs(conn, plan.skip_docs)
+
+
+async def completed(a: "Answer", question: str, plan: Plan, lang: str, client, settings: Settings,
+                    redo) -> "Answer":
+    """Before sending: every part of the question answered or marked not found, for the entity, level and period
+    asked (app/agent/completeness.py). A gap: redone once with the parts named; what is still missing is said."""
+    from app.agent import completeness
+    t0 = time.perf_counter()
+    first = await completeness.check(question, plan.english_question, a.exact or a.text, lang, client, settings,
+                                     chat_json)
+    a.timings["check"] = time.perf_counter() - t0
+    if first.ok:
+        return a
+    log.info("completeness: %d of %d parts missing or wrong; redoing once", len(first.gaps), len(first.parts))
+    asked = plan.english_question
+    plan.english_question = f"{asked} ({completeness.redo_hint(first)})"
+    try:
+        again = await redo()
+    finally:
+        plan.english_question = asked
+    second = first
+    if again.found and not again.clarify:
+        second = await completeness.check(question, asked, again.exact or again.text, lang, client, settings,
+                                          chat_json)
+        if second.cost < first.cost:
+            again.timings["check"] = a.timings["check"]
+            a = again
+        else:
+            second = first
+    if line := completeness.not_found_line(second, lang):
+        a.text = with_note(a.text, line)
+        a.partial = True
+    return a
+
+
+def with_note(text: str, note: str) -> str:
+    """A note before the sources line (or at the end when there is none)."""
+    cut = text.find("\n\n📄")
+    return f"{text[:cut]}\n\n{note}{text[cut:]}" if cut >= 0 else f"{text}\n\n{note}"
 
 
 def complete(a: "Answer | None") -> bool:
