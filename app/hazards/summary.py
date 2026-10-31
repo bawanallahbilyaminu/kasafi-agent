@@ -68,8 +68,8 @@ W = {
         "air_state": "Across Sokoto State {day}, air quality is mostly *{cat}* ({n} of 23 LGAs), which the US EPA "
                      "describes as “{meaning}”; it is worst in {worst} (*{wcat}*).",
         "air_driver": {"PM2.5": "Fine particles (PM2.5) set the AQI", "PM10": "Coarse dust (PM10) sets the AQI"},
-        "air_mult": "{driver}{there}: {mult}",
-        "there": " there",
+        "air_mult": "{driver}: {mult}",
+        "in_lga": "In {lga}, ",
         "both": "PM2.5 is about {a} times and PM10 about {b} times the WHO daily guideline",
         "one": "{name} is about {x} times the WHO daily guideline, {other} within it",
         "neither": "PM2.5 and PM10 are within the WHO daily guidelines",
@@ -77,14 +77,16 @@ W = {
                 "the NWS describes as “{meaning}”.",
         "heat_below": "Heat in {place} {day} stays below the US National Weather Service heat index Caution level.",
         "heat_state": "Across Sokoto State {day}, heat reaches *{cat}* at worst (in {worst}), which the US National "
-                      "Weather Service describes as “{meaning}”; {n} of 23 LGAs are at Danger or above.",
+                      "Weather Service describes as “{meaning}”; {danger}.",
+        "danger_n": {0: "no LGA is at Danger or above", 1: "1 of the 23 LGAs is at Danger or above",
+                     "n": "{n} of the 23 LGAs are at Danger or above"},
         "heat_driver": {"air_temperature": "It comes from the air temperature itself (the air is too dry for "
                                            "humidity to add to it)",
                         "heat_index": "It comes from heat and humidity together"},
         "rain": "{place} expects *{cls}* rain {day} (WMO rainfall intensity class).",
         "rain_none": "{place} expects no rain {day}.",
-        "rain_state": "{n} of 23 LGAs expect rain {day}, the most in {worst} (*{cls}*, WMO rainfall intensity "
-                      "class).",
+        "rain_state": "{wet} {day}, the most in {worst} (*{cls}*, WMO rainfall intensity class).",
+        "wet_n": {1: "1 of the 23 LGAs expects rain", "n": "{n} of the 23 LGAs expect rain"},
         "rain_state_none": "No LGA in Sokoto State expects rain {day}.",
         "river": "By the GloFAS model, the {point} is *{level}* for {period}.",
         "river_none": "There is no river forecast for {place} {day}.",
@@ -113,28 +115,32 @@ W = {
         "place_state": "Jihar Sokoto", "place_lga": "Ƙaramar Hukumar {lga}", "today": "yau", "tomorrow": "gobe",
         "place_named": "{place} (Ƙaramar Hukumar {lga})",
         "air": "Ingancin iska a {place} {day} *{cat}* ne a ma'aunin US AQI; US EPA ta bayyana shi da “{meaning}” "
-               "(fassarar Kasafi).",
+               "(fassarar bayanin US EPA).",
         "air_state": "A faɗin Jihar Sokoto {day}, ingancin iska galibi *{cat}* ne (ƙananan hukumomi {n} cikin 23); "
-                     "US EPA ta bayyana shi da “{meaning}” (fassarar Kasafi); ya fi muni a {worst} (*{wcat}*).",
+                     "US EPA ta bayyana shi da “{meaning}” (fassarar bayanin US EPA); ya fi muni a {worst} (*{wcat}*).",
         "air_driver": {"PM2.5": "Ƙananan ƙwayoyi (PM2.5) ne suka ƙayyade AQI", "PM10": "Ƙura (PM10) ce ta ƙayyade AQI"},
-        "air_mult": "{driver}{there}: {mult}",
-        "there": " a can",
+        "air_mult": "{driver}: {mult}",
+        "in_lga": "A {lga}, ",
         "both": "PM2.5 ya kai kusan ninki {a}, PM10 kuma kusan ninki {b} na iyakar WHO ta yini",
         "one": "{name} ya kai kusan ninki {x} na iyakar WHO ta yini, {other} kuma yana cikin iyakar",
         "neither": "PM2.5 da PM10 suna cikin iyakokin WHO na yini",
         "heat": "Zafi a {place} {day} ya kai *{cat}* a ma'aunin zafi na US National Weather Service; NWS ta "
-                "bayyana shi da “{meaning}” (fassarar Kasafi).",
+                "bayyana shi da “{meaning}” (fassarar bayanin NWS).",
         "heat_below": "Zafi a {place} {day} bai kai matakin 'A kula' na ma'aunin zafi na US National Weather Service "
                       "ba.",
         "heat_state": "A faɗin Jihar Sokoto {day}, zafi ya kai *{cat}* a inda ya fi (a {worst}); NWS ta bayyana shi "
-                      "da “{meaning}” (fassarar Kasafi); ƙananan hukumomi {n} cikin 23 suna matakin Haɗari ko sama.",
+                      "da “{meaning}” (fassarar bayanin NWS); {danger}.",
+        "danger_n": {0: "babu ƙaramar hukumar da ke matakin Haɗari ko sama",
+                     1: "ƙaramar hukuma 1 cikin 23 ce ke matakin Haɗari ko sama",
+                     "n": "ƙananan hukumomi {n} cikin 23 suna matakin Haɗari ko sama"},
         "heat_driver": {"air_temperature": "Zafin iskar kanta ne ya kawo shi (iskar ta bushe sosai da danshi ba zai "
                                            "ƙara masa ba)",
                         "heat_index": "Zafi da danshi tare ne suka kawo shi"},
         "rain": "Ana sa ran ruwan sama *{cls}* a {place} {day} (rabe-raben WMO).",
         "rain_none": "Ba a sa ran ruwan sama a {place} {day} ba.",
-        "rain_state": "Ƙananan hukumomi {n} cikin 23 suna sa ran ruwan sama {day}, mafi yawa a {worst} (*{cls}*, "
-                      "rabe-raben WMO).",
+        "rain_state": "{wet} {day}, mafi yawa a {worst} (*{cls}*, rabe-raben WMO).",
+        "wet_n": {1: "Ƙaramar hukuma 1 cikin 23 ce ke sa ran ruwan sama",
+                  "n": "Ƙananan hukumomi {n} cikin 23 suna sa ran ruwan sama"},
         "rain_state_none": "Babu ƙaramar hukuma a Jihar Sokoto da ke sa ran ruwan sama {day}.",
         "river": "A samfurin GloFAS, {point} yana *{level}* a {period}.",
         "river_none": "Babu hasashen koguna na {place} {day}.",
@@ -173,6 +179,11 @@ def _w(lang: str) -> dict:
 def _day(d: date, today: date, lang: str) -> str:
     w = _w(lang)
     return w["today"] if d == today else w["tomorrow"] if d == today + timedelta(days=1) else d.strftime("%a %d %b")
+
+
+def counted(forms: dict, n: int) -> str:
+    """The wording for a count: its own form for 0 or 1 when there is one ('1 of the 23 LGAs is'), else 'n'."""
+    return forms.get(n, forms["n"]).format(n=n)
 
 
 def _x(m: float) -> str:
@@ -230,20 +241,22 @@ def _air(conn, lang, where, pids, day, today, place) -> list[str]:
         s1 = w["air_state"].format(day=_day(day, today, lang), cat=cat.label(common, lang),
                                    n=sum(1 for r in every if r.category == common), meaning=_meaning("air", common, lang),
                                    worst=worst.lga, wcat=cat.label(worst.category, lang))
-        r, there = worst, w["there"]
+        r, lead = worst, w["in_lga"].format(lga=worst.lga)        # the LGA named, not 'there'
         others = [o for pid, lga in state if lga == worst.lga and (o := read.air_day(conn, pid, lga, other_day))]
         rank = ""
     else:
         rows = [r for pid, lga in pids if (r := read.air_day(conn, pid, lga, day))]
         if not rows:
             return []
-        r, there = rows[0], ""
+        r, lead = rows[0], ""
         s1 = w["air"].format(place=place, day=_day(day, today, lang), cat=cat.label(r.category, lang),
                              meaning=_meaning("air", r.category, lang))
         others = [o for pid, lga in pids if (o := read.air_day(conn, pid, lga, other_day))]
         rank = _rank(lang, place, r.aqi_max, [x.aqi_max for x in every]) if where.kind != "state" else ""
-    mult = w["air_mult"].format(driver=w["air_driver"].get(r.aqi_by, w["air_driver"]["PM10"]), there=there,
-                                mult=multiples(r.pm2_5_mean, r.pm10_mean, lang))
+    driver = w["air_driver"].get(r.aqi_by, w["air_driver"]["PM10"])
+    if lead:                                    # "In Tureta, fine particles (PM2.5) set the AQI: ..."
+        driver = lead + driver[0].lower() + driver[1:]
+    mult = w["air_mult"].format(driver=driver, mult=multiples(r.pm2_5_mean, r.pm10_mean, lang))
     trend = _trend(lang, "air", r.category, r.aqi_max, others[0].category, others[0].aqi_max,
                    _day(other_day, today, lang)) if others else ""
     return [s1, _clause_join(mult, [trend, rank])]
@@ -262,7 +275,8 @@ def _heat(conn, lang, where, pids, day, today, place) -> list[str]:
         if worst.category == "below":
             return [w["heat_below"].format(place=place, day=_day(day, today, lang))]
         s1 = w["heat_state"].format(day=_day(day, today, lang), cat=cat.label(worst.category, lang), worst=worst.lga,
-                                    meaning=_meaning("heat", worst.category, lang), n=n)
+                                    meaning=_meaning("heat", worst.category, lang),
+                                    danger=counted(w["danger_n"], n))
         r = worst
         others = [o for pid, lga in state if lga == worst.lga and (o := read.heat_day(conn, pid, lga, other_day))]
         rank = ""
@@ -293,7 +307,7 @@ def _rain(conn, lang, where, pids, day, today, place) -> list[str]:
         if not wet:
             return [w["rain_state_none"].format(day=_day(day, today, lang))]
         worst = max(wet, key=lambda r: r.rain_mm)
-        return [w["rain_state"].format(n=len(wet), day=_day(day, today, lang), worst=worst.lga,
+        return [w["rain_state"].format(wet=counted(w["wet_n"], len(wet)), day=_day(day, today, lang), worst=worst.lga,
                                        cls=cat.label(worst.rain_class, lang))]
     rows = [r for pid, lga in pids if (r := read.heat_day(conn, pid, lga, day))]
     if not rows:

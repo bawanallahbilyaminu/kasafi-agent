@@ -134,7 +134,20 @@ def test_heat_names_the_driver_the_trend_and_the_rank(data) -> None:
 
 def test_hausa_quotes_are_marked_as_kasafis_translation(data) -> None:
     s, _, _ = _answer(["air"], WAMAKKO, "ha")
-    assert "US EPA ta bayyana shi da “" in s and "(fassarar Kasafi)" in s and "kusan ninki 6" in s
+    assert "US EPA ta bayyana shi da “" in s and "(fassarar bayanin US EPA)" in s and "kusan ninki 6" in s
+
+
+def test_state_summaries_name_the_lga_and_count_in_the_singular(data) -> None:
+    data["air"][("Tureta", TODAY)] = {"aqi": 204.0, "cat_": "very_unhealthy", "pm25": 135.0, "pm10": 180.0}
+    s, _, _ = _answer(["air"], read.Where("state"))
+    assert "In Tureta, fine particles (PM2.5) set the AQI: PM2.5 is about 9 times" in s and " there" not in s
+    data["heat"][("Gudu", TODAY)] = {"t": 41.0, "hi": 38.0, "cat_": "danger"}
+    s, _, _ = _answer(["heat"], read.Where("state"), question="heat today")
+    assert "1 of the 23 LGAs is at Danger or above" in s
+    ha, _, _ = _answer(["heat"], read.Where("state"), "ha", question="heat today")
+    assert "ƙaramar hukuma 1 cikin 23 ce ke matakin Haɗari ko sama" in ha and "(fassarar bayanin NWS)" in ha
+    assert hs.counted(hs.W["en"]["wet_n"], 1) == "1 of the 23 LGAs expects rain"
+    assert hs.counted(hs.W["en"]["wet_n"], 5) == "5 of the 23 LGAs expect rain"
 
 
 @pytest.mark.parametrize("pm25,pm10,want", [(87, 124, "PM2.5 is about 6 times and PM10 about 3 times"),

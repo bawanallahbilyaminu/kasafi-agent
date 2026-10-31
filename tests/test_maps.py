@@ -52,7 +52,7 @@ def test_a_hazard_map_by_lga_with_its_numbers_in_the_caption(monkeypatch) -> Non
         m = render.hazard_map(conn, "heat", DAY, "en", "NG034021", today=DAY)
         _jpeg(m.jpeg)
         assert m.caption.startswith(f"Heat today: highest in {names[0]}, 41 °C (Danger).")
-        assert "Danger: 1 LGAs; Extreme caution: 22 LGAs." in m.caption
+        assert "Danger: 1 LGA; Extreme caution: 22 LGAs." in m.caption
         assert render.hazard_map(conn, "heat", DAY, "en", "NG034021", today=DAY) is m       # cached this hour
         ha = render.hazard_map(conn, "heat", DAY, "ha", "", today=DAY)
         assert ha is not m and "Haɗari" in ha.caption and "ƙananan hukumomi" in ha.caption

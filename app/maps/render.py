@@ -408,13 +408,14 @@ def hazard_map(conn, layer: str, day: date, lang: str = "en", highlight: str = "
         caption = t["caption_lga"].format(what=t[layer], lga=lga_name, day=day_word, value=own[2],
                                           cat=cat.label(own[0], lang))
     else:
-        caption = {"en": f"{t[layer]} {day_word}: highest in {top[0]}, {top[1][2]} ({worst}). "
-                         + "; ".join(f"{cat.label(c, lang)}: {sum(v[0] == c for v in values.values())} LGAs"
-                                     for c in reversed(present)) + ".",
-                   "ha": f"{t[layer]} {day_word}: mafi yawa a {top[0]}, {top[1][2]} ({worst}). "
-                         + "; ".join(f"{cat.label(c, lang)}: ƙananan hukumomi "
-                                     f"{sum(v[0] == c for v in values.values())}" for c in reversed(present)) + "."
-                   }[lang]
+        def lgas_n(c: str) -> str:                       # '1 LGA', '13 LGAs'; 'ƙaramar hukuma 1', 'ƙananan hukumomi 13'
+            n = sum(v[0] == c for v in values.values())
+            if lang == "ha":
+                return f"ƙaramar hukuma {n}" if n == 1 else f"ƙananan hukumomi {n}"
+            return f"{n} LGA" if n == 1 else f"{n} LGAs"
+        lead = {"en": "highest in", "ha": "mafi yawa a"}[lang]
+        caption = (f"{t[layer]} {day_word}: {lead} {top[0]}, {top[1][2]} ({worst}). "
+                   + "; ".join(f"{cat.label(c, lang)}: {lgas_n(c)}" for c in reversed(present)) + ".")
     img = MapImage(jpeg, caption)
     with _cache_lock:
         _cache[key] = (time.time(), img)
