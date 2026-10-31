@@ -63,8 +63,8 @@ def import_lgas(conn, codab: list[dict], wards: list[dict], facilities: list[dic
     grid3 = {canonical(w["properties"]["lganame"]): (w["properties"]["lgacode"], w["properties"]["lganame"])
              for w in wards}
     fac_names = {canonical(f["properties"]["lga"]): f["properties"]["lga"] for f in facilities}
-    conn.execute("DELETE FROM facility_capability; DELETE FROM facility; DELETE FROM place; DELETE FROM ward; "
-                 "DELETE FROM lga")
+    # LGAs are updated in place, never deleted: the hazard points refer to them (a re-run of --sync-geo failed)
+    conn.execute("DELETE FROM facility_capability; DELETE FROM facility; DELETE FROM place; DELETE FROM ward")
     for f in codab:
         p = f["properties"]
         name = canonical(p["admin2Name"])
@@ -77,7 +77,10 @@ def import_lgas(conn, codab: list[dict], wards: list[dict], facilities: list[dic
             {k.title() for k, v in ALIASES.items() if v == name}
         conn.execute(
             "INSERT INTO lga (pcode, name, grid3_code, grid3_name, facility_name, aliases, geom, source, valid_on) "
-            "VALUES (%s, %s, %s, %s, %s, %s, ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)), %s, %s)",
+            "VALUES (%s, %s, %s, %s, %s, %s, ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)), %s, %s) "
+            "ON CONFLICT (pcode) DO UPDATE SET name = EXCLUDED.name, grid3_code = EXCLUDED.grid3_code, "
+            "grid3_name = EXCLUDED.grid3_name, facility_name = EXCLUDED.facility_name, aliases = EXCLUDED.aliases, "
+            "geom = EXCLUDED.geom, source = EXCLUDED.source, valid_on = EXCLUDED.valid_on",
             (p["admin2Pcod"], name, code, g3name, fac_names.get(name), sorted(s for s in spellings if s),
              json.dumps(f["geometry"]), "OCHA COD-AB (HDX)", (p.get("validOn") or "").replace("/", "-") or None))
 
