@@ -91,3 +91,24 @@ def test_a_typed_place_is_found_in_the_gazetteer() -> None:
         assert area.lga_pcode == "NG034006" and spot.how == "place"
         assert area_from_text(c, "how hot is it here today?", "NG034021")[0].lga == "Wamakko"   # the LGA on file
         assert area_from_text(c, "how hot is it here today?") is None
+
+
+def test_a_point_near_a_ward_border_says_likely_and_one_inside_does_not() -> None:
+    from app.geo import WARD_EDGE_M, locate
+    conn = _conn()
+    with conn:
+        # the middle of a large Wamakko ward, and a point about 60 m inside its border
+        far = conn.execute(
+            "SELECT ST_Y(c.center), ST_X(c.center), w.name FROM ward w, ST_MaximumInscribedCircle(w.geom) c "
+            "WHERE w.lga_pcode = 'NG034021' AND c.radius > 0.01 ORDER BY c.radius DESC LIMIT 1").fetchone()
+        near = conn.execute(
+            "WITH w AS (SELECT geom, name FROM ward WHERE name = %s AND lga_pcode = 'NG034021'), "
+            "e AS (SELECT ST_ClosestPoint(ST_Boundary(w.geom), c.center) AS p, c.center AS m FROM w, "
+            "ST_MaximumInscribedCircle(w.geom) c) "
+            "SELECT ST_Y(q), ST_X(q) FROM e, ST_Translate(e.p, (ST_X(e.m) - ST_X(e.p)) / "
+            "(ST_Distance(e.p, e.m) / 0.00055), (ST_Y(e.m) - ST_Y(e.p)) / (ST_Distance(e.p, e.m) / 0.00055)) q",
+            (far[2],)).fetchone()
+        inside, edge = locate(conn, far[0], far[1]), locate(conn, near[0], near[1])
+    assert WARD_EDGE_M == 300
+    assert inside.ward == far[2] and not inside.ward_likely
+    assert edge.ward == far[2] and edge.ward_likely

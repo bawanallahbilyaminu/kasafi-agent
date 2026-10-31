@@ -192,3 +192,16 @@ def test_no_coordinates_are_persisted_after_a_location_conversation(tmp_path: Pa
     assert "location: Wamakko LGA (pin)" in caplog.text                  # the log says the LGA, nothing finer
     assert redact("MPI fell from 0.409, 0.239") == "MPI fell from 0.409, 0.239"   # figures aren't coordinates
     memory.forget(key)
+
+
+def test_the_ward_is_named_plainly_or_as_likely_near_its_border() -> None:
+    from app.users import UserStore
+    from app.whatsapp import conversation as conv
+    store = UserStore(":memory:")
+    store.create("w1", "en")
+    plain = conv._located("w1", "en", store, Spot(13.0, 5.2, "NG034021", "Wamakko", "Bado"))
+    likely = conv._located("w1", "en", store, Spot(13.0, 5.2, "NG034021", "Wamakko", "Bado", ward_likely=True))
+    ha = conv._located("w1", "ha", store, Spot(13.0, 5.2, "NG034021", "Wamakko", "Bado", ward_likely=True))
+    assert "Wamakko LGA (Bado ward)" in plain[0].text
+    assert "Wamakko LGA (likely Bado ward)" in likely[0].text
+    assert "(wataƙila mazaɓar Bado)" in ha[0].text

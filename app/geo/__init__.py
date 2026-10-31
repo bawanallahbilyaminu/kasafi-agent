@@ -29,16 +29,24 @@ class Area:
     lga: str
     ward: str = ""
     wardcode: str = ""
+    ward_likely: bool = False         # within WARD_EDGE_M of the ward's border: "likely Bado ward"
+
+
+# the GRID3 ward boundaries (2019) can be off near their edges: a point this close to one says "likely"
+WARD_EDGE_M = 300
 
 
 def locate(conn: psycopg.Connection, lat: float, lon: float) -> Area | None:
     """The LGA (and ward) a point is in, or None outside Sokoto."""
     row = conn.execute(
-        "SELECT l.pcode, l.name, w.name, w.wardcode FROM lga l "
+        "SELECT l.pcode, l.name, w.name, w.wardcode, ST_Distance(ST_Boundary(w.geom)::geography, "
+        "ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s), 4326)::geography) FROM lga l "
         "LEFT JOIN ward w ON w.lga_pcode = l.pcode AND ST_Within(ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s), 4326), "
         "w.geom) WHERE ST_Within(ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s), 4326), l.geom) LIMIT 1",
         {"lat": lat, "lon": lon}).fetchone()
-    return Area(row[0], row[1], row[2] or "", row[3] or "") if row else None
+    if not row:
+        return None
+    return Area(row[0], row[1], row[2] or "", row[3] or "", row[4] is not None and row[4] < WARD_EDGE_M)
 
 
 def name_key(s: str) -> str:

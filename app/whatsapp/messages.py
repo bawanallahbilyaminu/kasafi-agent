@@ -115,6 +115,8 @@ TEXTS = {
         "en": "📍 Got it: you're in {lga} LGA{ward}, Sokoto State. What would you like to know about it?",
     },
     "location_ward": {"ha": " (mazaɓar {ward})", "en": " ({ward} ward)"},
+    # within ~300 m of a ward border (the 2019 GRID3 wards can be off near their edges)
+    "location_ward_likely": {"ha": " (wataƙila mazaɓar {ward})", "en": " (likely {ward} ward)"},
     "location_outside": {
         "ha": "Wannan wurin yana wajen Jihar Sokoto. Kasafi yana bayani ne kan Jihar Sokoto kaɗai; ka aiko da wuri a "
               "cikin jihar, ko ka rubuta sunan ƙaramar hukuma ko gari.",

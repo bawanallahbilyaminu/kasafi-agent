@@ -27,6 +27,7 @@ class Spot:
     lga: str = ""
     ward: str = ""
     how: str = "pin"           # pin | place | lga
+    ward_likely: bool = False  # near the ward's border: said as "likely ... ward"
 
     def __repr__(self) -> str:
         return f"Spot(location: {self.lga or 'outside Sokoto'} LGA ({self.how}))"

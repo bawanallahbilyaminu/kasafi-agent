@@ -16,6 +16,7 @@ import difflib
 import re
 from dataclasses import dataclass
 
+from app.geo import WARD_EDGE_M
 from app.geo.corrections import checked_on
 from app.sources.lga_names import name_of
 
@@ -61,15 +62,18 @@ class Registered:
     emonc: str = ""         # cemonc | bemonc, when the link is exact or confirmed
     score: float = 0.0
     checked: str = ""       # the date a person checked its location (app/geo/corrections.py)
+    ward_likely: bool = False   # within ~300 m of its ward's border (app/geo.WARD_EDGE_M): "likely ... ward"
 
 
 def _rows(conn, where: str = "TRUE", args: tuple = ()) -> list[Registered]:
     return [Registered(r[0], r[1], r[2] or "", (r[3] or "").replace("\xa0", " "), r[4] or "", r[5] or "", r[6] or "",
-                       r[7] or "", r[8], r[9], r[10] or "", checked=checked_on(r[11])) for r in conn.execute(
+                       r[7] or "", r[8], r[9], r[10] or "", checked=checked_on(r[11]),
+                       ward_likely=r[12] is not None and r[12] < WARD_EDGE_M) for r in conn.execute(
         "SELECT f.fid, f.name, f.level, f.level_option, f.ownership, coalesce(w.name, f.ward_attr), l.name, "
         "f.lga_attr, ST_Y(f.geom), ST_X(f.geom), (SELECT CASE WHEN bool_or(c.capability = 'cemonc') THEN 'cemonc' "
         "ELSE 'bemonc' END FROM facility_capability c WHERE c.fid = f.fid AND (c.confirmed OR c.score >= 1.0)), "
-        "f.correction FROM facility f LEFT JOIN lga l ON l.pcode = f.lga_pcode LEFT JOIN ward w ON w.wardcode = f.ward_code "
+        "f.correction, ST_Distance(ST_Boundary(w.geom)::geography, f.geom::geography) "
+        "FROM facility f LEFT JOIN lga l ON l.pcode = f.lga_pcode LEFT JOIN ward w ON w.wardcode = f.ward_code "
         f"WHERE f.geom IS NOT NULL AND {where}", args).fetchall()]
 
 
@@ -121,7 +125,8 @@ W = {
                     "them. Reply “EmONC” to see it.",
            "source": "📄 GRID3 Nigeria / NHFR facility registry (updated Nov 2024)",
            "state": "Sokoto State", "lga": "{lga} LGA", "ward": "{ward} ward ({lga} LGA)",
-           "card": "*{name}*: {kind}, {level} level, {own}; in {ward} ward, {lga} LGA{differs}.",
+           "card": "*{name}*: {kind}, {level} level, {own}; {likely}in {ward} ward, {lga} LGA{differs}.",
+           "likely": "likely ",
            "differs": " (the registry lists it under {attr})",
            "emonc_yes": "In the UNFPA EmONC assessment: {cap}.",
            "emonc_no": "Not linked to the UNFPA EmONC assessment's list.",
@@ -144,7 +149,8 @@ W = {
                     "Rubuta “EmONC” don gani.",
            "source": "📄 Rajistar cibiyoyin lafiya ta GRID3 Nigeria / NHFR (an sabunta Nuwamba 2024)",
            "state": "Jihar Sokoto", "lga": "Ƙaramar Hukumar {lga}", "ward": "Mazaɓar {ward} (Ƙaramar Hukumar {lga})",
-           "card": "*{name}*: {kind}, matakin {level}, {own}; a mazaɓar {ward}, Ƙaramar Hukumar {lga}{differs}.",
+           "card": "*{name}*: {kind}, matakin {level}, {own}; {likely}a mazaɓar {ward}, Ƙaramar Hukumar {lga}{differs}.",
+           "likely": "wataƙila ",
            "differs": " (rajistar ta sanya ta a {attr})",
            "emonc_yes": "A binciken EmONC na UNFPA: {cap}.",
            "emonc_no": "Ba a haɗa ta da jerin binciken EmONC na UNFPA ba.",
@@ -241,7 +247,7 @@ def card(f: Registered, lang: str = "en", others: list[Registered] | None = None
     from app.geo.facilities import checked_text
     lines = [w["card"].format(name=f.name, kind=f.kind or "-", level=w["levels"].get(f.level, f.level.lower()),
                               own=w["own_kinds"].get(f.ownership, f.ownership), ward=f.ward or "-", lga=f.lga,
-                              differs=differs) + checked_text(lang if lang in ("en", "ha") else "en", f),
+                              differs=differs, likely=w["likely"] if f.ward_likely else "") + checked_text(lang if lang in ("en", "ha") else "en", f),
              w["emonc_yes"].format(cap=w["caps"][f.emonc]) if f.emonc else w["emonc_no"]]
     if others:
         lines.append(w["more"].format(names="; ".join(f"{o.name} ({o.lga})" for o in others[:3])))

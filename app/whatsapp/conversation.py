@@ -454,7 +454,8 @@ async def _location(msg: dict[str, Any], key: str, lang: str, store: UserStore, 
     if area is None:
         log.info("location: outside Sokoto (pin)")
         return outs + [Out(t("location_outside", lang))]
-    return outs + _located(key, lang, store, Spot(pin[0], pin[1], area.lga_pcode, area.lga, area.ward))
+    return outs + _located(key, lang, store, Spot(pin[0], pin[1], area.lga_pcode, area.lga, area.ward,
+                                                  ward_likely=getattr(area, "ward_likely", False)))
 
 
 def _located(key: str, lang: str, store: UserStore, spot: Spot) -> list[Out]:
@@ -462,7 +463,7 @@ def _located(key: str, lang: str, store: UserStore, spot: Spot) -> list[Out]:
     location_memory.remember(key, spot)
     store.set_last_lga(key, spot.lga_pcode)
     log.info("location: %s LGA (%s)", spot.lga, spot.how)
-    ward = t("location_ward", lang, ward=spot.ward) if spot.ward else ""
+    ward = t("location_ward_likely" if spot.ward_likely else "location_ward", lang, ward=spot.ward) if spot.ward else ""
     return [Out(t("location_got", lang, lga=spot.lga, ward=ward))]
 
 
