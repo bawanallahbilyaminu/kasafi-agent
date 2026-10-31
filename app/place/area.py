@@ -8,7 +8,7 @@ masked to cropland (ESA WorldCover 2021, class 40, majority per cell):
   Aqua, pixel reliability good or marginal), then the 90th percentile over the June–October composites; n_obs =
   composites with half the unit's cropland cells good.
 - jrc_recurrence_share, jrc_occurrence_mean (year 0): JRC Global Surface Water 1984–2020, averaged to 200 m.
-- s1_flood_share (per year, 2017→): Sentinel-1 RTC VV averaged to 200 m over the August–September passes; a cell
+- s1_flood_share (per year, 2017→): Sentinel-1 RTC VV averaged to 200 m over the August–October passes; a cell
   floods when its lowest pass is under WATER_DB and it is normally dry (JRC recurrence under 50%); the share of
   such cells among the unit's normally dry cropland cells; n_obs = passes covering the unit.
 - unosat_share (2022, 2024): the share of cropland cells inside UNOSAT's satellite-detected water extents
@@ -56,7 +56,7 @@ NORMALLY_DRY = 50.0           # JRC recurrence (%) under which a cell is normall
 MODIS = "modis-13Q1-061"
 S2 = stac.S2
 SEASON_DOY = (145, 300)       # MODIS composites starting June–October
-S1_MONTHS = ("08-01", "09-30")
+S1_MONTHS = ("08-01", "10-31")     # the Rima floods peak late September–October (2022: 1–25 October per UNOSAT)
 DRY_MONTHS = ("02-01", "04-30")
 WORKERS = 6
 SOURCES = {
