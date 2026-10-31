@@ -116,6 +116,55 @@ def test_going_to_a_named_facility_asks_for_a_location_then_routes(monkeypatch) 
     memory.forget(key)
 
 
+SALEWA = fac.Facility("s1", "Salewa Health Post", "Primary", "", "Public", "", 13.08, 5.21, "Wamakko", "Wamakko",
+                      0.9)
+
+
+def _after_a_list(monkeypatch, key, s):
+    """A user whose last answer was a list led by Salewa Health Post, with a point in memory."""
+    store = UserStore(":memory:")
+    store.create(key, "en")
+    store.give_consent(key)
+    memory.remember(key, Spot(13.06, 5.17, "NG034021", "Wamakko"))
+    memory.remember_search(key, fac.FacilitySearch(shown=[SALEWA]))
+    monkeypatch.setattr(conv, "lookup", lambda settings, text: [ARKILLA] if "arkilla" in text.lower() else [])
+    routes = []
+
+    async def fake_routes(settings, lat, lon, search, lang, *, mode="list", **kw):
+        routes.append((mode, search.shown[0].name))
+        return [(f"{mode} to {search.shown[0].name}", None, None)]
+
+    def say(body):
+        return asyncio.run(conv.handle({"from": "2348000000057", "id": "w", "type": "text", "text": {"body": body}},
+                                       None, store=store, settings=s, answer_fn=None, facility_fn=fake_routes))
+    return say, routes
+
+
+@pytest.mark.parametrize("text", ["How far is Arkilla PHC", "route to Arkilla PHC", "Yaya nisan Arkilla PHC?",
+                                  "directions to arkilla primary health centre"])
+def test_a_named_facility_beats_the_last_lists_shortcuts(monkeypatch, text) -> None:
+    s = _db_settings()
+    key = user_key("2348000000057", s)
+    say, routes = _after_a_list(monkeypatch, key, s)
+    out = say(text)
+    memory.forget(key)
+    assert routes == [("route", "Arkilla Primary Health Center")] and "Salewa" not in out[0].text
+
+
+@pytest.mark.parametrize("text,want", [("How far is it?", ("route", "Salewa Health Post")),
+                                       ("route?", ("route", "Salewa Health Post")),
+                                       ("next", ("list", "Salewa Health Post"))])
+def test_shortcuts_still_mean_the_last_list_when_no_facility_is_named(monkeypatch, text, want) -> None:
+    s = _db_settings()
+    key = user_key("2348000000057", s)
+    say, routes = _after_a_list(monkeypatch, key, s)
+    say(text)
+    memory.forget(key)
+    assert routes and routes[0][0] == want[0]
+    if text != "next":
+        assert routes[0] == want
+
+
 async def _located(settings, lat, lon):
     from app.geo import Area
     return Area("NG034021", "Wamakko", "Gumbi", "62109")

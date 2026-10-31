@@ -559,7 +559,11 @@ async def _facilities(text: str, key: str, lang: str, store: UserStore, settings
     question names ("nearest clinic in Gwadabawa"), else the location request, the question kept for the pin."""
     spot, search = location_memory.recall(key), location_memory.last_search(key)
     if search is not None and (step := follow_up(text)):
-        if spot is None:                 # 'how far is it from me?' with no point: ask, the question kept for the pin
+        # a facility the message names wins over the shortcut: "how far is Arkilla PHC" is the route to Arkilla,
+        # not to the last list's first one; "route?" / "next" / "how far is it" name none
+        if (named := await _named_facility(text, key, lang, settings, facility_fn, spot)) is not None:
+            return named
+        if spot is None:                # 'how far is it from me?' with no point: ask, the question kept for the pin
             location_memory.wait_for_location(key, text)
             return [Out(FAC_WORDS.get(lang, FAC_WORDS["en"])["need_location"], lang=lang, location_request=True)]
         if step == "next":
