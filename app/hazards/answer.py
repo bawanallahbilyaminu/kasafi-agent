@@ -47,8 +47,11 @@ def layers_asked(question: str, measures: list[str] | None = None) -> list[str]:
     if MONEY.search(question or ""):
         return []
     found = [layer for layer, pat in WORDS.items() if re.search(rf"(?i){pat}", question or "")]
-    found += [MEASURE_LAYERS[m] for m in measures or [] if m in MEASURE_LAYERS]
-    return list(dict.fromkeys(found))
+    named = [x for x in found if x != "overview"]
+    planned = [MEASURE_LAYERS[m] for m in measures or [] if m in MEASURE_LAYERS]
+    if named and "overview" not in found:        # 'is there a flood warning?': the layer named, not an overview
+        planned = [x for x in planned if x != "overview"]
+    return list(dict.fromkeys(found + planned))
 
 
 def days_asked(question: str, today: date) -> list[date]:

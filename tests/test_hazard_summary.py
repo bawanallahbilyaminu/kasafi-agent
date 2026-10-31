@@ -174,3 +174,10 @@ def test_hazard_questions_say_they_are_checking_forecasts(question, key) -> None
     from app.whatsapp.messages import t
     assert searching_key(question) == key
     assert t("searching_forecasts", "en") == "🌦️ Checking the latest forecasts…"
+
+
+def test_a_named_layer_beats_an_overview_the_planner_adds() -> None:
+    from app.hazards.answer import layers_asked
+    assert layers_asked("Is there a flood warning for Goronyo?", ["hazard_overview", "river_discharge"]) == ["flood"]
+    assert "overview" in layers_asked("What should we watch out for this week?", ["hazard_overview"])
+    assert "overview" in layers_asked("Any hazards in Goronyo? heat too?", ["hazard_overview"])
