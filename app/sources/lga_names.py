@@ -24,6 +24,8 @@ ALIASES = {
     "wamako": "Wamakko", "wamakko": "Wamakko",
     "dange-shuni": "Dange Shuni", "dange shuni": "Dange Shuni", "dangeshuni": "Dange Shuni",
     "sabon-birni": "Sabon Birni", "sabonbirni": "Sabon Birni", "sabon biri": "Sabon Birni",
+    "sabon burni": "Sabon Birni",                               # SEMA's desk officer list
+    "salame": "Silame", "tambawal": "Tambuwal",                 # OSM's town spellings
     "ilela": "Illela", "illella": "Illela",
     "issa": "Isa",
     "raba": "Rabah",

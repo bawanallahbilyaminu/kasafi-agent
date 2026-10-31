@@ -47,12 +47,15 @@ def test_only_verified_emergency_numbers_are_shown(tmp_path) -> None:
                  "  - {number: '112', service: National emergency number, service_ha: Lambar gaggawa, area: state-wide}\n"
                  "  - {number: '0800 000 0000', service: State ambulance, service_ha: Motar asibiti, area: Wamakko,\n"
                  "     verified_on: 2026-10-30}\n", encoding="utf-8")
-    shown = verified_contacts(f)
+    shown = verified_contacts(f, private=())
     assert [c.number for c in shown] == ["0800 000 0000"]                    # 112 has no verified_on: never shown
-    text = emergency_reply(shown)
-    assert "*0800 000 0000*: Motar asibiti (Wamakko)" in text and "*0800 000 0000*: State ambulance (Wamakko)" in text
-    assert "112" not in text
-    assert verified_contacts(tmp_path / "missing.yaml") == []
+    assert "0800" not in emergency_reply(shown)                              # no LGA known: state-wide numbers only
+    from app.guardrails.emergency import contact_lines
+    assert contact_lines("en", shown, lga="Wamako") == ["📞 *0800 000 0000*: State ambulance (Wamakko)"]
+    assert contact_lines("ha", shown, lga="Wamakko") == ["📞 *0800 000 0000*: Motar asibiti (Wamakko)"]
+    assert contact_lines("en", shown, lga="Goronyo") == [] and contact_lines("en", shown) == []
+    assert "112" not in emergency_reply(shown)
+    assert verified_contacts(tmp_path / "missing.yaml", private=()) == []
     # the repo's own file: no number is verified yet, so the reply sends people to the nearest facility only
     assert all(c.verified_on for c in verified_contacts(CONTACTS_PATH))
     assert "112" not in EMERGENCY_REPLY and "nearest health facility *now*" in EMERGENCY_REPLY
@@ -65,3 +68,25 @@ def test_budget_question_about_emergency_care_does_not_trigger_on_raw_text() -> 
                      hypotheses={"asr": "Merohoto nyu NFT kan kulawar gaggawa ga mata masu ayyuwa da jarirai",
                                  "spark_audio": "Mirahoto NFE kan kulawa ta gaggawa || English: emergency care report"})
     assert compose_reply(r) != EMERGENCY_REPLY
+
+
+def test_private_role_numbers_load_only_when_verified_and_never_name_a_person(tmp_path) -> None:
+    from app.guardrails.emergency import PRIVATE_CONTACTS, contact_lines, verified_contacts
+    public = tmp_path / "public.yaml"
+    public.write_text("contacts: []\n", encoding="utf-8")
+    private = tmp_path / "private.yaml"
+    private.write_text("contacts:\n"
+                       "  - {number: '08000000001', service: 'SEMA desk officer, Goronyo', area: Goronyo,\n"
+                       "     service_ha: \"Jami'in SEMA na Ƙaramar Hukumar Goronyo\", verified_on: 2026-11-02}\n"
+                       "  - {number: '08000000002', service: 'SEMA desk officer, Wurno', area: Wurno}\n",
+                       encoding="utf-8")
+    shown = verified_contacts(public, private=(tmp_path / "absent.yaml", private))
+    assert [c.number for c in shown] == ["08000000001"]                      # Wurno's has no verified_on
+    assert contact_lines("en", shown, lga="Goronyo") == ["📞 *08000000001*: SEMA desk officer, Goronyo"]
+    # the real private file (outside git), when present: role entries only, none verified yet
+    real = PRIVATE_CONTACTS[1]
+    if real.exists():
+        import yaml
+        rows = yaml.safe_load(real.read_text(encoding="utf-8"))["contacts"]
+        assert len(rows) == 23 and all(r["service"].startswith("SEMA desk officer, ") for r in rows)
+        assert not any(r.get("verified_on") for r in rows)

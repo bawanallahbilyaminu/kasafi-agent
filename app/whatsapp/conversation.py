@@ -36,6 +36,7 @@ from app.maps.render import render_specs
 from app.geo.location import memory as location_memory
 from app.guardrails import scope
 from app.alerts.recipients import encrypt as encrypt_number
+from app.sources.lga_names import name_of
 from app.alerts.signup import reply as alerts_reply
 from app.guardrails import emergency as em
 from app.guardrails.emergency import EMERGENCY_REPLY, is_medical_emergency
@@ -482,7 +483,7 @@ async def _emergency(key: str, lang: str, d: em.Detection, store: UserStore, set
     w = em.WORDS[lang]
     spot = spot or location_memory.recall(key)
     last = None if spot else store.get_last_lga(key)
-    lines = ([w["now"]] if first else []) + em.contact_lines(lang)
+    lines = ([w["now"]] if first else []) + em.contact_lines(lang, lga=spot.lga if spot else name_of(last or ""))
     outs: list[Out] = []
     picks = []
     if (spot or last) and settings.has_database:

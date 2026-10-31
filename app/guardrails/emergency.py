@@ -39,13 +39,24 @@ class Contact:
     verified_on: str
 
 
-def verified_contacts(path: Path = CONTACTS_PATH) -> list[Contact]:
-    """The emergency numbers confirmed to work from Sokoto (data/emergency_contacts.yaml, verified_on set). An entry
-    without verified_on is never shown; a missing or broken file means none."""
+# role numbers that aren't public (SEMA's LGA desk officers): outside git, in data/private/ on dev and in the
+# read-only private mount on the server; the same format, never with a person's name
+PRIVATE_CONTACTS = (Path("/run/kasafi-private/emergency_contacts.yaml"),
+                    Path(__file__).resolve().parents[2] / "data" / "private" / "emergency_contacts.yaml")
+
+
+def _rows(path: Path) -> list:
     try:
-        rows = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("contacts") or []
+        return (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("contacts") or []
     except (OSError, yaml.YAMLError):
         return []
+
+
+def verified_contacts(path: Path = CONTACTS_PATH, private: tuple[Path, ...] = PRIVATE_CONTACTS) -> list[Contact]:
+    """The emergency numbers confirmed to work from Sokoto (data/emergency_contacts.yaml and the first private file
+    that exists, verified_on set). An entry without verified_on is never shown; a missing or broken file means
+    none from it."""
+    rows = _rows(path) + next((_rows(p) for p in private if p.exists()), [])
     return [Contact(str(r["number"]).strip(), str(r.get("service") or ""), str(r.get("service_ha") or r.get("service")
                                                                                  or ""),
                     str(r.get("area") or "state-wide"), str(r["verified_on"]))
@@ -55,7 +66,7 @@ def verified_contacts(path: Path = CONTACTS_PATH) -> list[Contact]:
 def emergency_reply(contacts: list[Contact] | None = None) -> str:
     """Go to the nearest facility now, and the verified numbers only (none shown until one is verified). Both
     languages: used where the user's language isn't known yet. It also marks a voice reply as an emergency."""
-    contacts = verified_contacts() if contacts is None else contacts
+    contacts = [c for c in (verified_contacts() if contacts is None else contacts) if c.area == "state-wide"]
     ha = "\n".join(f"📞 *{c.number}*: {c.service_ha}" + ("" if c.area == "state-wide" else f" ({c.area})")
                    for c in contacts)
     en = "\n".join(f"📞 *{c.number}*: {c.service}" + ("" if c.area == "state-wide" else f" ({c.area})")
@@ -238,10 +249,19 @@ WORDS = {
 }
 
 
-def contact_lines(lang: str, contacts: list[Contact] | None = None) -> list[str]:
+def contact_lines(lang: str, contacts: list[Contact] | None = None, lga: str = "") -> list[str]:
+    """The verified numbers to show: state-wide ones, and an LGA's own only when the user is in that LGA."""
+    from app.sources.lga_names import canonical
     contacts = verified_contacts() if contacts is None else contacts
-    return [f"📞 *{c.number}*: {c.service_ha if lang == 'ha' else c.service}"
-            + ("" if c.area == "state-wide" else f" ({c.area})") for c in contacts]
+    mine = canonical(lga) if lga else ""
+    out = []
+    for c in contacts:
+        if c.area != "state-wide" and not (mine and canonical(c.area) == mine):
+            continue
+        service = c.service_ha if lang == "ha" else c.service
+        out.append(f"📞 *{c.number}*: {service}" + ("" if c.area == "state-wide" or c.area in service
+                                                   else f" ({c.area})"))
+    return out
 
 
 def facility_lines(lang: str, picks: list[tuple[str, object]], near: str = "spot", lga: str = "",
