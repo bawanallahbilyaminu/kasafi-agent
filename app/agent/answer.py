@@ -1921,6 +1921,12 @@ async def structured_answer(conn, plan: Plan, lang: str, settings: Settings, t: 
     need = plan.need
     if conn is None or need is None or not need.measures or plan.followup == "recheck":
         return None
+    if HEADCOUNT.search(f"{plan.original} {plan.english_question}"):
+        # staff numbers and grade levels aren't in the structured core: the search path says they aren't
+        # published and gives the nearest figure (the personnel line), which this path would give unlabelled
+        return None
+    if False:
+        return None
     # an agency that isn't the same entity as any printed name, but near a few: ask which (never its parent)
     unsure = [e for e in need.entities if e.type in ("mda", "sub_agency", "sector") and not e.code and e.candidates]
     if unsure:

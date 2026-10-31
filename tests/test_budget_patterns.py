@@ -162,7 +162,8 @@ def test_prose_search_leaves_out_table_rows() -> None:
 
         from app.retrieval.search import SENTENCES
         # running text (a BIR's narrative keeps the carried-over '[Table:' title), never a table of contents
-        assert all(re.search(SENTENCES, h.text) and not re.search(r"\.{6,}", h.text) for h in hits)
+        from app.retrieval.search import is_prose
+        assert all(is_prose(h.text) for h in hits)
 
 
 # --- 8. names: no footnote digits, no internal labels in the reply ------------------------------------------------
@@ -389,3 +390,24 @@ def test_a_table_row_with_a_long_name_is_not_prose() -> None:
              "0102 increase in access, retention, and completion rate at all levels | 2025 Original Budget: 1.00")
     toc = "4 Basic Education Budget Performance........................................55\n4.A Overview ............55"
     assert is_prose(narrative) and not is_prose(table) and not is_prose(toc)
+
+
+def test_a_narrative_under_a_contents_title_line_is_prose() -> None:
+    from app.retrieval.search import is_prose
+    text = ("[Table: Table 30: Basic Education Capital Expenditure by Project................................. 58]\n"
+            "1.B Revenue Performance\nThe Sokoto State Budgeted a Total Revenue and other receipts to the tune of "
+            "N413,074,379,419.18 for the year 2025 from various sources. The Recurrent Revenue that was projected to "
+            "be generated during the year is N268,946,298,906.89 while a total of N144,128,080,512.29 was expected "
+            "from capital receipts. Actual collection was lower because of shortfalls in FAAC.")
+    assert is_prose(text)
+
+
+def test_headcount_questions_never_take_the_structured_path() -> None:
+    import asyncio
+
+    from app.agent.need import Need
+    from tests.helpers import make_settings
+    plan = _plan("How many staff does the Ministry of Health employ?",
+                 original="How many staff does the Ministry of Health employ?",
+                 need=Need("q", measures=["personnel"]))
+    assert asyncio.run(ag.structured_answer(object(), plan, "en", make_settings(), {})) is None   # no query made

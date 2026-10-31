@@ -35,7 +35,8 @@ all_terms AS (
       AND (%(docs)s::text[] IS NULL OR c.doc_id = ANY(%(docs)s::text[]))
       AND (NOT %(key_rows)s OR (c.text LIKE '%% | %%'
            AND length(c.text) - length(replace(c.text, chr(10), '')) <= 1))
-      AND (NOT %(prose)s OR (c.text ~ %(sentences)s AND c.text ~ %(ends)s AND c.text !~ '\\.{6,}'
+      AND (NOT %(prose)s OR (c.text ~ %(sentences)s AND c.text ~ %(ends)s
+           AND regexp_replace(c.text, '^\\[Table:[^\\n]*\\n', '') !~ '\\.{6,}'
            AND (length(c.text) - length(replace(c.text, ' | ', ''))) / 3 <= 2))
     ORDER BY rank DESC LIMIT %(k)s
 ),
@@ -45,7 +46,8 @@ any_term AS (
       AND (%(docs)s::text[] IS NULL OR c.doc_id = ANY(%(docs)s::text[]))
       AND (NOT %(key_rows)s OR (c.text LIKE '%% | %%'
            AND length(c.text) - length(replace(c.text, chr(10), '')) <= 1))
-      AND (NOT %(prose)s OR (c.text ~ %(sentences)s AND c.text ~ %(ends)s AND c.text !~ '\\.{6,}'
+      AND (NOT %(prose)s OR (c.text ~ %(sentences)s AND c.text ~ %(ends)s
+           AND regexp_replace(c.text, '^\\[Table:[^\\n]*\\n', '') !~ '\\.{6,}'
            AND (length(c.text) - length(replace(c.text, ' | ', ''))) / 3 <= 2))
       AND (SELECT count(*) FROM all_terms) < %(k)s
     ORDER BY rank DESC LIMIT %(k)s
@@ -100,9 +102,12 @@ SENTENCE_ENDS = r"[a-z0-9%)]\.\s+[A-Z].*[a-z0-9%)]\.(\s|$)"
 
 
 def is_prose(text: str) -> bool:
-    """The same test in Python (the eval generator picks narrative paragraphs with it)."""
-    return bool(re.search(SENTENCES, text) and re.search(SENTENCE_ENDS, text, re.S) and not re.search(r"\.{6,}", text)
-                and text.count(" | ") <= 2)
+    """The same test in Python (the eval generator picks narrative paragraphs with it). The carried-over
+    '[Table: …]' title line is left out of the leaders test: a narrative page's title can come from a contents
+    line ('Table 30: … 58')."""
+    body = re.sub(r"^\[Table:[^\n]*\n", "", text)
+    return bool(re.search(SENTENCES, body) and re.search(SENTENCE_ENDS, body, re.S) and not re.search(r"\.{6,}", body)
+                and body.count(" | ") <= 2)
 
 
 def search(conn: psycopg.Connection, query: str, *, k: int = 8, doc_ids: list[str] | None = None,
