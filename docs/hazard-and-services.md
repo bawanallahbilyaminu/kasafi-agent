@@ -175,6 +175,20 @@ Render server-side with geopandas and matplotlib, on our own base layer: LGA bou
   leader line.
 - A map whose data is older than twice the fetch interval says "(older than usual)" next to its fetch time.
 
+**Every hazard answer sends one map (Oct 31, `maps_for` in `app/agent/answer.py`, `app/maps/render.py`)**, right
+after the text, with a caption repeating the key number:
+- **Layer:** the one asked (several asked: the most severe).
+- **View:**
+  - about 10 km around the user's point (pin, saved location or a named town);
+  - the LGA and its neighbours when only an LGA is known;
+  - the whole state when the answer is state-wide or asked for ("Sokoto", "all LGAs", "taswirar jiha").
+- **The ~10 km view** labels the value at the user's point in its category's exact colour, with nearby forecast
+  points and their own values. Air shows the CAMS ~40 km cell edges dotted and says "model grid ~40 km". Nothing is
+  interpolated.
+- **Rivers:** the frame reaches the nearest river point. **Fires:** satellite detections on the view.
+- **Caching:** state and LGA maps per layer, view and hour; a point's map 30 minutes, keyed by the ~1 km point.
+- **If a map can't be drawn,** the reply says so.
+
 Images in Hausa or English to match the user. Colour-blind-safe palette with clear category labels. Cache per layer per hour. Each image's caption repeats the key number in text, for users on slow data.
 
 ## 9. Alerts people sign up for

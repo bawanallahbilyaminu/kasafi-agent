@@ -92,18 +92,92 @@ def _ha(kind, layers, pcode=""):
     return HazardAnswer("t", layers, read.Where(kind, pcode, "Goronyo" if pcode else ""), True)
 
 
-def test_when_an_answer_sends_a_map() -> None:
+def _point(layers):
+    return HazardAnswer("t", layers, read.Where("point", "NG034021", "Wamakko", 13.0589127, 5.1673341), True)
+
+
+def test_every_hazard_answer_gets_one_map_for_its_view() -> None:
     today = DAY
+    # the state: state-wide answers, or asked for ("Sokoto", "all LGAs", "taswirar jiha")
     assert maps_for("How hot is it in Sokoto today?", _ha("state", ["heat"]), today) == \
         [{"kind": "hazard", "layer": "heat", "day": "2026-10-31", "highlight": ""}]
-    assert maps_for("How hot is it in Goronyo today?", _ha("lga", ["heat"], "NG034006"), today) == []
-    assert maps_for("Show me a map of the heat in Goronyo", _ha("lga", ["heat"], "NG034006"), today) == \
-        [{"kind": "hazard", "layer": "heat", "day": "2026-10-31", "highlight": "NG034006"}]
+    assert maps_for("show me a dust map of Sokoto", _point(["air"]), today) == \
+        [{"kind": "hazard", "layer": "air", "day": "2026-10-31", "highlight": "NG034021"}]
+    assert maps_for("nuna min taswirar jiha ta ƙura", _point(["air"]), today)[0]["kind"] == "hazard"
+    # an LGA: that LGA and its neighbours
+    assert maps_for("How hot is it in Goronyo today?", _ha("lga", ["heat"], "NG034006"), today) == \
+        [{"kind": "hazard", "layer": "heat", "day": "2026-10-31", "zoom": "NG034006"}]
+    # a point (pin, saved location, named town): ~10 km around it, rounded to ~1 km
+    assert maps_for("Whats the dust and air quality today", _point(["air"]), today) == \
+        [{"kind": "local", "layer": "air", "day": "2026-10-31", "lat": 13.06, "lon": 5.17}]
+    assert maps_for("dust in Sokoto North?", _point(["air"]), today)[0]["kind"] == "local"      # not the state
+    # rivers and fires
     assert maps_for("Is the river high near Goronyo?", _ha("lga", ["flood"], "NG034006"), today) == \
         [{"kind": "river", "day": "2026-10-31"}]
+    assert maps_for("any fires in Goronyo?", _ha("lga", ["fires"], "NG034006"), today) == \
+        [{"kind": "fires", "day": "2026-10-31", "view": "lga", "pcode": "NG034006"}]
+    # an overview: the most severe layer only (already ordered)
     assert maps_for("What should we watch out for?", _ha("state", ["air", "fires", "heat", "flood", "rain"]),
                     today) == [{"kind": "hazard", "layer": "air", "day": "2026-10-31", "highlight": ""}]
     assert maps_for("Will it rain tomorrow?", _ha("state", ["rain"]), today)[0]["day"] == "2026-11-01"
+    assert len(maps_for("heat and dust today", _ha("state", ["heat", "air"]), today)) == 1
+
+
+def test_when_the_map_cant_be_drawn_the_text_says_so(monkeypatch) -> None:
+    from app.agent.answer import Answer
+    from app.users import UserStore, user_key
+    from app.whatsapp import conversation as conv
+    from tests.helpers import make_settings
+    s = make_settings(database_url="postgresql://x:y@127.0.0.1:1/none")
+    store = UserStore(":memory:")
+    key = user_key("2348000000078", s)
+    store.create(key, "en")
+    store.give_consent(key)
+    monkeypatch.setattr(conv, "render_specs", lambda settings, specs, lang, today=None: [])
+
+    async def answer(question, lang, **kw):
+        return Answer("text", True, True, maps=[{"kind": "hazard", "layer": "air", "day": "2026-10-31"}])
+
+    async def guard(texts, settings=None):
+        from app.guardrails.scope import Verdict
+        return Verdict("ok", "none")
+    msg = {"from": "2348000000078", "id": "w", "type": "text", "text": {"body": "dust today?"}}
+    outs = asyncio.run(conv.handle(msg, None, store=store, settings=s, answer_fn=answer, guard_fn=guard))
+    assert outs[-1].text == "(The map for this answer couldn't be drawn this time.)"
+
+
+def test_a_hazard_answer_always_carries_a_map_when_it_has_data(monkeypatch) -> None:
+    """The agent's hazard branch: found -> exactly one map spec, for every layer."""
+    for layer in ("air", "heat", "rain", "flood", "fires"):
+        for ha in (_ha("state", [layer]), _ha("lga", [layer], "NG034006"), _point([layer])):
+            assert len(maps_for(f"{layer} today", ha, DAY)) == 1, (layer, ha.where.kind)
+
+
+@pytest.mark.parametrize("layer", ["air", "heat", "rain"])
+def test_the_local_map_labels_the_value_at_the_point_and_stays_small(layer) -> None:
+    with _conn() as conn:
+        render._cache.clear()
+        m = render.local_map(conn, layer, DAY, 13.0589127, 5.1673341, "en", DAY)
+        if m is None:
+            pytest.skip(f"no {layer} data for {DAY} in this database")
+        _jpeg(m.jpeg)
+        assert "at your location (Wamakko LGA)" in m.caption
+        key = next(k for k in render._cache if k[0] == "local")
+        assert key[4] == (13.06, 5.17)                                       # cached by the ~1 km point only
+
+
+@pytest.mark.parametrize("spec", [{"kind": "hazard", "layer": "air", "day": "2026-10-31", "zoom": "NG034006"},
+                                  {"kind": "fires", "day": "2026-10-31", "view": "state"},
+                                  {"kind": "fires", "day": "2026-10-31", "view": "lga", "pcode": "NG034006"},
+                                  {"kind": "local", "layer": "flood", "day": "2026-10-31", "lat": 13.44, "lon": 5.67}])
+def test_every_view_renders_under_the_size_limit(spec) -> None:
+    with _conn() as conn:
+        render._cache.clear()
+        m = render.draw(conn, spec, "ha", DAY)
+        if m is None:
+            pytest.skip("no data for this view in this database")
+        _jpeg(m.jpeg)
+        assert m.caption
 
 
 @pytest.mark.parametrize("text, want", [("show me a map", True), ("Map?", True), ("nuna min taswira", True),

@@ -1036,7 +1036,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             text = lead(summary, details)
             return Answer(text, True, True, plan=plan, timings=t, exact=f"{summary}\n{ha.text}",
                           partial=not ha.found, quotes=quotes,
-                          maps=maps_for(f"{question} {plan.english_question}", ha, today) if ha.found else [])
+                          maps=maps_for(q, ha, today, conn) if ha.found else [])
         # every cell of the need fillable by one structured tool (budget_core, dtm_api): answered from the data
         if (a := await structured_answer(conn, plan, lang, settings, t, today)) is not None:
             return a
@@ -1325,23 +1325,44 @@ async def _led(question: str, full: str, lang: str, settings, client) -> tuple[s
 
 
 MAP_WORDS = re.compile(r"(?i)\b(?:maps?|taswira\w*|on a map)\b")
-MAPPED = {"heat": "heat", "air": "air", "rain": "rain", "flood": "river"}
+MAPPED = {"heat": "heat", "air": "air", "rain": "rain", "flood": "river", "fires": "fires"}
+# the whole state asked for: "Sokoto" alone (not Sokoto North/South), "the state", "all LGAs", "taswirar jiha"
+STATE_MAP = re.compile(r"(?i)\b(?:sokoto state|the (?:whole |entire )?state|all (?:the )?lgas|every lga|"
+                       r"state-?wide|taswirar jiha|jihar sokoto|duk(?:kan)? ƙananan hukumomi|duk jihar|"
+                       r"(?:of|in|for|across|over) sokoto\b(?!\s+(?:north|south|ta arewa|ta kudu)))")
 
 
-def maps_for(question: str, ha, today: date) -> list[dict]:
-    """The maps a hazard answer sends: the ones asked for ('show me a map', 'taswira'), else the useful ones: the
-    state's heat, dust or rain by LGA, the rivers, and for 'what should we watch out for' the most severe layer's.
-    An LGA's answer gets its map only when asked, with the LGA outlined."""
-    asked = bool(MAP_WORDS.search(question or ""))
+def maps_for(question: str, ha, today: date, conn=None) -> list[dict]:
+    """The one map every hazard answer sends, right after the text: the asked layer (several asked: the most severe;
+    an overview is already ordered by severity), over the view the answer is about:
+    - the whole state when the answer is state-wide or the question asks for it ('Sokoto', 'all LGAs');
+    - about 10 km around the user's point (a pin, the saved location, or a named town);
+    - the LGA and its neighbours when only an LGA is known.
+    The point goes in rounded to ~1 km (as the near-you map draws it)."""
     layers = [x for x in ha.layers if x in MAPPED]
-    if not asked and ha.where.kind != "state" and "flood" not in layers:
+    if not layers:
         return []
-    if not asked and len(layers) > 1:                      # an overview: the most severe layer only
-        layers = layers[:1]
-    highlight = ha.where.lga_pcode if ha.where.kind in ("lga", "point") else ""
-    day = days_asked(question, today)[0].isoformat()
-    return [{"kind": "river", "day": day} if MAPPED[x] == "river" else
-            {"kind": "hazard", "layer": x, "day": day, "highlight": highlight} for x in layers[:2]]
+    day = days_asked(question, today)[0]
+    if len(layers) > 1 and "overview" not in (ha.layers or []) and conn is not None:
+        from app.hazards import read
+        from app.hazards.answer import severity
+        pids = read.point_ids(conn, ha.where)
+        layers = sorted(layers, key=lambda x: -severity(conn, x, ha.where, pids, day))
+    layer, d = layers[0], day.isoformat()
+    w = ha.where
+    if w.kind == "state" or STATE_MAP.search(question or ""):
+        if layer == "flood":
+            return [{"kind": "river", "day": d}]
+        if layer == "fires":
+            return [{"kind": "fires", "day": d, "view": "state"}]
+        return [{"kind": "hazard", "layer": layer, "day": d, "highlight": w.lga_pcode if w.kind != "state" else ""}]
+    if w.kind == "point" and w.lat is not None:
+        return [{"kind": "local", "layer": layer, "day": d, "lat": round(w.lat, 2), "lon": round(w.lon, 2)}]
+    if layer == "flood":
+        return [{"kind": "river", "day": d}]
+    if layer == "fires":
+        return [{"kind": "fires", "day": d, "view": "lga", "pcode": w.lga_pcode}]
+    return [{"kind": "hazard", "layer": layer, "day": d, "zoom": w.lga_pcode}]
 
 
 def hazard_route(question: str, plan: Plan) -> list[str]:

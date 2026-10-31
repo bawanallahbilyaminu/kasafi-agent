@@ -25,6 +25,7 @@ from app.maps import render  # noqa: E402
 
 OUT = Path("data/samples")
 TEST_POINT = (13.44, 5.67)              # near Goronyo town: a sample point, not anyone's location
+ARKILLA = (13.03, 5.20)                 # near Arkilla PHC (Wamakko): a sample point
 
 
 def main() -> None:
@@ -44,6 +45,17 @@ def main() -> None:
         line = asyncio.run(fac.route_line(s, *TEST_POINT, found[0])) if found else []
         m = render.near_you_map(conn, *TEST_POINT, "Goronyo", found, line, "en")
         print("near_you", (OUT / "near_you.jpg").write_bytes(m.jpeg), "routed" if routed else "straight line")
+        for name, spec in (("air_local", {"kind": "local", "layer": "air", "day": today.isoformat(),
+                                          "lat": ARKILLA[0], "lon": ARKILLA[1]}),
+                           ("heat_local", {"kind": "local", "layer": "heat", "day": today.isoformat(),
+                                           "lat": ARKILLA[0], "lon": ARKILLA[1]}),
+                           ("heat_goronyo", {"kind": "hazard", "layer": "heat", "day": today.isoformat(),
+                                             "zoom": "NG034006"}),
+                           ("fires_state", {"kind": "fires", "day": today.isoformat(), "view": "state"}),
+                           ("river_local", {"kind": "local", "layer": "flood", "day": today.isoformat(),
+                                            "lat": TEST_POINT[0], "lon": TEST_POINT[1]})):
+            m = render.draw(conn, spec, "en", today)
+            print(name, "no data" if m is None else (OUT / f"{name}.jpg").write_bytes(m.jpeg), m.caption if m else "")
         names = [r[0] for r in conn.execute("SELECT name FROM lga ORDER BY name").fetchall()]
         mixed = {}
         for i, n in enumerate(names):

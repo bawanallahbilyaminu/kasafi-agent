@@ -157,6 +157,10 @@ TEXTS = {
         "ha": "🔎 Ina duba takardu…",
         "en": "🔎 Checking the documents…",
     },
+    "map_failed": {
+        "ha": "(Ba a iya zana taswirar wannan amsa a yanzu ba.)",
+        "en": "(The map for this answer couldn't be drawn this time.)",
+    },
     "searching_forecasts": {          # a heat, dust, rain, river or fire question: no documents are read
         "ha": "🌦️ Ina duba sabbin hasashen yanayi…",
         "en": "🌦️ Checking the latest forecasts…",

@@ -92,6 +92,18 @@ T = {
                         "rain": "the day's rain, mm"},
            "dist_road": "{km} km, about {mins}", "dist_line": "about {km} km (straight line)",
            "off_map": " (beyond the map)",
+           "caption_lga": "{what} {day} in {lga} LGA: {value} ({cat}).",
+           "here_title": "{what} around you, {day}",
+           "caption_here": "{what} {day} at your location ({lga} LGA): {value} ({cat}).",
+           "grid_air": "The air-quality model's grid is ~40 km (cell edges dotted): this whole area shares one "
+                       "value, and no finer detail is drawn.",
+           "grid_fc": "Forecast values at points about 11 km apart; no finer detail is drawn.",
+           "fires_title": "Satellite heat detections, last 24 hours",
+           "fires_caption": "{n} satellite heat detections (could be bush, farm or other fires) on this map in the "
+                            "last 24 hours.",
+           "fires_src": "NASA FIRMS VIIRS active fire detections",
+           "fire_mark": "Heat detection (could be a fire)",
+           "river_here": "Nearest river point: {point}, {q} m³/s, {level}",
            "river_legend": "Colour: today's flow against the same time of year since {year}."},
     "ha": {"heat": "Zafin rana", "air": "Ƙura da ingancin iska (US AQI)", "rain": "Ruwan sama", "today": "yau",
            "tomorrow": "gobe", "valid": "Na {day}", "fetched": "an samo {when}", "old": " (ya daɗe fiye da yadda aka saba)",
@@ -115,6 +127,18 @@ T = {
                         "air": "mafi girman US AQI na ranar", "rain": "ruwan saman ranar, mm"},
            "dist_road": "kilomita {km}, kusan {mins}", "dist_line": "kusan kilomita {km} (a miƙe)",
            "off_map": " (bayan iyakar taswirar)",
+           "caption_lga": "{what} {day} a Ƙaramar Hukumar {lga}: {value} ({cat}).",
+           "here_title": "{what} a kewayenka, {day}",
+           "caption_here": "{what} {day} a inda kake (Ƙaramar Hukumar {lga}): {value} ({cat}).",
+           "grid_air": "Ragar samfurin ingancin iska kusan kilomita 40 ce (iyakokin raga a ɗigo-ɗigo): duk wannan "
+                       "yanki ƙima ɗaya yake da ita, kuma ba a zana wani ƙarin dalla-dalla ba.",
+           "grid_fc": "Ƙimomin hasashe a wurare masu nisan kusan kilomita 11 da juna; ba a zana ƙarin dalla-dalla ba.",
+           "fires_title": "Alamun zafi daga tauraron ɗan adam, awa 24 da suka wuce",
+           "fires_caption": "Alamun zafi {n} daga tauraron ɗan adam (na iya zama gobarar daji, gona ko wata) a wannan "
+                            "taswira a awa 24 da suka wuce.",
+           "fires_src": "NASA FIRMS VIIRS (gano gobara)",
+           "fire_mark": "Alamar zafi (na iya zama gobara)",
+           "river_here": "Wurin kogi mafi kusa: {point}, {q} m³/s, {level}",
            "river_legend": "Launi: kwararar yau idan aka kwatanta da wannan lokaci na shekara tun {year}."},
 }
 
@@ -293,13 +317,23 @@ _cache: dict[tuple, tuple[float, MapImage]] = {}
 _cache_lock = threading.Lock()
 
 
-def hazard_map(conn, layer: str, day: date, lang: str = "en", highlight: str = "", today: date | None = None
-               ) -> MapImage | None:
+def lga_frame(lgas, pcode: str) -> tuple[float, float, float] | None:
+    """(centre lon, centre lat, side): the LGA with a margin, so its neighbours show around it."""
+    mine = lgas[lgas["pcode"] == pcode]
+    if not len(mine):
+        return None
+    x0, y0, x1, y1 = mine.geometry.iloc[0].bounds
+    return (x0 + x1) / 2, (y0 + y1) / 2, max(x1 - x0, y1 - y0) * 1.5 + 0.06
+
+
+def hazard_map(conn, layer: str, day: date, lang: str = "en", highlight: str = "", today: date | None = None,
+               zoom: str = "") -> MapImage | None:
     """Sokoto by LGA for the day: heat category, US AQI category (dust and fine particles) or rain class, with each
-    LGA's value printed; None when the layer has no data for the day."""
+    LGA's value printed; None when the layer has no data for the day. `zoom` (an LGA P-code) frames that LGA and
+    its neighbours, the LGA outlined, and the caption gives its own value."""
     lang = lang if lang in T else "en"
     hour = datetime.now().strftime("%Y%m%d%H")
-    key = ("hazard", layer, day, lang, highlight, hour)
+    key = ("hazard", layer, day, lang, highlight, zoom, hour)
     with _cache_lock:
         if key in _cache:
             return _cache[key][1]
@@ -309,6 +343,8 @@ def hazard_map(conn, layer: str, day: date, lang: str = "en", highlight: str = "
     order, colors = {"heat": (HEAT, HEAT_COLORS), "air": (AIR, AIR_COLORS), "rain": (RAIN, RAIN_COLORS)}[layer]
     lgas, lines = base(conn)
     t = T[lang]
+    framed = lga_frame(lgas, zoom) if zoom else None
+    highlight = highlight or (zoom if framed else "")
     fig, ax = plt.subplots(figsize=FIGSIZE)
     fig.subplots_adjust(left=0.02, right=0.98, top=0.87, bottom=0.235)
     shade = dict(zip(order, colors))
@@ -322,18 +358,28 @@ def hazard_map(conn, layer: str, day: date, lang: str = "en", highlight: str = "
             mine.boundary.plot(ax=ax, color=INK, linewidth=2.8, zorder=4)
     small = []
     points = {row["name"]: row.geometry.representative_point() for _, row in lgas.iterrows()}
+    big = 1.0 if framed is None else 1.4                  # zoomed in: room for larger labels
     for _, row in lgas.iterrows():
         name, p = row["name"], points[row["name"]]
         v = values.get(name)
-        if crowded(name, points):                    # the Sokoto city LGAs: labelled outside, with a leader
+        if framed is not None:
+            cx, cy, side = framed
+            if not (abs(p.x - cx) < side / 2 and abs(p.y - cy) < side / 2):
+                continue
+        elif crowded(name, points):                  # the Sokoto city LGAs: labelled outside, with a leader
             small.append((f"{name} {short_value(layer, v[1])}" if v else name, p))
             continue
         ink = "#ffffff" if dark(fill.get(name, "#f4f3f0")) else INK
-        ax.text(p.x, p.y + 0.028, name, fontsize=pt(12.5), ha="center", va="bottom", zorder=5, color=ink)
+        gap = 0.008 * (framed[2] / 0.5 if framed else 1) + 0.02
+        ax.text(p.x, p.y + gap, name, fontsize=pt(12.5 * big), ha="center", va="bottom", zorder=5, color=ink)
         if v:
-            ax.text(p.x, p.y + 0.02, short_value(layer, v[1]), fontsize=pt(17), fontweight="bold", ha="center",
-                    va="top", zorder=5, color=ink)
+            ax.text(p.x, p.y + gap * 0.7, short_value(layer, v[1]), fontsize=pt(17 * big), fontweight="bold",
+                    ha="center", va="top", zorder=5, color=ink)
     _leader_labels(ax, small)
+    if framed is not None:
+        cx, cy, side = framed
+        ax.set_xlim(cx - side / 2, cx + side / 2)
+        ax.set_ylim(cy - side / 2, cy + side / 2)
     present = [c for c in order if any(v[0] == c for v in values.values())]
     handles = [Patch(facecolor=shade[c], edgecolor=MUTED if c in ("none",) or layer == "air" else shade[c],
                      linewidth=0.6, label=f"{cat.label(c, lang)} ({sum(v[0] == c for v in values.values())})")
@@ -346,17 +392,25 @@ def hazard_map(conn, layer: str, day: date, lang: str = "en", highlight: str = "
     top = max(values.items(), key=lambda kv: kv[1][1])
     fetched = read.freshness(conn, "air" if layer == "air" else "forecast").fetched_at
     day_word = _day_word(day, today or day, lang)
-    title = f"{t[layer]}: {day_word}"
+    from app.sources.lga_names import name_of
+    lga_name = name_of(zoom) if framed is not None else ""
+    title = f"{t[layer]}: {lga_name}, {day_word}" if lga_name else f"{t[layer]}: {day_word}"
     subtitle = t["valid"].format(day=day.strftime("%d %b %Y")) + _fetched(
         conn, "air" if layer == "air" else "forecast", fetched, lang)
     jpeg = _finish(fig, ax, title, subtitle, f"{t[layer + '_src']}. {t['credit']}.", legend_line, 0.19)
     worst = cat.label(top[1][0], lang)
-    caption = {"en": f"{t[layer]} {day_word}: highest in {top[0]}, {top[1][2]} ({worst}). "
-                     + "; ".join(f"{cat.label(c, lang)}: {sum(v[0] == c for v in values.values())} LGAs"
-                                 for c in reversed(present)) + ".",
-               "ha": f"{t[layer]} {day_word}: mafi yawa a {top[0]}, {top[1][2]} ({worst}). "
-                     + "; ".join(f"{cat.label(c, lang)}: ƙananan hukumomi {sum(v[0] == c for v in values.values())}"
-                                 for c in reversed(present)) + "."}[lang]
+    own = values.get(lga_name)
+    if own:                                           # an LGA's map: its own value first
+        caption = t["caption_lga"].format(what=t[layer], lga=lga_name, day=day_word, value=own[2],
+                                          cat=cat.label(own[0], lang))
+    else:
+        caption = {"en": f"{t[layer]} {day_word}: highest in {top[0]}, {top[1][2]} ({worst}). "
+                         + "; ".join(f"{cat.label(c, lang)}: {sum(v[0] == c for v in values.values())} LGAs"
+                                     for c in reversed(present)) + ".",
+                   "ha": f"{t[layer]} {day_word}: mafi yawa a {top[0]}, {top[1][2]} ({worst}). "
+                         + "; ".join(f"{cat.label(c, lang)}: ƙananan hukumomi "
+                                     f"{sum(v[0] == c for v in values.values())}" for c in reversed(present)) + "."
+                   }[lang]
     img = MapImage(jpeg, caption)
     with _cache_lock:
         _cache[key] = (time.time(), img)
@@ -366,8 +420,10 @@ def hazard_map(conn, layer: str, day: date, lang: str = "en", highlight: str = "
 
 
 def render_specs(settings, specs: list[dict], lang: str, today: date | None = None) -> list[MapImage]:
-    """The maps an answer asked for ({"kind": "hazard", "layer", "day", "highlight"} or {"kind": "river", "day"}),
-    each drawn from its own connection; a map that can't be drawn is left out (the text answer stands)."""
+    """The maps an answer asked for, each drawn from its own connection; a map that can't be drawn is left out (the
+    conversation then says so). Specs: {"kind": "hazard", "layer", "day", "highlight", "zoom"} (the state, or an
+    LGA with `zoom`), {"kind": "river", "day"}, {"kind": "local", "layer", "day", "lat", "lon"} (about 10 km around
+    a point) or {"kind": "fires", "day", "view": state | lga | point, "pcode", "lat", "lon"}."""
     import logging
 
     import psycopg
@@ -375,14 +431,213 @@ def render_specs(settings, specs: list[dict], lang: str, today: date | None = No
     try:
         with psycopg.connect(settings.db_url(), connect_timeout=5) as conn:
             for s in specs:
-                day = date.fromisoformat(s["day"])
-                m = hazard_map(conn, s["layer"], day, lang, s.get("highlight", ""), today) if s["kind"] == "hazard" \
-                    else river_map(conn, day, lang, today)
-                if m is not None:
-                    out.append(m)
+                out += [m for m in [draw(conn, s, lang, today)] if m is not None]
     except Exception as e:                        # noqa: BLE001 - a map is extra; never lose the answer over it
         logging.getLogger(__name__).warning("map failed: %s", type(e).__name__)
     return out
+
+
+def draw(conn, s: dict, lang: str, today: date | None = None) -> MapImage | None:
+    day = date.fromisoformat(s["day"])
+    if s["kind"] == "hazard":
+        return hazard_map(conn, s["layer"], day, lang, s.get("highlight", ""), today, s.get("zoom", ""))
+    if s["kind"] == "river":
+        return river_map(conn, day, lang, today)
+    if s["kind"] == "local":
+        return local_map(conn, s["layer"], day, s["lat"], s["lon"], lang, today)
+    if s["kind"] == "fires":
+        return fires_map(conn, s.get("view", "state"), lang, s.get("pcode", ""), s.get("lat"), s.get("lon"))
+    return None
+
+
+# --- 1b. around a point, and fires ------------------------------------------------------------------------------
+
+LOCAL_SIDE = 0.09                         # degrees, ~10 km across
+LOCAL_TTL_S = 1800                        # a map around a user's point is kept 30 minutes, like the point itself
+CAMS_STEP = 0.4                           # the CAMS global air-quality grid (degrees)
+
+
+def _cached(key: tuple, ttl: float = 3600) -> MapImage | None:
+    with _cache_lock:
+        hit = _cache.get(key)
+    return hit[1] if hit and time.time() - hit[0] < ttl else None
+
+
+def _keep(key: tuple, img: MapImage) -> MapImage:
+    with _cache_lock:
+        _cache[key] = (time.time(), img)
+        for k in [k for k, (at, _) in _cache.items() if time.time() - at > 3600]:
+            _cache.pop(k, None)
+    return img
+
+
+def _value_here(conn, layer: str, day: date, me: tuple[float, float]):
+    """(category, value text, LGA) at the user's point (the nearest fetch point), or None."""
+    for pid, lga in read.point_ids(conn, read.Where("point", "", "", me[0], me[1])):
+        if layer == "air" and (r := read.air_day(conn, pid, lga, day)):
+            return r.category, f"AQI {r.aqi_max:.0f}", lga
+        if layer in ("heat", "rain") and (r := read.heat_day(conn, pid, lga, day)):
+            return ((r.category, f"{r.category_value:.0f} °C", lga) if layer == "heat" else
+                    (r.rain_class, f"{r.rain_mm:.1f} mm", lga))
+    return None
+
+
+def _points_in(conn, cx: float, cy: float, side: float) -> list:
+    h = side / 2
+    return conn.execute(
+        "SELECT p.id, l.name, ST_Y(p.geom), ST_X(p.geom) FROM hazard_point p JOIN lga l ON l.pcode = p.lga_pcode "
+        "WHERE p.kind IN ('grid', 'lga') AND p.geom && ST_MakeEnvelope(%s, %s, %s, %s, 4326)",
+        (cx - h, cy - h, cx + h, cy + h)).fetchall()
+
+
+def _local_base(conn, cx: float, cy: float, side: float, me: tuple[float, float] | None):
+    lgas, lines = base(conn)
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    fig.subplots_adjust(left=0.02, right=0.98, top=0.87, bottom=0.24)
+    lgas.plot(ax=ax, color="#f4f3f0", edgecolor="#c9c6bf", linewidth=1.6, zorder=1)
+    _draw_base(ax, lgas, lines, scale=2.0)
+    if me is not None:
+        ax.add_patch(Circle((me[1], me[0]), YOU_RADIUS, facecolor="#256abf", alpha=0.15, edgecolor="#256abf",
+                            linewidth=2, zorder=6))
+    for name, plat, plon in towns_in(conn, cx, cy, side, me or (cy, cx), most=5):
+        ax.scatter([plon], [plat], s=36, color=MUTED, zorder=4)
+        ax.text(plon + side * 0.012, plat, name, fontsize=LABEL, color=INK, ha="left", va="center", zorder=7,
+                style="italic", bbox={"boxstyle": "round,pad=0.15", "fc": "#ffffff", "ec": "none", "alpha": 0.8})
+    _scale_bar(ax, cx, cy, side, cy)
+    ax.set_xlim(cx - side / 2, cx + side / 2)
+    ax.set_ylim(cy - side / 2, cy + side / 2)
+    return fig, ax
+
+
+def local_map(conn, layer: str, day: date, lat: float, lon: float, lang: str = "en", today: date | None = None
+              ) -> MapImage | None:
+    """About 10 km around the user's point (rounded to ~1 km): the value at the point, labelled in its category's
+    exact colour, and the forecast points nearby with theirs. Air: the model's ~40 km cells' edges dotted and said in
+    the stamp; never interpolated. Rivers: the frame reaches the nearest river point. Fires: the detections."""
+    lang = lang if lang in T else "en"
+    if layer == "fires":
+        return fires_map(conn, "point", lang, "", lat, lon)
+    t, me = T[lang], approx(lat, lon)
+    key = ("local", layer, day, lang, me, datetime.now().strftime("%Y%m%d%H"))
+    if (hit := _cached(key, LOCAL_TTL_S)) is not None:
+        return hit
+    day_word = _day_word(day, today or day, lang)
+    cx, cy, side = me[1], me[0], LOCAL_SIDE
+    if layer == "flood":
+        return _local_river(conn, day, me, lang, today, key)
+    here = _value_here(conn, layer, day, me)
+    if here is None:
+        return None
+    category, value, lga = here
+    order, colors = {"heat": (HEAT, HEAT_COLORS), "air": (AIR, AIR_COLORS), "rain": (RAIN, RAIN_COLORS)}[layer]
+    shade = dict(zip(order, colors))
+    fig, ax = _local_base(conn, cx, cy, side, me)
+    if layer == "air":                        # the model's cells: edges only, dotted; one value inside each
+        k0 = math.floor((cx - side) / CAMS_STEP)
+        for k in range(k0, k0 + 4):
+            ax.axvline(CAMS_STEP * k + CAMS_STEP / 2, color=MUTED, linewidth=1.2, linestyle=(0, (2, 4)), zorder=3)
+        k0 = math.floor((cy - side) / CAMS_STEP)
+        for k in range(k0, k0 + 4):
+            ax.axhline(CAMS_STEP * k + CAMS_STEP / 2, color=MUTED, linewidth=1.2, linestyle=(0, (2, 4)), zorder=3)
+    else:                                     # nearby forecast points with their own values
+        for pid, plga, plat, plon in _points_in(conn, cx, cy, side):
+            r = read.heat_day(conn, pid, plga, day)
+            if r is None or math.hypot(plat - me[0], plon - me[1]) < side * 0.12:
+                continue
+            c, v = (r.category, f"{r.category_value:.0f}°") if layer == "heat" else (r.rain_class, f"{r.rain_mm:.1f}")
+            ax.scatter([plon], [plat], s=160, color=shade.get(c, "#cccccc"), edgecolor=INK, linewidth=0.8, zorder=7)
+            ax.text(plon, plat - side * 0.03, v, fontsize=pt(17), color=INK, ha="center", va="top", zorder=7,
+                    bbox={"boxstyle": "round,pad=0.15", "fc": "#ffffff", "ec": "none", "alpha": 0.8})
+    fill = shade.get(category, "#cccccc")
+    ax.text(me[1], me[0], f"{value}\n{cat.label(category, lang)}", fontsize=pt(24), fontweight="bold",
+            color="#ffffff" if dark(fill) else INK, ha="center", va="center", zorder=9, linespacing=1.2,
+            bbox={"boxstyle": "round,pad=0.45", "fc": fill, "ec": INK, "lw": 1.2})
+    handles = [Patch(facecolor=shade[c], edgecolor=MUTED, linewidth=0.6, label=cat.label(c, lang)) for c in order]
+    handles.append(Line2D([0], [0], marker="o", color="none", markerfacecolor="#9ec5f4", markeredgecolor="#256abf",
+                          markersize=16, label=t["you"]))
+    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.075), ncol=3, frameon=False,
+               fontsize=pt(16), handlelength=1.4, columnspacing=1.2)
+    src = "air" if layer == "air" else "forecast"
+    subtitle = t["valid"].format(day=day.strftime("%d %b %Y")) + _fetched(conn, src, read.freshness(conn, src)
+                                                                          .fetched_at, lang)
+    jpeg = _finish(fig, ax, t["here_title"].format(what=t[layer], day=day_word), subtitle,
+                   f"{t[layer + '_src']}. {t['credit']}.", t["grid_air" if layer == "air" else "grid_fc"], 0.18)
+    caption = t["caption_here"].format(what=t[layer], day=day_word, lga=lga, value=value,
+                                       cat=cat.label(category, lang))
+    return _keep(key, MapImage(jpeg, caption))
+
+
+def _local_river(conn, day: date, me: tuple[float, float], lang: str, today: date | None, key: tuple
+                 ) -> MapImage | None:
+    """The user and the nearest river point, framed together (at least ~10 km across)."""
+    from app.hazards.answer import discharge
+    t = T[lang]
+    rows = read.river_days(conn, day)
+    pts = {r[0]: (r[1], r[2]) for r in conn.execute(
+        "SELECT name, ST_Y(geom), ST_X(geom) FROM hazard_point WHERE kind = 'river'").fetchall()}
+    rows = [r for r in rows if r.point in pts]
+    if not rows:
+        return None
+    r = min(rows, key=lambda r: math.hypot(pts[r.point][0] - me[0], pts[r.point][1] - me[1]))
+    py, px = pts[r.point]
+    cx, cy = (me[1] + px) / 2, (me[0] + py) / 2
+    side = max(LOCAL_SIDE, 1.4 * max(abs(px - me[1]), abs(py - me[0])))
+    fig, ax = _local_base(conn, cx, cy, side, me)
+    shade = dict(zip(RIVER, RIVER_COLORS))
+    ax.scatter([px], [py], s=420, color=shade[r.level], edgecolor="#ffffff", linewidth=2.5, zorder=8)
+    label = t["river_here"].format(point=r.point, q=discharge(r.discharge), level=t["levels"][r.level])
+    _place_labels(ax, [(px, py, label.replace(": ", ":\n", 1))])
+    handles = [Patch(facecolor=shade[lv], label=t["levels"][lv]) for lv in RIVER]
+    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.09), ncol=4, frameon=False,
+               fontsize=pt(17))
+    day_word = _day_word(day, today or day, lang)
+    subtitle = t["valid"].format(day=day.strftime("%d %b %Y")) + _fetched(conn, "flood", r.fetched_at, lang)
+    jpeg = _finish(fig, ax, river_title(lang, day, today or day), subtitle, f"{t['model']} {t['credit']}.",
+                   t["river_legend"].format(year=r.since.year), 0.15)
+    return _keep(key, MapImage(jpeg, f"{label}. {t['model']}"))
+
+
+def fires_map(conn, view: str, lang: str = "en", pcode: str = "", lat: float | None = None,
+              lon: float | None = None) -> MapImage | None:
+    """Satellite heat detections of the last 24 hours on the state, an LGA (with its neighbours) or ~10 km around
+    a point; drawn even when there are none (the caption says so)."""
+    lang = lang if lang in T else "en"
+    t = T[lang]
+    me = approx(lat, lon) if view == "point" and lat is not None else None
+    key = ("fires", view, pcode, me, lang, datetime.now().strftime("%Y%m%d%H"))
+    if (hit := _cached(key, LOCAL_TTL_S if me else 3600)) is not None:
+        return hit
+    lgas, _ = base(conn)
+    if me is not None:
+        cx, cy, side = me[1], me[0], LOCAL_SIDE
+    elif view == "lga" and (framed := lga_frame(lgas, pcode)):
+        cx, cy, side = framed
+    else:
+        x0, y0, x1, y1 = lgas.total_bounds
+        cx, cy, side = (x0 + x1) / 2, (y0 + y1) / 2, max(x1 - x0, y1 - y0) * 1.04
+    h = side / 2
+    rows = conn.execute("SELECT ST_Y(geom), ST_X(geom) FROM fire_detection WHERE detected_at >= now() - interval "
+                        "'24 hours' AND geom && ST_MakeEnvelope(%s, %s, %s, %s, 4326)",
+                        (cx - h, cy - h, cx + h, cy + h)).fetchall()
+    fig, ax = _local_base(conn, cx, cy, side, me) if me is not None or view == "lga" else plt.subplots(
+        figsize=FIGSIZE)
+    if me is None and view != "lga":
+        fig.subplots_adjust(left=0.02, right=0.98, top=0.87, bottom=0.24)
+        lgas.plot(ax=ax, color="#f4f3f0", edgecolor="#c9c6bf", linewidth=1.0, zorder=1)
+        ax.set_xlim(cx - h, cx + h)
+        ax.set_ylim(cy - h, cy + h)
+    if view == "lga" and pcode:
+        lgas[lgas["pcode"] == pcode].boundary.plot(ax=ax, color=INK, linewidth=2.8, zorder=4)
+    if rows:
+        ax.scatter([r[1] for r in rows], [r[0] for r in rows], s=70, marker="^", color="#d95926", edgecolor=INK,
+                   linewidth=0.6, zorder=8)
+    handles = [Line2D([0], [0], marker="^", color="none", markerfacecolor="#d95926", markeredgecolor=INK,
+                      markersize=13, label=t["fire_mark"])]
+    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.1), frameon=False, fontsize=pt(17))
+    fetched = read.freshness(conn, "fires").fetched_at
+    jpeg = _finish(fig, ax, t["fires_title"], _fetched(conn, "fires", fetched, lang).removeprefix(" · "),
+                   f"{t['fires_src']}. {t['credit']}.")
+    return _keep(key, MapImage(jpeg, t["fires_caption"].format(n=len(rows))))
 
 
 # --- 2. near you ------------------------------------------------------------------------------------------------

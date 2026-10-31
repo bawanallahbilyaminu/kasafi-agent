@@ -292,8 +292,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                  if result is not None and settings.kasafi_evidence_images and store.images_on(key) else None)
         outs = [Out(text_out, CALC_BUTTONS.get(lang, CALC_BUTTONS["en"]) if offer else None, crops or None, lang)]
         if (specs := getattr(result, "maps", None)) and store.images_on(key) and settings.has_database:
-            outs += [Out(m.caption, lang=lang, image=m.jpeg)
-                     for m in await asyncio.to_thread(render_specs, settings, specs, lang)]
+            drawn = await asyncio.to_thread(render_specs, settings, specs, lang)
+            outs += [Out(m.caption, lang=lang, image=m.jpeg) for m in drawn]
+            if len(drawn) < len(specs):            # the answer always has its map; when it can't be drawn, say so
+                outs.append(Out(t("map_failed", lang), lang=lang))
         return outs
 
     async def resolution_reply(res: Resolution, pending_q: str, reply: str = "") -> list[Out]:
