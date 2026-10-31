@@ -457,6 +457,9 @@ def draw(conn, s: dict, lang: str, today: date | None = None) -> MapImage | None
     if s["kind"] in ("place_chart", "place_map"):          # place history (app/place/images.py)
         from app.place.images import draw_place
         return draw_place(conn, s, lang, today)
+    if s["kind"] == "area_map":                             # a ward or LGA choropleth (planner answers)
+        from app.place.images import area_map
+        return area_map(conn, s, lang, today)
     return None
 
 

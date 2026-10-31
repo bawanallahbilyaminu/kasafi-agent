@@ -53,6 +53,7 @@ from app.agent.summary import lead, split_quotes
 from app.hazards.answer import MEASURE_LAYERS, days_asked, hazard_answer, layers_asked, where_for
 from app.hazards.summary import hazard_summary
 from app.place.answer import place_answer, place_route
+from app.place.planner import area_answer, area_route
 from app.agent.topics import note_of as topic_note
 from app.agent.topics import local_documents as topics_local
 from app.agent.topics import named_publishers
@@ -1061,6 +1062,13 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         if conn is not None and (fac := facility_route(question, plan, conn, lang)):
             t["facilities"] = 0.0
             return Answer(fac, True, True, plan=plan, timings=t, exact=fac)
+        # place history for a ward, an LGA or the state (docs/place-history.md §5): the precomputed measures
+        if conn is not None and (ar := area_route(question, plan.english_question)):
+            t0 = time.perf_counter()
+            aa = area_answer(conn, question, plan.english_question, lang, ar[0], ar[1], today)
+            t["place_area"] = time.perf_counter() - t0
+            return Answer(aa.text, aa.found, True, plan=plan, timings=t, exact=aa.text, working=aa.working,
+                          partial=aa.partial, maps=aa.specs)
         # place history (docs/place-history.md): what the satellite record shows for the user's pin, in code
         if conn is not None and place_route(question, plan.english_question):
             t0 = time.perf_counter()

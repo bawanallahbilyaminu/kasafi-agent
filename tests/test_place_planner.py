@@ -1,0 +1,95 @@
+"""Place history step 3: the planner route and answer (the answer and the map against the dev database's
+ward_history rows; skipped without them)."""
+
+from __future__ import annotations
+
+from datetime import date
+
+import pytest
+
+from app.place import planner as P
+
+TODAY = date(2026, 10, 31)
+
+
+@pytest.mark.parametrize("q,want", [
+    ("Which wards of Wurno LGA were greenest in 2024?", ("lga", "NG034022")),
+    ("Waɗanne gundumomin Ƙaramar Hukumar Wurno ne suka fi koriya a 2024?", ("lga", "NG034022")),
+    ("Share of cropland flooded in 2022 across Sokoto State", ("state", "NG034")),
+    ("Which LGAs had the most bare soil in the dry season?", ("state", "NG034")),
+    ("Flood share by ward in Wamakko", ("lga", "NG034021")),
+])
+def test_area_questions_route_to_the_lga_or_the_state(q, want) -> None:
+    assert P.area_route(q) == want
+
+
+@pytest.mark.parametrize("q", [
+    "How green was my farm in 2024?", "Was my plot in Wurno flooded?", "How much was budgeted for farms in Wurno?",
+    "Will it rain in Wurno tomorrow?", "Nearest hospital in Wurno",
+])
+def test_pin_budget_weather_and_facility_questions_do_not_route_to_an_area(q) -> None:
+    assert P.area_route(q) is None
+
+
+def test_the_measure_and_year_come_from_the_words() -> None:
+    assert P.measure_asked("which wards flooded most in 2022") == "flood"
+    assert P.measure_asked("wards inside the UN flood map") == "flood_map"
+    assert P.measure_asked("bare soil spreading by ward") == "bare"
+    assert P.measure_asked("wettest wards by rainfall") == "rain"
+    assert P.measure_asked("vegetation decline by ward") == "greenness"
+    assert P.measure_asked("ambaliya a gundumomin Goronyo") == "flood"
+    assert P.year_asked("floods in 2022 across the state", TODAY) == 2022 and P.year_asked("which wards", TODAY) is None
+
+
+def test_low_data_cut_is_relative_to_the_median_count() -> None:
+    rows = [("a", "A", 0.5, 17), ("b", "B", 0.4, 16), ("c", "C", 0.3, 5), ("d", "D", 0.2, 18), ("e", "E", None, 0)]
+    assert P.low_data_cut(rows, "modis_peak") == 10               # 60% of 16.5 -> 10: at or under 10 is low data
+    assert P.low_data_cut(rows, "unosat_share") == -1
+
+
+@pytest.fixture(scope="module")
+def conn():
+    psycopg = pytest.importorskip("psycopg")
+    from app.config import get_settings
+    s = get_settings()
+    if not s.has_database:
+        pytest.skip("no database configured")
+    try:
+        c = psycopg.connect(s.db_url(), connect_timeout=3)
+        if not c.execute("SELECT 1 FROM ward_history WHERE measure = 'modis_peak' AND year = 2024 LIMIT 1").fetchone():
+            pytest.skip("ward_history not precomputed for 2024")
+    except psycopg.OperationalError:
+        pytest.skip("dev database not available")
+    yield c
+    c.close()
+
+
+def test_the_lga_answer_names_the_wards_that_stand_out_and_ranks_them(conn) -> None:
+    a = P.area_answer(conn, "Which wards of Wurno LGA were greenest in 2024?", "", "en", "lga", "NG034022", TODAY)
+    assert a.found and a.year == 2024 and a.level == "ward"
+    assert "wards of Wurno LGA, 2024" in a.text and "Greenest:" in a.text and "Least green:" in a.text
+    assert "Period 2001–" in a.text and "250 m" in a.text and "*Ranking (" in a.text
+    assert "Kasafi reports what the satellite record shows" in a.text
+    assert a.working.startswith("All wards, modis_peak, 2024") and a.specs[0]["kind"] == "area_map"
+    ha = P.area_answer(conn, "Waɗanne gundumomin Wurno ne suka fi koriya a 2024?", "", "ha", "lga", "NG034022", TODAY)
+    assert "gundumomin Ƙaramar Hukumar Wurno, 2024" in ha.text and "Mafi koriya:" in ha.text
+
+
+def test_the_state_answer_compares_lgas_and_a_missing_year_is_said(conn) -> None:
+    a = P.area_answer(conn, "Share of cropland inside the UN flood map in 2022 across Sokoto State", "", "en", "state",
+                      "NG034", TODAY)
+    assert a.found and a.level == "lga" and a.year == 2022 and "the 23 LGAs of Sokoto State, 2022" in a.text
+    assert "Budget lines are linked per LGA" in a.text
+    b = P.area_answer(conn, "greenness by LGA in 1999", "", "en", "state", "NG034", TODAY)
+    assert not b.found and "1999" in b.text
+
+
+def test_the_area_map_draws(conn) -> None:
+    from app.maps.render import MAX_BYTES
+    from app.place.images import area_map
+    img = area_map(conn, {"kind": "area_map", "measure": "modis_peak", "key": "greenness", "year": 2024, "level": "ward",
+                          "unit": "NG034022"}, "en", TODAY)
+    assert img is not None and len(img.jpeg) <= MAX_BYTES and "Wurno LGA, 2024" in img.caption
+    img = area_map(conn, {"kind": "area_map", "measure": "unosat_share", "key": "flood_map", "year": 2022, "level": "lga",
+                          "unit": "NG034"}, "ha", TODAY)
+    assert img is not None and "Jihar Sokoto" in img.caption

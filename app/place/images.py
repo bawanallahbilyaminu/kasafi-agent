@@ -238,6 +238,112 @@ def place_map(chip: Chip, outline: Outline | None, h: H.History, lang: str, lga:
     return MapImage(jpeg, t["map_caption"].format(how=how, day=_day(chip.day, lang)))
 
 
+# --- the ward choropleth (planner answers) ---------------------------------------------------------------------------
+
+AREA_RAMP = ("#eef3ea", "#c7dcc0", "#8fbb8a", "#4f8f5c", "#1f5a40")        # one hue, light -> dark (greenness)
+FLOOD_RAMP = ("#eceff4", "#bcd0e6", "#86aad3", "#4b7fb8", "#1f4e8c")       # one hue, light -> dark (water, floods)
+BARE_RAMP = ("#f4efe6", "#e4cfae", "#d0a870", "#b07c3c", "#7a4f1d")        # one hue (bare soil)
+RAIN_RAMP = FLOOD_RAMP
+A = {
+    "en": {"title": "{short}, {area}, {year}", "title_noyear": "{short}, {area}",
+           "legend": "Colour: {what} per {unit}, five equal-count classes. Grey hatched: low data or no cropland.",
+           "caption": "{short} by {unit} in {area}{year}: {lo} to {hi}; darkest = highest.",
+           "low": "Low data / no cropland", "ward": "ward", "lga": "LGA",
+           "area_lga": "{lga} LGA", "area_state": "Sokoto State",
+           "src": "{source}; boundaries GRID3 wards, OCHA COD-AB LGAs."},
+    "ha": {"title": "{short}, {area}, {year}", "title_noyear": "{short}, {area}",
+           "legend": "Launi: {what} a kowace {unit}, aji biyar masu yawan daidai. Toka mai layuka: ƙarancin bayanai ko babu gona.",
+           "caption": "{short} a kowace {unit} a {area}{year}: daga {lo} zuwa {hi}; mafi duhu = mafi girma.",
+           "low": "Ƙarancin bayanai / babu gona", "ward": "gunduma", "lga": "ƙaramar hukuma",
+           "area_lga": "Ƙaramar Hukumar {lga}", "area_state": "Jihar Sokoto",
+           "src": "{source}; iyakoki gundumomin GRID3, ƙananan hukumomin OCHA COD-AB."},
+}
+
+
+def area_map(conn, s: dict, lang: str, today: date | None = None) -> MapImage | None:
+    """{"kind": "area_map", "measure", "key", "year", "level": ward | lga, "unit": LGA pcode | NG034}."""
+    import geopandas as gpd
+    from shapely import wkb
+    from app.maps.render import base, _draw_base
+    from app.place.planner import MEASURES, W as PW, low_data_cut, rows_for
+    from app.sources.lga_names import name_of
+    t, pw = A["ha" if lang == "ha" else "en"], PW["ha" if lang == "ha" else "en"]
+    key, measure, year, level, unit = s["key"], s["measure"], int(s["year"]), s["level"], s["unit"]
+    spec = MEASURES[key]
+    within = unit if unit != "NG034" else None
+    rows = rows_for(conn, measure, level, year, within)
+    if not rows:
+        return None
+    cut = low_data_cut(rows, measure)
+    vals = {code: v for code, _, v, n in rows if v is not None and (n is None or n > cut)}
+    if level == "ward":
+        q = "SELECT wardcode, name, ST_AsBinary(geom) FROM ward" + (" WHERE lga_pcode = %s" if within else "")
+        recs = conn.execute(q, (within,) if within else ()).fetchall()
+    else:
+        recs = conn.execute("SELECT pcode, name, ST_AsBinary(geom) FROM lga").fetchall()
+    gdf = gpd.GeoDataFrame({"code": [r[0] for r in recs], "name": [r[1] for r in recs]},
+                           geometry=[wkb.loads(bytes(r[2])) for r in recs], crs="EPSG:4326")
+    gdf["value"] = [vals.get(c) for c in gdf["code"]]
+    ramp = {"greenness": AREA_RAMP, "flood": FLOOD_RAMP, "flood_map": FLOOD_RAMP, "water": FLOOD_RAMP,
+            "bare": BARE_RAMP, "rain": RAIN_RAMP}[key]
+    have = sorted(v for v in gdf["value"] if v is not None)
+    if not have:
+        return None
+    breaks = [have[min(len(have) - 1, int(len(have) * q))] for q in (0.2, 0.4, 0.6, 0.8)]
+
+    def cls(v):
+        return sum(1 for b in breaks if v > b)
+
+    lgas, lines = base(conn)
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    fig.subplots_adjust(left=0.02, right=0.98, top=0.86, bottom=0.27)
+    for _, r in gdf.iterrows():
+        if r["value"] is None:
+            gpd.GeoSeries([r.geometry], crs="EPSG:4326").plot(ax=ax, facecolor="#e6e4df", edgecolor="#9a9890", hatch="///",
+                                                              linewidth=0.5, zorder=2)
+        else:
+            gpd.GeoSeries([r.geometry], crs="EPSG:4326").plot(ax=ax, facecolor=ramp[cls(r["value"])], edgecolor="#ffffff",
+                                                              linewidth=0.7, zorder=2)
+    frame = lgas[lgas["pcode"] == within] if within else lgas
+    frame.boundary.plot(ax=ax, color=INK, linewidth=1.4, zorder=4)
+    if within:
+        minx, miny, maxx, maxy = frame.total_bounds
+        pad = max(maxx - minx, maxy - miny) * 0.06
+        ax.set_xlim(minx - pad, maxx + pad)
+        ax.set_ylim(miny - pad, maxy + pad)
+        # the top three and bottom three named on the map
+        ranked = sorted([r for r in gdf.itertuples() if r.value is not None], key=lambda r: -r.value)
+        for r in ranked[:3] + ranked[-3:]:
+            c = r.geometry.representative_point()
+            ax.annotate(r.name, (c.x, c.y), fontsize=SMALL, color=INK, ha="center", va="center", zorder=7,
+                        bbox={"boxstyle": "round,pad=0.2", "fc": "#ffffff", "ec": "none", "alpha": 0.85})
+    else:
+        lgas.boundary.plot(ax=ax, color="#ffffff", linewidth=0.9, zorder=3)
+        if level == "lga":
+            for r in lgas.itertuples():
+                c = r.geometry.representative_point()
+                ax.annotate(r.name, (c.x, c.y), fontsize=pt(13), color=INK, ha="center", va="center", zorder=7)
+    labels = []
+    lo_edges = [have[0]] + breaks
+    hi_edges = breaks + [have[-1]]
+    for i in range(5):
+        labels.append(f"{spec['fmt'].format(lo_edges[i])} – {spec['fmt'].format(hi_edges[i])}")
+    handles = [Patch(facecolor=ramp[i], edgecolor="#ffffff", label=labels[i]) for i in range(5)]
+    handles.append(Patch(facecolor="#e6e4df", edgecolor="#9a9890", hatch="///", label=t["low"]))
+    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.09), ncol=2, fontsize=LEGEND, frameon=False,
+               handlelength=1.6, borderaxespad=0.0)
+    area = t["area_lga"].format(lga=name_of(unit)) if within else t["area_state"]
+    short = pw["short"][key]
+    title = (t["title"] if year else t["title_noyear"]).format(short=short[0].upper() + short[1:], area=area, year=year)
+    source = conn.execute("SELECT source FROM ward_history WHERE measure = %s LIMIT 1", (measure,)).fetchone()[0]
+    unit_word = t[level]
+    jpeg = _finish(fig, ax, title, t["legend"].format(what=short, unit=unit_word), t["src"].format(source=source))
+    caption = t["caption"].format(short=short[0].upper() + short[1:], unit=unit_word, area=area,
+                                  year=f", {year}" if year else "", lo=spec["fmt"].format(have[0]),
+                                  hi=spec["fmt"].format(have[-1]))
+    return MapImage(jpeg, caption)
+
+
 # --- from an answer's spec ---------------------------------------------------------------------------------------
 
 def draw_place(conn, s: dict, lang: str, today: date | None = None) -> MapImage | None:

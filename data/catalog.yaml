@@ -134,6 +134,17 @@ capabilities:
     cites: Copernicus Sentinel-2 L2A (Planetary Computer), JRC Global Surface Water v1.3, ESA WorldCover 2021, Open-Meteo archive
     note: observation only; no causes, inputs, varieties or dates (the ADP extension service is referred to); no land ownership, boundaries or certificates
 
+  - id: place_history_area
+    what: "the satellite record for every ward of an LGA, or every LGA of the state, from the precomputed table (cropland only): peak rainy-season greenness per year since 2001 (MODIS, 250 m) with rain adjustment per ward, Sentinel-1 flood share of normally dry cropland since 2017 (200 m), UNOSAT flood-map share 2022 and 2024, JRC water recurrence 1984–2020, dry-season bare-soil share since 2017, June–October rain; the wards that stand out, a choropleth map, a ranking"
+    kind: structured
+    measures: [greenness, surface_water, bare_soil, flood_share, rainfall, place_history]
+    entity_types: [state, lga, ward]
+    geo_levels: [state, lga, ward]
+    operations: [rank, compare, trend, lookup]
+    time: yearly; precomputed by scripts/precompute_area.py
+    cites: MODIS 13Q1, Sentinel-1 RTC, Sentinel-2 L2A (Planetary Computer), JRC GSW, UNOSAT via HDX, ESA WorldCover, Open-Meteo
+    note: neutral observation; no causes and no verdicts on anyone's work
+
   - id: plot_outline
     what: "the approximate outline of the field at a pin, drawn by SAM 3.1 on a Sentinel-2 true-colour chip (accepted at 0.1–50 ha containing the pin; else a 1 ha circle, said so); never a boundary"
     kind: structured
