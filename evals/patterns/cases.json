@@ -1,0 +1,226 @@
+{
+ "seed": 11,
+ "cases": [
+  {
+   "id": "p1_revenue-01",
+   "pattern": "p1_revenue",
+   "text": "How much revenue does the Ministry of Innovation and Digital Economy expect to collect in 2026?",
+   "lang": "en",
+   "expect": [
+    "100,000,000.00"
+   ],
+   "code": "027900100100"
+  },
+  {
+   "id": "p1_revenue-02",
+   "pattern": "p1_revenue",
+   "text": "How much revenue does the Ministry for Basic Education expect to collect in 2026?",
+   "lang": "en",
+   "expect": [
+    "15,775,000,000.00"
+   ],
+   "code": "051700100100"
+  },
+  {
+   "id": "p1_revenue-03",
+   "pattern": "p1_revenue",
+   "text": "How much revenue does the Sokoto State University expect to collect in 2026?",
+   "lang": "en",
+   "expect": [
+    "315,000,000.00"
+   ],
+   "code": "056900400100"
+  },
+  {
+   "id": "p1_revenue-04",
+   "pattern": "p1_revenue",
+   "text": "How much revenue had the College of Nursing Sciences collected by the end of Q1 2026?",
+   "lang": "en",
+   "expect": [
+    "13,300,000.00"
+   ],
+   "code": "052110400100"
+  },
+  {
+   "id": "p1_revenue-05",
+   "pattern": "p1_revenue",
+   "text": "How much revenue had the Umaru Ali Shinkafi Polytechnic Sokoto collected by the end of Q1 2026?",
+   "lang": "en",
+   "expect": [
+    "4,819,250.00"
+   ],
+   "code": "056901800100"
+  },
+  {
+   "id": "p1_revenue-06",
+   "pattern": "p1_revenue",
+   "text": "How much does the 2026 budget expect to receive for the Nutrition Response (kyautata Rayuwa)- Recurrent?",
+   "lang": "en",
+   "expect": [
+    "500,000,000.00"
+   ]
+  },
+  {
+   "id": "p1_revenue-07",
+   "pattern": "p1_revenue",
+   "text": "How much does the 2026 budget expect to receive for the Federal Government Tetfund Intervention - Capital?",
+   "lang": "en",
+   "expect": [
+    "4,815,562,362.66"
+   ]
+  },
+  {
+   "id": "p2_period-01",
+   "pattern": "p2_period",
+   "text": "How much had the Ministry for Religious Affairs spent by the end of Q1 2026?",
+   "lang": "en",
+   "expect": [
+    "1,021,268,397.91"
+   ],
+   "code": "017200000000",
+   "avoid": [
+    "2,550,588,413.70"
+   ]
+  },
+  {
+   "id": "p2_period-02",
+   "pattern": "p2_period",
+   "text": "How much had the Ministry Careers & Special Services spent by the end of Q1 2026?",
+   "lang": "en",
+   "expect": [
+    "1,844,419,057.46"
+   ],
+   "code": "017000000000",
+   "avoid": [
+    "7,612,786,073.92"
+   ]
+  },
+  {
+   "id": "p2_period-03",
+   "pattern": "p2_period",
+   "text": "Nawa Ministry for Women Affairs ta kashe zuwa ƙarshen Q1 2026?",
+   "lang": "ha",
+   "expect": [
+    "305,197,297.18"
+   ],
+   "code": "051400000000",
+   "avoid": [
+    "388,367,043.02"
+   ]
+  },
+  {
+   "id": "p2_period-04",
+   "pattern": "p2_period",
+   "text": "How much did the Ministry of Lands and Housing spend from January to September 2025?",
+   "lang": "en",
+   "expect": [
+    "33,198,501,951.04"
+   ],
+   "code": "025300000000"
+  },
+  {
+   "id": "p6_multi_part-01",
+   "pattern": "p6_multi_part",
+   "text": "How much was allocated to the Ministry of Justice in 2026, and how much had it spent by the end of Q2 2026?",
+   "lang": "en",
+   "expect": [
+    "6,092,663,285.02",
+    "902,452,728.17"
+   ],
+   "code": "032600000000"
+  },
+  {
+   "id": "p6_multi_part-02",
+   "pattern": "p6_multi_part",
+   "text": "How much was allocated to the Ministry of Social Welfare & Community Development in 2026, and how much had it spent by the end of Q2 2026?",
+   "lang": "en",
+   "expect": [
+    "5,114,755,946.00",
+    "365,484,610.66"
+   ],
+   "code": "055600000000"
+  },
+  {
+   "id": "p6_multi_part-03",
+   "pattern": "p6_multi_part",
+   "text": "Nawa aka ware wa Civil Service Commission a 2026, kuma nawa ta kashe zuwa ƙarshen Q2 2026?",
+   "lang": "ha",
+   "expect": [
+    "403,144,241.41",
+    "141,420,838.18"
+   ],
+   "code": "014700000000"
+  },
+  {
+   "id": "p3_project-01",
+   "pattern": "p3_project",
+   "text": "How much is budgeted for Procurment of 5n0 peugout 406 saloon for members and secretary in 2026?",
+   "lang": "en",
+   "expect": [
+    "10,000,000.00"
+   ]
+  },
+  {
+   "id": "p3_project-02",
+   "pattern": "p3_project",
+   "text": "How much is budgeted for Renovaton of kebbi house and gwandu house at iktc in 2026?",
+   "lang": "en",
+   "expect": [
+    "150,000,000.00"
+   ]
+  },
+  {
+   "id": "p3_project-03",
+   "pattern": "p3_project",
+   "text": "How much is budgeted for Constraction of idp camps at isa, sabon birni and rabah in 2026?",
+   "lang": "en",
+   "expect": [
+    "800,000,000.00"
+   ]
+  },
+  {
+   "id": "p4_narrative-01",
+   "pattern": "p4_narrative",
+   "text": "What does the Sokoto State Budget Implementation Report Q3 2025 say about education expenditure economic classification? What reasons does it give?",
+   "lang": "en",
+   "expect": [],
+   "cites": [
+    "bir-2025-q3",
+    3
+   ]
+  },
+  {
+   "id": "p4_narrative-02",
+   "pattern": "p4_narrative",
+   "text": "What does the Budget Implementation Report Q4 2025 say about education performance overview reports? What reasons does it give?",
+   "lang": "en",
+   "expect": [],
+   "cites": [
+    "bir-2025-q4",
+    2
+   ]
+  },
+  {
+   "id": "p5_not_published-01",
+   "pattern": "p5_not_published",
+   "text": "How many staff does the Ministry for Higher Education employ, and on which grade levels?",
+   "lang": "en",
+   "expect": [
+    "6,722,649,078.46"
+   ],
+   "code": "056900000000",
+   "must_say": "(?i)publish|wallafa|buga"
+  },
+  {
+   "id": "p5_not_published-02",
+   "pattern": "p5_not_published",
+   "text": "How many staff does the Ministry of Water Resources employ, and on which grade levels?",
+   "lang": "en",
+   "expect": [
+    "1,026,195,159.68"
+   ],
+   "code": "025200000000",
+   "must_say": "(?i)publish|wallafa|buga"
+  }
+ ]
+}
