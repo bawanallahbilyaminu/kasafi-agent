@@ -117,6 +117,14 @@ EMERGENCY_WAIT = "__emergency__:"                 # a location request sent by t
 ROAD_WAIT_S = 8.0                                 # how long the emergency follow-up waits for ORS road distances
 
 
+def searching_key(question: str) -> str:
+    """The 'working on it' line: forecasts for a hazard question (heat, dust, rain, rivers, fires; not one about
+    money for them), documents otherwise. Words only: the planner hasn't run yet."""
+    from app.agent.answer import MONEY_WORDS
+    from app.hazards.answer import layers_asked
+    return "searching_forecasts" if layers_asked(question) and not MONEY_WORDS.search(question or "") else "searching"
+
+
 async def _no_notify(out: Out) -> None:
     return None
 
@@ -246,7 +254,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             log.warning("daily spend cap reached")
             return [Out(t("busy", lang))]
         store.add_spend(settings.kasafi_cost_per_question_usd)
-        await notify(Out(t("searching", lang)))   # planning + search + answer: median ~10 s
+        await notify(Out(t(searching_key(question), lang)))   # planning + search + answer: median ~10 s
         sent: list[str] = []
 
         async def still_working() -> None:        # a slow answer (a second search, a fallback) gets one more word

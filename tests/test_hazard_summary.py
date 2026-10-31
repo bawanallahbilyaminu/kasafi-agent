@@ -148,3 +148,16 @@ def test_every_category_has_its_owners_meaning() -> None:
     from app.hazards.categories import AQI_CATEGORIES, HEAT_CATEGORIES
     assert {c for _, c in AQI_CATEGORIES} == set(hs.EPA) == set(hs.EPA_HA)
     assert {c for _, c in HEAT_CATEGORIES} == set(hs.NWS) == set(hs.NWS_HA)
+
+
+@pytest.mark.parametrize("question,key", [
+    ("Whats the dust and air quality today", "searching_forecasts"),
+    ("Yaya zafin rana yake a Goronyo gobe?", "searching_forecasts"),
+    ("Is the river high near Goronyo?", "searching_forecasts"),
+    ("What is the 2026 budget for flood control?", "searching"),
+    ("How much did Sokoto spend on health in 2025?", "searching")])
+def test_hazard_questions_say_they_are_checking_forecasts(question, key) -> None:
+    from app.whatsapp.conversation import searching_key
+    from app.whatsapp.messages import t
+    assert searching_key(question) == key
+    assert t("searching_forecasts", "en") == "🌦️ Checking the latest forecasts…"

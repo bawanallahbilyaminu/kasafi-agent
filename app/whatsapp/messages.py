@@ -157,6 +157,10 @@ TEXTS = {
         "ha": "🔎 Ina duba takardu…",
         "en": "🔎 Checking the documents…",
     },
+    "searching_forecasts": {          # a heat, dust, rain, river or fire question: no documents are read
+        "ha": "🌦️ Ina duba sabbin hasashen yanayi…",
+        "en": "🌦️ Checking the latest forecasts…",
+    },
     "heard_prefix": {
         "ha": "Na ji tambayarka:\n\n«{transcript}»",
         "en": "I heard your question:\n\n«{transcript}»",
