@@ -152,12 +152,13 @@ def generate(conn, rng: random.Random) -> list[dict]:
         phrases = [p for p in re.findall(r"(?:[A-Z][a-z]+ ){2,}[A-Z][a-z]+", body)
                    if not re.search(r"Sokoto State Government|Budget Implementation Report", p)]
         topic = m.group(1).strip() if m else (max(phrases, key=len) if phrases else "")
-        figure = re.search(r"(?<![\d,.])\d{1,3}(?:,\d{3}){2,}(?:\.\d{2})?", body.split("\n", 1)[-1])
-        if topic and figure:                    # a paragraph with a subject the question can name, and a figure
-            prose.append((doc, page, doc_title, topic, figure.group(0)))
-    for doc, page, doc_title, topic, figure in rng.sample(prose, min(3, len(prose))):
+        figures = re.findall(r"(?<![\d,.])\d{1,3}(?:,\d{3}){2,}(?:\.\d{2})?", body.split("\n", 1)[-1])
+        if topic and figures:                   # a paragraph with a subject the question can name, and a figure
+            prose.append((doc, page, doc_title, topic, list(dict.fromkeys(figures))))
+    for doc, page, doc_title, topic, figures in rng.sample(prose, min(3, len(prose))):
+        # any figure the paragraph prints will do: a reply about the section may lead with a different one
         add("p4_narrative", f"What does the {doc_title} say about {topic}, and what reasons does it give?",
-            [figure], cites=[doc, page], narrative=True)
+            [], expect_any=figures, cites=[doc, page], narrative=True)
 
     # p5: staff numbers aren't published: say so and give the agency's personnel figure
     pers = conn.execute("""SELECT DISTINCT ON (code) code, name, approved_2026 FROM budget_items WHERE
@@ -196,6 +197,9 @@ def judge(case: dict, a) -> tuple[str, list[str]]:
         if not any(form in text or form in (a.exact or "") for form in accepted(want)):
             why = f"missing {want}"
             break
+    if not why and case.get("expect_any") and not any(form in text or form in (a.exact or "")
+                                                      for want in case["expect_any"] for form in accepted(want)):
+        why = f"none of {', '.join(case['expect_any'][:3])}"
     if not why and case.get("cites"):
         doc, page = case["cites"]
         if not any(e.doc_id == doc and e.page == page for e in a.cited or []):

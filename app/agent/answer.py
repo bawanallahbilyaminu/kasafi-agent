@@ -64,8 +64,8 @@ from app.agent.calculate import MIXED, CalcError, Calculation, MixedBases, offer
 from app.agent.line_answer import (TOTAL_ASKED, WHOLE_BUDGET, LineResult, clean_name, fmt, is_location, item_of,
                                    kind_of, level, plain_label, read_lines, short_name)
 from app.retrieval import pool
-from app.retrieval.line_search import (MAX_LINES, name_key, names_a_kind, nearest, project_lines, project_phrases,
-                                       search_lines)
+from app.retrieval.line_search import (MAX_LINES, name_key, names_a_kind, nearest, project_lines, project_named,
+                                       project_phrases, search_lines)
 from app.config import Settings, get_settings
 from app.providers.baseten import BasetenClient
 from app.providers.fireworks import FireworksClient, OpenModel
@@ -1157,6 +1157,14 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             if res is not None and (a := analysis_answer(conn, plan, res, lang, t, acq)) is not None:
                 return a
             log.info("analysis gave no answer; falling back")
+        if plan.category and not plan.budget_query and (named := project_phrases(question, plan.english_question)):
+            # the planner read a named project as a kind of spending ('5 Peugeot 406 saloons' -> motor vehicles):
+            # a phrase that is one project line's own name is answered from that line (p3)
+            for n in named[:2]:
+                if own := await pool.run(settings, project_named, conn, n):
+                    log.info("category: the question names the project line %r; its own line answers", own)
+                    plan.category = {}
+                    break
         if plan.category and not plan.budget_query:          # a kind of spending: code adds up its economic codes
             t0 = time.perf_counter()
             year = plan.category["year"]

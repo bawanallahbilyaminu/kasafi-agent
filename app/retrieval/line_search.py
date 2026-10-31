@@ -377,6 +377,25 @@ def project_lines(conn: psycopg.Connection, name: str, *, years: list[int] | Non
     return _with_cells(conn, lines)
 
 
+_NAMED_SQL = """
+SELECT o.own, similarity(lower(o.own), lower(%(name)s)) AS score
+FROM budget_lines l CROSS JOIN LATERAL (SELECT regexp_replace(l.name, '\\s\\d{8,}\\s*-.*$', '') AS own) o
+WHERE l.classification = 'project' AND lower(o.own) %% lower(%(name)s)
+  AND NOT EXISTS (SELECT 1 FROM budget_lines e WHERE e.classification = 'economic' AND lower(e.name) = lower(o.own))
+ORDER BY score DESC LIMIT 1
+"""
+
+
+def project_named(conn: psycopg.Connection, name: str, *, floor: float = 0.75) -> str | None:
+    """The project line a question's phrase names, when the phrase is close to one line's whole name (symmetric
+    trigram similarity, spelling slips allowed: 'Procurment of 5n0 peugout 406 saloon for members and secretary')
+    and that name is no kind of spending (a heading such as 'PURCHASE OF MOTOR VEHICLES' is also an economic
+    line, and 'construction of roads' is only a third of any road's name): a named project is its own line, never
+    a kind of spending summed across the state."""
+    row = conn.execute(_NAMED_SQL, {"name": name}).fetchone()
+    return row[0] if row and float(row[1]) >= floor else None
+
+
 def _with_cells(conn: psycopg.Connection, lines: list[Line]) -> list[Line]:
     if lines:
         by_id = {x.id: x for x in lines}

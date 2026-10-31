@@ -202,3 +202,28 @@ def test_the_reader_level_labels_echoed_in_a_summary_become_plain_words() -> Non
     assert "one agency or unit" not in ag.plain_level_words("the 'one agency or unit' line", "en")
     assert "all spending (total)" not in ag.plain_level_words("Wannan all spending (total) ne", "ha")
     assert ag.plain_level_words("No label here: ₦5.00 billion", "en") == "No label here: ₦5.00 billion"
+
+
+@pytest.fixture(scope="module")
+def conn():
+    psycopg = pytest.importorskip("psycopg")
+    from app.config import get_settings
+    s = get_settings()
+    if not s.has_database:
+        pytest.skip("no database configured")
+    try:
+        c = psycopg.connect(s.db_url(), connect_timeout=3)
+        if not c.execute("SELECT 1 FROM budget_lines WHERE doc_id = 'budget-2026-approved' LIMIT 1").fetchone():
+            pytest.skip("budget_lines not indexed")
+    except psycopg.OperationalError:
+        pytest.skip("dev database not available")
+    yield c
+    c.close()
+
+
+def test_a_named_project_is_its_own_line_but_a_kind_of_spending_is_not(conn) -> None:
+    from app.retrieval.line_search import project_named
+    assert "Peugout 406" in project_named(conn, "Procurment of 5n0 peugout 406 saloon for members and secretary")
+    assert project_named(conn, "purchase of motor vehicles") is None       # also an economic line: a kind
+    assert project_named(conn, "construction of roads") is None            # a third of any road's name
+    assert project_named(conn, "provision of drugs") is None
