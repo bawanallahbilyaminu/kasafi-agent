@@ -338,6 +338,50 @@ def search_lines(conn: psycopg.Connection, terms: list[str], *, year: int | None
     return lines
 
 
+# a project the question names: 'Construction of …', 'Rehabilitation of …' (the words up to the end of the clause)
+PROJECT_PHRASE = re.compile(r"(?i)\b((?:re)?(?:constr|rehab|renov|complet|provi|suppl|procur|purchas|install|upgrad|"
+                            r"expan|establish|drill|equip|fenc|furnish|mainten|erect|electrif|dual|asphalt)\w*\s+"
+                            r"(?:and\s+\w+\s+)?of\s+[^?;,.]{4,140})")      # verb prefixes: typos still match
+
+
+def project_phrases(*texts: str) -> list[str]:
+    """The project names a question gives ('Construction of Kalambaina Road' ...), longest first."""
+    found = [m.group(1).strip() for t in texts if t for m in PROJECT_PHRASE.finditer(t)]
+    found = [re.sub(r"(?i)\s+(?:in|for|during|by)\s+(?:the\s+)?(?:20\d\d|q[1-4]|budget|year)\b.*$", "", p) for p in found]
+    return sorted(dict.fromkeys(p for p in found if len(p) >= 12), key=len, reverse=True)
+
+
+_FUZZY_SQL = """
+SELECT """ + _COLS + """, greatest(word_similarity(lower(%(name)s), lower(o.own)),
+                                   similarity(lower(o.own), lower(%(name)s))) AS score
+FROM budget_lines l JOIN documents d ON d.id = l.doc_id
+CROSS JOIN LATERAL (SELECT regexp_replace(l.name, '\\s\\d{8,}\\s*-.*$', '') AS own) o
+WHERE (lower(%(name)s) <%% lower(o.own) OR lower(o.own) %% lower(%(name)s)) AND """ + _FILTERS + """
+ORDER BY score DESC, l.id
+LIMIT %(cap)s
+"""
+
+
+def project_lines(conn: psycopg.Connection, name: str, *, years: list[int] | None = None,
+                  docs: list[str] | None = None, limit: int = 12, floor: float = 0.45) -> list[Line]:
+    """Lines whose own name matches a project name loosely (pg_trgm word similarity: spelling variants, a word
+    left out or added), in the budgets' project lists and the BIRs' capital project tables, best first."""
+    rows = conn.execute(_FUZZY_SQL, {"name": name, "years": list(years or []), "docs": docs, "spend": "expenditure",
+                                     "cap": limit * 3}).fetchall()
+    lines = [_line(r) for r in rows if float(r[13]) >= floor][:limit]
+    return _with_cells(conn, lines)
+
+
+def _with_cells(conn: psycopg.Connection, lines: list[Line]) -> list[Line]:
+    if lines:
+        by_id = {x.id: x for x in lines}
+        for lid, col, yr, measure, period, amount in conn.execute(
+                "SELECT line_id, column_label, year, measure, period, amount_naira FROM budget_rows "
+                "WHERE line_id = ANY(%s) ORDER BY id", ([x.id for x in lines],)).fetchall():
+            by_id[lid].cells.append(Cell(col, yr, measure, period, Decimal(amount)))
+    return lines
+
+
 def ministry_of(line: Line) -> str:
     """The agency a project line belongs to ('052100100100 - Ministry of Health'), or the line's own name."""
     import re

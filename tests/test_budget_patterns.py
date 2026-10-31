@@ -98,3 +98,35 @@ def test_latest_or_no_period_changes_nothing() -> None:
     plan = _plan("What is the latest capital spending?", doc_ids=["bir-2026-q2"], latest={"series": "sokoto_bir"})
     ag.apply_period(Conn(), plan, plan.english_question, date(2026, 10, 31))
     assert plan.period_doc == "" and plan.latest and plan.doc_ids == ["bir-2026-q2"]
+
+
+# --- 3. projects named: found by fuzzy name before 'not found' ------------------------------------------------
+
+@pytest.mark.parametrize("q,want", [
+    ("How much is budgeted for Construction of Offa Road in Sokoto Metropolis in 2026?",
+     "Construction of Offa Road in Sokoto Metropolis"),
+    ("How much was spent on constraction of water supply at Rugar Liman by Q2 2026?",
+     "constraction of water supply at Rugar Liman"),
+    ("What about the Rehabilitation and Upgrading of Specialist Hospital?",
+     "Rehabilitation and Upgrading of Specialist Hospital"),
+    ("How much for health in 2026?", None)])
+def test_the_project_a_question_names(q, want) -> None:
+    from app.retrieval.line_search import project_phrases
+    got = project_phrases(q)
+    assert (got[0] if got else None) == want
+
+
+def test_misspelt_project_names_are_found_in_the_project_lists() -> None:
+    import psycopg
+
+    from app.config import get_settings
+    from app.retrieval.line_search import project_lines
+    try:
+        conn = psycopg.connect(get_settings().db_url(), connect_timeout=3)
+    except Exception:
+        pytest.skip("no database")
+    with conn:
+        if not conn.execute("SELECT 1 FROM budget_lines WHERE doc_id = 'budget-2026-approved' LIMIT 1").fetchone():
+            pytest.skip("no 2026 budget lines")
+        got = project_lines(conn, "constraction of water supply at rugar liman", years=[2026])
+        assert any("Rugar Liman" in x.name and x.cells for x in got)

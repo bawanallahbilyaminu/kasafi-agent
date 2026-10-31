@@ -63,7 +63,8 @@ from app.agent.category import TOP_UNITS, CategoryResult, pct, run_category
 from app.agent.calculate import MIXED, CalcError, Calculation, MixedBases, offer_text, validate
 from app.agent.line_answer import (TOTAL_ASKED, WHOLE_BUDGET, LineResult, fmt, is_location, item_of, kind_of, level,
                                    read_lines, short_name)
-from app.retrieval.line_search import MAX_LINES, name_key, names_a_kind, nearest, search_lines
+from app.retrieval.line_search import (MAX_LINES, name_key, names_a_kind, nearest, project_lines, project_phrases,
+                                       search_lines)
 from app.config import Settings, get_settings
 from app.providers.baseten import BasetenClient
 from app.providers.fireworks import FireworksClient, OpenModel
@@ -1119,6 +1120,9 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         page = partial(_page_path, conn, plan, question, lang, client, settings, acq=acq, latest=latest, prev=prev,
                        context=context, recheck_note=recheck_note, second=second)
         lines = {} if plan.budget_query else (plan.line_search or fallback_line_search(plan, question))
+        if not lines and not plan.budget_query and (named := project_phrases(question, plan.english_question)):
+            lines = {"terms": named[:3], "spend": "expenditure",       # a named project: its rows, by fuzzy name
+                     "years": sorted({int(y) for y in question_years(question, plan.english_question)})}
         if not lines:
             return await page(t)
         # Every budget question: the budget lines and the pages are searched side by side, not one after the other
@@ -1858,6 +1862,15 @@ async def _line_path(conn, plan: Plan, question: str, lang: str, client, second,
     hits = search_lines(conn, plan.line_search["terms"], years=plan.line_search["years"],
                         spend=plan.line_search.get("spend", "any"), question=plan.english_question,
                         docs=line_docs(conn, plan))
+    # a project the question names ('Construction of …'): its rows by fuzzy name in the budgets' project lists and
+    # the BIRs' capital project tables come first, so spelling variants are found before any 'not found'
+    for phrase in project_phrases(question, plan.english_question)[:2]:
+        have = {x.id for x in hits}
+        named = [x for x in project_lines(conn, phrase, years=plan.line_search["years"], docs=line_docs(conn, plan))
+                 if x.id not in have]
+        if named:
+            log.info("project named: %d rows by fuzzy name", len(named))
+            hits = [*named, *hits]
     t["search"] = t["line_search"] = time.perf_counter() - t0
     log.info("line search: %d terms, %d hits", len(plan.line_search["terms"]), len(hits))
     if not hits:
