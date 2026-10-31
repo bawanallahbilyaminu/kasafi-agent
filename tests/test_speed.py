@@ -187,3 +187,9 @@ def test_a_revenue_narrative_question_reads_the_rows_and_pages_not_the_fixed_sum
     assert ag.revenue_rows_needed(q, ag.Plan(q, [], []))
     q2 = "What was the state's total revenue in 2025?"
     assert not ag.revenue_rows_needed(q2, ag.Plan(q2, [], []))
+
+
+def test_a_narrative_question_reads_the_whole_page_else_the_hits_and_their_neighbours() -> None:
+    assert ag.page_chunks_wanted([0], whole=False) == [0, 1]
+    assert ag.page_chunks_wanted([2, 5], whole=False) == [1, 2, 3, 4, 5, 6]
+    assert ag.page_chunks_wanted([0], whole=True) is None

@@ -596,11 +596,13 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
             by_page.setdefault((h.doc_id, h.page), []).append(h)
     ranked = [hs[0] for hs in by_page.values()]
     texts = {}
+    whole = narrative_asked(plan)     # a narrative section runs across a page's chunks: the whole page is read
     for (doc_id, page), hs in by_page.items():
         hit_idx = [h.idx for h in hs]
-        wanted = sorted({i for h in hs for i in (h.idx - 1, h.idx, h.idx + 1) if i >= 0})
-        rows = dict(conn.execute("SELECT idx, text FROM chunks WHERE doc_id = %s AND page = %s AND idx = ANY(%s)",
-                                 (doc_id, page, wanted)).fetchall())
+        wanted = page_chunks_wanted(hit_idx, whole)
+        rows = dict(conn.execute("SELECT idx, text FROM chunks WHERE doc_id = %s AND page = %s "
+                                 "AND (%s::int[] IS NULL OR idx = ANY(%s::int[]))",
+                                 (doc_id, page, wanted, wanted)).fetchall())
         # The chunks that matched come first and their neighbours after, so the evidence cut-off never
         # drops the row that matched (p40's "04 Health" total was cut off behind three big neighbours).
         order = [i for i in hit_idx if i in rows] + sorted(i for i in rows if i not in hit_idx)
@@ -685,6 +687,15 @@ def line_evidence(conn: psycopg.Connection, plan: Plan, have: list[Evidence]) ->
                      "\n".join(dict.fromkeys(f"[Table: {x.table_title}]" + (f" [{level(x)}]" if level(x) else "")
                                              + f"\n{x.row_text}" for x in ls[:4]))[:EVIDENCE_CHARS])
             for i, ((d, p), ls) in enumerate(pages.items(), start=1)]
+
+
+def page_chunks_wanted(hit_idx: list[int], whole: bool) -> list[int] | None:
+    """The chunks of a page to read: each hit with its neighbours either side, or (a narrative question) every
+    chunk, as the reasons a report gives can sit two chunks below the heading that matched (bir-2025-q3 p4:
+    the intro matched 'Sokoto State', the revenue reasons were in the page's third chunk)."""
+    if whole:
+        return None
+    return sorted({i for idx in hit_idx for i in (idx - 1, idx, idx + 1) if i >= 0})
 
 
 def _join_chunks(chunks: list[str]) -> str:
