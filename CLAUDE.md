@@ -58,7 +58,7 @@ Some details are not confirmed yet. Look them up (dev.meta.ai docs, provider doc
 
 ## Status (as of Oct 31, 2026)
 
-**Live: `3ea68e0`** at https://kasafi-api.halalnumeriq.com.ng, deployed with `deploy/deploy.sh`.
+**Live: `059e77c`** (plus the docs commit after it) at https://kasafi-api.halalnumeriq.com.ng, deployed with `deploy/deploy.sh`.
 - **Documents:** budgets and performance reports (structured core plus line search), topic sweeps across publishers (`app/agent/topics.py`, L32), fetching on demand, the admin trace and review pages.
 - **Hazard steps 1–5 of 7 are live** (`docs/hazard-and-services.md`):
   - location intake (the point in memory for 30 min, only the LGA stored);
@@ -105,7 +105,8 @@ Some details are not confirmed yet. Look them up (dev.meta.ai docs, provider doc
   - pre-deploy eval: fresh 52 at 0 wrong (median 5.4 s), topics 12 at 0 wrong, advisories 5 at 0 wrong.
   - Still waiting on Bilyaminu: the correct types for Hussaini Medical Center and Noma Hospital.
 - **Hazard step 6 (alerts): ON in dry-run mode on the server** since Oct 31 (`KASAFI_ALERTS=true` and the number key came through `--sync-env` from Bilyaminu's `.env`; `KASAFI_ALERTS_DRY_RUN` stays at its default true). Alerts go to `/admin/alerts`, never to users. Bilyaminu switches dry run off himself once the English template is approved. Recipients: only subscribers' numbers are stored, encrypted (`KASAFI_ALERTS_NUMBER_KEY`), and deleted on STOP, DELETE MY DATA or 90 days without contact. Season dust needs AQI 201+ and the last 30 days' 95th percentile.
-- **Next:** step 7 (evals, docs, demo). The full 39 eval runs on Tue Nov 3 only (`evals/`).
+- **Oct 31 speed round, live at `059e77c`:** searches run in worker threads on a connection pool (`app/retrieval/pool.py`), keyword and vector line search side by side, an entity/level/period check in code on every answer (`app/agent/consistency.py`) with the model-based parts check only for multi-part questions, redo searches only for the missing part, crops rendered during the checks. Gate (`evals/speed-gate-1031.md`): fresh 50 at 0 wrong (median 5.4→3.8 s, p90 12.2→6.3 s), patterns 22 at 0 wrong (median 21.8→8.2 s), topics 12 and advisories 5 at 0 wrong; three questions at once median 8.9 s vs 7.2 s alone. Correctness fixes found on the way are lesson L34.
+- **Next:** step 7 (evals, docs, demo). The full 39 eval runs on Tue Nov 3 only (`evals/`). Follow-up: a question naming no kind of spending should take the total in code on the structured path too (planner `splits` variance on false-premise questions).
 - **Open items:**
   - Bilyaminu to fill `data/geo/facility_corrections.yaml` (Alheri Clinic and Sarda Quarters share one registry point).
   - The Goronyo river point needs Bilyaminu's confirmation.
