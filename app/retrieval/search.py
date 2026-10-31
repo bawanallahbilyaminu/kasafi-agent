@@ -7,6 +7,7 @@ term when too few chunks match. All of this is one round-trip.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 import psycopg
@@ -64,11 +65,40 @@ ORDER BY rank DESC LIMIT %(k)s
 """
 
 
+# Everyday words for indicators that surveys print under their technical names: NDHS Table 11.1 heads Sokoto's
+# 42.8% stunting "Height-for-age1 ... below -2 SD" and never says "stunted", so a question's words alone can't reach
+# it. The printed name 'or' its first word: a footnote mark glued to it ("age1") breaks the full name's match.
+PRINTED_AS = (
+    (re.compile(r"(?i)\bstunt\w*"), "height-for-age or height"),
+    (re.compile(r"(?i)\bwast(?:ed|ing)\b"), "weight-for-height or weight"),
+    (re.compile(r"(?i)\bunderweight\b"), "weight-for-age or weight"),
+)
+
+
+def printed_names(query: str) -> list[str]:
+    """The printed names of the indicators a query names in everyday words ('stunted' -> 'height-for-age')."""
+    return [printed.split(" or ")[0] for pat, printed in PRINTED_AS if pat.search(query or "")]
+
+
+def printed_query(query: str) -> str:
+    """The query with each everyday indicator word replaced by the name surveys print, or '' when none."""
+    out = query
+    for pat, printed in PRINTED_AS:
+        out = pat.sub(printed, out)
+    return out if out != query else ""
+
+
 def search(conn: psycopg.Connection, query: str, *, k: int = 8, doc_ids: list[str] | None = None,
            key_rows: bool = False) -> list[Hit]:
     """key_rows=True searches only labelled single-row chunks ("[Table: ...]" + one table row): exact facts
-    such as a ministry's total, which keyword ranking over whole pages tends to bury."""
+    such as a ministry's total, which keyword ranking over whole pages tends to bury. A query naming an indicator
+    in everyday words also runs with its printed name, and the best hits of both are kept."""
     rows = conn.execute(SQL, {"q": query, "k": k, "docs": doc_ids, "key_rows": key_rows}).fetchall()
+    if alt := printed_query(query):
+        seen = {(r[0], r[3], r[6]) for r in rows}
+        more = [r for r in conn.execute(SQL, {"q": alt, "k": k, "docs": doc_ids, "key_rows": key_rows}).fetchall()
+                if (r[0], r[3], r[6]) not in seen]
+        rows = sorted(rows + more, key=lambda r: -r[5])[:k]
     return [Hit(*r) for r in rows]
 
 

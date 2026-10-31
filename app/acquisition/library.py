@@ -70,6 +70,8 @@ def log_gap(conn: psycopg.Connection, question: str, missing_doc: str, reason: s
 
 
 def fetches_today(conn: psycopg.Connection) -> int:
+    """Documents fetched for users' questions in the last 24 hours (and failed tries); a scheduled crawler's
+    ('scheduled') don't count: its own budget is a monthly spend cap."""
     fetched = conn.execute("SELECT count(*) FROM documents WHERE acquisition = 'fetched' "
                            "AND fetched_at > now() - interval '1 day'").fetchone()[0]
     failed = conn.execute("SELECT count(*) FROM gaps WHERE reason IN ('not_found', 'fetch_failed') "
@@ -130,9 +132,12 @@ def _known(conn: psycopg.Connection, *, url: str = "", sha: str = "") -> str | N
 async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, *, settings: Settings,
                           client: ChatClient, http: httpx.AsyncClient, robots: Robots | None = None,
                           series: str | None = None, edition: str | None = None,
-                          download_timeout: httpx.Timeout | None = None, allowed=host_allowed) -> Acquired:
+                          download_timeout: httpx.Timeout | None = None, allowed=host_allowed,
+                          scheduled: bool = False) -> Acquired:
     """`series`/`edition`: the edition we were looking for (find_latest); the document must match it.
-    `allowed`: the domain check for every hop (an open-web result: review.open_web_trusted)."""
+    `allowed`: the domain check for every hop (an open-web result: review.open_web_trusted).
+    `scheduled`: fetched by a scheduled crawler (the NCDC reports): kept as acquisition 'scheduled', so it doesn't
+    use up the daily fetch limit that users' questions draw on."""
     t: dict[str, float] = {}
     if known := _known(conn, url=url):
         return Acquired("known", known, url=url)
@@ -175,7 +180,8 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
         doc = {"id": doc_id, "title": str(meta.get("title") or description)[:300],
                "category": meta.get("category") if meta.get("category") in CATEGORIES else None,
                "year": year, "publisher": str(meta.get("publisher") or "")[:200] or None,
-               "source_url": url, "final_url": dl.final_url, "fetched_at": dl.fetched_at, "acquisition": "fetched",
+               "source_url": url, "final_url": dl.final_url, "fetched_at": dl.fetched_at,
+               "acquisition": "scheduled" if scheduled else "fetched",
                "series": got_series, "edition": got_edition if got_series else None}
         t0 = time.perf_counter()
         res = index_document(conn, doc, path, pages=pages, sha=sha, image_pages=image_pages)

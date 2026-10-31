@@ -49,7 +49,7 @@ from app.acquisition.registry import Publisher, Topic, registry
 from app.config import Settings
 from app.providers.chat import ChatClient
 from app.providers.stt import parse_json_reply
-from app.retrieval.search import search
+from app.retrieval.search import printed_names, printed_query, search
 from app.sources import dtm as dtm_api
 
 log = logging.getLogger(__name__)
@@ -176,6 +176,14 @@ def named_publishers(topic: Topic, text: str) -> list[Publisher]:
 _EVERYDAY = {"reach", "impact", "hac", "idp", "sema"}
 
 
+def other_topics(text: str, topic_id: str) -> list[Topic]:
+    """The other multi-source topics the text names by their synonyms ('unemployment' in a displacement question)."""
+    from app.acquisition.registry import _pattern
+    norm = text.replace("’", "'").replace("‘", "'")
+    return [t for t in registry().topics.values() if t.id != topic_id and t.answer_pattern == "multi_source"
+            and (pat := _pattern(t.synonyms_en + t.synonyms_ha)) and pat.search(norm)]
+
+
 # --- 2. the newest document ------------------------------------------------------------------------------------
 
 _YEAR = re.compile(r"\b(20\d\d)\b")
@@ -222,10 +230,21 @@ def local_documents(conn: psycopg.Connection, p: Publisher) -> list[tuple]:
         elif host and any(host == d or host.endswith("." + d) for d in p.domains) and need \
                 and len(own & _title_words(r[1])) >= need:
             out.append(r)
-        elif not p.domains and any(a in r[1] for a in _ACRONYM.findall(p.name) if a not in ("NBS", "FCT", "SBS")) \
+        elif not p.domains and any(a in r[1] or spelled_out(a, r[1]) for a in _ACRONYM.findall(p.name)
+                                   if a not in ("NBS", "FCT", "SBS")) \
                 and (not place or "sokoto" in r[1].lower()):
             out.append(r)
     return out
+
+
+_SMALL = {"and", "of", "the", "for", "in", "on"}
+
+
+def spelled_out(acronym: str, title: str) -> bool:
+    """The title spells the acronym out: 'Nigeria Demographic and Health Survey 2024' is NDHS (small words skipped),
+    so the NDHS report, whose title never prints 'NDHS', belongs to a publisher named for it."""
+    initials = "".join(w[0] for w in re.findall(r"[A-Za-z]+", title) if w.lower() not in _SMALL).upper()
+    return len(acronym) >= 3 and acronym.upper() in initials
 
 
 def fresh_enough(p: Publisher, row: tuple, today: date) -> bool:
@@ -497,7 +516,8 @@ CARD_SYSTEM = (
 _GROUPS = (("children", r"\bchild|\bunder[- ]?5|\baged? 0|\bunder[- ]?five|\binfant"), ("women", r"\bwom[ae]n|\bfemale"),
            ("men", r"\bmen\b|\bmale\b"), ("adults", r"\badult"), ("youth", r"\byouth|\b15[–-]24|\b15[–-]35"),
            ("urban", r"\burban"), ("rural", r"\brural"), ("idps", r"\bidps?\b|displaced"),
-           ("households", r"\bhouseholds?\b"))
+           # a figure for households, not a sample size ('sampling over 56,000 households', SBS MPI 2025 p17)
+           ("households", r"(?<!\d )\bhouseholds?\b"))
 
 
 def population_of(said: str, what: str) -> str:
@@ -522,6 +542,10 @@ def measure_of(value: str, unit: str, said: str, what: str = "") -> str:
     between 0 and 1 without a %; the figure's own label ('Intensity of Poverty (A)', 'Headcount Ratio') names
     its kind before the model's word (an intensity printed 0.40328 is no MPI value); the model's word stands
     only where the printed figure allows it."""
+    # a change, not a level ('a reduction of 32 percentage points', SBS MPI 2025 p36): never one side of a change
+    if re.search(r"(?i)percentage points?|\bpp\b", f"{value} {unit}") or \
+            re.search(r"(?i)^\s*(?:the\s+)?(?:reduction|decrease|decline|increase|rise|fall|drop|change)\b", what):
+        return "other"
     pct = value.strip().endswith("%") or unit.strip().lower() in ("%", "percent", "per cent", "percentage")
     m = re.search(r"\d[\d,]*(?:\.\d+)?", value)
     n = float(m.group(0).replace(",", "")) if m else None
@@ -564,7 +588,8 @@ def printed_words(phrase: str, text: str) -> bool:
     return bool(words) and all(w.lower() in low for w in words)
 
 
-SOKOTO_ROW = re.compile(r"(?i)\bsokoto\s+\d[\d.,]*\s+\d[\d.,]*\s+\d")      # a table row: Sokoto, then figures
+# a table row: Sokoto, then figures (a z-score prints with a minus sign: 'Sokoto 14.8 42.8 −2.0 332', NDHS p366)
+SOKOTO_ROW = re.compile(r"(?i)\bsokoto\s+[−–-]?\d[\d.,]*\s+[−–-]?\d[\d.,]*\s+[−–-]?\d")
 
 
 def quoted_from(value: str, page_text: str, topic: Topic, own: Publisher, own_year: int | None = None) -> str:
@@ -622,26 +647,59 @@ def page_order(text: dict[int, str], question: str, by_state: bool = True) -> li
     words = {w for w in re.findall(r"[a-z]{3,}", question.lower())
              if w not in ("the", "and", "what", "how", "much", "has", "according", "sokoto", "state")}
     asked = population_of("", question)
+    names = printed_names(question)                  # 'stunted': the table headed 'Height-for-age'
+    # the measures asked (any topic's synonyms the question uses: 'unemployment', 'IDPs'), before other words: a
+    # report's introduction repeats its publishers' names and 'survey', its Annex I table has the measure
+    measures = {s.lower() for t in registry().topics.values() for s in t.synonyms_en
+                if re.search(rf"(?i)\b{re.escape(s)}\b", question)}
+    years = set(re.findall(r"\b20\d\d\b", question))  # 'in 2022': the page quoting the 2022 figure (SBS p17)
 
     def key(p: int) -> tuple:
         low = text[p].lower()
         group = population_of("", low[:600])          # a table's own title says whose figures it has
+        # a word counts by its first six letters: 'unemployment' asked, 'Unemployed' printed
         return ("sokoto" in low, by_state and bool(SOKOTO_ROW.search(text[p])), group == asked or group == "all",
-                sum(w in low for w in words))
+                sum(y in low for y in years), any(n in low[:800] for n in names), sum(m[:6] in low for m in measures),
+                sum(w[:6] in low for w in words))
     return sorted(text, key=key, reverse=True)
+
+
+_TABLE_TITLE = re.compile(r"(?im)^\s*(?:\|\s*)?Table\s+\d+[\w.]*\s*[:.\-—]\s*[^\n|]{3,150}")
+
+
+def continued_from(conn, doc_id: str, page: int, text: str) -> str:
+    """'(continues Table 14: Discouraged Job Seekers by State and Sex, from page 50)' for a page that opens without
+    a table title while the page before ends in a titled table; '' otherwise. NLFS 2023 p51 prints Sokoto's
+    discouraged job seekers (0.3) under no title, and was read as the unemployment rate."""
+    if _TABLE_TITLE.search(text[:400]):
+        return ""
+    row = conn.execute("SELECT text FROM pages WHERE doc_id = %s AND page = %s", (doc_id, page - 1)).fetchone()
+    titles = _TABLE_TITLE.findall(row[0] or "") if row else []
+    return f"(continues {' '.join(titles[-1].split())}, from page {page - 1})\n" if titles else ""
 
 
 async def fact_cards(conn: psycopg.Connection, src: SourceResult, topic: Topic, question: str, client: ChatClient,
                      settings: Settings, want: str = "") -> list[Card]:
     """`want`: measures to copy first (the ones another source gave, so the two can be compared)."""
     hits = search(conn, topic_query(topic, f"{question} {want}"), k=30, doc_ids=[src.doc_id])
+    # a measure from another topic ('unemployment' asked of the IDP survey, its Annex I p68) is drowned by this
+    # topic's own words in that query: searched on its own too
+    other = [s for t in other_topics(question, topic.id) for s in t.synonyms_en
+             if re.search(rf"(?i)\b{re.escape(s)}\b", question)]
+    if other:
+        hits += search(conn, " or ".join(other), k=10, doc_ids=[src.doc_id])
     ranked = list(dict.fromkeys(h.page for h in hits))
-    # a dense state table ranks low in keyword search: the pages that print a Sokoto row are candidates too
-    ranked += [r[0] for r in conn.execute(r"SELECT page FROM pages WHERE doc_id = %s AND text ~* 'sokoto\s+[0-9]' "
-                                          "ORDER BY page LIMIT 40", (src.doc_id,)) if r[0] not in ranked]
+    # a dense state table ranks low in keyword search: the pages that print a Sokoto row are candidates too, the
+    # ones sharing most of the question's words (with indicators' printed names) first, not the first by page
+    # number: NDHS 2024 prints a Sokoto row on hundreds of pages, its stunting table on p366
+    asked = f"{question} {want} {printed_query(question)}"
+    ranked += [r[0] for r in conn.execute(
+        r"SELECT page FROM pages WHERE doc_id = %s AND text ~* 'sokoto\s+[0-9]' ORDER BY ts_rank_cd("
+        r"to_tsvector('english', text), to_tsquery('english', replace(websearch_to_tsquery('english', %s)::text, "
+        r"' & ', ' | '))) DESC, page LIMIT 40", (src.doc_id, asked)) if r[0] not in ranked]
     text = {p: (conn.execute("SELECT text FROM pages WHERE doc_id = %s AND page = %s", (src.doc_id, p)).fetchone()
                 or [""])[0] for p in ranked}
-    pages = {p: text[p] for p in page_order(text, f"{question} {want}", src.publisher.level_rank >= 1)[:CARD_PAGES]}
+    pages = {p: text[p] for p in page_order(text, asked, src.publisher.level_rank >= 1)[:CARD_PAGES]}
     if not pages:
         return []
     own_year = (conn.execute("SELECT year FROM documents WHERE id = %s", (src.doc_id,)).fetchone() or [None])[0]
@@ -655,7 +713,8 @@ async def fact_cards(conn: psycopg.Connection, src: SourceResult, topic: Topic, 
              if p.definition_note else "")
     if want:
         extra += f"Copy first, if printed for Sokoto: {want}. "
-    body = "\n\n".join(f"--- page {n} ---\n{t[:PAGE_CHARS]}" for n, t in pages.items())
+    body = "\n\n".join(f"--- page {n} ---\n{continued_from(conn, src.doc_id, n, t)}{t[:PAGE_CHARS]}"
+                       for n, t in pages.items())
     messages = [{"role": "system", "content": CARD_SYSTEM.format(extra=extra)},
                 {"role": "user", "content": f"QUESTION: {question}\nDOCUMENT: {src.title}\n\n{body}"}]
     d = {}
@@ -680,8 +739,9 @@ async def fact_cards(conn: psycopg.Connection, src: SourceResult, topic: Topic, 
             based = str(f.get("based_on") or "")[:60]
             if based and not printed_words(based, " ".join(pages.values())):
                 based = ""                   # a source the pages don't name isn't claimed
-            # the code check too: the text before the figure names another publisher's report
-            based = based or quoted_from(value, pages[page], topic, p, own_year)
+            # the code check first: the text before the figure names another publisher's report (the model may
+            # name the quoting report itself as the source: SBS MPI p17's 91% is the 2022 National MPI's)
+            based = quoted_from(value, pages[page], topic, p, own_year) or based
             unit, what = str(f.get("unit") or "")[:40], str(f.get("what") or "")[:160]
             cards.append(Card(p, src.doc_id, src.title, page, value, unit, what, str(f.get("ref_date") or "")[:60],
                               str(f.get("geography") or "")[:60], str(d.get("edition") or "")[:60], based,
@@ -702,6 +762,7 @@ W = {
            "based": "the statewide figures of {names} are {source} counts, not separate counts; they differ by "
                     "round and date",
            "based_one": "{names} is a {source} count, not a separate count; they differ by round and date",
+           "quoted_one": "the {value} in {doc} is {source}'s own figure, quoted there (rounded), not a separate one",
            "via": "via {names}",
            "same": "the same number ({value}) appears in {a} ({da}) and {b} ({db}): the later one repeats that count, "
                    "it isn't a new one",
@@ -735,6 +796,7 @@ W = {
            "based": "alƙaluman jiha na {names} ƙidayar {source} ne, ba ƙidaya daban ba; zagaye da kwanan wata ne "
                     "suka bambanta",
            "based_one": "{names} ƙidayar {source} ce, ba ƙidaya daban ba; zagaye da kwanan wata ne suka bambanta",
+           "quoted_one": "{value} a cikin {doc} alƙaluman {source} ne da aka ambata a can (an tattara), ba daban ba",
            "via": "ta hannun {names}",
            "same": "adadi ɗaya ({value}) ne a {a} ({da}) da {b} ({db}): na baya maimaita wannan ƙidayar ne, ba sabuwa ba",
            "dates": "lokutansu sun bambanta ({dates})", "geo": "wuraren da suka shafa sun bambanta ({areas})",
@@ -790,6 +852,12 @@ def source_label(c: Card, lang: str) -> str:
     return short_pub(c.publisher)
 
 
+def quoted_earlier(c: Card) -> bool:
+    """The figure is from an earlier year than the edition printing it (a baseline quoted from another survey)."""
+    editions = [int(y) for y in _YEAR.findall(c.edition or "")]
+    return bool(editions) and 0 < card_year(c) < max(editions)
+
+
 def card_year(c: Card) -> int:
     """The year the figure refers to: its date, else the year of the report it is cited from, else the edition."""
     for text in (c.ref_date, c.based_on if cited_from_other(c) else "", c.edition):
@@ -832,8 +900,11 @@ def change_lines(cards: list[Card], question: str, lang: str) -> list[str]:
     for m, pop, area in sorted(groups, key=lambda g: (COMPARED.index(g[0]), g[1] != "all", g[2] != "state")):
         # the same measure of the same population for the same area (a Child MPI is not the MPI, a district's
         # not the state's); a publisher's own figure before a document's quote of it
+        # ... and for each year, a figure measured in its own edition first: a 2022 figure printed in a 2025 report
+        # is a quote of an earlier survey (SBS MPI 2025 p36's '2022 baseline 91%' is NBS's), even unlabelled
         same = sorted((c for c in cards if c.measure == m and (c.population or "all") == pop and area_of(c) == area
-                       and _amount(c) is not None and card_year(c)), key=cited_from_other)
+                       and _amount(c) is not None and card_year(c)),
+                      key=lambda c: (cited_from_other(c), quoted_earlier(c)))
         years = sorted({card_year(c) for c in same})
         if len(years) < 2:
             continue
@@ -849,8 +920,10 @@ def change_lines(cards: list[Card], question: str, lang: str) -> list[str]:
         direction = w["fell"] if diff < 0 else w["rose"] if diff > 0 else w["unchanged"]
         pa, pb = f"{source_label(a, lang)}, {years[0]}", f"{source_label(b, lang)}, {years[-1]}"
         what = (label[m] or m) + ("" if pop == "all" else f", {pop}") + ("" if area == "state" else f", {area}")
-        out.append(w["change"].format(what=what, a=a.value, b=b.value, pa=pa, pb=pb, direction=direction,
-                                      diff=size))
+        # a percentage measure says its unit on both sides (a table cell prints '90.5', the text '59.1%')
+        unit = (lambda v: v if v.endswith("%") else f"{v}%") if m in ("headcount", "intensity") else (lambda v: v)
+        out.append(w["change"].format(what=what, a=unit(a.value.strip()), b=unit(b.value.strip()), pa=pa, pb=pb,
+                                      direction=direction, diff=size))
         origin = lambda c: c.based_on.lower() if cited_from_other(c) else c.publisher.id      # noqa: E731
         if origin(a) != origin(b):
             out.append(w["comparable"].format(pa=pa, pb=pb))
@@ -918,6 +991,10 @@ def why_differ(cards: list[Card], lang: str) -> str:
             counted.setdefault(o.publisher.id, []).append((c, note))
     for pid, cs in counted.items():
         src = next(o for o in main if o.publisher.id == pid)
+        if len(cs) == 1 and cs[0][0].measure != "count":    # a rate or index quoted from the source's report
+            c = cs[0][0]
+            reasons.append(w["quoted_one"].format(value=c.value, doc=c.title, source=short_pub(src.publisher)))
+            continue
         names = " / ".join(f"{short_pub(c.publisher)} ({c.value}{', ' + note if note else ''})" for c, note in cs)
         reasons.append(w["based" if len(cs) > 1 else "based_one"].format(names=names, source=short_pub(src.publisher)))
     if counted:
@@ -1129,8 +1206,22 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
             text = await publishers_answer(conn, topic, lang, settings, http)
             return TopicResult(topic_id, text, True, False, [], [], [], {"topic": time.perf_counter() - t0})
         primary, context = choose_publishers(topic)
-        # "according to NBS ... according to SBS": each named publisher's own document is required
-        if named := named_publishers(topic, f"{question} {english} {previous}"):
+        own_topic: dict[str, Topic] = {}                 # a publisher from another topic reads with that topic
+        # "according to NBS ... according to SBS": each named publisher's own document is required, also when the
+        # question spans two topics ("unemployment according to NBS, and the JIPS/DRC survey for IDPs")
+        said = f"{question} {english} {previous}"
+        named = named_publishers(topic, said)
+        for other in other_topics(said, topic_id):
+            # one publisher per other topic: the first of its main sources the question names, whose document
+            # isn't one already named (the JIPS/DRC town survey is a publisher on both topics)
+            have = {d[0] for x in named for d in local_documents(conn, x)}
+            fits = {p.id for p in named_publishers(other, said)}
+            pick = next((p for p in choose_publishers(other)[0] if p.id in fits and p.id not in {x.id for x in named}
+                         and not {d[0] for d in local_documents(conn, p)} & have), None)
+            if pick is not None:
+                named.append(pick)
+                own_topic[pick.id] = other
+        if named:
             primary, context = named[:3], []
         if notify and len(primary) > 1:
             await notify(PROGRESS.get(lang, PROGRESS["en"]).format(
@@ -1141,10 +1232,11 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
         async def one(p: Publisher) -> SourceResult:
             if "dtm_api" in p.discovery and settings.dtmapi_subscription_key:    # figures from the API, not PDFs
                 return await dtm_api_source(p, http, settings)
-            src = await get_document(conn, p, topic, today, http=http, robots=robots, client=client,
+            its = own_topic.get(p.id, topic)
+            src = await get_document(conn, p, its, today, http=http, robots=robots, client=client,
                                      settings=settings)
             if src.doc_id:
-                src.cards = await fact_cards(conn, src, topic, ask, client, settings)
+                src.cards = await fact_cards(conn, src, its, ask, client, settings)
                 if not src.cards and src.status == "ok":
                     src.status = "no_figure"
             return src

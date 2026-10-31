@@ -1297,7 +1297,7 @@ def topic_route(question: str, plan: Plan) -> str:
     if (plan.line_search or plan.budget_query or plan.analysis or plan.category) and MONEY_WORDS.search(text):
         return ""
     need_topics = plan.need.topics if plan.need else []
-    tid = detect_topic(text) or (need_topics[0] if need_topics else "") or plan.topic
+    tid = detect_topic(text, pattern="multi_source") or (need_topics[0] if need_topics else "") or plan.topic
     topic = registry().topics.get(tid)
     if not topic or topic.answer_pattern != "multi_source":
         return ""

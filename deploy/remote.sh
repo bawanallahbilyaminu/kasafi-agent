@@ -168,7 +168,7 @@ sync-index)
   dc up -d --wait db
   # The dev index replaces everything, including documents fetched live on the server; they are
   # fetched again the next time a question needs them.
-  fetched=$(dc exec -T db psql -At -U kasafi -d kasafi -c "SELECT string_agg(id, ', ') FROM documents WHERE acquisition = 'fetched'" 2>/dev/null || true)
+  fetched=$(dc exec -T db psql -At -U kasafi -d kasafi -c "SELECT string_agg(id, ', ') FROM documents WHERE acquisition IN ('fetched', 'scheduled')" 2>/dev/null || true)
   [ -n "$fetched" ] && say "note: replacing live-fetched documents too: $fetched"
   say "loading index ($(du -h "$INCOMING" | cut -f1) compressed)"
   if { echo "TRUNCATE documents CASCADE;"; gunzip -c "$INCOMING"; }        | dc exec -T db psql -q -1 -v ON_ERROR_STOP=1 -U kasafi -d kasafi >/dev/null; then

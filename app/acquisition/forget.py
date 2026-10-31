@@ -41,7 +41,7 @@ def forget(conn: psycopg.Connection, doc_id: str, settings: Settings, *, reason:
     doc = describe(conn, doc_id)
     if doc is None:
         raise SystemExit(f"no document with id {doc_id!r}")
-    if doc["acquisition"] != "fetched" and not allow_seed:
+    if doc["acquisition"] not in ("fetched", "scheduled") and not allow_seed:
         raise SystemExit(f"{doc_id} is a seed document ({doc['acquisition']}); add --seed to remove it anyway "
                          "(it only comes back with deploy/deploy.sh --sync-index)")
     fetch_dir = Path(settings.kasafi_fetch_dir)

@@ -172,13 +172,16 @@ def _pattern(words: tuple[str, ...]) -> re.Pattern | None:
     return re.compile(rf"(?<![\w'])(?:{alts})(?![\w])", re.I)
 
 
-def detect_topic(text: str, reg: Registry | None = None) -> str:
+def detect_topic(text: str, reg: Registry | None = None, pattern: str = "") -> str:
     """The topic whose English or Hausa synonyms the text names, the one named most; '' for none (the planner's
-    topic is the fallback). Apostrophes are normalised (’ and ' are one)."""
+    topic is the fallback). Apostrophes are normalised (’ and ' are one). `pattern`: only topics answered that way
+    (the topic path: 'multi_source', so 'measles' isn't taken by the hazards_and_advisories topic)."""
     reg = reg or registry()
     norm = text.replace("’", "'").replace("‘", "'")
     best, most = "", 0
     for t in reg.topics.values():
+        if pattern and t.answer_pattern != pattern:
+            continue
         pat = _pattern(t.synonyms_en + t.synonyms_ha)
         n = len(pat.findall(norm)) if pat else 0
         if n > most:

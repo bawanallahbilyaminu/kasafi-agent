@@ -223,7 +223,7 @@ async def crawl_ncdc(conn, http: httpx.AsyncClient, client, settings) -> int:
             try:                            # one bad report (a malformed model reply) skips only that report
                 acq = await fetch_and_index(conn, url, f"NCDC {name} situation report listed as 'for week {week}', "
                                                        f"dated {date_text} (weekly or monthly)",
-                                            settings=settings, client=client, http=http)
+                                            settings=settings, client=client, http=http, scheduled=True)
             except ValueError as e:
                 conn.rollback()
                 log.info("NCDC %s week %s: not fetched (%s)", disease, week, str(e)[:160])

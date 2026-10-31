@@ -407,6 +407,13 @@ topics:
     synonyms_ha: ["abinci mai gina jiki", "tamowa", "yunwa", "wadatar abinci", "rashin abinci"]
     answer_pattern: multi_source
     publishers:
+      - id: ndhs_mics_nutrition
+        name: NDHS 2024 / MICS 2021 child nutrition indicators
+        level: state
+        tier: 1
+        discovery: [dhs_api]
+        note: stunting, wasting, underweight; NDHS 2024 Table 11.1 prints stunting as height-for-age below -2 SD; MICS 2021 in the library has no anthropometry
+        verified: already in library
       - id: cadre_harmonise
         name: Cadre Harmonise analysis (Govt of Nigeria with FAO/CILSS/WFP)
         domains: [fao.org, data.humdata.org, reliefweb.int]
