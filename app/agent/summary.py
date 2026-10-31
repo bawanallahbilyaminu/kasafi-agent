@@ -58,7 +58,11 @@ async def summarize(question: str, details: str, lang: str, settings, client) ->
 def split_quotes(text: str) -> tuple[str, str]:
     """(the text without its verbatim quotes, the lines that hold them): quotes are shown on request."""
     quotes = "\n".join(line for line in text.splitlines() if "“" in line)
-    return _QUOTE.sub("", text), quotes
+    out: list[str] = []
+    for line in _QUOTE.sub("", text).splitlines():
+        if not (line.strip() and out and line == out[-1]):     # two quotes from one page: one line once stripped
+            out.append(line)
+    return "\n".join(out), quotes
 
 
 def lead(summary: str, details: str) -> str:

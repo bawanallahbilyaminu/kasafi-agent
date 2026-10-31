@@ -173,6 +173,7 @@ def test_quotes_are_held_back_and_sent_on_request() -> None:
     assert details == "• October-November 2026, page 42\n📄 NIHSA AFO p. 42"
     assert quotes == "• October-November 2026, page 42: “Sokoto remains under High Flood Risk.”"
     assert lead("Sokoto is at high flood risk this season.", details).startswith("Sokoto is at high flood risk")
+    assert split_quotes("NiMet, page 3: “Wetter.”\nNiMet, page 3: “Drier spells.”")[0] == "NiMet, page 3"
     s, store = make_settings(), UserStore(":memory:")
     key = user_key("2348000000066", s)
     store.create(key, "en")
