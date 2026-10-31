@@ -94,8 +94,9 @@ W = {
         "short": {"greenness": "peak greenness", "flood": "flooded share of normally dry cropland",
                   "flood_map": "share of cropland inside the UN flood map", "water": "share of cropland often under water",
                   "bare": "bare-soil share of cropland", "rain": "June–October rain"},
-        "rain_adj": "Against each ward's own years and that season's rain: {below} were less green than the rain "
-                    "would suggest; {above} greener than usual for the rain{none}.",
+        "rain_adj": "Against each ward's own years and that season's rain: {parts}.",
+        "rain_below": "{units} were less green than the rain would suggest",
+        "rain_above": "{units} were greener than usual for the rain",
         "rain_adj_none": "no ward stood out against its own years and the rain",
         "rain_adj_units": "{n} wards had too few years for a rain comparison",
         "low_data": "Low data: {units} ({n} or fewer observations that year) are marked ~ and not ranked.",
@@ -128,8 +129,9 @@ W = {
         "short": {"greenness": "koriyar ƙololuwa", "flood": "kashin gonakin da ambaliya ta rufe",
                   "flood_map": "kashin gonaki a cikin taswirar ambaliya ta MDD", "water": "kashin gonakin da ruwa ke yawan rufewa",
                   "bare": "kashin ƙasa mara ciyayi a gonaki", "rain": "ruwan sama na Yuni–Oktoba"},
-        "rain_adj": "Idan aka kwatanta kowace gunduma da shekarunta da ruwan saman daminar: {below} sun yi ƙasa da abin da "
-                    "ruwan saman ya nuna; {above} sun fi koriya fiye da yadda ruwan saman ya nuna{none}.",
+        "rain_adj": "Idan aka kwatanta kowace gunduma da shekarunta da ruwan saman daminar: {parts}.",
+        "rain_below": "{units} sun yi ƙasa da abin da ruwan saman ya nuna",
+        "rain_above": "{units} sun fi koriya fiye da yadda ruwan saman ya nuna",
         "rain_adj_none": "babu gundumar da ta bambanta da shekarunta da ruwan sama",
         "rain_adj_units": "gundumomi {n} ba su da isassun shekaru don kwatancen ruwan sama",
         "low_data": "Ƙarancin bayanai: {units} (lura {n} ko ƙasa a shekarar) an yi musu alamar ~ kuma ba a jera su ba.",
@@ -319,11 +321,17 @@ def area_answer(conn, question: str, english: str, lang: str, level: str, unit: 
         below = [names[u] for u, f in flags.items() if f == "below"]
         above = [names[u] for u, f in flags.items() if f == "above"]
         unfit = sum(1 for f in flags.values() if f == "")
-        if below or above:
-            lines.append(t["rain_adj"].format(below=", ".join(below) or "–", above=", ".join(above) or "–",
-                                              none=f"; {t['rain_adj_units'].format(n=unfit)}" if unfit else ""))
-        else:
-            lines.append(t["rain_adj_none"].capitalize() + (f"; {t['rain_adj_units'].format(n=unfit)}" if unfit else "") + ".")
+        parts = []
+        if below:
+            parts.append(t["rain_below"].format(units=", ".join(below)))
+        if above:
+            parts.append(t["rain_above"].format(units=", ".join(above)))
+        if not parts:
+            parts.append(t["rain_adj_none"])
+        if unfit:
+            parts.append(t["rain_adj_units"].format(n=unfit))
+        s = t["rain_adj"].format(parts="; ".join(parts))
+        lines.append(s[0].upper() + s[1:])
     if low:
         lines.append(t["low_data"].format(units=", ".join(r[1] for r in low[:6]) + (" …" if len(low) > 6 else ""),
                                           n=cut))
