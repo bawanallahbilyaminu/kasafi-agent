@@ -58,7 +58,7 @@ Some details are not confirmed yet. Look them up (dev.meta.ai docs, provider doc
 
 ## Status (as of Oct 31, 2026)
 
-**Live: `3f1c034`** at https://kasafi-api.halalnumeriq.com.ng, deployed with `deploy/deploy.sh`.
+**Live: `a722cdf`** at https://kasafi-api.halalnumeriq.com.ng, deployed with `deploy/deploy.sh`.
 - **Documents:** budgets and performance reports (structured core plus line search), topic sweeps across publishers (`app/agent/topics.py`, L32), fetching on demand, the admin trace and review pages.
 - **Hazard steps 1–5 of 7 are live** (`docs/hazard-and-services.md`):
   - location intake (the point in memory for 30 min, only the LGA stored);
@@ -90,6 +90,13 @@ Some details are not confirmed yet. Look them up (dev.meta.ai docs, provider doc
   - facility corrections on the server: Arkilla PHC and Alheri verified, Wajake Dispensary renamed (not merged with Wajeke Health Post), the Wamakko "Salewa Health Post" removed, Sarda Quarters hidden;
   - maps use exact legend colours; the near-you map zooms to the user and the nearest facility;
   - SEMA desk officers are in `data/private/emergency_contacts.yaml` (outside git, all unverified, not on the server yet).
+- **Oct 31 night, live at `a722cdf`:**
+  - hazard summaries are written in code (`app/hazards/summary.py`; EPA/NWS meanings quoted, WHO multiples, official status last);
+  - every hazard answer sends one map: ~10 km around the point, the LGA, or the state when asked; a named town sets the point;
+  - "Checking the latest forecasts…" for hazard questions;
+  - facility first line = the pin's facility;
+  - Wajake merged (…/0049 point, not marked checked);
+  - alert key and cap synced to the server.
 - **Hazard step 6 (alerts) is built and in the live code, but off** (`KASAFI_ALERTS` unset; dry run by default; `/admin/alerts`). Don't turn it on until Bilyaminu says. Recipients: only subscribers' numbers are stored, encrypted (`KASAFI_ALERTS_NUMBER_KEY`), and deleted on STOP, DELETE MY DATA or 90 days without contact. Bilyaminu adds the key and `KASAFI_ALERTS_DAILY_CAP` to `.env` himself.
 - **Next:** step 7 (evals, docs, demo). The full 39 eval runs on Tue Nov 3 only (`evals/`).
 - **Open items:**
