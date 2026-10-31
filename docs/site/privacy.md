@@ -33,9 +33,10 @@ won't keep it. Only your LGA is remembered for follow-ups."*
 
 - Kasafi works out your **Local Government Area** (and ward) from the location on our own server. The exact location
   is never sent to an AI service.
-- For **road distance and travel time** to the nearest health facilities, your location, **rounded to about 100
-  metres**, is sent to **OpenRouteService** (HeiGIT, Heidelberg) with the facilities' locations, and nothing else: no
-  number, name or message. Without it, Kasafi gives straight-line distances. In an emergency it isn't sent at all.
+- For **road distance, travel time and the route on the map** to the nearest health facilities, your location,
+  **rounded to about 100 metres**, is sent to **OpenRouteService** (HeiGIT, Heidelberg) with the facilities'
+  locations, and nothing else: no number, name or message. Without it, Kasafi gives straight-line distances. In an
+  emergency it isn't sent at all. The map Kasafi sends you marks your location only as a circle about 1 km across.
 - The **exact location** is kept only in our server's working memory for **up to 30 minutes**, for follow-up
   questions such as "the next one?", and is then forgotten. It is **never written to our database, logs or answer
   traces**. If you type coordinates into a question, they are removed before the question is logged.
