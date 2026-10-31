@@ -43,6 +43,8 @@ def test_the_pool_passes_a_settings_keyword_through_to_the_search() -> None:
 
 from decimal import Decimal
 
+from datetime import date
+
 from app.agent import answer as ag
 from app.agent import consistency
 from app.agent.line_answer import LineResult, Selection
@@ -227,3 +229,24 @@ def test_a_named_project_is_its_own_line_but_a_kind_of_spending_is_not(conn) -> 
     assert project_named(conn, "purchase of motor vehicles") is None       # also an economic line: a kind
     assert project_named(conn, "construction of roads") is None            # a third of any road's name
     assert project_named(conn, "provision of drugs") is None
+
+
+def test_a_quarter_with_no_report_yet_is_still_pinned_on_the_need(monkeypatch) -> None:
+    from app.agent import periods
+    monkeypatch.setattr(periods, "report_for", lambda conn, period, today=None: None)
+    plan = _plan_asking("sub_agency", "011103500200")
+    plan.need.time = {"kind": "year", "year": 2027}                  # the planner dropped the quarter
+    q = "How much did the Primary School Staff Pension Board spend in Q1 2027?"
+    plan.english_question = q
+    ag.apply_period(None, plan, q, date(2026, 10, 31))
+    assert plan.need.time == {"kind": "quarter", "year": 2027, "quarter": 1} and plan.period_doc == ""
+
+
+def test_an_agency_named_staff_or_workers_is_no_headcount_question() -> None:
+    board = Entity("mda", "Primary School Staff Pension Board", "Primary School Staff Pension Board", "011103500200")
+    q = "How much did the Primary School Staff Pension Board spend in Q1 2027?"
+    assert not ag.headcount_asked(ag.Plan(q, [], [], need=Need(q, entities=[board])))
+    q2 = "How many staff does the Ministry for Higher Education employ, and on which grade levels?"
+    mhe = Entity("mda", "Ministry for Higher Education", "Ministry for Higher Education", "051700000000")
+    assert ag.headcount_asked(ag.Plan(q2, [], [], need=Need(q2, entities=[mhe])))
+    assert ag.headcount_asked(ag.Plan(q2, [], []))                          # no need yet: the words decide

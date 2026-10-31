@@ -1262,6 +1262,17 @@ def narrative_asked(plan: Plan) -> bool:
     return bool(NARRATIVE.search(f"{plan.original} {plan.english_question}"))
 
 
+def headcount_asked(plan: Plan) -> bool:
+    """The question asks for staff numbers or grade levels. The agencies it names are left out of the check first:
+    'Primary School Staff Pension Board' names no headcount."""
+    text = f"{plan.original} {plan.english_question}"
+    for e in (plan.need.entities if plan.need else []):
+        for name in (e.name, e.resolved):
+            if name:
+                text = re.sub(r"(?i)" + re.escape(name), " ", text)
+    return bool(HEADCOUNT.search(text))
+
+
 HEADCOUNT = re.compile(r"(?i)\b(?:staff|staffing|headcount|head\s+count|employees?|workers?|workforce|personnel\s+"
                        r"numbers?|number\s+of\s+(?:staff|employees|workers|teachers|nurses|doctors)|grade\s+levels?|"
                        r"posts?|vacanc\w+|ma'?aikata\s+nawa|yawan\s+ma'?aikata)\b")
@@ -1271,7 +1282,7 @@ def with_nearest_terms(plan: Plan, question: str, lines: dict) -> dict:
     """Staff numbers, headcounts and grade levels aren't printed in budgets: the agency's personnel rows are
     searched too, so a 'not published' answer can give the nearest figure that is (its salaries, budgeted and
     spent)."""
-    if not lines or not HEADCOUNT.search(f"{question} {plan.english_question}"):
+    if not lines or not headcount_asked(plan):
         return lines
     terms = [*lines.get("terms", []), "Personnel", "Personnel Cost", "Salaries and Wages"]
     plan.search_queries = list(dict.fromkeys([*plan.search_queries, "Personnel Expenditure by Administrative "
@@ -1287,6 +1298,8 @@ def apply_period(conn, plan: Plan, question: str, today: date) -> None:
     period = asked_period(question, plan.english_question)
     if period is None:
         return
+    if period.year:                  # even with no report for it yet ('Q1 2027'): the structured core then says
+        pin_quarter(plan, period.quarter, period.year)   # no such report exists and names the newest
     try:
         rep = report_for(conn, period, today)
     except psycopg.Error:
@@ -1979,7 +1992,7 @@ async def structured_answer(conn, plan: Plan, lang: str, settings: Settings, t: 
     need = plan.need
     if conn is None or need is None or not need.measures or plan.followup == "recheck":
         return None
-    if HEADCOUNT.search(f"{plan.original} {plan.english_question}"):
+    if headcount_asked(plan):
         # staff numbers and grade levels aren't in the structured core: the search path says they aren't
         # published and gives the nearest figure (the personnel line), which this path would give unlabelled
         return None
