@@ -23,6 +23,7 @@ from datetime import date
 import matplotlib
 
 matplotlib.use("Agg")
+import matplotlib.patheffects as pe  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
@@ -67,6 +68,7 @@ T = {
         "leg_corners": "Plot from your {n} corner pins (approximate; not a boundary)",
         "leg_water": "How often water was seen, 1984–2020 (JRC): light = rarely, dark = most months",
         "leg_nearest": "Nearest water body, {km} km",
+        "leg_nearest_named": "Nearest water body: {name}, {km} km",
         "leg_pin": "Your pin",
         "map_foot": "Sources: Copernicus Sentinel-2 L2A via Microsoft Planetary Computer; JRC Global Surface Water "
                     "v1.3; outline by SAM 3.1 (Meta) from the image, approximate.",
@@ -96,6 +98,7 @@ T = {
         "leg_corners": "Gona daga wuraren kusurwoyi {n} da ka aiko (kiyasi; ba iyakar mallaka ba)",
         "leg_water": "Yawan ganin ruwa, 1984–2020 (JRC): mai haske = da wuya, mai duhu = mafi yawan watanni",
         "leg_nearest": "Tafkin ruwa mafi kusa, kilomita {km}",
+        "leg_nearest_named": "Tafkin ruwa mafi kusa: {name}, kilomita {km}",
         "leg_pin": "Wurinka",
         "map_foot": "Madogara: Copernicus Sentinel-2 L2A ta Microsoft Planetary Computer; JRC Global Surface Water "
                     "v1.3; iyaka daga SAM 3.1 (Meta) bisa hoton, kiyasi ce.",
@@ -224,8 +227,15 @@ def place_map(chip: Chip, outline: Outline | None, h: H.History, lang: str, lga:
         ring = nw["outline"]["coordinates"][0]
         ax.add_patch(MplPolygon(ring, closed=True, edgecolor=NEAREST, linewidth=2.5, facecolor="none", zorder=5))
         ax.plot([lon, nw["lon"]], [lat, nw["lat"]], color=NEAREST, linewidth=1.6, linestyle=":", zorder=5)
-        handles.append(Line2D([], [], color=NEAREST, linewidth=2.5, label=t["leg_nearest"].format(
-            km=f"{nw['distance_m'] / 1000:.1f}")))
+        name = str(nw.get("name_ha" if lang == "ha" else "name") or nw.get("name") or "")
+        handles.append(Line2D([], [], color=NEAREST, linewidth=2.5, label=t["leg_nearest_named" if name else "leg_nearest"]
+                              .format(name=name, km=f"{nw['distance_m'] / 1000:.1f}")))
+        if name:                                                # the name on the map, by the body
+            ax.annotate(name, (nw["lon"], nw["lat"]), xytext=(4, 4), textcoords="offset points", fontsize=LEGEND,
+                        color="#0b2545", zorder=8, path_effects=[pe.withStroke(linewidth=2.5, foreground="white")])
+    if h.water_name and (h.water_type == "permanent" or h.on_water):      # the body under the pin
+        ax.annotate(h.water_name, (lon, lat), xytext=(10, -14), textcoords="offset points", fontsize=LEGEND,
+                    color="#0b2545", zorder=8, path_effects=[pe.withStroke(linewidth=2.5, foreground="white")])
     ax.scatter([lon], [lat], s=160, marker="o", facecolor=PIN, edgecolor="#ffffff", linewidth=1.8, zorder=7)
     handles.append(Line2D([], [], color=PIN, marker="o", markersize=10, markeredgecolor="#ffffff", linestyle="none",
                           label=t["leg_pin"]))

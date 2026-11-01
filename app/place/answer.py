@@ -34,19 +34,16 @@ WATER_BODIES = Path("data/geo/water_bodies.yaml")
 
 
 def water_body_name(lat: float, lon: float, lang: str, path: Path = WATER_BODIES) -> str:
-    """The named water body (data/geo/water_bodies.yaml) the pin lies in, or ''."""
-    import math
-    import yaml
+    """The named water body the pin lies in, or '': the water-body layer (app/place/water.py: JRC bodies named
+    from OSM, with data/geo/water_bodies.yaml overriding), or the yaml's own radius rule without a layer."""
+    from app.place import water as W
+    if path != WATER_BODIES:
+        return W.override_name(lat, lon, lang, path)
     try:
-        rows = yaml.safe_load(path.read_text(encoding="utf-8")) or []
-    except OSError:
+        return W.name_at(lon, lat, lang)
+    except Exception as e:                      # noqa: BLE001 - a name is extra
+        log.warning("place: water-body name failed: %s", type(e).__name__)
         return ""
-    best, best_d = "", None
-    for r in rows:
-        d = math.hypot((lon - float(r["lon"])) * 111.32 * math.cos(math.radians(lat)), (lat - float(r["lat"])) * 111.32)
-        if d <= float(r.get("radius_km", 1)) and (best_d is None or d < best_d):
-            best, best_d = str(r.get("name_ha" if lang == "ha" else "name") or r.get("name") or ""), d
-    return best
 
 log = logging.getLogger(__name__)
 
@@ -144,6 +141,8 @@ W = {
         "water_caveat": "Floods under crops, short floods and floods under cloud can be missed.",
         "nearest": "The nearest water body is {km} km from your pin ({ha} ha; water in {occ}% of the months JRC "
                    "observed, 1984–2020); Sentinel-2 saw water there in {when}.",
+        "nearest_named": "The nearest water body is {name}, {km} km from your pin ({ha} ha; water in {occ}% of the "
+                         "months JRC observed, 1984–2020); Sentinel-2 saw water there in {when}.",
         "nearest_none": "No water body (water in half the months JRC observed, 1984–2020) lies within 2 km of "
                         "your pin.",
         "outline_sam": "Plot outline: about {ha} ha, drawn from the satellite image (SAM 3.1, 10 m): approximate, "
@@ -266,6 +265,8 @@ W = {
                         "iya ɓacewa.",
         "nearest": "Tafkin ruwa mafi kusa yana da nisan kilomita {km} daga wurinka (hekta {ha}; ruwa a kashi {occ}% na "
                    "watannin da JRC ta lura, 1984–2020); Sentinel-2 ta ga ruwa a can a {when}.",
+        "nearest_named": "Tafkin ruwa mafi kusa shi ne {name}, kilomita {km} daga wurinka (hekta {ha}; ruwa a kashi "
+                         "{occ}% na watannin da JRC ta lura, 1984–2020); Sentinel-2 ta ga ruwa a can a {when}.",
         "nearest_none": "Babu tafkin ruwa (ruwa a rabin watannin da JRC ta lura, 1984–2020) a cikin kilomita 2 daga "
                         "wurinka.",
         "outline_sam": "Iyakar gona: kusan hekta {ha}, an zana ta daga hoton tauraron ɗan adam (SAM 3.1, mita 10): "
@@ -541,6 +542,10 @@ def water_sentence(h: H.History, lang: str) -> str:
     return s + nearest_sentence(h, lang)
 
 
+def nearest_name(nw: dict, lang: str) -> str:
+    return str(nw.get("name_ha" if lang == "ha" else "name") or nw.get("name") or "")
+
+
 def nearest_sentence(h: H.History, lang: str) -> str:
     t = _t(lang)
     s = ""
@@ -548,8 +553,9 @@ def nearest_sentence(h: H.History, lang: str) -> str:
         nw = h.nearest_water
         nh = nw.get("history")
         nwhen = when_text(nh.years, lang) if nh else ""
-        s += " " + t["nearest"].format(km=f"{nw['distance_m'] / 1000:.1f}", ha=nw["area_ha"], occ=nw["occurrence"],
-                                       when=nwhen or t["none"])
+        name = nearest_name(nw, lang)
+        s += " " + t["nearest_named" if name else "nearest"].format(
+            name=name, km=f"{nw['distance_m'] / 1000:.1f}", ha=nw["area_ha"], occ=nw["occurrence"], when=nwhen or t["none"])
     return s
 
 

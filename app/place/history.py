@@ -488,6 +488,12 @@ def point_history(conn, lat: float, lon: float, *, today: date | None = None, po
             near = dict(near)
             near["history"] = _point_history(conn, near["lat"], near["lon"], today=today, workers=workers,
                                              progress=progress)
+            try:                                       # its name, from the water-body layer (app/place/water.py)
+                from app.place import water as W
+                near["name"] = W.name_at(near["lon"], near["lat"], "en")
+                near["name_ha"] = W.name_at(near["lon"], near["lat"], "ha")
+            except Exception as e:                     # noqa: BLE001 - a name is extra
+                log.warning("place: water-body name failed: %s", type(e).__name__)
             h.nearest_water = near
         h.timing["nearest_water"] = time.perf_counter() - t0
         h.timing["total"] += h.timing["nearest_water"]
