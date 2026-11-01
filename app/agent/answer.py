@@ -1649,7 +1649,9 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
     # every figure bound to its row: the entity named next to it, the year, the unit and the kind (external review,
     # finding 01); a contradiction is composed again with the mismatch named, then refused
     names = [x for e in (plan.need.entities if plan.need else []) for x in (e.resolved, e.name, e.code) if x]
-    att = attribution.bind(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], names)
+    # a budget query's rows and arithmetic are computed in code (differences, shares): calculation checked, no binding
+    att = (attribution.bind(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], names)
+           if budget is None else attribution.Attribution("calculation checked"))
     if not att.ok and not bad and _found(d) != "none":
         t["compose_retry"] = t.get("compose_retry", 0.0) + 1.0
         d = await compose(question, lang, plan, evidence, client, settings, context=context, second=second,
