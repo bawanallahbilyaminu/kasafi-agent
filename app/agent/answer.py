@@ -918,6 +918,7 @@ def prefer_newest_edition(conn: psycopg.Connection, plan: Plan, question: str) -
 
 LIB_EXTRA = 3                # library-wide pages read beyond the planned ones
 BROAD_PAGES_PER_DOC = 2      # a broad question: the top pages of each of its documents
+PLANNED_BONUS = 0.05         # a planned document's library pages, on the library search's score scale
 
 
 def library_candidates(conn: psycopg.Connection, plan: Plan, asked: str = "") -> list:
@@ -1147,15 +1148,15 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
     # the planned documents' best pages by the question's words first (the plan chose the document, the library
     # search confirms it, but its keyword hits were other pages: the Health ROP's p9 behind p3, p13, p16), then
     # each other document's best page before any document's second
+    # by the library search's own score, a planned document getting a small bonus, each document's best page
+    # before any second page (2 Nov 2026: planned pages first took every slot from a better unplanned document)
     scope_docs = set(scope or [])
-    planned_lib = [lh for lh in lib if lh.hit.doc_id in scope_docs]
+    ranked_lib = sorted(lib, key=lambda lh: -(lh.score + (PLANNED_BONUS if lh.hit.doc_id in scope_docs else 0.0)))
     firsts, seconds, seen_docs = [], [], set()
-    for lh in lib:
-        if lh.hit.doc_id in scope_docs:
-            continue
+    for lh in ranked_lib:
         (seconds if lh.hit.doc_id in seen_docs else firsts).append(lh)
         seen_docs.add(lh.hit.doc_id)
-    for lh in planned_lib + firsts + seconds:
+    for lh in firsts + seconds:
         h = lh.hit
         if len([k for k in by_page if k not in planned_pages]) >= LIB_EXTRA:
             break
