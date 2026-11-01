@@ -112,7 +112,7 @@ def test_a_job_over_the_limit_gets_the_apology_and_a_failure_note(monkeypatch) -
     monkeypatch.setattr(C, "_note_failure", note)
     out = _run(_text("How green was my farm in 2024?"), store, s, slow, notified)
     assert [o.text for o in out] == ["Sorry, I couldn't finish checking the satellite images.\n\nPlease try again in a few minutes."]
-    assert noted and noted[0][1].startswith("timeout after") and noted[0][0] == "How green was my farm in 2024?"
+    assert noted and noted[0][1].startswith("satellite: timeout after") and noted[0][0] == "How green was my farm in 2024?"
     out = _run(_text("What is the 2026 budget for agriculture?"), store, s, slow, notified)
     assert out[-1].text == "Sorry, I couldn't finish the answer in time.\n\nPlease try again in a few minutes."
 
@@ -120,7 +120,7 @@ def test_a_job_over_the_limit_gets_the_apology_and_a_failure_note(monkeypatch) -
         raise RuntimeError("Planetary Computer refused")
     out = _run(_text("Shin ruwa ya taɓa rufe gonata a shekarun baya?"), store, make_settings(), boom, notified)
     assert out[-1].text.startswith("Sorry, I couldn't finish checking the satellite images.")   # the user's language is en
-    assert noted[-1][1] == "RuntimeError: Planetary Computer refused"
+    assert noted[-1][1] == "satellite: RuntimeError: Planetary Computer refused"
     memory.forget(key)
 
 

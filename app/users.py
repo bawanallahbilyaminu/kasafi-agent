@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS alert_log (   -- each alert decided, per hazard and L
 CREATE INDEX IF NOT EXISTS alert_log_day_idx ON alert_log (day, hazard, lga_pcode);
 """
 ALERT_LOG_DAYS = 90
+EVENT_DAYS = 90
 
 
 @dataclass
@@ -167,6 +168,8 @@ class UserStore:
             self._db.execute("ALTER TABLE turns ADD COLUMN working TEXT")     # "nuna lissafi" / "show working"
         if "quotes" not in turn_cols:
             self._db.execute("ALTER TABLE turns ADD COLUMN quotes TEXT")      # "quotes" / "nuna rubutun"
+        self._db.execute("CREATE TABLE IF NOT EXISTS events (day TEXT NOT NULL, kind TEXT NOT NULL, n INTEGER NOT NULL, "
+                         "PRIMARY KEY (day, kind))")       # counts per day only (the admin status page): no key, no text
         log_cols = {row[1] for row in self._db.execute("PRAGMA table_info(alert_log)")}
         if "failed" not in log_cols:             # the recipients a failed or partial send still owes (finding 02)
             self._db.execute("ALTER TABLE alert_log ADD COLUMN failed TEXT")
@@ -411,6 +414,26 @@ class UserStore:
         row = self._exec(f"SELECT coalesce(sum(recipients), 0) FROM alert_log WHERE day=? AND status IN {statuses}",
                          (day,)).fetchone()
         return int(row[0])
+
+    def count_event(self, kind: str, now: datetime | None = None) -> None:
+        now = now or datetime.now(timezone.utc)
+        day = now.astimezone(LAGOS).date().isoformat()
+        self._exec("INSERT INTO events (day, kind, n) VALUES (?, ?, 1) ON CONFLICT (day, kind) DO UPDATE SET n = n + 1",
+                   (day, kind))
+        self._exec("DELETE FROM events WHERE day < ?", ((now - timedelta(days=EVENT_DAYS)).date().isoformat(),))
+
+    def event_counts(self, kind: str, days: int = 7, now: datetime | None = None) -> dict[str, int]:
+        """{day: n} for the last `days` Lagos days with any."""
+        now = now or datetime.now(timezone.utc)
+        since = (now.astimezone(LAGOS) - timedelta(days=days - 1)).date().isoformat()
+        return dict(self._exec("SELECT day, n FROM events WHERE kind = ? AND day >= ? ORDER BY day", (kind, since)).fetchall())
+
+    def alert_status_counts(self, days: int = 7, now: datetime | None = None) -> dict[str, int]:
+        """Alert decisions by status over the last `days` days (dry_run, sent, partial, failed, ...)."""
+        now = now or datetime.now(timezone.utc)
+        rows = self._exec("SELECT status, count(*) FROM alert_log WHERE at >= ? GROUP BY status",
+                          ((now - timedelta(days=days)).isoformat(),)).fetchall()
+        return dict(rows)
 
     def alert_log(self, limit: int = 200) -> list[dict]:
         cols = ("at", "day", "hazard", "lga_pcode", "key", "official", "status", "recipients", "langs", "message",

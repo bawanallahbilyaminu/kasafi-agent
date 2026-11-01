@@ -51,6 +51,10 @@ def outcome(a) -> str:
 
 
 def path(a) -> str:
+    if "place_area" in a.timings:
+        return "place_area"
+    if "place" in a.timings:
+        return "place:first" if a.timings.get("place_first") else "place:cached"
     if getattr(a, "analysis", None) is not None:
         return f"analysis:{a.analysis.tool}"
     if getattr(a, "category", None) is not None:

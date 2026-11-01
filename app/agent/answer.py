@@ -1128,6 +1128,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             pa = await place_answer(conn, settings, question, plan.english_question, lang, place, today,
                                     notify=notify, ask_size=bool(place and place.get("ask_size")))
             t["place"] = time.perf_counter() - t0
+            t["place_first"] = pa.timing.get("first", 0.0)
             return Answer(pa.text, pa.found, True, plan=plan, timings=t, exact=pa.text, working=pa.working,
                           partial=pa.partial, maps=pa.specs, needs_pin=pa.needs_pin, needs_size=pa.needs_size)
         # NCDC outbreak figures and official outlooks (NIHSA, NiMet): answered in code from the crawled tables; an

@@ -1,5 +1,7 @@
 """Admin pages: the agent trace of each answer and the human review queue.
 
+- /admin/status            hazard layers' freshness, advisories, alerts, fast-path and place-history counts,
+                           failures and the serving commit (counts only)
 - /admin/traces            recent answers; ?flagged=1 shows only those a person should check
 - /admin/traces/{id}       one answer step by step: plan, search, the two model readings side by side, what code
                            verified and kept, citations, timings and the reply
@@ -86,8 +88,8 @@ button.bad{border-color:var(--bad);color:var(--bad)}.scroll{overflow-x:auto}deta
 
 def page(title: str, body: str, on: str = "") -> HTMLResponse:
     nav = "".join(f'<a href="/admin/{p}" class="{"on" if p == on else ""}">{n}</a>'
-                  for p, n in (("traces", "Traces"), ("traces?flagged=1", "Flagged"), ("review", "Review queue"),
-                               ("alerts", "Alerts")))
+                  for p, n in (("status", "Status"), ("traces", "Traces"), ("traces?flagged=1", "Flagged"),
+                               ("review", "Review queue"), ("alerts", "Alerts")))
     doc = (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" '
            f'content="width=device-width,initial-scale=1"><title>{e(title)} · Kasafi admin</title>'
            f'<style>{CSS}</style></head><body><main><header class="top"><b>Kasafi admin</b><nav>{nav}</nav>'
@@ -305,6 +307,81 @@ def alerts_page(_: None = Depends(admin), settings: Settings = Depends(get_setti
             f'<th>People</th><th>Template values</th></tr>{trs or "<tr><td colspan=6>No alerts yet.</td></tr>"}'
             f'</table></div>')
     return page("Alerts", body, "alerts")
+
+
+STATUS_DAYS = 7
+
+
+def _age(ts, now) -> str:
+    if ts is None:
+        return "never"
+    s = (now - ts).total_seconds()
+    return f"{s / 60:.0f} min" if s < 5400 else f"{s / 3600:.1f} h" if s < 172800 else f"{s / 86400:.0f} days"
+
+
+def status_data(conn, store, settings: Settings) -> dict:
+    """What the status page shows, as data (tested without HTML): hazard layers' last fetch and age, the latest
+    advisories, alert decisions by status, emergency fast-path firings, place-history requests and failures, and
+    the serving commit. Counts only: no question text, no keys."""
+    import os
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    layers = conn.execute(
+        "SELECT layer, max(started_at) FILTER (WHERE ok), max(started_at), "
+        "(array_agg(ok ORDER BY started_at DESC))[1], (array_agg(error ORDER BY started_at DESC))[1] "
+        "FROM hazard_fetch GROUP BY layer ORDER BY layer").fetchall()
+    advisories = conn.execute(
+        "SELECT source, hazard, title, issued_at, fetched_at FROM advisories ORDER BY fetched_at DESC, issued_at DESC "
+        "LIMIT 5").fetchall()
+    place = dict(conn.execute(
+        "SELECT path, count(*) FROM traces WHERE created_at >= now() - make_interval(days => %s) AND "
+        "(path LIKE 'place%%') GROUP BY path", (STATUS_DAYS,)).fetchall())
+    failures = dict(conn.execute(
+        "SELECT split_part(trace->>'failure', ':', 1), count(*) FROM traces WHERE outcome = 'failed' AND "
+        "created_at >= now() - make_interval(days => %s) GROUP BY 1", (STATUS_DAYS,)).fetchall())
+    return {
+        "now": now, "commit": os.environ.get("KASAFI_COMMIT", "unknown"),
+        "layers": [{"layer": l, "last_ok": ok_at, "age": _age(ok_at, now), "last_try": tried, "ok": ok,
+                    "error": err or ""} for l, ok_at, tried, ok, err in layers],
+        "advisories": [{"source": s, "hazard": h, "title": t, "issued": i, "fetched": f} for s, h, t, i, f in advisories],
+        "alerts": store.alert_status_counts(STATUS_DAYS), "alerts_mode": "dry run" if settings.kasafi_alerts_dry_run else "live",
+        "emergency": store.event_counts("emergency_fast_path", STATUS_DAYS),
+        "place": {"first": place.get("place:first", 0), "cached": place.get("place:cached", 0),
+                  "area": place.get("place_area", 0), "failed": failures.get("satellite", 0)},
+        "failures": failures,
+    }
+
+
+@router.get("/status", response_class=HTMLResponse)
+def status_page(_: None = Depends(admin), settings: Settings = Depends(get_settings)) -> HTMLResponse:
+    from app.users import get_store
+    with _conn(settings) as conn:
+        d = status_data(conn, get_store(), settings)
+    rows = "".join(
+        f'<tr><td>{e(x["layer"])}</td><td>{e(x["last_ok"].strftime("%Y-%m-%d %H:%M") + " UTC" if x["last_ok"] else "never")}</td>'
+        f'<td>{e(x["age"])}</td><td class="{"answered" if x["ok"] else "wrong"}">{"ok" if x["ok"] else "failed"}'
+        f'<div class="small mute">{e(x["error"][:120])}</div></td></tr>' for x in d["layers"])
+    adv = "".join(f'<tr><td>{e(a["source"])}</td><td>{e(a["hazard"])}</td><td>{e(a["title"][:110])}</td>'
+                  f'<td class="small">{e(str(a["issued"])[:10])}</td></tr>' for a in d["advisories"])
+    al = ", ".join(f"{k} {v}" for k, v in sorted(d["alerts"].items())) or "none"
+    em_total = sum(d["emergency"].values())
+    p = d["place"]
+    fails = ", ".join(f"{k or 'other'} {v}" for k, v in d["failures"].items()) or "none"
+    body = (f'<h1>Status</h1><p>Serving commit <b>{e(d["commit"][:12])}</b> · {e(d["now"].strftime("%Y-%m-%d %H:%M"))} UTC · '
+            f'counts over the last {STATUS_DAYS} days</p>'
+            f'<div class="card"><h2>Hazard layers</h2><table><tr><th>Layer</th><th>Last good fetch</th><th>Age</th>'
+            f'<th>Last attempt</th></tr>{rows or "<tr><td colspan=4>No fetches yet.</td></tr>"}</table></div>'
+            f'<div class="card"><h2>Latest advisories</h2><table><tr><th>Source</th><th>Hazard</th><th>Title</th>'
+            f'<th>Issued</th></tr>{adv or "<tr><td colspan=4>None yet.</td></tr>"}</table></div>'
+            f'<div class="card"><h2>Alerts ({e(d["alerts_mode"])})</h2><p>{e(al)}</p></div>'
+            f'<div class="card"><h2>Emergency fast path</h2><p>{em_total} firing(s): '
+            f'{e(", ".join(f"{k} {v}" for k, v in d["emergency"].items()) or "none")}</p></div>'
+            f'<div class="card"><h2>Place history</h2><p>Farm questions: {p["first"]} first request(s) (satellite read '
+            f'now), {p["cached"]} from the cache · ward/LGA questions: {p["area"]} · satellite failures (apology sent): '
+            f'{p["failed"]}</p></div>'
+            f'<div class="card"><h2>Failed replies</h2><p>{e(fails)} <span class="small mute">(each is a trace with '
+            f'outcome "failed" and its reason)</span></p></div>')
+    return page("Status", body, "status")
 
 
 @router.post("/domains/{domain}")

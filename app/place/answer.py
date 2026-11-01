@@ -722,6 +722,7 @@ async def place_answer(conn, settings, question: str, english: str, lang: str, p
     h = await asyncio.to_thread(H.point_history, conn, lat, lon, today=today, polygon=polygon,
                                 water=water_asked(f"{question} {english}"))
     timing["history"] = time.perf_counter() - t1
+    timing["first"] = 0.0 if h.from_cache else 1.0         # computed now (a first request) or from the cache
     t3 = time.perf_counter()
     h.floods = await asyncio.to_thread(flood_evidence, conn, lat, lon, polygon or H.cell_circle(lat, lon), today=today,
                                        on_water=h.on_water, key=h.cell)

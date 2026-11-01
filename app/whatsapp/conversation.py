@@ -319,12 +319,12 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             log.error("answer timed out after %.0fs (limit %.0fs): %s", seconds, settings.kasafi_answer_timeout_s,
                       "satellite" if satellite else "documents")
             body, result = t("satellite_failed" if satellite else "answer_timeout", lang), None
-            await _note_failure(settings, question, lang, f"timeout after {seconds:.0f}s", seconds, body)
+            await _note_failure(settings, question, lang, f"{'satellite' if satellite else 'documents'}: timeout after {seconds:.0f}s", seconds, body)
         except Exception as e:  # DB or model down: tell the user rather than go silent
             seconds = time.perf_counter() - started
             log.exception("answer failed: %s", type(e).__name__)
             body, result = t("satellite_failed" if satellite else "answer_failed", lang), None
-            await _note_failure(settings, question, lang, f"{type(e).__name__}: {e}"[:300], seconds, body)
+            await _note_failure(settings, question, lang, f"{'satellite' if satellite else 'documents'}: {type(e).__name__}: {e}"[:300], seconds, body)
         offer = getattr(result, "offer", None)
         store.set_pending_calc(key, offer.to_dict() if offer else None)
         text_out = f"{prefix}\n\n{body}" if prefix else body
@@ -617,6 +617,8 @@ async def _emergency(key: str, lang: str, d: em.Detection, store: UserStore, set
     fired is logged. From a point, the fast reply goes through `notify` at once (returned first when there is
     none) and the road-distance follow-up is returned."""
     t0 = time.perf_counter()
+    if first:
+        store.count_event("emergency_fast_path")      # a count per day for the admin status page; no key, no text
     lang = lang if lang in em.WORDS else "ha"
     w = em.WORDS[lang]
     spot = spot or location_memory.recall(key)
