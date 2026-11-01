@@ -26,9 +26,19 @@ def test_area_questions_route_to_the_lga_or_the_state(q, want) -> None:
 @pytest.mark.parametrize("q", [
     "How green was my farm in 2024?", "Was my plot in Wurno flooded?", "How much was budgeted for farms in Wurno?",
     "Will it rain in Wurno tomorrow?", "Nearest hospital in Wurno",
+    # no satellite measure named: displacement, facilities and population rankings keep their own paths (the 1 Nov
+    # fresh eval had 'which 10 LGAs get most IDPs?' answered with greenness)
+    "How many IDPs ne a Gada LGA?", "Abeg, which 10 LGAs ne a Sokoto da get most IDPs?",
+    "Which LGAs have the most people displaced?", "Which LGAs have the most health facilities?", "Rank LGAs by population",
+    "Wadanne kananan hukumomi ne suka fi yawan 'yan gudun hijira?",
 ])
 def test_pin_budget_weather_and_facility_questions_do_not_route_to_an_area(q) -> None:
     assert P.area_route(q) is None
+
+
+def test_a_question_naming_no_measure_has_none() -> None:
+    assert P.measure_word("which LGAs have most IDPs") is None and P.measure_asked("which LGAs have most IDPs") == "greenness"
+    assert P.measure_word("greenest wards") == "greenness"
 
 
 def test_the_measure_and_year_come_from_the_words() -> None:

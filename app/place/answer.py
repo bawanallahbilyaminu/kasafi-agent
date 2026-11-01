@@ -59,8 +59,8 @@ EXPLICIT = re.compile(r"(?i)\b(?:place history|tarihin wuri|tarihin gona\w*|tari
 WATER_WORDS = re.compile(r"(?i)\b(?:pond|dam\b|lake|reservoir|flood\w*|under water|water\b|fadama|wet\b|"
                          r"tafki\w*|madatsa\w*|ambaliya\w*|ruwa\w*|kogi)\b")
 NOT_PLACE = re.compile(r"(?i)\b(?:budget\w*|allocat\w*|kasafi\w*|naira|spen[dt]\w*|expenditure|project\w*|aikin?|"
-                       r"ware|kashe|kuɗi|kudi|forecast|tomorrow|gobe|today|yau|hospital|asibiti|clinic|idp|"
-                       r"displac\w*)\b|₦")
+                       r"ware|kashe|kuɗi|kudi|forecast|tomorrow|gobe|today|yau|hospital|asibiti|clinic|idps?|"
+                       r"displac\w*|'yan\s+gudun\s+hijira|gudun\s+hijira)\b|₦")
 
 
 def place_route(question: str, english: str = "") -> str:

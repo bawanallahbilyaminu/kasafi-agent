@@ -255,13 +255,12 @@ def area_route(question: str, english: str = "") -> tuple[str, str] | None:
     text = f"{question} {english}"
     if MINE.search(text) or NOT_PLACE.search(text):
         return None
-    measure = measure_asked(text)
+    measure = measure_word(text)              # a satellite measure must be named: "most IDPs by LGA" is not ours
     lgas = lgas_in(text)
     if not (AREA_WORDS.search(text) or lgas):
         return None
-    if not (place_route(text) or measure in ("flood", "flood_map", "bare", "water", "greenness", "rain") and
-            (AREA_WORDS.search(text) or lgas) and re.search(r"(?i)\b(?:wards?|lgas?|gundum|hukum|which|wa[ɗd]anne|"
-                                                              r"most|least|mafi|share|kashi)\b", text)):
+    if not (place_route(text) or measure is not None and
+            re.search(r"(?i)\b(?:wards?|lgas?|gundum|hukum|which|wa[ɗd]anne|most|least|mafi|share|kashi)\b", text)):
         return None
     if lgas and not re.search(r"(?i)\b(?:all\s+lgas|which\s+lgas|the\s+state|state-?wide|sokoto\s+state|"
                               r"ƙananan\s+hukumomi|kananan\s+hukumomi|jihar?\s+sokoto)\b", text):
@@ -269,11 +268,16 @@ def area_route(question: str, english: str = "") -> tuple[str, str] | None:
     return ("state", STATE)
 
 
-def measure_asked(text: str) -> str:
+def measure_word(text: str) -> str | None:
+    """The measure a question names, or None when it names none."""
     for key, pat in MEASURE_WORDS:
         if pat.search(text):
             return key
-    return "greenness"
+    return None
+
+
+def measure_asked(text: str) -> str:
+    return measure_word(text) or "greenness"
 
 
 def year_asked(text: str, today: date) -> int | None:
