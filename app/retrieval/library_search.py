@@ -38,6 +38,7 @@ RRF_K = 5                      # reciprocal-rank constant over document ranks: t
 TOP = 5                        # a list that puts a document in its first TOP places "agrees" on it
 RARE = 30                      # a phrase printed in at most this many chunks is distinctive
 TABLE_CATEGORIES = ("budget", "budget_performance")
+CARD_WEIGHT = 0.5              # the card list's weight beside meaning (1.2), keywords (1.0) and phrases (1.5)
 PROSE = "(length(c.text) - length(replace(c.text, ' | ', ''))) / 3 <= 2"
 VEC_SQL = f"""
 SELECT c.doc_id, c.page, c.idx FROM chunks c JOIN documents d ON d.id = c.doc_id
@@ -175,7 +176,9 @@ def library_search(conn: psycopg.Connection, question: str, queries: list[str] |
     via: dict[str, set[str]] = {}
     agree: dict[str, int] = {}
     for name, order in lists.items():
-        weight = {"phrase": 1.5, "meaning": 1.2, "card": 1.3}.get(name, 1.0)
+        # cards boost; they never decide alone: with every document carded, a full-weight card list buried a
+        # document whose card isn't built yet (a fresh fetch, its card still in the background)
+        weight = {"phrase": 1.5, "meaning": 1.2, "card": CARD_WEIGHT}.get(name, 1.0)
         for rank, d in enumerate(order):
             scores[d] = scores.get(d, 0.0) + weight / (RRF_K + rank + 1)
             via.setdefault(d, set()).add(name)
