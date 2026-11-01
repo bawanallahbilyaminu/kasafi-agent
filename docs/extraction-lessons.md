@@ -89,3 +89,22 @@ so the LGA row far below the header chunk is seen (p53, Table 3.14: 8 public and
 topic sweep drops publishers whose finest geography is coarser than the question's (`choose_publishers`,
 `geo_level`); (5) `deploy.sh --sync-index` refuses when the server's migration differs from dev's, and the
 sync replaces live-fetched documents (they are re-fetched on demand). `tests/test_dash_cells.py`.
+
+**L37 (1 Nov 2026): every indexed document is a candidate; prose figures are values.** A newly indexed plan
+(the Sokoto State Health Resource Optimization Plan, Feb 2023) was never read for three questions it answers
+(traces 88-90): the planner chose budgets and a fetch of the 2023 budget for an intention ("plan to raise"),
+and when it did choose the plan, the 320-page EmONC assessment took every keyword slot, so page 9 (the
+out-of-pocket share, the drug revolving fund staffing finding) never reached the reader; the topic sweep read
+only registry publishers (NDHS, MICS, UNFPA). With the name given (trace 91) the right pages were read but the
+answer was refused: the model wrote the table's '29,617,906,608.4' as '29,617,906,608.45' (the digit check
+compared digits), a wrapped PDF line split 'NGN1.94 billion ... as' from 'allocated to ...' (a false spending /
+allocation contradiction), and a 'Total' row under 'Table 5: ... total health budget' was not the health
+budget. The rules now: a library-wide search (keywords, chunk vectors from bge-small, migration 0025, and the
+question's own multi-word phrases; at most two hits per document) adds its best pages on the document path,
+gives the topic sweep library sources, sends intention questions to the library's plans and policies first,
+and runs before any web fetch; amounts are compared as values within the coarser printed rounding
+(`app/agent/figures.py`: ₦/N/NGN, bn/billion, a decimal comma before billion, percent words); prose is bound by
+whole sentences ('This/It' carries the sentence before), a Total row takes its table title's words, and one
+figure that can't be found is answered marked "Not verified" (only a contradiction, or no figure found at all,
+refuses). `tests/test_library_search.py` (a fresh fixture document found unnamed on every path),
+`tests/test_prose_figures.py`, `evals/newdocs`, `evals/prose`.

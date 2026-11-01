@@ -94,6 +94,28 @@ library through the same path as PDFs:
   Install LibreOffice locally with `winget install TheDocumentFoundation.LibreOffice` to run it and to add Word
   documents to the local manifest.
 
+### Library-wide search (added 1 Nov 2026)
+
+Every indexed document is a candidate for every question, named or not (L37). `app/retrieval/library_search.py`
+fuses three lists by reciprocal rank, at most two hits per document so one long report can't fill every place:
+keyword search with the question and the planner's queries over all documents; meaning search, the question's
+vector against every chunk's vector (BAAI/bge-small-en-v1.5 run locally, the model the budget lines already use;
+`chunks.embedding`, migration 0025, filled by the indexer and by `python -m app.retrieval.library_search` for a
+backfill); and the question's own multi-word phrases matched as phrases (a chunk printing two of them ranks
+first). A hit is *strong* when it prints two phrases, or one phrase found by another list too, or is close in
+meaning (cosine ≥ 0.72). Where it is used:
+
+- **Document path:** up to two library pages beyond the planned ones (only strong ones for a money question).
+- **Topic sweep:** documents with strong hits become sources (their publisher from the manifest), read from the
+  pages the search found.
+- **Intentions** ('plan to raise', 'proposed', 'target', Hausa 'shirin'): the library's plans and policies are read
+  first, before the budget tables and before any fetch.
+- **Before a web fetch:** the library's own strong documents are tried first.
+- **Planner:** the catalog lists every document with its publisher, and the prompt says plans and policies answer
+  intention questions.
+
+The trace keeps the library hits (`library`, `*` = strong). `deploy.sh --sync-index` carries the vectors.
+
 ### Multi-document answers: important rules
 
 - **Disagreeing figures** (approved vs revised vs released vs actual): show them side by side with sources and explain the difference. Never average them or silently pick one.
