@@ -85,6 +85,17 @@ def wrong(case: dict, a, lang: str) -> str:
     return ""
 
 
+def followup_fits(case: dict, v: dict) -> bool:
+    """A follow-up form is usable only when its earlier question names the case's own organisation (a shared
+    capitalised word of 4+ letters, or the code): the 1 Nov split-06 follow-up asked 'its …' after a question
+    about another company, and the case's figures could never appear."""
+    def names(text: str) -> set[str]:
+        return {w.lower() for w in re.findall(r"\b[A-Z][A-Za-z'’-]{3,}", text or "")} - {"what", "which", "how", "much",
+                                                                                      "does", "were", "sokoto", "state"}
+    prev = str(v.get("previous") or "")
+    return bool(names(case.get("text", "")) & names(prev)) or bool(case.get("code") and case["code"] in prev)
+
+
 # a reply corrects a false premise when it says the change didn't happen ("did not go up", "there was no rise",
 # Hausa "bai karu ba") or names the real direction, the opposite of the premise's; a "because" is no sign either way
 DENIES = re.compile(r"(?i)\b(?:did not|didn't|does not|not (?:an? )?(?:go|rise|fall|increase|decrease|drop)|"
