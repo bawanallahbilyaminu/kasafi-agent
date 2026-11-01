@@ -1,0 +1,12 @@
+{
+ "_about": "Prose figures (1 Nov 2026): amounts written in running text in Naira-billion form ('N12.9 billion', 'N9.3billion', '₦694 billion'), with a percent beside them ('N19.7billion (82.4%)', '25% ... (N116 billion)', 'N89.215 billion (or 73.10%)'), from plans and reports already in the library. The answer must be given and pass the figure and attribution checks, not refused as unverified. The decimal-comma form ('NGN29,6 billion') has no clean instance in the library (the DSA's 'N23,11 million' is a thousands slip): tests/test_prose_figures.py covers it. Part of the pre-deploy gate: uv run python evals/complex/run_open.py --file evals/prose/questions.json --out evals/prose/report.md",
+ "questions": [
+  {"id": "p01", "lang": "en", "text": "According to the 2023 Citizens Accountability Report, what was the Board of Internal Revenue's budget and how much did it realise?", "note": "citizens-accountability-2023 p12"},
+  {"id": "p02", "lang": "en", "text": "What were Sokoto State's total cash reserves at the end of 2023?", "note": "citizens-accountability-2023 p23"},
+  {"id": "p03", "lang": "en", "text": "Which MDA had the highest total actual expenditure in 2023 according to the Citizens Accountability Report, and how much was it?", "note": "citizens-accountability-2023 p27"},
+  {"id": "p04", "lang": "en", "text": "According to the 2025 Sokoto MPI report, what share of the 2025 budget went to education, and how much was that?", "note": "mpi-2025-sokoto p54"},
+  {"id": "p05", "lang": "en", "text": "What was Sokoto's domestic debt stock in the MTEF 2025-2027, and what share of total debt was it?", "note": "mtef-2025-2027 p39"},
+  {"id": "p06", "lang": "en", "text": "How much was the Tamaje Water Scheme the state government commissioned?", "note": "mpi-2025-sokoto p50"},
+  {"id": "p07", "lang": "ha", "text": "Nawa ne kasafin Hukumar Tattara Haraji ta Jihar Sokoto (BIR) a 2023 bisa Rahoton Lissafin Kuɗi ga 'Yan Ƙasa, kuma nawa aka samu?", "note": "citizens-accountability-2023 p12, Hausa"}
+ ]
+}

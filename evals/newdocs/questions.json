@@ -1,0 +1,17 @@
+{
+ "_about": "New-document family (1 Nov 2026): questions answered by a library document that is not a budget, without naming it (the EmONC assessment, the 2025 Sokoto MPI report, the 2025 health sector AOP), so the library-wide search, not the plan, must find it. Expected values in questions_checks.json were read from the PDF text of the page named. Part of the pre-deploy gate: uv run python evals/complex/run_open.py --file evals/newdocs/questions.json --out evals/newdocs/report.md",
+ "questions": [
+  {"id": "d01", "lang": "en", "text": "How many emergency obstetric and newborn care facilities does Sokoto have, and what share of them are basic (BEmONC) facilities?", "note": "emonc-sokoto p13"},
+  {"id": "d02", "lang": "en", "text": "What share of Sokoto's emergency obstetric care facilities reported power cuts lasting more than 30 minutes?", "note": "emonc-sokoto p14"},
+  {"id": "d03", "lang": "en", "text": "How many people in Sokoto live within 30 minutes of a functional emergency obstetric care facility?", "note": "emonc-sokoto p18"},
+  {"id": "d04", "lang": "ha", "text": "Mutane nawa ne a jihar Sokoto ke zaune a cikin minti 30 daga cibiyar kula da gaggawar haihuwa da jarirai mai aiki?", "note": "emonc-sokoto p18, Hausa"},
+  {"id": "d05", "lang": "en", "text": "How many eligible public health facilities were identified for Sokoto's emergency obstetric care assessment, and how many of them were assessed?", "note": "emonc-sokoto p29"},
+  {"id": "d06", "lang": "en", "text": "What share of Sokoto State's GDP came from agriculture in 2023?", "note": "mpi-2025-sokoto p19"},
+  {"id": "d07", "lang": "en", "text": "How much did crop production in Sokoto shrink in real terms between 2020 and 2023?", "note": "mpi-2025-sokoto p19"},
+  {"id": "d08", "lang": "en", "text": "In Sokoto's 2025 multidimensional poverty survey, how many households were interviewed in each sampled enumeration area?", "note": "mpi-2025-sokoto p26"},
+  {"id": "d09", "lang": "en", "text": "What score on the facility readiness assessment must Tier 2 primary health care facilities reach to be accredited for direct facility financing?", "note": "health-aop-2025 p25"},
+  {"id": "d10", "lang": "en", "text": "After the first year, what share of previously accredited BEmONC facilities will the independent verification agent visit, and what share of newly accredited ones?", "note": "health-aop-2025 p29"},
+  {"id": "d11", "lang": "en", "text": "What is the total cost of the health sector activities Sokoto planned for 2025?", "note": "health-aop-2025 p14"},
+  {"id": "d12", "lang": "ha", "text": "Kashi nawa ne na tattalin arzikin (GDP) jihar Sokoto ya fito daga noma a shekarar 2023?", "note": "mpi-2025-sokoto p19, Hausa"}
+ ]
+}

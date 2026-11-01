@@ -123,6 +123,8 @@ def record(a) -> dict:
         r = a.analysis
         t["analysis"] = {"tool": r.tool, "subject": r.subject, "focus": r.focus, "year": r.year,
                          "facts": {k: str(v.value) for k, v in r.facts.items()}, "rows": len(r.rows)}
+    if a.plan is not None and getattr(a.plan, "_library", None):    # what the library-wide search found (* = strong)
+        t["library"] = [f"{h.hit.doc_id} p{h.hit.page}{'*' if h.strong else ''}" for h in a.plan._library[:8]]
     if getattr(a, "working", ""):
         t["working"] = a.working[:4000]                      # shown to the user only on "nuna lissafi"
     if getattr(a, "verification", ""):                       # attribution / figures / calculation checked, unsupported

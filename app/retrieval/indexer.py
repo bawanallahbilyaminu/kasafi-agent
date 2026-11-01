@@ -597,6 +597,12 @@ def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bo
                     cp.write_row((doc["id"], r.page, r.table_title, r.classification, r.spend_kind, r.code, r.name,
                                   r.column_label, r.year, r.measure, r.period, r.amount_naira, r.row_text,
                                   line_ids[(r.page, r.table_title, r.row_text)][0]))
+    try:                        # chunk vectors for the library-wide meaning search (app/retrieval/library_search.py)
+        from app.retrieval.library_search import embed_chunks
+        embed_chunks(conn, doc["id"])
+    except Exception as e:      # the model can't load or migration 0025 isn't applied: keyword search still finds it
+        conn.rollback()
+        log.warning("%s: chunk vectors skipped: %s", doc["id"], e)
     if rows:
         try:
             line_meaning.enrich(conn, doc["id"])

@@ -703,8 +703,9 @@ def continued_from(conn, doc_id: str, page: int, text: str) -> str:
 
 
 async def fact_cards(conn: psycopg.Connection, src: SourceResult, topic: Topic, question: str, client: ChatClient,
-                     settings: Settings, want: str = "") -> list[Card]:
-    """`want`: measures to copy first (the ones another source gave, so the two can be compared)."""
+                     settings: Settings, want: str = "", first_pages: list[int] | None = None) -> list[Card]:
+    """`want`: measures to copy first (the ones another source gave, so the two can be compared). `first_pages`:
+    pages the library-wide search found for the question in this document: always read, ahead of the rest."""
     hits = search(conn, topic_query(topic, f"{question} {want}"), k=30, doc_ids=[src.doc_id])
     # a measure from another topic ('unemployment' asked of the IDP survey, its Annex I p68) is drowned by this
     # topic's own words in that query: searched on its own too
@@ -721,9 +722,12 @@ async def fact_cards(conn: psycopg.Connection, src: SourceResult, topic: Topic, 
         r"SELECT page FROM pages WHERE doc_id = %s AND text ~* 'sokoto\s+[0-9]' ORDER BY ts_rank_cd("
         r"to_tsvector('english', text), to_tsquery('english', replace(websearch_to_tsquery('english', %s)::text, "
         r"' & ', ' | '))) DESC, page LIMIT 40", (src.doc_id, asked)) if r[0] not in ranked]
+    first = [p for p in dict.fromkeys(first_pages or [])][:CARD_PAGES]
+    ranked = first + [p for p in ranked if p not in first]
     text = {p: (conn.execute("SELECT text FROM pages WHERE doc_id = %s AND page = %s", (src.doc_id, p)).fetchone()
                 or [""])[0] for p in ranked}
-    pages = {p: text[p] for p in page_order(text, asked, src.publisher.level_rank >= 1)[:CARD_PAGES]}
+    order = [p for p in page_order(text, asked, src.publisher.level_rank >= 1) if p not in first]
+    pages = {p: text[p] for p in (first + order)[:CARD_PAGES] if text.get(p)}
     if not pages:
         return []
     own_year = (conn.execute("SELECT year FROM documents WHERE id = %s", (src.doc_id,)).fetchone() or [None])[0]
@@ -1249,6 +1253,41 @@ def primary_sources(topic: Topic, sources: list[SourceResult], most: int = 2) ->
     return out[:most]
 
 
+LIBRARY_PREFIX = "library:"
+LIBRARY_SOURCES = 2
+
+
+def library_sources(conn: psycopg.Connection, question: str, have: set[str],
+                    most: int = LIBRARY_SOURCES) -> list[tuple[Publisher, list[int]]]:
+    """Indexed documents the library-wide search finds for the question that no chosen publisher covers, as
+    sources (publisher from the manifest), with the pages to read first. A document counts when one of its hits is
+    strong (a phrase of the question printed there, or close in meaning); weaker hits stay for the document path."""
+    from app.retrieval.library_search import library_search
+    try:
+        hits = library_search(conn, question, k=8)
+    except Exception as e:          # noqa: BLE001 - the sweep goes on with the registry's publishers
+        conn.rollback()
+        log.warning("library sources skipped: %s", e)
+        return []
+    pages: dict[str, list[int]] = {}
+    for h in hits:
+        d = h.hit.doc_id
+        if d in have or not h.strong:
+            continue
+        pages.setdefault(d, []).append(h.hit.page)
+    out = []
+    for d, ps in list(pages.items())[:most]:
+        row = conn.execute("SELECT title, publisher FROM documents WHERE id = %s", (d,)).fetchone()
+        if not row:
+            continue
+        name = row[1] or row[0]
+        out.append((Publisher(f"{LIBRARY_PREFIX}{d}", name, level="state", tier=1, verified="library",
+                              doc_types=(row[0],)), ps))
+    if out:
+        log.info("library sources: %s", ", ".join(f"{p.id} p{','.join(map(str, ps))}" for p, ps in out))
+    return out
+
+
 async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, english: str, lang: str, *,
                        client: ChatClient, settings: Settings, notify: Notify | None = None,
                        today: date | None = None, http: httpx.AsyncClient | None = None,
@@ -1283,6 +1322,15 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
                 own_topic[pick.id] = other
         if named:
             primary, context = named[:3], []
+        # every indexed document whose pages match the question is a source too, not only the registry's
+        # publishers (1 Nov 2026: the Health Resource Optimization Plan had the out-of-pocket share the NDHS,
+        # MICS and UNFPA sweep couldn't give); a question naming its publishers reads only those
+        lib_pages: dict[str, list[int]] = {}
+        if not named:
+            have = {d[0] for p in primary + context for d in local_documents(conn, p)}
+            for p, pages in library_sources(conn, ask, have):
+                primary.append(p)
+                lib_pages[p.id] = pages
         if notify and len(primary) > 1:
             await notify(PROGRESS.get(lang, PROGRESS["en"]).format(
                 n=len(primary), names=", ".join(short_pub(p) for p in primary)))
@@ -1290,6 +1338,14 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
         budget = settings.kasafi_topic_budget_s
 
         async def one(p: Publisher) -> SourceResult:
+            if p.id in lib_pages:                    # a library document: read where the library search found it
+                doc_id = p.id.removeprefix(LIBRARY_PREFIX)
+                title = (conn.execute("SELECT title FROM documents WHERE id = %s", (doc_id,)).fetchone() or [""])[0]
+                src = SourceResult(p, doc_id, title, "ok")
+                src.cards = await fact_cards(conn, src, topic, ask, client, settings, first_pages=lib_pages[p.id])
+                if not src.cards:
+                    src.status = "no_figure"
+                return src
             if "dtm_api" in p.discovery and settings.dtmapi_subscription_key:    # figures from the API, not PDFs
                 return await dtm_api_source(p, http, settings)
             its = own_topic.get(p.id, topic)

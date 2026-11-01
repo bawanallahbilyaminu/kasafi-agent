@@ -1,0 +1,12 @@
+{
+ "_about": "Checked facts for evals/prose/questions.json, read from the PDF text of the page named, 1 Nov 2026. A refusal ('couldn't verify') is wrong: these figures are printed in running text on the cited page.",
+ "checks": {
+  "p01": {"any": [["12.9", "9.3"]], "must_not": "(?i)couldn't verify|couldn't find|ban iya tabbatar|ban samu", "source": "citizens-accountability-2023 p12: 'had a budget of N12.9 billion but N9.3billion was realized, equivalent to 72...'"},
+  "p02": {"any": [["23.5"]], "must_not": "(?i)couldn't verify|couldn't find|ban iya tabbatar|ban samu", "source": "citizens-accountability-2023 p23: 'Total cash reserves as at the end of 2023 stood at N23.5billion'"},
+  "p03": {"any": [["19.7", "82.4"], ["19.7", "Lands"]], "must_not": "(?i)couldn't verify|couldn't find|ban iya tabbatar|ban samu", "source": "citizens-accountability-2023 p27: 'Ministry of Lands, Housing and Survey received the highest total actual expenditure which is about N19.7billion (82.4%)'"},
+  "p04": {"any": [["25", "116"]], "must_not": "(?i)couldn't verify|couldn't find|ban iya tabbatar|ban samu", "source": "mpi-2025-sokoto p54: 'allocation of 25% of the 2025 budget to Education (N116 billion)'"},
+  "p05": {"any": [["89.215", "73.1"]], "must_not": "(?i)couldn't verify|couldn't find|ban iya tabbatar|ban samu", "source": "mtef-2025-2027 p39: 'Domestic Debt Stock of N89.215 billion (or 73.10%)'"},
+  "p06": {"any": [["14.1"]], "must_not": "(?i)couldn't verify|couldn't find|ban iya tabbatar|ban samu", "source": "mpi-2025-sokoto p50: 'The state government's commissioning of the N14.1 billion Tamaje Water Scheme'"},
+  "p07": {"any": [["12.9", "9.3"]], "must_not": "(?i)couldn't verify|couldn't find|ban iya tabbatar|ban samu", "source": "as p01"}
+ }
+}

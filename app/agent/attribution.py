@@ -99,6 +99,9 @@ def periods(text: str) -> set[tuple[int, int]]:
     return out
 
 
+CONTRADICTIONS = ("entity", "year", "period", "kind", "geography", "subpopulation")
+
+
 @dataclass
 class Claim:
     sentence: str
@@ -133,14 +136,38 @@ class Attribution:
     def ok(self) -> bool:
         return self.state != "unsupported"
 
+    @property
+    def unverified(self) -> list[str]:
+        """Figures not found (or found at another scale) in the cited evidence: answered, but marked."""
+        return [b.claim.number for b in self.bindings if b.problem in ("missing", "unit")]
+
     def feedback(self) -> str:
         """What to tell the model on a retry."""
         return "; ".join(self.problems[:4])
 
 
+BIG_SCALES = ("billion", "bn", "biliyan", "trillion")
+
+
+def _decimal_comma(num: str, scale: str | None) -> bool:
+    """'NGN29,6 billion' is 29.6 billion; before 'million', '23,11' is a thousands slip, not read as a decimal."""
+    return bool(scale) and scale.lower() in BIG_SCALES and bool(re.fullmatch(r"\d+,\d{1,2}", num))
+
+
 def _value(num: str, scale: str | None) -> float:
+    if _decimal_comma(num, scale):
+        num = num.replace(",", ".")
     v = float(num.replace(",", ""))
     return v * SCALE[scale.lower()] if scale else v
+
+
+def _half_unit(num: str, scale: str | None) -> float:
+    """Half a unit in the figure's last printed place, times its scale: the rounding it was printed at."""
+    if _decimal_comma(num, scale):
+        num = num.replace(",", ".")
+    clean = num.replace(",", "")
+    places = len(clean.split(".")[1]) if "." in clean else 0
+    return 0.5 * 10 ** -places * (SCALE[scale.lower()] if scale else 1)
 
 
 def _terms(text: str) -> set[str]:
@@ -442,9 +469,54 @@ def _spans(evidence) -> list[tuple[str, str, int | None, str, str]]:
     for e in evidence:
         header = (e.text or "")[:300]
         kind = kind_of(getattr(e, "title", "") or "")
-        for line in re.split(r"\n+|(?<=[.;])\s+(?=[A-Z])", e.text or ""):
-            if line.strip():
-                out.append((line.strip(), header, e.year, kind, e.text or ""))
+        for span, head in prose_spans(e.text or ""):
+            out.append((span, head or header, e.year, kind, e.text or ""))
+    return out
+
+
+_LEAD_BACK = re.compile(r"(?i)^\s*(?:this|it|these|that|they|such)\b")
+
+
+def _prose_line(line: str) -> bool:
+    """A line of running text (a sentence wrapped by the PDF), not a table row: five words or more, no cells,
+    and more words than figures twice over."""
+    if "|" in line or line.lstrip().startswith("[Table:"):
+        return False
+    words = len(re.findall(r"[A-Za-z]{2,}", line))
+    return words >= 5 and words >= 2 * len(NUMBER.findall(line))
+
+
+def prose_spans(text: str) -> list[tuple[str, str]]:
+    """(span, header) for an evidence text. Table rows stay one line each (header ''); running text is unwrapped
+    into whole sentences, so 'NGN1.94 billion out of the total N29.62 billion ... as' and 'allocated to the
+    agencies involved with primary healthcare management' are one span. A sentence that starts with 'This' or
+    'It' carries the sentence before it (what 'this' is). The header of a prose span is the paragraph's earlier
+    sentences, nearest last, for the year the paragraph set ('the health budget for 2022 ...')."""
+    out: list[tuple[str, str]] = []
+    para: list[str] = []
+
+    def flush() -> None:
+        if not para:
+            return
+        joined = re.sub(r"(\w)-\s+(\w)", r"\1\2", " ".join(x.strip() for x in para))     # 'alloca- tion'
+        sents = [s.strip() for s in re.split(r"(?<=[.;!?])\s+(?=[A-Z(])", joined) if s.strip()]
+        for i, s in enumerate(sents):
+            span = f"{sents[i - 1]} {s}" if i and _LEAD_BACK.match(s) else s
+            out.append((span, " ".join(sents[:i])[-600:]))
+        para.clear()
+
+    for line in (text or "").split("\n"):
+        if not line.strip():
+            flush()
+            continue
+        if _prose_line(line) or (para and not re.search(r"[.!?:]\s*$", para[-1]) and line[:1].islower()):
+            para.append(line)
+            continue
+        flush()
+        for part in re.split(r"(?<=[.;])\s+(?=[A-Z])", line):   # a short line: as before, split at sentence ends
+            if part.strip():
+                out.append((part.strip(), ""))
+    flush()
     return out
 
 
@@ -459,13 +531,18 @@ def _matches(span: str, claim: Claim) -> list[re.Match]:
     tol = max(0.005, 0.0005 * abs(claim.value))
     if claim.percent and "." not in claim.number:
         tol = 0.55
+    elif claim.scaled:                    # '₦29.6 billion' written at its own rounding: half a unit of its last place
+        cm = NUMBER.match(claim.number)
+        if cm and cm.group(2):
+            tol = max(tol, _half_unit(cm.group(1), cm.group(2)))
     out = []
     for m in NUMBER.finditer(span):
         try:
             v = _value(m.group(1), m.group(2))
         except ValueError:
             continue
-        if abs(v - claim.value) <= tol:
+        own = _half_unit(m.group(1), m.group(2)) if m.group(2) else 0.0     # the span's rounding ('N29.62 billion')
+        if abs(v - claim.value) <= max(tol, own):
             out.append(m)
     return out
 
@@ -698,7 +775,8 @@ def bind(answer_text: str, evidence, entity_names=None) -> Attribution:
             bindings.append(b)
             continue
         if c.kind:
-            row_kind = _kind_at(s, c) or _kind(h)
+            # a running-text sentence's kind is its own (the paragraph before it may speak of spending and budgets)
+            row_kind = _kind_at(s, c) or (_kind(h) if _tabular(s) else "")
             if row_kind and row_kind != c.kind:
                 b.problem = "kind"
                 problems.append(f"kind: {c.number} is {'spending' if row_kind == 'spend' else 'an allocation'} in the "
@@ -708,8 +786,12 @@ def bind(answer_text: str, evidence, entity_names=None) -> Attribution:
         b.bound = (entity_ok and (not c.years or settled_year and bool(years))
                    and (not c.periods or settled_period and bool(pers)))
         bindings.append(b)
-    if any(b.problem for b in bindings):
+    # a contradiction (another entity's row, year, period or kind) refuses; a figure that can't be found or bound
+    # alone doesn't: the others are answered and it is marked unverified (1 Nov 2026)
+    if any(b.problem in CONTRADICTIONS for b in bindings) or (bindings and not any(b.found for b in bindings)):
         state = "unsupported"
+    elif any(b.problem for b in bindings):
+        state = "figures checked"
     elif bindings and all(b.bound for b in bindings):
         state = "attribution checked"
     else:

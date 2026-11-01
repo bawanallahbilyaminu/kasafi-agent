@@ -1,0 +1,17 @@
+{
+ "_about": "Checked facts for evals/newdocs/questions.json, read from the PDF text of the page named, 1 Nov 2026. any: one group's figures all in the reply; all_re: patterns that must match; must_not: a refusal or 'couldn't find'.",
+ "checks": {
+  "d01": {"any": [["232", "90.5"]], "must_not": "(?i)couldn't find|couldn't verify|ban samu|ban iya tabbatar", "source": "emonc-sokoto p13: 'Out of 232 EmONC facilities, the vast majority are Basic EmONC (BEmONC) (90.5%)'"},
+  "d02": {"any": [["81.8"]], "must_not": "(?i)couldn't find|couldn't verify|ban samu|ban iya tabbatar", "source": "emonc-sokoto p14: 'over four-fifths (81.8%) of facilities reported power interruptions exceeding 30 minutes'"},
+  "d03": {"any": [["4,712,575"], ["80.4"]], "must_not": "(?i)couldn't find|couldn't verify|ban samu|ban iya tabbatar", "source": "emonc-sokoto p18: 'approximately 4,712,575 individuals (80.4%) reside within 30 minutes of a functional EmONC facility'"},
+  "d04": {"any": [["4,712,575"], ["80.4"]], "must_not": "(?i)couldn't find|couldn't verify|ban samu|ban iya tabbatar", "source": "as d03"},
+  "d05": {"any": [["281", "259"]], "must_not": "(?i)couldn't find|couldn't verify|ban samu|ban iya tabbatar", "source": "emonc-sokoto p29: 'A total of 281 eligible public sector facilities were identified ... and of these, 259 were assessed (92.2%)'"},
+  "d06": {"any": [["36.5"]], "must_not": "(?i)couldn't find|couldn't verify|ban samu|ban iya tabbatar", "source": "mpi-2025-sokoto p19: 'the Agricultural sector contributed 36.5% to the state's GDP in 2023'"},
+  "d07": {"any": [["694", "568"]], "must_not": "(?i)couldn't find|couldn't verify|ban samu|ban iya tabbatar", "source": "mpi-2025-sokoto p19: 'Crop Production specifically shrinking in real terms from ₦694 billion (2020) to ₦568 billion (2023)'"},
+  "d08": {"all_re": ["(?i)\\b10\\b[^.\\n]{0,40}household|household[^.\\n]{0,60}\\b10\\b"], "must_not": "(?i)couldn't find|couldn't verify|ban samu|ban iya tabbatar", "source": "mpi-2025-sokoto p26: 'Within each sampled EA, a systematic random sample of 10 households was selected for interview'"},
+  "d09": {"all_re": ["75\\s?%|75 percent"], "must_not": "(?i)couldn't find|couldn't verify|ban samu|ban iya tabbatar", "source": "health-aop-2025 p25: 'Tier 2 PHC facilities -- will need to meet a score of 75% on the health facility readiness assessment'"},
+  "d10": {"all_re": ["(?<![\\d.])5\\s?%|(?<![\\d.])5 percent", "25\\s?%|25 percent"], "must_not": "(?i)couldn't find|couldn't verify|ban samu|ban iya tabbatar", "source": "health-aop-2025 p29: 'the IVA will visit 5% or more of previously accredited BEmONC facilities in each state and 25% of newly accredited BEmONC facilities'"},
+  "d11": {"any": [["38,242,722,287"], ["38.24"], ["38.2 billion"]], "must_not": "(?i)couldn't find|couldn't verify|ban samu|ban iya tabbatar", "source": "health-aop-2025 p14: 'Total ₦ 38,242,722,287'"},
+  "d12": {"any": [["36.5"]], "must_not": "(?i)couldn't find|couldn't verify|ban samu|ban iya tabbatar", "source": "as d06"}
+ }
+}
