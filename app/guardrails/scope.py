@@ -58,6 +58,9 @@ _KEYWORDS = {
         r"\bmallak\w*.{0,40}\b(?:gona|fili|ƙasa|kasa)\w*", r"\b(?:gona|fili|ƙasa|kasa)\w*.{0,40}\bmallak\w*",
         r"\biyak\w*\s+(?:gona|fili|ƙasa|kasa)\w*", r"\b(?:gona|fili)\w*\b.{0,30}\b(?:ta|na)\s+wane?\s+ne\b",
         r"\bna\s+wane?\s+ne\b.{0,30}\b(?:gona|fili)\w*",
+        r"\bwane?\s+ne\s+mai\b.{0,30}\b(?:gona|fili|ƙasa|kasa)\w*",            # "wane ne mai wannan gona?"
+        r"\bmai\s+(?:wannan\s+|wancan\s+)?(?:gona|fili)\w*\b.{0,20}\b(?:wane|wa|waye)\b",
+        r"\b(?:wanda|wacce)\s+(?:ya|ta)\s+mallak\w*",
     ],
     "electoral": [
         r"\b[ɗd]an\s+takara\b", r"\b'?\s?yan\s+takara\b", r"\b(?:in|zan|mu|za\s+mu)\s+za[ɓb]a\b",
@@ -114,8 +117,9 @@ def _norm(texts: list[str]) -> str:
 # a budget or statistics question: medical keywords never refuse it outright ("how much is budgeted to treat
 # malaria at home?", "kasafin kula da marasa lafiya a gida"); the classifier decides
 # (budget and statistics words only: not 'how much' or 'nawa', which also ask a dose: 'kwaya nawa zan sha?')
-FIGURES = re.compile(r"(?i)\b(?:budget\w*|allocat\w*|kasafi\w*|naira|spent|spending|expenditure|funding|"
-                     r"statistic\w*|percent\w*|percentage|kashi|ware\s+wa|aka\s+ware)\b")
+# ('kasafin …' / 'kasafi na …' is a budget; a bare 'Kasafi' is the bot's own name: "Can Kasafi give me a certificate…")
+FIGURES = re.compile(r"(?i)\b(?:budget\w*|allocat\w*|kasafin\w*|kasafi\s+na\b|kasafi\s+(?:kuɗi|kudi)|kasafe\w*|naira|"
+                     r"spent|spending|expenditure|funding|statistic\w*|percent\w*|percentage|kashi|ware\s+wa|aka\s+ware)\b")
 
 
 def keyword_check(texts: list[str]) -> str | None:
