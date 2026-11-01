@@ -1,0 +1,28 @@
+{
+ "_about": "Checked facts for evals/surveys/questions.json, read from the report pages (the PDF text of the page named), 1 Nov 2026. any: one group's figures all in the reply; all_re: patterns that must match; must_not: a pattern that must not (a refusal, a facility card, judgement words).",
+ "checks": {
+  "s01": {"any": [["22.5", "57.3"]], "must_not": "(?i)couldn't verify|ban iya tabbatar", "source": "MICS 2021 Table PR.1.1: Sokoto 11.1 8.7 2.8 22.5 (p337 'State' rows); Total 36.0 18.1 3.1 57.3 (p336)"},
+  "s02": {"any": [["22.5", "57.3"]], "must_not": "(?i)couldn't verify|ban iya tabbatar", "source": "as s01"},
+  "s03": {"any": [["7.2", "50.7"]], "must_not": "(?i)couldn't verify|\\b44\\.2\\b.{0,40}Sokoto|Sokoto.{0,60}\\b44\\.2\\b", "source": "MICS 2021 Table TC.1.2 (Continued) p190, Sokoto row: basic antigens 7.2, no vaccinations 50.7; the national basic antigens figure 44.2 (p187) must not be given as Sokoto's"},
+  "s04": {"any": [["202"]], "must_not": "(?i)couldn't verify", "source": "MICS 2021 Table CS.2 p105: Sokoto 34 70 104 109 202 (neonatal, post-neonatal, infant, child, under-five)"},
+  "s05": {"any": [["60.8"]], "must_not": "(?i)couldn't verify", "source": "MICS 2021 Table SR.12.1 p101: Sokoto 44.1 16.8 60.8 (12 months moderate, severe, moderate or severe)"},
+  "s06": {"any": [["11.5"]], "must_not": "(?i)couldn't verify", "source": "MICS 2021 Table SR.6.1W p61: Sokoto total percentage literate 11.5"},
+  "s07": {"any": [["30.5"]], "must_not": "(?i)couldn't verify", "source": "MICS 2021 Table TM.4.1 p130: Sokoto attended at least once by skilled personnel 30.5; no antenatal care 58.8"},
+  "s08": {"any": [["18.1"]], "must_not": "(?i)couldn't verify", "source": "MICS 2021 Table TM.3.3 p125: Sokoto unmet need total 18.1 (spacing 12.1, limiting 6.0)"},
+  "s09": {"any": [["47.5", "32.2", "20.0"], ["47.5", "32.2", "20%"]], "must_not": "(?i)couldn't verify", "source": "MICS 2021 Table SR.2.3 p45: Sokoto poorest 47.5; North West 32.2; Total 20.0"},
+  "s10": {"any": [["22.5"]], "all_re": ["(?i)57\\.3|national", "(?i)MICS|Multiple Indicator"], "must_not": "(?i)couldn't verify|alarming|shameful|failing|neglect|disgrace|\\bpoor\\s+(?:performance|record|state of)|wors[et]\\b", "source": "MICS 2021: Sokoto birth registration 22.5 (p337) against 57.3 nationally (p336); vaccination 7.2 / no vaccinations 50.7 (p190) against 44.2 / 17.8 nationally (p187); the answer lists figures beside the national ones with no judgement words"},
+  "s11": {"any": [["22.5"]], "must_not": "(?i)ban iya tabbatar|couldn't verify", "source": "as s10"},
+  "s12": {"any": [["42.8", "39.5"], ["43%", "39.5"], ["42.8", "40%"]], "must_not": "(?i)couldn't verify", "source": "NDHS 2024 Table 11.1 (Continued) p366: Sokoto height-for-age below -2 SD 42.8; Total 39.5"},
+  "s13": {"any": [["19.0", "32.7", "39.7"], ["19%", "32.7", "39.7"], ["19.0", "33%", "40%"]], "must_not": "(?i)couldn't verify", "source": "NDHS 2024 Table 2.10 p73: Sokoto 14.2 4.8 19.0 1,051; North West 23.5 9.2 32.7; Total 27.5 12.2 39.7"},
+  "s14": {"any": [["26.4"], ["26%"]], "must_not": "(?i)couldn't verify|Sokoto.{0,60}\\b49\\.0\\b", "source": "NDHS 2024 Table 9.1 p256: Sokoto percentage receiving antenatal care from a skilled provider 26.4; North West 49.0"},
+  "s15": {"any": [["56.7"], ["57%"]], "must_not": "(?i)couldn't verify", "source": "NDHS 2024 Table 11.12 p382: Sokoto any anaemia 56.7 (mild 23.1, moderate 30.6, severe 3.0)"},
+  "s16": {"any": [["14.7"], ["15%"]], "must_not": "(?i)couldn't verify", "source": "NDHS 2024 Table 10.2 p323: Sokoto ever had a card 14.7, card seen 11.9 (12-23 months)"},
+  "s17": {"any": [["22.7", "40.6"], ["23%", "41%"]], "must_not": "(?i)couldn't verify", "source": "NDHS 2024 Table 9.2 p258: Sokoto 4+ ANC visits 22.7; North West 40.6"},
+  "s18": {"any": [["22.5", "19.0"], ["22.5", "19%"]], "all_re": ["(?i)different surveys|not (?:directly )?comparable|differ(?:ent)? (?:in )?(?:method|sample)|MICS.{0,200}NDHS"], "must_not": "(?i)couldn't verify|fell by|dropped by|decline of", "source": "MICS 2021 p337 Sokoto 22.5; NDHS 2024 p73 Sokoto 19.0; two surveys with different samples and methods: side by side, no computed change"},
+  "s19": {"any": [["0.409", "90.5", "45.2"]], "must_not": "(?i)couldn't verify", "source": "NBS MPI 2022 Appendix D p123: Sokoto 0.409 (0.391-0.427) 90.5 (88.2-92.8) 45.2 (44.0-46.4)"},
+  "s20": {"any": [["90.5"]], "must_not": "(?i)ban iya tabbatar|couldn't verify", "source": "as s19: incidence (H) 90.5%"},
+  "s21": {"any": [["59.1"]], "all_re": ["0\\.239|0\\.23853"], "must_not": "(?i)couldn't verify", "source": "SBS MPI 2025 p13: '59.1% multidimensionally poor', MPI 0.239; p33: headcount ratio 59.1%"},
+  "s22": {"all_re": ["(?i)EmONC|Emergency Obstetric", "(?i)Wamakko"], "must_not": "(?i)couldn't verify|Reply .next.|Directions from your current location|^🏥|Primary Health Center\\*?, Primary \\(", "source": "emonc-sokoto (UNFPA EmONC Assessment, Sokoto State): Wamakko on p17-18 (uptake), p40 (8 facilities, 100.0%), the referral tables p320-322; never the registry card"},
+  "s23": {"all_re": ["(?i)EmONC|Emergency Obstetric|UNFPA", "(?i)Wamakko"], "must_not": "(?i)ban iya tabbatar|couldn't verify|Rubuta .na gaba.|Hanya daga inda kake", "source": "as s22"}
+ }
+}

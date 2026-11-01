@@ -1,0 +1,28 @@
+{
+ "_about": "Survey and statistics questions (MICS 2021, NDHS 2024, the NBS MPI 2022 and the SBS MPI 2025): single indicators, comparisons with the national and zone figures, 'gaps' questions, Hausa. Expected values in surveys_checks.json were read from the report pages (the PDF text of the cited page), not from Kasafi's extraction. Part of the pre-deploy gate: uv run python evals/complex/run_open.py --file evals/surveys/questions.json --out evals/surveys/report.md",
+ "questions": [
+  {"id": "s01", "lang": "en", "text": "According to MICS 2021, what share of children under 5 in Sokoto have their birth registered, and what is the national figure?", "note": "MICS 2021 Table PR.1.1: Sokoto 22.5 (p337), Total 57.3 (p336)"},
+  {"id": "s02", "lang": "ha", "text": "A cewar MICS 2021, kashi nawa na yara 'yan ƙasa da shekara 5 a Sokoto aka yi wa rajistar haihuwa, kuma nawa ne na ƙasa baki ɗaya?", "note": "s01 in Hausa"},
+  {"id": "s03", "lang": "en", "text": "According to MICS 2021, what percentage of children aged 12-23 months in Sokoto received all basic vaccinations, and what percentage had no vaccinations?", "note": "Table TC.1.2 state rows p190: basic antigens 7.2, no vaccinations 50.7"},
+  {"id": "s04", "lang": "en", "text": "What is the under-five mortality rate in Sokoto according to MICS 2021?", "note": "Table CS.2 p105: Sokoto under-five 202 per 1,000 (neonatal 34, infant 104)"},
+  {"id": "s05", "lang": "en", "text": "According to MICS 2021, what share of Sokoto's household population experienced moderate or severe food insecurity in the previous 12 months?", "note": "Table SR.12.1 p101: Sokoto 60.8"},
+  {"id": "s06", "lang": "en", "text": "What percentage of women aged 15-49 in Sokoto are literate according to MICS 2021?", "note": "Table SR.6.1W p61: Sokoto 11.5"},
+  {"id": "s07", "lang": "en", "text": "According to MICS 2021, what share of women in Sokoto with a recent live birth were attended at least once by skilled health personnel during antenatal care?", "note": "Table TM.4.1 p130: Sokoto 30.5 (no antenatal care 58.8)"},
+  {"id": "s08", "lang": "en", "text": "What is the unmet need for family planning among married women in Sokoto according to MICS 2021?", "note": "Table TM.3.3 p125: Sokoto total unmet need 18.1"},
+  {"id": "s09", "lang": "en", "text": "According to MICS 2021, what share of Sokoto's population is in the poorest wealth quintile, compared with the North West and Nigeria?", "note": "Table SR.2.3 p45: Sokoto 47.5, North West 32.2, Total 20.0"},
+  {"id": "s10", "lang": "en", "text": "According to the Multiple Indicator Cluster Survey (MICS) by NBS and UNICEF, what are the gaps in child healthcare and civil registration for Sokoto State?", "note": "the 1 Nov 2026 live question: Sokoto's figures beside the national ones, no refusal, no judgement words"},
+  {"id": "s11", "lang": "ha", "text": "A cewar MICS na NBS da UNICEF, waɗanne gibi ne ke cikin kula da lafiyar yara da rajistar haihuwa a Jihar Sokoto?", "note": "s10 in Hausa"},
+  {"id": "s12", "lang": "en", "text": "According to NDHS 2024, what percentage of children under 5 in Sokoto are stunted, and what is the national figure?", "note": "NDHS 2024 Table 11.1 p366: Sokoto 42.8, Total 39.5"},
+  {"id": "s13", "lang": "en", "text": "According to NDHS 2024, what share of children under 5 in Sokoto have their birth registered, compared with the North West zone and Nigeria?", "note": "NDHS 2024 Table 2.10 p73: Sokoto 19.0, North West 32.7, Total 39.7"},
+  {"id": "s14", "lang": "en", "text": "According to NDHS 2024, what percentage of women in Sokoto received antenatal care from a skilled provider for their most recent birth?", "note": "Table 9.1 p256: Sokoto 26.4 (North West 49.0)"},
+  {"id": "s15", "lang": "en", "text": "What is the prevalence of anaemia among children aged 6-59 months in Sokoto according to NDHS 2024?", "note": "Table 11.12 p382: Sokoto any anaemia 56.7"},
+  {"id": "s16", "lang": "en", "text": "According to NDHS 2024, what percentage of children aged 12-23 months in Sokoto ever had a vaccination card?", "note": "Table 10.2 p323: Sokoto 14.7 (card seen 11.9)"},
+  {"id": "s17", "lang": "en", "text": "According to NDHS 2024, what share of women in Sokoto had four or more antenatal care visits, and what is the North West figure?", "note": "Table 9.2 p258: Sokoto 22.7, North West 40.6"},
+  {"id": "s18", "lang": "en", "text": "Birth registration in Sokoto: what did MICS 2021 and NDHS 2024 each find, and can the two be compared?", "note": "MICS 22.5 (p337) and NDHS 19.0 (p73): different surveys, said so"},
+  {"id": "s19", "lang": "en", "text": "According to the NBS Nigeria MPI 2022, what are Sokoto's MPI value, incidence and intensity?", "note": "NBS MPI 2022 Appendix D p123: MPI 0.409, incidence 90.5%, intensity 45.2%"},
+  {"id": "s20", "lang": "ha", "text": "A cewar rahoton MPI na NBS na 2022, kashi nawa na mutanen Sokoto ne talakawa ta fuskoki da dama?", "note": "s19 in Hausa: incidence 90.5%"},
+  {"id": "s21", "lang": "en", "text": "What is Sokoto's multidimensional poverty headcount according to the SBS MPI 2025 report?", "note": "SBS MPI 2025 p13/p33: headcount 59.1%, MPI 0.239"},
+  {"id": "s22", "lang": "en", "text": "What did UNFPA find out about health facilities in Wamakko", "note": "the 1 Nov 2026 live misroute: the EmONC assessment (emonc-sokoto), never a facility card"},
+  {"id": "s23", "lang": "ha", "text": "Me rahoton UNFPA ya gano game da asibitocin Wamakko?", "note": "s22 in Hausa"}
+ ]
+}

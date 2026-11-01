@@ -1,0 +1,83 @@
+# Routing: which path answers a message
+
+Written 1 Nov 2026 after two live misroutes of one class: a question naming a report fired a keyword shortcut.
+"What did UNFPA find out about health facilities in Wamakko" got the registry card for "Wamakko Primary Health
+Center" (the name lookup matched the LGA and a facility word); "which 10 LGAs get most IDPs" had earlier gone to ward
+greenness; "According to the MICS … gaps in child healthcare" was refused by a budget-table rule. The rule, the
+switches and the eval set below fix the class.
+
+## 1. The rule
+
+1. **A shortcut fires only on unambiguous intent for its own feature.** A named facility needs *where is / how far /
+   directions to / what about X / is X open* (`app/agent/routing.py: facility_intent`); the nearest-facility search
+   needs *nearest / closest / around me*; a hazard route needs a hazard word and no money word; a place-history route
+   needs a satellite measure word.
+2. **A question naming a publisher, survey or report goes to the planner and the document path**, whatever facility,
+   place or hazard words it also contains: "according to", "what did X find / say / report", UNFPA, MICS, NDHS, IOM,
+   SBS, World Bank, "the … report / survey / assessment", Hausa *a cewar*, *rahoton*, *binciken*, *ya gano*
+   (`routing.document_question`; the publisher names come from `data/source_registry.yaml` plus a fixed list). A route
+   whose own data source is the one named may still answer (NCDC for the outbreak tables, NiMet and NIHSA for the
+   outlooks: `routing.own_source`).
+3. **When in doubt the planner decides with the catalogue.** The planner may add facility, hazard or place data as a
+   supplement; the report answers the question.
+4. **The emergency fast path stays first, unchanged.** The guardrails stay second.
+
+## 2. Every path that answers before or instead of the planner (audit, 1 Nov 2026)
+
+In order of priority. "Pre-planner" paths run in `app/whatsapp/conversation.py: handle` before any model call;
+"post-plan" paths run in `app/agent/answer.py: _answer_question` after the planner model, before the document path.
+
+| # | Path | Where | Trigger | Switch (default on) | Yields to a named source? |
+|---|---|---|---|---|---|
+| 1 | Delete my data | pre-planner | DELETE MY DATA / GOGE BAYANAI NA (exact phrases) | none | n/a |
+| 2 | **Emergency fast path** | pre-planner, before consent | the phrase list (bleeding, not breathing, snakebite, labour …) in Hausa or English; health words + the classifier after consent | **none** | no (safety first) |
+| 3 | Access, language, consent | pre-planner | pilot numbers; "english" / "hausa"; the consent buttons | none | n/a |
+| 4 | Plot shape (size / corner pins / done / skip) | pre-planner | only while a place question is waiting for a size, or "these are the corners" with recent pins | place | n/a (a state, not a keyword) |
+| 5 | Location pin / "share my location" | pre-planner | a WhatsApp location message; SHARE phrases | none | n/a |
+| 6 | Facility follow-ups (next / route / only government / on foot) | pre-planner | a short message (≤ 7 words, no money word) after a facility list | facilities | n/a (a state) |
+| 7 | Facility count | pre-planner | *how many / number of* + a facility kind, no project words | facilities | **yes** |
+| 8 | Named facility (card / route) | pre-planner | a facility word or *go to / how far*, **plus intent words**, and a registry name match ≥ 0.9 | facilities | **yes** |
+| 9 | Nearest facility | pre-planner | a facility word + *nearest / closest / near me / ina … mafi kusa* | facilities | **yes** |
+| 10 | Map only | pre-planner | "show me the map" alone | none | n/a |
+| 11 | Images on/off, show working, quotes | pre-planner | exact commands | none | n/a |
+| 12 | **Guardrails** (political, electoral, verdict, medical advice, land) | pre-planner, before the model | keyword lists, then the model on borderline wording | **none** | no |
+| 13 | Alert sign-up / menu / STOP / MORE | pre-planner | *alert me / faɗakar da ni*, the menu words, STOP / DAINA | alerts (and KASAFI_ALERTS) | n/a |
+| 14 | Replace-or-add, clarify buttons, calculation offer, read-back Eh/A'a | pre-planner | a pending state | none | n/a |
+| 15 | Voice: transcription and read-back | pre-planner | an audio message | none | n/a |
+| 16 | Planner clarify ("which did you mean?") | after the plan | two readings of an entity (never for a place question) | none | n/a |
+| 17 | Facility card / count from the registry | post-plan | the planner's facility measures or a facility-kind word, no money word | facilities | **yes** |
+| 18 | Place history, area (ward / LGA / state) | post-plan | a satellite measure word + a scope word or the pin's ward | place | **yes** |
+| 19 | Place history, the pin's record | post-plan | place words + history words (*my farm*, *gonata*, *how green*) | place | **yes** |
+| 20 | Outbreak tables and official outlooks (NCDC, NiMet, NIHSA) | post-plan | disease + cases words; outlook words | hazards | yes, except its own source |
+| 21 | Weather and hazard layers | post-plan | a hazard word (heat, dust/*kura*, rain, rivers, fires) and no money word | hazards | yes, except NiMet/NIHSA/NCDC |
+| 22 | Structured budget tools (budget_core, dtm_api) | post-plan | every cell of the planner's need fillable by one tool | none (the planner's own) | the budget is the document |
+| 23 | Statewide revenue summary | post-plan (analysis tool) | the planner's `revenue` analysis for the statewide picture | revenue (off: the revenue rows are searched instead) | n/a |
+| 24 | Multi-source topic path (registry) | post-plan | a statistics question on a registry topic | none (a document path) | it is the document path |
+| 25 | Document path (search, fetch, compose, checks) | last | everything else | none | — |
+
+## 3. Feature switches
+
+`.env` (all default true; see `.env.example`):
+
+```
+KASAFI_SHORTCUT_FACILITIES=true
+KASAFI_SHORTCUT_HAZARDS=true
+KASAFI_SHORTCUT_PLACE=true
+KASAFI_SHORTCUT_ALERTS=true
+KASAFI_SHORTCUT_REVENUE=true
+```
+
+Off turns off the shortcut's own trigger (rows 6–9, 13, 17–21, 23) without removing the capability: the planner can
+still use the registry, the hazard layers and the place tables from the catalogue. The emergency fast path and the
+guardrails have no switch. `tests/test_feature_switches.py` checks that with every switch off a nearest-hospital,
+named-facility, count and alert message reaches the planner, the fast path and the guardrails still fire, and the
+routing eval set routes every shortcut case to the planner.
+
+## 4. The routing eval set
+
+`evals/routing/cases.json` (56 cases, English and Hausa): questions carrying another feature's words with the route
+each must take: a budget question naming a facility, a hazard word in a budget question ("flood control budget"), a
+report question about facilities, a place-history question with "health", a facility question naming a ward,
+*kura* the village against *kura* dust, the two live misroutes. `uv run python evals/routing/run.py` applies the
+predicates in handler order in code (no model, no spend) and writes `evals/routing/report.md`; it is part of the
+pre-deploy gate. The named-facility cases need the facility registry (the dev database).

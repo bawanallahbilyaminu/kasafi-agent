@@ -12,6 +12,14 @@ or sentence that holds it and checks, in code with no model call, the claim's id
   against the claim's, as separate periods;
 - unit (the scale word) and kind (allocation vs spending) against the column.
 
+Survey and statistics tables (MICS, NDHS, the MPI, the labour force survey: the row is a geography or a
+sub-population, the columns are indicators, the year is the survey's) are bound by geography instead: the figure's
+row must be the geography the answer gives it (the Sokoto row, not the national 'Total' or the North West zone),
+the indicator words must be on the page, the survey year must be the year the answer states, and a sub-population
+the answer names (children 12–23 months) must be the row's or the table's. Percent figures count on these tables.
+A figure given for Sokoto that sits in the Total row is a contradiction; a figure whose geography the answer
+doesn't state is "figures checked", never a refusal.
+
 States (`Attribution.state`):
 - "attribution checked": every figure is bound on entity, and on year and period where the answer states them;
 - "figures checked": every figure is in the evidence, but a complete binding could not be established (the row
@@ -27,7 +35,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-NUMBER = re.compile(r"(?<![\d.])(\d[\d,]*(?:\.\d+)?)(?:\s*(trillion|billion|million|thousand|biliyan|miliyan|dubu|bn|m|k)\b)?",
+NUMBER = re.compile(r"(?<![\d.])(\d(?:[\d,]*\d)?(?:\.\d+)?)(?:\s*(trillion|billion|million|thousand|biliyan|miliyan|dubu|bn|m|k)\b)?",
                     re.IGNORECASE)
 SCALE = {"trillion": 1e12, "billion": 1e9, "bn": 1e9, "biliyan": 1e9, "million": 1e6, "m": 1e6, "miliyan": 1e6,
          "thousand": 1e3, "k": 1e3, "dubu": 1e3}
@@ -97,6 +105,8 @@ class Claim:
     kind: str                         # spend | alloc | ''
     periods: set[tuple[int, int]] = field(default_factory=set)
     segment: str = ""                 # the words written next to the figure
+    percent: bool = False             # written with % (a survey indicator; a budget share is not bound)
+    window: str = ""                  # the text from the previous figure to the next one
 
 
 @dataclass
@@ -150,17 +160,24 @@ def sentences(text: str) -> list[str]:
 
 
 def _figures(text: str) -> list[re.Match]:
-    """The money figures of a text: not years, page numbers, quarter digits or short counts."""
+    """The figures of a text: not years, page numbers, quarter digits or short counts. A figure written with %
+    is kept (survey indicators); the binding skips it when no survey table is cited."""
     out = []
     for m in NUMBER.finditer(text):
         num, scale = m.group(1), m.group(2)
         digits = num.replace(",", "").replace(".", "")
+        if _is_percent(text, m) and len(digits) >= 1 and not YEAR.fullmatch(num):
+            out.append(m)                              # '23%': a survey indicator
+            continue
         if len(digits) < 2 or (YEAR.fullmatch(num) and not scale) or re.fullmatch(r"\d{1,2}", num) and not scale:
             continue
-        if text[m.end():m.end() + 2].strip().startswith("%"):
-            continue                                   # a share, not a money figure
         out.append(m)
     return out
+
+
+def _is_percent(text: str, m: re.Match) -> bool:
+    return text[m.end():m.end() + 2].strip().startswith("%") or \
+        bool(re.match(r"(?i)\s*(?:percent|per\s+cent|kashi)", text[m.end():m.end() + 12]))
 
 
 def claims_from(text: str) -> list[Claim]:
@@ -179,18 +196,165 @@ def claims_from(text: str) -> list[Claim]:
             years = set(YEAR.findall(window)) or set(YEAR.findall(clean))
             per = periods(window) or periods(clean)
             out.append(Claim(s, m.group(0).strip(), _value(m.group(1), m.group(2)), bool(m.group(2)), terms, years,
-                             _kind(clean), per, segment))
+                             _kind(clean), per, segment, _is_percent(clean, m), window))
     return out
 
 
-def _spans(evidence) -> list[tuple[str, str, int | None]]:
-    """(span, header, document year) for every row or sentence of every cited evidence item."""
+# --- table kinds: budget rows, survey tables, running text ---------------------------------------------------------
+
+BUDGET_TITLE = re.compile(r"(?i)\b(?:budget|appropriation|implementation\s+report|expenditure|financial\s+statement|"
+                          r"audited|mtef|fiscal|accountability|revenue|kasafi)\b")
+SURVEY_TITLE = re.compile(r"(?i)\b(?:survey|mics|ndhs|dhs|index|statistics|labour\s+force|poverty|census|assessment|"
+                          r"bulletin|situation\s+report|cpi|displacement|tracking|matrix|profil\w*|monitoring)\b")
+
+
+def kind_of(title: str) -> str:
+    """budget | survey | text, from the document's title."""
+    t = title or ""
+    if BUDGET_TITLE.search(t):
+        return "budget"
+    if SURVEY_TITLE.search(t):
+        return "survey"
+    return "text"
+
+
+ZONES = {"north west": "zone:nw", "north-west": "zone:nw", "northwest": "zone:nw", "north east": "zone:ne",
+         "north-east": "zone:ne", "north central": "zone:nc", "north-central": "zone:nc", "south west": "zone:sw",
+         "south-west": "zone:sw", "south east": "zone:se", "south-east": "zone:se", "south south": "zone:ss",
+         "south-south": "zone:ss", "arewa maso yamma": "zone:nw", "arewa maso gabas": "zone:ne",
+         "arewa ta tsakiya": "zone:nc"}
+STATES = ("abia", "adamawa", "akwa ibom", "anambra", "bauchi", "bayelsa", "benue", "borno", "cross river", "delta",
+          "ebonyi", "edo", "ekiti", "enugu", "gombe", "imo", "jigawa", "kaduna", "kano", "katsina", "kebbi", "kogi",
+          "kwara", "lagos", "nasarawa", "niger", "ogun", "ondo", "osun", "oyo", "plateau", "rivers", "taraba",
+          "yobe", "zamfara", "fct", "abuja")
+NATIONAL = re.compile(r"(?i)\b(?:nigeria(?:'s|’s)?|national(?:ly)?|nationwide|country-?wide|the\s+country|"
+                      r"all\s+of\s+nigeria|ƙasa\s+baki\s+ɗaya|kasa\s+baki\s+daya|faɗin\s+ƙasa|fadin\s+kasa|"
+                      r"najeriya)\b")
+SOKOTO = re.compile(r"(?i)\bsokoto\b(?!\s+(?:north|south|ta\s+arewa|ta\s+kudu))|\bjihar\b|\bthe\s+state\b")
+AGE = re.compile(r"(?i)\b(\d{1,2})\s*[-–]\s*(\d{1,2})\s*(?:months?|years?|watanni|shekaru)?\b|"
+                 r"\bunder[-\s]?(?:age\s+|the\s+age\s+of\s+)?(?:5|five)\b|\b(?:ƙasa|kasa)\s+da\s+shekar\w*\s+(?:5|biyar)\b")
+
+
+def geo_of(text: str) -> set[str]:
+    """The geographies a claim names: sokoto, national, a zone, urban/rural, another state."""
+    low = (text or "").lower()
+    out = set()
+    if SOKOTO.search(text or ""):
+        out.add("sokoto")
+    if NATIONAL.search(text or ""):
+        out.add("national")
+    for z, key in ZONES.items():
+        if re.search(rf"\b{re.escape(z)}\b", low):
+            out.add(key)
+    for st in STATES:
+        if re.search(rf"\b{re.escape(st)}\b", low):
+            out.add(f"state:{st}")
+    if re.search(r"\burban\b|\bbirni\b", low):
+        out.add("urban")
+    if re.search(r"\brural\b|\bƙauye\b|\bkauye\b", low):
+        out.add("rural")
+    return out
+
+
+def _survey_label(span: str) -> str:
+    """A survey row's label: the words before its first figure ('Sokoto', 'North West', 'Total', '12-23')."""
+    m = re.match(r"\s*([^\d(]*?)(?=\s*[\d(]|$)", span)
+    return (m.group(1) if m else span).strip(" :|")
+
+
+def row_geo(label: str) -> str:
+    """The geography a survey row is for, or '' for a sub-population row ('Male', '12-23', 'Poorest')."""
+    low = label.lower().strip()
+    if not low:
+        return ""
+    if low.startswith("sokoto"):
+        return "sokoto"
+    if low.startswith(("total", "nigeria", "national", "all")):
+        return "national"
+    for z, key in ZONES.items():
+        if low.startswith(z):
+            return key
+    for st in STATES:
+        if low.startswith(st):
+            return f"state:{st}"
+    if low.startswith("urban"):
+        return "urban"
+    if low.startswith("rural"):
+        return "rural"
+    return ""
+
+
+def _ages(text: str) -> set[str]:
+    """Age groups as '12-23' or 'under5', whatever the unit words."""
+    return {f"{m.group(1)}-{m.group(2)}" if m.group(1) else "under5" for m in AGE.finditer(text or "")}
+
+
+GEO_TERMS = {"sokoto", "nigeria", "national", "nationally", "nationwide", "state", "states", "zone", "zones", "north",
+             "south", "east", "west", "central", "urban", "rural", "children", "women", "people", "figure", "figures",
+             "share", "percent", "percentage", "rate", "overall", "najeriya", "jihar", "ƙasa", "kasa", "yankin",
+             "arewa", "kudu", "gabas", "yamma", "birni", "ƙauye", "kauye"} | {s for s in ()}
+GEO_WORDS = {"national": "the national (Total) figure", "sokoto": "the Sokoto figure", "zone:nw": "the North West figure",
+             "zone:ne": "the North East figure", "zone:nc": "the North Central figure", "zone:sw": "the South West figure",
+             "zone:se": "the South East figure", "zone:ss": "the South South figure", "urban": "the urban figure",
+             "rural": "the rural figure"}
+
+
+def _survey(c: Claim, holding: list) -> tuple[str, str, object]:
+    """('bound' | 'unknown' | 'contradiction', the problem text, the span): a survey figure against the geography,
+    indicator, year and sub-population the answer gives it."""
+    claim_geo = geo_of(c.window) or geo_of(c.sentence)
+    claim_ages = _ages(c.window) or _ages(c.sentence)
+    rows = [(x, row_geo(_survey_label(x[0]))) for x in holding]
+    pick = None
+    if claim_geo:
+        fit = [x for x, g in rows if g in claim_geo]
+        if not fit:
+            geos = {g for _, g in rows if g}
+            if geos:
+                g = sorted(geos)[0]
+                what = GEO_WORDS.get(g, f"the {g.split(':')[-1].title()} figure")
+                return ("contradiction", f"geography: {c.number} is {what} in the row '{_survey_label(holding[0][0])}', "
+                                         f"given for {'/'.join(sorted(claim_geo))}", holding[0])
+            # sub-population rows only: a different age group than the answer's is a contradiction
+            labels = {_survey_label(x[0]).lower().replace("–", "-").replace(" ", "") for x in holding}
+            if claim_ages and labels & {a for x in holding for a in _ages(_survey_label(x[0]))} == set() and \
+                    any(_ages(_survey_label(x[0])) for x in holding):
+                return ("contradiction", f"subpopulation: {c.number} is the row '{_survey_label(holding[0][0])}', given "
+                                         f"for {', '.join(sorted(claim_ages))}", holding[0])
+            return ("unknown", "", holding[0])
+        pick = fit[0]
+    else:
+        pick = holding[0]
+    span, header, year, kind, full = pick
+    # the survey year: the year the answer gives the figure must be the survey's (or printed on the page)
+    if c.years and year and str(year) not in c.years and not any(y in full for y in c.years):
+        return ("contradiction", f"year: {c.number} is from the {year} survey, given for {'/'.join(sorted(c.years))}", pick)
+    # a sub-population the answer names must be the table's (its title) or the row's
+    if claim_ages:
+        page_ages = _ages(header) | _ages(_survey_label(span))
+        if page_ages and not claim_ages & page_ages:
+            return ("contradiction", f"subpopulation: {c.number} is for {', '.join(sorted(page_ages))[:40]}, given for "
+                                     f"{', '.join(sorted(claim_ages))}", pick)
+    if not claim_geo:
+        return ("unknown", "", pick)
+    # the indicator: a word of the claim on the page (its title or column headers); geography words don't count
+    words = {w for w in c.terms if w not in GEO_TERMS}
+    low = full.lower()
+    if words and not any(w in low for w in words):
+        return ("unknown", "", pick)
+    return ("bound", "", pick)
+
+
+def _spans(evidence) -> list[tuple[str, str, int | None, str, str]]:
+    """(span, header, document year, table kind, the whole item text) for every row or sentence of every cited
+    evidence item."""
     out = []
     for e in evidence:
         header = (e.text or "")[:300]
+        kind = kind_of(getattr(e, "title", "") or "")
         for line in re.split(r"\n+|(?<=[.;])\s+(?=[A-Z])", e.text or ""):
             if line.strip():
-                out.append((line.strip(), header, e.year))
+                out.append((line.strip(), header, e.year, kind, e.text or ""))
     return out
 
 
@@ -199,32 +363,49 @@ def _is_money(m: re.Match) -> bool:
     return bool(m.group(2)) or ("," in num or "." in num) and len(re.sub(r"[^\d]", "", num)) >= 4
 
 
-def _match(span: str, claim: Claim):
-    """The match of the claim's figure in the span, or None."""
+def _matches(span: str, claim: Claim) -> list[re.Match]:
+    """Every match of the claim's figure in the span. A percent written without decimals ('57%') matches the
+    table's '57.3'."""
+    tol = max(0.005, 0.0005 * abs(claim.value))
+    if claim.percent and "." not in claim.number:
+        tol = 0.55
+    out = []
     for m in NUMBER.finditer(span):
         try:
             v = _value(m.group(1), m.group(2))
         except ValueError:
             continue
-        if abs(v - claim.value) <= max(0.005, 0.0005 * abs(claim.value)):
-            return m
-    return None
+        if abs(v - claim.value) <= tol:
+            out.append(m)
+    return out
+
+
+def _match(span: str, claim: Claim):
+    """The first match of the claim's figure in the span, or None."""
+    ms = _matches(span, claim)
+    return ms[0] if ms else None
 
 
 def _holds(span: str, claim: Claim) -> bool:
     return _match(span, claim) is not None
 
 
+def _cells(span: str, claim: Claim) -> list[str]:
+    """The labels of every column holding the figure: the text just before each match, back to the previous cell
+    ('|') or money figure (years, codes and quarter digits are part of the label). A row can print one amount in
+    two columns (the 2027 and 2028 out-year estimates)."""
+    out = []
+    for m in _matches(span, claim):
+        before = span[:m.start()]
+        figures = [x.end() for x in NUMBER.finditer(before) if _is_money(x)]
+        cut = max(before.rfind("|"), max(figures, default=-1))
+        out.append(before[cut + 1:] if cut >= 0 else before)
+    return out
+
+
 def _cell(span: str, claim: Claim) -> str:
-    """The label of the column holding the figure: the text just before it, back to the previous cell ('|') or
-    money figure (years, codes and quarter digits are part of the label)."""
-    m = _match(span, claim)
-    if m is None:
-        return ""
-    before = span[:m.start()]
-    figures = [x.end() for x in NUMBER.finditer(before) if _is_money(x)]
-    cut = max(before.rfind("|"), max(figures, default=-1))
-    return before[cut + 1:] if cut >= 0 else before
+    cells = _cells(span, claim)
+    return cells[0] if cells else ""
 
 
 def _label(span: str) -> str:
@@ -241,8 +422,12 @@ def _label(span: str) -> str:
 
 
 def _kind_at(span: str, claim: Claim) -> str:
-    """The kind of the column holding the figure, else the row's kind when the row is of one kind."""
-    return _kind(_cell(span, claim)) or _kind(span)
+    """The kinds of the columns holding the figure: the claim's own kind when any column has it, else the first
+    column's, else the row's kind when the row is of one kind."""
+    kinds = [_kind(c) for c in _cells(span, claim)]
+    if claim.kind in kinds:
+        return claim.kind
+    return next((k for k in kinds if k), "") or _kind(span)
 
 
 def _digits_only(span: str, claim: Claim) -> bool:
@@ -270,6 +455,12 @@ def _names_in(text: str, name: str) -> bool:
     return bool(words) and all(w in _terms(low) or w in low for w in words)
 
 
+def _tabular(span: str) -> bool:
+    """A table row (cells, or two money figures), where another entity's words beside a figure contradict; a
+    running-text sentence naming the entity elsewhere does not."""
+    return "|" in span or len([m for m in NUMBER.finditer(span) if _is_money(m)]) >= 2
+
+
 def _entity(c: Claim, spans, groups) -> tuple[str, list]:
     """('bound' | 'ambiguous' | 'contradiction' | 'unknown', the rows holding the figure that the claim's words
     or its entity's names fit)."""
@@ -282,7 +473,7 @@ def _entity(c: Claim, spans, groups) -> tuple[str, list]:
         # one shared word never binds: a row with more distinguishing words than the claim ('Basic Education')
         # binds only when no other row of the evidence also fits the claim's words with another label
         rows = [x for x in fits if _terms(_label(x[0])) <= c.terms]
-        others = {frozenset(_terms(_label(s))) for s, _, _ in spans if c.terms <= _terms(s) and NUMBER.search(s)}
+        others = {frozenset(_terms(_label(x[0]))) for x in spans if c.terms <= _terms(x[0]) and NUMBER.search(x[0])}
         if rows or len(others) <= 1:
             return "bound", rows or fits
         return ("bound", by_name) if by_name else ("ambiguous", fits)
@@ -290,26 +481,32 @@ def _entity(c: Claim, spans, groups) -> tuple[str, list]:
         return "bound", by_name
     if c.terms:
         # a contradiction: the claim's words name another row (all of them in it) that holds a different figure
-        elsewhere = [s for s, _, _ in spans if c.terms <= _terms(s) and not _holds(s, c) and NUMBER.search(s)]
-        if elsewhere and not any(c.terms & _terms(s) == c.terms for s, _, _ in holding):
+        elsewhere = [x[0] for x in spans if c.terms <= _terms(x[0]) and not _holds(x[0], c) and NUMBER.search(x[0])
+                     and (x[3] == "budget" or _tabular(x[0]))]
+        if elsewhere and not any(c.terms & _terms(x[0]) == c.terms for x in holding):
             return "contradiction", holding
         if mine:
-            named = [s for s, _, _ in spans if any(_names_in(s, n) for g in mine for n in g) and not _holds(s, c)]
+            named = [x[0] for x in spans if any(_names_in(x[0], n) for g in mine for n in g) and not _holds(x[0], c)
+                     and (x[3] == "budget" or _tabular(x[0]))]
             if named:
                 return "contradiction", holding
     elif mine:
-        named = [s for s, _, _ in spans if any(_names_in(s, n) for g in mine for n in g) and not _holds(s, c)]
+        named = [x[0] for x in spans if any(_names_in(x[0], n) for g in mine for n in g) and not _holds(x[0], c)
+                 and (x[3] == "budget" or _tabular(x[0]))]
         if named:
             return "contradiction", holding
     return "unknown", holding
 
 
 def _years_of(span: str, header: str, doc_year: int | None, c: Claim) -> tuple[set[str], bool]:
-    """(the years of the figure's column, settled?): the cell label's years; else the row's single year; else the
-    header's single year; else the document's. Several years with no label on the cell: not settled."""
-    cell = set(YEAR.findall(_cell(span, c)))
-    if cell:
-        return cell, True
+    """(the years of the figure's columns, settled?): the cell labels' years (a column whose year the answer names
+    settles it); else the row's single year; else the header's single year; else the document's. Several years
+    with no label on the cell: not settled."""
+    cells = [set(YEAR.findall(x)) for x in _cells(span, c)]
+    cells = [x for x in cells if x]
+    if cells:
+        fit = [x for x in cells if x & c.years]
+        return (fit[0] if fit else set().union(*cells)), True
     row = set(YEAR.findall(span))
     if len(row) == 1:
         return row, True
@@ -324,9 +521,11 @@ def _years_of(span: str, header: str, doc_year: int | None, c: Claim) -> tuple[s
 
 
 def _periods_of(span: str, header: str, c: Claim) -> tuple[set[tuple[int, int]], bool]:
-    cell = periods(_cell(span, c))
-    if cell:
-        return cell, True
+    cells = [periods(x) for x in _cells(span, c)]
+    cells = [x for x in cells if x]
+    if cells:
+        fit = [x for x in cells if x & c.periods]
+        return (fit[0] if fit else set().union(*cells)), True
     row = periods(span)
     if len(row) == 1:
         return row, True
@@ -343,11 +542,14 @@ def bind(answer_text: str, evidence, entity_names=None) -> Attribution:
     groups = _groups(entity_names)
     bindings: list[Binding] = []
     problems: list[str] = []
+    any_survey = any(x[3] == "survey" for x in spans)
     for c in claims_from(answer_text):
+        if c.percent and not any_survey:
+            continue                                   # a budget share: not a figure of a row
         b = Binding(c)
-        holding = [(s, h, y) for s, h, y in spans if _holds(s, c)]
+        holding = [x for x in spans if _holds(x[0], c)]
         if not holding:
-            if any(_digits_only(s, c) for s, _, _ in spans):
+            if any(_digits_only(x[0], c) for x in spans):
                 b.problem = "unit"
                 problems.append(f"unit: {c.number} is written with another scale than the evidence row")
             else:
@@ -356,6 +558,16 @@ def bind(answer_text: str, evidence, entity_names=None) -> Attribution:
             bindings.append(b)
             continue
         b.found = True
+        survey_rows = [x for x in holding if x[3] == "survey"]
+        if survey_rows and len(survey_rows) == len(holding) or (survey_rows and not c.terms):
+            how, why, pick = _survey(c, survey_rows)
+            b.span = pick[0]
+            if how == "contradiction":
+                b.problem = why.split(":")[0]
+                problems.append(why)
+            b.bound = how == "bound"
+            bindings.append(b)
+            continue
         how, rows = _entity(c, spans, groups)
         if how == "contradiction":
             s = rows[0][0]
@@ -364,7 +576,7 @@ def bind(answer_text: str, evidence, entity_names=None) -> Attribution:
                             f"'{', '.join(sorted(c.terms))[:60] or 'the entity named'}'")
             bindings.append(b)
             continue
-        s, h, y = (rows or holding)[0]
+        s, h, y = (rows or holding)[0][:3]
         b.span = s
         entity_ok = how == "bound"
         # the year of the figure's own column

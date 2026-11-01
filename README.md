@@ -95,8 +95,11 @@ from that publisher's own documents.
 - **Fixed sets:** multi-publisher topic questions ([`evals/topics/`](evals/topics)), answer patterns found in phone
   tests ([`evals/patterns/`](evals/patterns)), official advisories, the scope guardrails in Hausa and English
   ([`evals/guardrails/`](evals/guardrails)), place history for wards and LGAs with expected values from the
-  precomputed table ([`evals/place/`](evals/place)), and the questions that once flipped between runs
-  ([`evals/variance/`](evals/variance)).
+  precomputed table ([`evals/place/`](evals/place)), the questions that once flipped between runs
+  ([`evals/variance/`](evals/variance)), survey and statistics questions (MICS 2021, NDHS 2024, the NBS and SBS
+  MPI reports) with expected values read from the report pages ([`evals/surveys/`](evals/surveys)), and a routing
+  set of questions that carry another feature's words, checked in code against the route each must take
+  ([`evals/routing/`](evals/routing), [`docs/routing.md`](docs/routing.md)).
 - **Conversations end to end.** Scripted WhatsApp conversations run through the real webhook handler against a
   test database before every deploy. Each scripted message must get exactly the expected replies, never silence
   and never a duplicate ([`tests/test_e2e_conversation.py`](tests/test_e2e_conversation.py)).

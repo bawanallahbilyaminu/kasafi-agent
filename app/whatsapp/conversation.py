@@ -34,6 +34,7 @@ from app.geo.facility_info import NAMED, ROUTE_TO, as_facility, card, counted, i
 from app.geo.location import SHARE, Spot, locate_point, pin_of, place_from_text
 from app.place.answer import place_route
 from app.place.planner import area_route
+from app.agent.routing import document_question, facility_intent
 from app.privacy import strip_location
 from app.maps.render import render_specs
 from app.geo.location import memory as location_memory
@@ -246,7 +247,8 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             return _located(key, lang, store, typed) + await _after_location(waiting, key, lang, settings,
                                                                              facility_fn, typed)
     # "nearest hospital?" and its follow-ups ("next", "route?", "only government hospitals"): PostGIS and ORS, no model
-    if text and settings.has_database and (outs := await _facilities(text, key, lang, store, settings, place_fn,
+    if text and settings.has_database and settings.kasafi_shortcut_facilities and \
+            (outs := await _facilities(text, key, lang, store, settings, place_fn,
                                                                          facility_fn)) is not None:
         return outs
     # "show me a map" / "nuna min taswira" on its own: the map for what was just asked, no model
@@ -399,7 +401,8 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
 
     # 5. Hazard alerts (app/alerts): sign-up and its explicit OK, the menu, STOP / DAINA, MORE; no model. Only with
     # KASAFI_ALERTS on (off on the server until step 6 is released)
-    if settings.kasafi_alerts and kind in ("text", "button", "interactive") and (step := alerts_reply(
+    if settings.kasafi_alerts and settings.kasafi_shortcut_alerts and kind in ("text", "button", "interactive") and \
+            (step := alerts_reply(
             text, button, key, lang, store, store.get_last_lga(key),
             seal=lambda: encrypt_number(sender, settings))) is not None:
         if not step.ask:
@@ -501,7 +504,8 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             return [Out(outcome.text)]            # read-back: answer after Eh or a correction
         if r and outcome.text != EMERGENCY_REPLY:  # heard clearly: answer now
             # a facility question by voice ('ina asibiti mafi kusa', 'how far is Arkilla PHC') as by text
-            if settings.has_database and (outs := await _facilities(r.english or r.transcript, key, lang, store,
+            if settings.has_database and settings.kasafi_shortcut_facilities and \
+                    (outs := await _facilities(r.english or r.transcript, key, lang, store,
                                                                     settings, place_fn, facility_fn)) is not None:
                 return [Out(t("heard_prefix", lang, transcript=r.transcript[:1000]))] + outs
             return await respond(r.transcript, t("heard_prefix", lang, transcript=r.transcript[:1000]),
@@ -753,6 +757,8 @@ async def _facilities(text: str, key: str, lang: str, store: UserStore, settings
         log.info("facility follow-up: %s", step)
         return await _facility_replies(spot, search, lang, settings, facility_fn, "route" if step == "route" else "list",
                                        key)
+    if document_question(text):          # a publisher, survey or report named: the document path answers
+        return None                      # (the planner may add registry data as a supplement; app/agent/routing.py)
     if is_count(text):                   # 'how many PHCs in Sokoto?': the registry's count
         return [Out(await asyncio.to_thread(counted, settings, text, lang), lang=lang)]
     if not is_facility_query(text) and (named := await _named_facility(text, key, lang, settings, facility_fn, spot)):
@@ -774,6 +780,10 @@ async def _named_facility(text: str, key: str, lang: str, settings: Settings, fa
     """A facility the message names ('What about Arkilla PHC'): its registry card, kept as the facility a follow-up
     means; with 'go to' / 'how far': the route to it from the point, or the location request when there is none."""
     if not (text or "").strip() or not settings.has_database or not (FACILITY_WORD.search(text) or ROUTE_TO.search(text)):
+        return None
+    # unambiguous intent only ('where is', 'how far', 'what about X', 'is X open'): "What did UNFPA find out about
+    # health facilities in Wamakko" matched the LGA and a facility word and got a facility card (1 Nov 2026)
+    if document_question(text) or not (facility_intent(text) or ROUTE_TO.search(text)):
         return None
     try:
         hits = await asyncio.to_thread(lookup, settings, text)

@@ -54,6 +54,7 @@ from app.hazards.answer import MEASURE_LAYERS, days_asked, hazard_answer, layers
 from app.hazards.summary import hazard_summary
 from app.place.answer import place_answer, place_route
 from app.place.planner import area_answer, area_route
+from app.agent.routing import document_question, own_source
 from app.agent.topics import note_of as topic_note
 from app.agent.topics import local_documents as topics_local
 from app.agent.topics import named_publishers
@@ -287,6 +288,14 @@ ANSWER_SYSTEM = (
     "8. When the question asks what a report says, explains, notes or gives reasons for, answer from its "
     "running-text paragraphs: state the reasons it gives in short, with the figures those paragraphs print, and "
     "cite that excerpt; table rows can follow. Say the reasons aren't in the evidence only if no excerpt has them.\n"
+    "9. Survey and statistics tables (MICS, NDHS, the MPI, the labour force survey): the row is a place or a "
+    "group and the columns are indicators. Give Sokoto's figure from the Sokoto row (the 'State' rows, often on "
+    "the table's continuation page), and beside it the national 'Total' figure and the zone's (North West) when "
+    "the same table prints them, naming each as Sokoto's, national or the zone's, with the survey's year. Never "
+    "give a Total or zone figure as Sokoto's. For 'gaps', 'challenges', 'how bad' or 'weakest' questions, list "
+    "Sokoto's lowest indicators on the topic as plain figures beside the national ones; the gap is the difference "
+    "in numbers, stated as numbers; use no judgement words (poor, alarming, failing). Say which survey and year, "
+    "and that a state figure comes from a sample.\n"
     "Reply with JSON only: {\"summary\": \"<one line, in the requested language>\", \"items\": [\"<...>\"], "
     "\"found\": \"full\"|\"partial\"|\"none\", \"cited\": [<evidence numbers used>], "
     "\"calculation\": null or {\"description\": \"<what it is, e.g. Sokoto year-on-year All Items inflation, "
@@ -565,9 +574,55 @@ def _latest_field(v) -> dict:
             "frequency": str(v.get("frequency") or "")}
 
 
+def named_source_docs(conn: psycopg.Connection, text: str) -> list[str]:
+    """The documents of the publisher, survey or report the question names (MICS, NDHS, UNFPA, the World Bank):
+    their ids by title or publisher. A question naming a survey searches that survey's documents (routing.py)."""
+    from app.agent.routing import names_a_source
+    name = names_a_source(text)
+    if not name:
+        return []
+    like = f"%{name}%"
+    rows = conn.execute("SELECT id FROM documents WHERE title ILIKE %s OR publisher ILIKE %s", (like, like)).fetchall()
+    return [r[0] for r in rows]
+
+
+STATE_ROW = re.compile(r"(?m)^\s*Sokoto\b(?!\s+(?:North|South))\s+[\d(]")
+
+
+def state_row_pages(conn: psycopg.Connection, evidence: list[Evidence], most: int = 3) -> list[Evidence]:
+    """A survey's national table prints its state rows on the continuation pages ('Table PR.1.1 … (Continued)'):
+    for a statistics page with no Sokoto row, the next pages of the same table that have one."""
+    extra: list[Evidence] = []
+    seen = {(e.doc_id, e.page) for e in evidence}
+    for e in evidence:
+        if len(extra) >= most or STATE_ROW.search(e.text or "") or not e.doc_id:
+            continue
+        cat = conn.execute("SELECT category FROM documents WHERE id = %s", (e.doc_id,)).fetchone()
+        if not cat or cat[0] != "statistics":
+            continue
+        title = next((m.group(0) for m in re.finditer(r"(?m)^\s*Table\s+[A-Z]*\.?\d+", e.text or "")), "")
+        key = title.strip()                          # the table family ('Table TC.1': its by-state table is TC.1.2)
+        if not key:
+            continue
+        for page, text in conn.execute("SELECT page, text FROM pages WHERE doc_id = %s AND page > %s AND page <= %s "
+                                       "ORDER BY page", (e.doc_id, e.page, e.page + 4)).fetchall():
+            if key not in (text or "") or (e.doc_id, page) in seen:
+                continue
+            if STATE_ROW.search(text or ""):
+                extra.append(Evidence(0, e.doc_id, e.title, e.year, page, "text", text[:EVIDENCE_CHARS]))
+                seen.add((e.doc_id, page))
+                break
+    return extra
+
+
 def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
-    """Search the planned documents first; widen to all documents only if nothing is found."""
+    """Search the planned documents first; widen to all documents only if nothing is found. A question naming a
+    survey or a publisher searches that source's documents, and budget rows join only when money is asked."""
     scope: list[str] | None = plan.doc_ids or None
+    asked = f"{plan.original} {plan.english_question}"
+    money = bool(MONEY_WORDS.search(asked))
+    if not money and (named := named_source_docs(conn, asked)):
+        scope = named
     # Stage 1: labelled table rows only ("[Table: Total Expenditure by Administrative Classification]
     # 017200000000 Ministry for Religious Affairs | ..."). Exact facts; whole-page keyword ranking buried
     # them under tables of contents and long project lists.
@@ -627,7 +682,11 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
         ([h.doc_id for h in ranked], [h.page for h in ranked])).fetchall()) if ranked else {}
     evidence = [Evidence(i, h.doc_id, h.title, h.year, h.page, sources.get((h.doc_id, h.page), "text"),
                          texts[(h.doc_id, h.page)][:EVIDENCE_CHARS]) for i, h in enumerate(ranked, start=1)]
-    return evidence + line_evidence(conn, plan, evidence)
+    extra = state_row_pages(conn, evidence) if not money else []        # the Sokoto rows of a national table
+    extra += line_evidence(conn, plan, evidence) if money or not plan.statistics else []
+    for i, e in enumerate(extra, start=len(evidence) + 1):
+        e.n = i
+    return evidence + extra
 
 
 LINE_EVIDENCE_PAGES = 8       # each is a few printed rows, not a whole page (a sector and a ministry per document)
@@ -1112,18 +1171,20 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             apply_period(conn, plan, question, today)        # a period named beats the newest report
         drop_unnamed_splits(plan, question)                  # no kind of spending named: the total
         # health facilities from the registry: a count of a kind, or one facility by name (no money asked about)
-        if conn is not None and (fac := facility_route(question, plan, conn, lang)):
+        if conn is not None and settings.kasafi_shortcut_facilities and (fac := facility_route(question, plan, conn, lang)):
             t["facilities"] = 0.0
             return Answer(fac, True, True, plan=plan, timings=t, exact=fac)
         # place history for a ward, an LGA or the state (docs/place-history.md §5): the precomputed measures
-        if conn is not None and (ar := area_route(question, plan.english_question, place)):
+        shortcut = not document_question(question)                   # a source named: the document path (routing.py)
+        place_on = shortcut and settings.kasafi_shortcut_place          # feature switches: docs/routing.md
+        if conn is not None and place_on and (ar := area_route(question, plan.english_question, place)):
             t0 = time.perf_counter()
             aa = area_answer(conn, question, plan.english_question, lang, ar[0], ar[1], today, place=place)
             t["place_area"] = time.perf_counter() - t0
             return Answer(aa.text, aa.found, True, plan=plan, timings=t, exact=aa.text, working=aa.working,
                           partial=aa.partial, maps=aa.specs, needs_pin=aa.needs_pin)
         # place history (docs/place-history.md): what the satellite record shows for the user's pin, in code
-        if conn is not None and place_route(question, plan.english_question):
+        if conn is not None and place_on and place_route(question, plan.english_question):
             t0 = time.perf_counter()
             pa = await place_answer(conn, settings, question, plan.english_question, lang, place, today,
                                     notify=notify, ask_size=bool(place and place.get("ask_size")))
@@ -1133,7 +1194,8 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
                           partial=pa.partial, maps=pa.specs, needs_pin=pa.needs_pin, needs_size=pa.needs_size)
         # NCDC outbreak figures and official outlooks (NIHSA, NiMet): answered in code from the crawled tables; an
         # outlook in the library goes on to the document path
-        if conn is not None and (kind := official.route(f"{question} {plan.english_question}",
+        if conn is not None and settings.kasafi_shortcut_hazards and \
+                (shortcut or own_source(question, ("NCDC", "NiMet", "NIHSA"))) and                 (kind := official.route(f"{question} {plan.english_question}",
                                                          list(plan.need.measures) if plan.need else [])):
             t0 = time.perf_counter()
             where = where_for(plan.need.entities if plan.need else [], place)
@@ -1147,7 +1209,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
                 return Answer(text, True, True, plan=plan, timings=t, exact=f"{summary}\n{oa.text}",
                               partial=not oa.found, quotes=quotes)
         # weather and hazards (heat, dust, rain, rivers, fires): answered in code from the fetched layers
-        if conn is not None and (layers := hazard_route(question, plan)):
+        if conn is not None and settings.kasafi_shortcut_hazards and (layers := hazard_route(question, plan)):
             t0 = time.perf_counter()
             q = f"{question} {plan.english_question}"
             ha = hazard_answer(conn, q, lang, layers, hazard_where(conn, question, plan, place), today, settings,
@@ -1218,7 +1280,8 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         profile_compare = (plan.analysis.get("tool") in ("mda_profile", "function_profile")
                            and (len(set(question_years(question, plan.english_question))) >= 2
                                 or not PROFILE_CUE.search(f"{plan.english_question} {question}")))
-        if plan.analysis.get("tool") == "revenue" and revenue_rows_needed(question, plan):
+        if plan.analysis.get("tool") == "revenue" and (revenue_rows_needed(question, plan)
+                                                       or not settings.kasafi_shortcut_revenue):
             # an MDA, donor, grant, line or calculation named: the revenue rows, not the statewide summary; what
             # a report says about its revenue performance is in its narrative, which the pages read
             log.info("revenue: narrower than the statewide picture, or its narrative asked; searching the rows")
@@ -1752,6 +1815,10 @@ def off_topic_note(conn, plan: Plan, question: str, cited: list[Evidence], lang:
     an IDP count): said before the answer, never left to look like the figure."""
     if conn is None or not cited or not (plan.statistics or plan.current):
         return ""
+    from app.agent.routing import names_a_source
+    name = names_a_source(f"{question} {plan.english_question}")
+    if name and any(name.lower() in f"{e.title} {e.doc_id}".lower() for e in cited):
+        return ""                                  # the source the question asked for is the one cited: no note
     topic = registry().topics.get(detect_topic(f"{question} {plan.english_question}") or plan.topic)
     if not topic or topic.answer_pattern != "multi_source":
         return ""
@@ -1779,7 +1846,7 @@ def facility_route(question: str, plan: Plan, conn, lang: str) -> str:
     from app.hazards.advisories import lgas_in
     text = f"{question} {plan.english_question}"
     measures = set(plan.need.measures) if plan.need else set()
-    if MONEY_WORDS.search(text):
+    if MONEY_WORDS.search(text) or document_question(question):     # a report named: its findings, not the registry
         return ""
     if is_count(text) or "facility_count" in measures and is_count(f"how many {text}"):
         return count_answer(conn, text, lang)
@@ -1878,6 +1945,8 @@ def hazard_route(question: str, plan: Plan) -> list[str]:
     layers = layers_asked(text, measures, own=question)      # the user's own words decide a named layer
     if not layers or MONEY_WORDS.search(text) or (others and not set(measures) & HAZARD_MEASURES):
         return []
+    if document_question(question) and not own_source(question, ("NiMet", "NIHSA", "NCDC")):
+        return []                                             # "what did the World Bank say about floods": a document
     return layers
 
 

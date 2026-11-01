@@ -94,6 +94,15 @@ class Settings(BaseSettings):
     # straight-line distance) and NASA FIRMS fire detections (without it, no fires layer)
     ors_api_key: SecretStr | None = None
     firms_map_key: SecretStr | None = None
+    # feature switches for the capability shortcuts (docs/routing.md): off turns off the shortcut's own trigger
+    # (the pre-planner facility search, the in-code hazard, place-history, alert sign-up and revenue-summary
+    # routes) without removing the capability, which the planner can still use from the catalogue. All on by
+    # default. The emergency fast path and the guardrails have no switch.
+    kasafi_shortcut_facilities: bool = True
+    kasafi_shortcut_hazards: bool = True
+    kasafi_shortcut_place: bool = True
+    kasafi_shortcut_alerts: bool = True
+    kasafi_shortcut_revenue: bool = True
     # the hazard fetchers' schedule (app/hazards/fetch.py) runs in the app only when this is on
     kasafi_hazard_fetch: bool = False
     # the hazard fetchers stop for the day (UTC) at this many Open-Meteo calls, well under the free 10,000
