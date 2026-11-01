@@ -25,7 +25,7 @@ import psycopg  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.place import area  # noqa: E402
 
-LAYERS = ["cropland", "jrc", "unosat", "rain", "modis", "s1", "bsi"]
+LAYERS = ["cropland", "jrc", "unosat", "rain", "modis", "season", "s1", "bsi"]
 FIRST = {"modis": 2001, "s1": 2017, "bsi": 2017, "rain": 2001}
 
 
@@ -88,6 +88,13 @@ def main() -> None:
                 rows += [(u, lvl, "rain_season_mm", y, v, None, area.SOURCES["rain"]) for y, v in vals.items()]
             area.save(conn, rows, today)
             logging.info("rain: %.0fs (%d rows)", time.perf_counter() - t0, len(rows))
+        if "season" in layers:                 # which years' MODIS seasons are complete in the catalogue (STAC only)
+            t0 = time.perf_counter()
+            lo = max(FIRST["modis"], yr[0]) if yr else FIRST["modis"]
+            hi = min(today.year, yr[1]) if yr else today.year
+            years = [y for y in range(lo, hi + 1) if a.force or y >= today.year - 1 or not area.have(conn, "modis_season_last_doy", y)]
+            area.save(conn, area.season_rows(grid, range(min(years), max(years) + 1)) if years else [], today)
+            logging.info("season: %.0fs (%d years)", time.perf_counter() - t0, len(years))
         for layer, fn, measures in (("modis", area.modis_year, ("modis_peak",)), ("s1", None, ("s1_flood_share",)),
                                     ("bsi", area.bsi_year, ("bsi_share", "bsi_median"))):
             if layer not in layers:

@@ -8,12 +8,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034011",
-   "year": 2026,
-   "question": "Which wards of Kware LGA were greenest in 2026?",
+   "year": 2024,
+   "question": "Which wards of Kware LGA were greenest in 2024?",
    "expect": {
     "top": "Tsaki Walakae",
     "bottom": "Tunga Mallamawa",
-    "top_value": "0.72",
+    "top_value": "0.69",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -32,12 +32,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034011",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Kware ne suka fi koriya a 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Kware ne suka fi koriya a 2024?",
    "expect": {
     "top": "Tsaki Walakae",
     "bottom": "Tunga Mallamawa",
-    "top_value": "0.72",
+    "top_value": "0.69",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -56,11 +56,11 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034005",
-   "year": 2026,
-   "question": "Which wards of Gwadabawa LGA were greenest in 2026?",
+   "year": 2024,
+   "question": "Which wards of Gwadabawa LGA were greenest in 2024?",
    "expect": {
     "top": "Huchi",
-    "bottom": "Gigane",
+    "bottom": "Atakwanyo",
     "top_value": "0.69",
     "n_ranked": 11,
     "low_data": [],
@@ -80,11 +80,11 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034005",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Gwadabawa ne suka fi koriya a 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Gwadabawa ne suka fi koriya a 2024?",
    "expect": {
     "top": "Huchi",
-    "bottom": "Gigane",
+    "bottom": "Atakwanyo",
     "top_value": "0.69",
     "n_ranked": 11,
     "low_data": [],
@@ -104,12 +104,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034013",
-   "year": 2026,
-   "question": "Which wards of Sabon Birni LGA were greenest in 2026?",
+   "year": 2024,
+   "question": "Which wards of Sabon Birni LGA were greenest in 2024?",
    "expect": {
-    "top": "Gangara",
-    "bottom": "Gatawa",
-    "top_value": "0.67",
+    "top": "Kalgo",
+    "bottom": "Tarah",
+    "top_value": "0.57",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -128,12 +128,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034013",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Sabon Birni ne suka fi koriya a 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Sabon Birni ne suka fi koriya a 2024?",
    "expect": {
-    "top": "Gangara",
-    "bottom": "Gatawa",
-    "top_value": "0.67",
+    "top": "Kalgo",
+    "bottom": "Tarah",
+    "top_value": "0.57",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -152,12 +152,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034002",
-   "year": 2026,
-   "question": "Which wards of Bodinga LGA were greenest in 2026?",
+   "year": 2024,
+   "question": "Which wards of Bodinga LGA were greenest in 2024?",
    "expect": {
     "top": "Bodinga Tauma",
     "bottom": "Bangi Dabaga",
-    "top_value": "0.69",
+    "top_value": "0.66",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -176,12 +176,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034002",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Bodinga ne suka fi koriya a 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Bodinga ne suka fi koriya a 2024?",
    "expect": {
     "top": "Bodinga Tauma",
     "bottom": "Bangi Dabaga",
-    "top_value": "0.69",
+    "top_value": "0.66",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -200,12 +200,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034003",
-   "year": 2026,
-   "question": "Which wards of Dange Shuni LGA were greenest in 2026?",
+   "year": 2024,
+   "question": "Which wards of Dange Shuni LGA were greenest in 2024?",
    "expect": {
-    "top": "Dange",
+    "top": "Rikina",
     "bottom": "Fajaldu",
-    "top_value": "0.72",
+    "top_value": "0.68",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -224,12 +224,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034003",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Dange Shuni ne suka fi koriya a 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Dange Shuni ne suka fi koriya a 2024?",
    "expect": {
-    "top": "Dange",
+    "top": "Rikina",
     "bottom": "Fajaldu",
-    "top_value": "0.72",
+    "top_value": "0.68",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -248,12 +248,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034018",
-   "year": 2026,
-   "question": "Which wards of Tambuwal LGA were greenest in 2026?",
+   "year": 2024,
+   "question": "Which wards of Tambuwal LGA were greenest in 2024?",
    "expect": {
-    "top": "Jabo-Kagara",
+    "top": "Tambuwal",
     "bottom": "Romo Sarki",
-    "top_value": "0.62",
+    "top_value": "0.57",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -272,12 +272,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034018",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Tambuwal ne suka fi koriya a 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Tambuwal ne suka fi koriya a 2024?",
    "expect": {
-    "top": "Jabo-Kagara",
+    "top": "Tambuwal",
     "bottom": "Romo Sarki",
-    "top_value": "0.62",
+    "top_value": "0.57",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -296,12 +296,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034011",
-   "year": 2026,
-   "question": "Which wards of Kware LGA flooded most in 2026?",
+   "year": 2024,
+   "question": "Which wards of Kware LGA flooded most in 2024?",
    "expect": {
-    "top": "Bankanu",
-    "bottom": "Tunga Mallamawa",
-    "top_value": "0.0%",
+    "top": "Gidan Rugga More",
+    "bottom": "Tsaki Walakae",
+    "top_value": "2.4%",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -320,12 +320,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034011",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Kware ne ambaliya ta fi rufewa a 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Kware ne ambaliya ta fi rufewa a 2024?",
    "expect": {
-    "top": "Bankanu",
-    "bottom": "Tunga Mallamawa",
-    "top_value": "0.0%",
+    "top": "Gidan Rugga More",
+    "bottom": "Tsaki Walakae",
+    "top_value": "2.4%",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -344,12 +344,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034005",
-   "year": 2026,
-   "question": "Which wards of Gwadabawa LGA flooded most in 2026?",
+   "year": 2024,
+   "question": "Which wards of Gwadabawa LGA flooded most in 2024?",
    "expect": {
-    "top": "Asara",
+    "top": "Gigane",
     "bottom": "Tambagarka",
-    "top_value": "0.0%",
+    "top_value": "0.3%",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -368,12 +368,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034005",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Gwadabawa ne ambaliya ta fi rufewa a 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Gwadabawa ne ambaliya ta fi rufewa a 2024?",
    "expect": {
-    "top": "Asara",
+    "top": "Gigane",
     "bottom": "Tambagarka",
-    "top_value": "0.0%",
+    "top_value": "0.3%",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -392,12 +392,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034013",
-   "year": 2026,
-   "question": "Which wards of Sabon Birni LGA flooded most in 2026?",
+   "year": 2024,
+   "question": "Which wards of Sabon Birni LGA flooded most in 2024?",
    "expect": {
-    "top": "Makuwana",
+    "top": "Lajinge",
     "bottom": "Unguwar Lalle",
-    "top_value": "0.1%",
+    "top_value": "0.5%",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -416,12 +416,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034013",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Sabon Birni ne ambaliya ta fi rufewa a 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Sabon Birni ne ambaliya ta fi rufewa a 2024?",
    "expect": {
-    "top": "Makuwana",
+    "top": "Lajinge",
     "bottom": "Unguwar Lalle",
-    "top_value": "0.1%",
+    "top_value": "0.5%",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -440,12 +440,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034002",
-   "year": 2026,
-   "question": "Which wards of Bodinga LGA flooded most in 2026?",
+   "year": 2024,
+   "question": "Which wards of Bodinga LGA flooded most in 2024?",
    "expect": {
     "top": "Kaura Miyo",
     "bottom": "Tulluwa",
-    "top_value": "0.1%",
+    "top_value": "0.5%",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -464,12 +464,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034002",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Bodinga ne ambaliya ta fi rufewa a 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Bodinga ne ambaliya ta fi rufewa a 2024?",
    "expect": {
     "top": "Kaura Miyo",
     "bottom": "Tulluwa",
-    "top_value": "0.1%",
+    "top_value": "0.5%",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -488,8 +488,8 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034003",
-   "year": 2026,
-   "question": "Which wards of Dange Shuni LGA flooded most in 2026?",
+   "year": 2024,
+   "question": "Which wards of Dange Shuni LGA flooded most in 2024?",
    "expect": {
     "top": "Bodai",
     "bottom": "Wababe-Salau",
@@ -512,8 +512,8 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034003",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Dange Shuni ne ambaliya ta fi rufewa a 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Dange Shuni ne ambaliya ta fi rufewa a 2024?",
    "expect": {
     "top": "Bodai",
     "bottom": "Wababe-Salau",
@@ -536,12 +536,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034018",
-   "year": 2026,
-   "question": "Which wards of Tambuwal LGA flooded most in 2026?",
+   "year": 2024,
+   "question": "Which wards of Tambuwal LGA flooded most in 2024?",
    "expect": {
     "top": "Romo Sarki",
     "bottom": "Tambuwal",
-    "top_value": "0.7%",
+    "top_value": "24.8%",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -560,12 +560,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034018",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Tambuwal ne ambaliya ta fi rufewa a 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Tambuwal ne ambaliya ta fi rufewa a 2024?",
    "expect": {
     "top": "Romo Sarki",
     "bottom": "Tambuwal",
-    "top_value": "0.7%",
+    "top_value": "24.8%",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1160,12 +1160,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034011",
-   "year": 2026,
-   "question": "Which wards of Kware LGA had the most bare soil in the 2026 dry season?",
+   "year": 2024,
+   "question": "Which wards of Kware LGA had the most bare soil in the 2024 dry season?",
    "expect": {
-    "top": "Sabon Birni",
+    "top": "Kware",
     "bottom": "Tunga Mallamawa",
-    "top_value": "60%",
+    "top_value": "70%",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1184,12 +1184,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034011",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Kware ne suka fi ƙasa mara ciyayi a ranin 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Kware ne suka fi ƙasa mara ciyayi a ranin 2024?",
    "expect": {
-    "top": "Sabon Birni",
+    "top": "Kware",
     "bottom": "Tunga Mallamawa",
-    "top_value": "60%",
+    "top_value": "70%",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1208,12 +1208,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034005",
-   "year": 2026,
-   "question": "Which wards of Gwadabawa LGA had the most bare soil in the 2026 dry season?",
+   "year": 2024,
+   "question": "Which wards of Gwadabawa LGA had the most bare soil in the 2024 dry season?",
    "expect": {
-    "top": "Salame",
+    "top": "Gidan Kaya",
     "bottom": "Atakwanyo",
-    "top_value": "90%",
+    "top_value": "83%",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1232,12 +1232,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034005",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Gwadabawa ne suka fi ƙasa mara ciyayi a ranin 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Gwadabawa ne suka fi ƙasa mara ciyayi a ranin 2024?",
    "expect": {
-    "top": "Salame",
+    "top": "Gidan Kaya",
     "bottom": "Atakwanyo",
-    "top_value": "90%",
+    "top_value": "83%",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1256,13 +1256,13 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034013",
-   "year": 2026,
-   "question": "Which wards of Sabon Birni LGA had the most bare soil in the 2026 dry season?",
+   "year": 2024,
+   "question": "Which wards of Sabon Birni LGA had the most bare soil in the 2024 dry season?",
    "expect": {
-    "top": "Unguwar Lalle",
-    "bottom": "Sabon Birni",
-    "top_value": "7%",
-    "n_ranked": 11,
+    "top": "Sabon Birni",
+    "bottom": "Gatawa",
+    "top_value": "8%",
+    "n_ranked": 9,
     "low_data": [],
     "must_have": [
      "Kasafi"
@@ -1280,13 +1280,13 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034013",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Sabon Birni ne suka fi ƙasa mara ciyayi a ranin 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Sabon Birni ne suka fi ƙasa mara ciyayi a ranin 2024?",
    "expect": {
-    "top": "Unguwar Lalle",
-    "bottom": "Sabon Birni",
-    "top_value": "7%",
-    "n_ranked": 11,
+    "top": "Sabon Birni",
+    "bottom": "Gatawa",
+    "top_value": "8%",
+    "n_ranked": 9,
     "low_data": [],
     "must_have": [
      "Kasafi"
@@ -1304,12 +1304,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034002",
-   "year": 2026,
-   "question": "Which wards of Bodinga LGA had the most bare soil in the 2026 dry season?",
+   "year": 2024,
+   "question": "Which wards of Bodinga LGA had the most bare soil in the 2024 dry season?",
    "expect": {
-    "top": "Tulluwa",
+    "top": "Bagarawa",
     "bottom": "Bangi Dabaga",
-    "top_value": "78%",
+    "top_value": "88%",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1328,12 +1328,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034002",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Bodinga ne suka fi ƙasa mara ciyayi a ranin 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Bodinga ne suka fi ƙasa mara ciyayi a ranin 2024?",
    "expect": {
-    "top": "Tulluwa",
+    "top": "Bagarawa",
     "bottom": "Bangi Dabaga",
-    "top_value": "78%",
+    "top_value": "88%",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1352,12 +1352,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034003",
-   "year": 2026,
-   "question": "Which wards of Dange Shuni LGA had the most bare soil in the 2026 dry season?",
+   "year": 2024,
+   "question": "Which wards of Dange Shuni LGA had the most bare soil in the 2024 dry season?",
    "expect": {
     "top": "Tuntube-Tsefe",
     "bottom": "Fajaldu",
-    "top_value": "85%",
+    "top_value": "93%",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1376,12 +1376,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034003",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Dange Shuni ne suka fi ƙasa mara ciyayi a ranin 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Dange Shuni ne suka fi ƙasa mara ciyayi a ranin 2024?",
    "expect": {
     "top": "Tuntube-Tsefe",
     "bottom": "Fajaldu",
-    "top_value": "85%",
+    "top_value": "93%",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1400,12 +1400,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034018",
-   "year": 2026,
-   "question": "Which wards of Tambuwal LGA had the most bare soil in the 2026 dry season?",
+   "year": 2024,
+   "question": "Which wards of Tambuwal LGA had the most bare soil in the 2024 dry season?",
    "expect": {
     "top": "Bashire-Maikada",
-    "bottom": "Jabo-Kagara",
-    "top_value": "89%",
+    "bottom": "Romo Sarki",
+    "top_value": "88%",
     "n_ranked": 10,
     "low_data": [],
     "must_have": [
@@ -1424,12 +1424,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034018",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Tambuwal ne suka fi ƙasa mara ciyayi a ranin 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Tambuwal ne suka fi ƙasa mara ciyayi a ranin 2024?",
    "expect": {
     "top": "Bashire-Maikada",
-    "bottom": "Jabo-Kagara",
-    "top_value": "89%",
+    "bottom": "Romo Sarki",
+    "top_value": "88%",
     "n_ranked": 10,
     "low_data": [],
     "must_have": [
@@ -1448,12 +1448,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034011",
-   "year": 2026,
-   "question": "Which wards of Kware LGA got the most June–October rain in 2026?",
+   "year": 2024,
+   "question": "Which wards of Kware LGA got the most June–October rain in 2024?",
    "expect": {
     "top": "Bankanu",
     "bottom": "Tunga Mallamawa",
-    "top_value": "307 mm",
+    "top_value": "586 mm",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1472,12 +1472,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034011",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Kware ne suka fi samun ruwan sama na Yuni–Oktoba a 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Kware ne suka fi samun ruwan sama na Yuni–Oktoba a 2024?",
    "expect": {
     "top": "Bankanu",
     "bottom": "Tunga Mallamawa",
-    "top_value": "307 mm",
+    "top_value": "586 mm",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1496,12 +1496,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034005",
-   "year": 2026,
-   "question": "Which wards of Gwadabawa LGA got the most June–October rain in 2026?",
+   "year": 2024,
+   "question": "Which wards of Gwadabawa LGA got the most June–October rain in 2024?",
    "expect": {
     "top": "Asara",
     "bottom": "Tambagarka",
-    "top_value": "276 mm",
+    "top_value": "552 mm",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1520,12 +1520,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034005",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Gwadabawa ne suka fi samun ruwan sama na Yuni–Oktoba a 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Gwadabawa ne suka fi samun ruwan sama na Yuni–Oktoba a 2024?",
    "expect": {
     "top": "Asara",
     "bottom": "Tambagarka",
-    "top_value": "276 mm",
+    "top_value": "552 mm",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1544,12 +1544,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034013",
-   "year": 2026,
-   "question": "Which wards of Sabon Birni LGA got the most June–October rain in 2026?",
+   "year": 2024,
+   "question": "Which wards of Sabon Birni LGA got the most June–October rain in 2024?",
    "expect": {
     "top": "Gangara",
     "bottom": "Unguwar Lalle",
-    "top_value": "231 mm",
+    "top_value": "491 mm",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1568,12 +1568,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034013",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Sabon Birni ne suka fi samun ruwan sama na Yuni–Oktoba a 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Sabon Birni ne suka fi samun ruwan sama na Yuni–Oktoba a 2024?",
    "expect": {
     "top": "Gangara",
     "bottom": "Unguwar Lalle",
-    "top_value": "231 mm",
+    "top_value": "491 mm",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1592,12 +1592,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034002",
-   "year": 2026,
-   "question": "Which wards of Bodinga LGA got the most June–October rain in 2026?",
+   "year": 2024,
+   "question": "Which wards of Bodinga LGA got the most June–October rain in 2024?",
    "expect": {
     "top": "Bagarawa",
     "bottom": "Tulluwa",
-    "top_value": "388 mm",
+    "top_value": "614 mm",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1616,12 +1616,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034002",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Bodinga ne suka fi samun ruwan sama na Yuni–Oktoba a 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Bodinga ne suka fi samun ruwan sama na Yuni–Oktoba a 2024?",
    "expect": {
     "top": "Bagarawa",
     "bottom": "Tulluwa",
-    "top_value": "388 mm",
+    "top_value": "614 mm",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1640,12 +1640,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034003",
-   "year": 2026,
-   "question": "Which wards of Dange Shuni LGA got the most June–October rain in 2026?",
+   "year": 2024,
+   "question": "Which wards of Dange Shuni LGA got the most June–October rain in 2024?",
    "expect": {
     "top": "Bodai",
     "bottom": "Wababe-Salau",
-    "top_value": "374 mm",
+    "top_value": "595 mm",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1664,12 +1664,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034003",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Dange Shuni ne suka fi samun ruwan sama na Yuni–Oktoba a 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Dange Shuni ne suka fi samun ruwan sama na Yuni–Oktoba a 2024?",
    "expect": {
     "top": "Bodai",
     "bottom": "Wababe-Salau",
-    "top_value": "374 mm",
+    "top_value": "595 mm",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1688,12 +1688,12 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034018",
-   "year": 2026,
-   "question": "Which wards of Tambuwal LGA got the most June–October rain in 2026?",
+   "year": 2024,
+   "question": "Which wards of Tambuwal LGA got the most June–October rain in 2024?",
    "expect": {
     "top": "Bagida",
     "bottom": "Tambuwal",
-    "top_value": "387 mm",
+    "top_value": "707 mm",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -1712,12 +1712,12 @@
    "lang": "ha",
    "level": "lga",
    "unit": "NG034018",
-   "year": 2026,
-   "question": "Waɗanne gundumomin Ƙaramar Hukumar Tambuwal ne suka fi samun ruwan sama na Yuni–Oktoba a 2026?",
+   "year": 2024,
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Tambuwal ne suka fi samun ruwan sama na Yuni–Oktoba a 2024?",
    "expect": {
     "top": "Bagida",
     "bottom": "Tambuwal",
-    "top_value": "387 mm",
+    "top_value": "707 mm",
     "n_ranked": 11,
     "low_data": [],
     "must_have": [
@@ -2074,22 +2074,22 @@
    "family": "scope_ward",
    "lang": "en",
    "level": "ward",
-   "unit": "61102",
-   "year": 2026,
+   "unit": "61105",
+   "year": 2024,
    "question": "How has farming evolved in my ward over the years",
    "place": {
     "lga_pcode": "NG034011",
     "lga": "Kware",
-    "ward": "Basansan",
-    "wardcode": "61102",
+    "ward": "Hamma Ali Marabawa",
+    "wardcode": "61105",
     "ward_likely": false
    },
    "expect": {
     "must_have": [
-     "Basansan ward, Kware LGA",
-     "Your pin is in Basansan ward",
+     "Hamma Ali Marabawa ward, Kware LGA",
+     "Your pin is in Hamma Ali Marabawa ward",
      "Since 20",
-     "In 2026 Basansan was"
+     "In 2024 Hamma Ali Marabawa was"
     ],
     "must_not": [
      "*Ranking",
@@ -2108,19 +2108,19 @@
    "family": "scope_ward",
    "lang": "ha",
    "level": "ward",
-   "unit": "61102",
-   "year": 2026,
+   "unit": "61105",
+   "year": 2024,
    "question": "Yaya noma ya canza a unguwata tun shekaru?",
    "place": {
     "lga_pcode": "NG034011",
     "lga": "Kware",
-    "ward": "Basansan",
-    "wardcode": "61102",
+    "ward": "Hamma Ali Marabawa",
+    "wardcode": "61105",
     "ward_likely": false
    },
    "expect": {
     "must_have": [
-     "gundumar Basansan",
+     "gundumar Hamma Ali Marabawa",
      "Wurinka yana gundumar",
      "Tun 20"
     ],
@@ -2142,19 +2142,19 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034011",
-   "year": 2026,
+   "year": 2024,
    "question": "How has farming evolved in my LGA over the years",
    "place": {
     "lga_pcode": "NG034011",
     "lga": "Kware",
-    "ward": "Basansan",
-    "wardcode": "61102",
+    "ward": "Hamma Ali Marabawa",
+    "wardcode": "61105",
     "ward_likely": false
    },
    "expect": {
     "top": "Tsaki Walakae",
     "must_have": [
-     "wards of Kware LGA, 2026",
+     "wards of Kware LGA, 2024",
      "Since 20"
     ],
     "must_not": [],
@@ -2169,22 +2169,22 @@
    "family": "scope_ward",
    "lang": "en",
    "level": "ward",
-   "unit": "60701",
-   "year": 2026,
+   "unit": "60708",
+   "year": 2024,
    "question": "How has farming evolved in my ward over the years",
    "place": {
     "lga_pcode": "NG034005",
     "lga": "Gwadabawa",
-    "ward": "Asara",
-    "wardcode": "60701",
+    "ward": "Mamman Suka",
+    "wardcode": "60708",
     "ward_likely": false
    },
    "expect": {
     "must_have": [
-     "Asara ward, Gwadabawa LGA",
-     "Your pin is in Asara ward",
+     "Mamman Suka ward, Gwadabawa LGA",
+     "Your pin is in Mamman Suka ward",
      "Since 20",
-     "In 2026 Asara was"
+     "In 2024 Mamman Suka was"
     ],
     "must_not": [
      "*Ranking",
@@ -2203,19 +2203,19 @@
    "family": "scope_ward",
    "lang": "ha",
    "level": "ward",
-   "unit": "60701",
-   "year": 2026,
+   "unit": "60708",
+   "year": 2024,
    "question": "Yaya noma ya canza a unguwata tun shekaru?",
    "place": {
     "lga_pcode": "NG034005",
     "lga": "Gwadabawa",
-    "ward": "Asara",
-    "wardcode": "60701",
+    "ward": "Mamman Suka",
+    "wardcode": "60708",
     "ward_likely": false
    },
    "expect": {
     "must_have": [
-     "gundumar Asara",
+     "gundumar Mamman Suka",
      "Wurinka yana gundumar",
      "Tun 20"
     ],
@@ -2237,19 +2237,19 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034005",
-   "year": 2026,
+   "year": 2024,
    "question": "How has farming evolved in my LGA over the years",
    "place": {
     "lga_pcode": "NG034005",
     "lga": "Gwadabawa",
-    "ward": "Asara",
-    "wardcode": "60701",
+    "ward": "Mamman Suka",
+    "wardcode": "60708",
     "ward_likely": false
    },
    "expect": {
     "top": "Huchi",
     "must_have": [
-     "wards of Gwadabawa LGA, 2026",
+     "wards of Gwadabawa LGA, 2024",
      "Since 20"
     ],
     "must_not": [],
@@ -2264,22 +2264,22 @@
    "family": "scope_ward",
    "lang": "en",
    "level": "ward",
-   "unit": "61304",
-   "year": 2026,
+   "unit": "61307",
+   "year": 2024,
    "question": "How has farming evolved in my ward over the years",
    "place": {
     "lga_pcode": "NG034013",
     "lga": "Sabon Birni",
-    "ward": "Kurawa",
-    "wardcode": "61304",
+    "ward": "Sabon Birni",
+    "wardcode": "61307",
     "ward_likely": false
    },
    "expect": {
     "must_have": [
-     "Kurawa ward, Sabon Birni LGA",
-     "Your pin is in Kurawa ward",
+     "Sabon Birni ward, Sabon Birni LGA",
+     "Your pin is in Sabon Birni ward",
      "Since 20",
-     "In 2026 Kurawa was"
+     "In 2024 Sabon Birni was"
     ],
     "must_not": [
      "*Ranking",
@@ -2298,19 +2298,19 @@
    "family": "scope_ward",
    "lang": "ha",
    "level": "ward",
-   "unit": "61304",
-   "year": 2026,
+   "unit": "61307",
+   "year": 2024,
    "question": "Yaya noma ya canza a unguwata tun shekaru?",
    "place": {
     "lga_pcode": "NG034013",
     "lga": "Sabon Birni",
-    "ward": "Kurawa",
-    "wardcode": "61304",
+    "ward": "Sabon Birni",
+    "wardcode": "61307",
     "ward_likely": false
    },
    "expect": {
     "must_have": [
-     "gundumar Kurawa",
+     "gundumar Sabon Birni",
      "Wurinka yana gundumar",
      "Tun 20"
     ],
@@ -2332,19 +2332,19 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034013",
-   "year": 2026,
+   "year": 2024,
    "question": "How has farming evolved in my LGA over the years",
    "place": {
     "lga_pcode": "NG034013",
     "lga": "Sabon Birni",
-    "ward": "Kurawa",
-    "wardcode": "61304",
+    "ward": "Sabon Birni",
+    "wardcode": "61307",
     "ward_likely": false
    },
    "expect": {
-    "top": "Gangara",
+    "top": "Kalgo",
     "must_have": [
-     "wards of Sabon Birni LGA, 2026",
+     "wards of Sabon Birni LGA, 2024",
      "Since 20"
     ],
     "must_not": [],
@@ -2360,7 +2360,7 @@
    "lang": "en",
    "level": "ward",
    "unit": "60201",
-   "year": 2026,
+   "year": 2024,
    "question": "How has farming evolved in my ward over the years",
    "place": {
     "lga_pcode": "NG034002",
@@ -2374,7 +2374,7 @@
      "Darhela Badau ward, Bodinga LGA",
      "Your pin is in Darhela Badau ward",
      "Since 20",
-     "In 2026 Darhela Badau was"
+     "In 2024 Darhela Badau was"
     ],
     "must_not": [
      "*Ranking",
@@ -2394,7 +2394,7 @@
    "lang": "ha",
    "level": "ward",
    "unit": "60201",
-   "year": 2026,
+   "year": 2024,
    "question": "Yaya noma ya canza a unguwata tun shekaru?",
    "place": {
     "lga_pcode": "NG034002",
@@ -2427,7 +2427,7 @@
    "lang": "en",
    "level": "lga",
    "unit": "NG034002",
-   "year": 2026,
+   "year": 2024,
    "question": "How has farming evolved in my LGA over the years",
    "place": {
     "lga_pcode": "NG034002",
@@ -2439,7 +2439,7 @@
    "expect": {
     "top": "Bodinga Tauma",
     "must_have": [
-     "wards of Bodinga LGA, 2026",
+     "wards of Bodinga LGA, 2024",
      "Since 20"
     ],
     "must_not": [],
@@ -2455,7 +2455,7 @@
    "lang": "en",
    "level": "state",
    "unit": "NG034",
-   "year": 2026,
+   "year": 2024,
    "question": "How has farming evolved across the state over the years",
    "place": {
     "lga_pcode": "NG034002",
@@ -2466,7 +2466,7 @@
    },
    "expect": {
     "must_have": [
-     "the 23 LGAs of Sokoto State, 2026",
+     "the 23 LGAs of Sokoto State, 2024",
      "Sokoto State's farmland greenness"
     ],
     "must_not": [],
@@ -2482,7 +2482,7 @@
    "lang": "en",
    "level": "ward",
    "unit": "",
-   "year": 2026,
+   "year": 2024,
    "question": "How has farming evolved in my ward over the years",
    "expect": {
     "must_have": [

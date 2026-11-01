@@ -134,7 +134,10 @@ W = {
         "ward_green_rain_how": {"near": "about as green as the rain would suggest", "above": "greener than the rain would suggest",
                                 "below": "less green than the rain would suggest"},
         "ward_year_norain": "In {year} {ward} was {how}: {value} against its usual {usual}.",
-        "skipped_years": "{years} {verb} too few clear images so far, so {year} is the latest year with normal data.",
+        "skipped_years": "{why}, so {year} is the latest year with normal data.",
+        "thin_years": "{years} {verb} too few clear images so far",
+        "unfinished_years": "{years}'s season {verb} not complete in the satellite catalogue yet (composites to {last})",
+        "unfinished_verb": {"one": "is", "many": "are"},
         "skipped_verb": {"one": "has", "many": "have"},
         "missing_units": "{no_crop} {what} have no cropland in the 2021 land-cover map; {no_data} {what_data} have no data that year.",
         "missing_crop_only": "{no_crop} {what} have no cropland in the 2021 land-cover map, so they carry no value.",
@@ -235,8 +238,11 @@ W = {
         "ward_green_rain_how": {"near": "kamar yadda ruwan sama ya nuna a koriya", "above": "ta fi koriya fiye da yadda ruwan sama ya nuna",
                                 "below": "ba ta yi koriya kamar yadda ruwan sama ya nuna ba"},
         "ward_year_norain": "A {year} {ward} ta kasance {how}: {value} idan aka kwatanta da yadda ta saba {usual}.",
-        "skipped_years": "{years} {verb} da hotuna bayyanannu kaɗan har yanzu, saboda haka {year} ce shekara ta ƙarshe mai bayanai na yau da kullum.",
-        "skipped_verb": {"one": "ba ta", "many": "ba su"},
+        "skipped_years": "{why}, saboda haka {year} ce shekara ta ƙarshe mai bayanai na yau da kullum.",
+        "thin_years": "{years} {verb} da hotuna bayyanannu kaɗan ne har yanzu",
+        "unfinished_years": "daminar {years} {verb} cika a tarihin tauraron ɗan adam ba tukuna (hotuna har zuwa {last})",
+        "unfinished_verb": {"one": "ba ta", "many": "ba su"},
+        "skipped_verb": {"one": "tana", "many": "suna"},
         "missing_units": "{what} {no_crop} ba su da gona a taswirar yanayin ƙasa ta 2021; {what_data} {no_data} ba su da bayanai a shekarar.",
         "missing_crop_only": "{what} {no_crop} ba su da gona a taswirar yanayin ƙasa ta 2021, saboda haka ba su da ƙima.",
         "missing_data_only": "{what} {no_data} ba su da bayanai na shekarar.",
@@ -369,10 +375,27 @@ def trend_asked(text: str) -> bool:
     return bool(TREND.search(text or ""))
 
 
-def headline_year(conn, measure: str, compare: str, loaded: list[int], today: date) -> tuple[int, list[int]]:
-    """The latest year with normal data (at least 60 % of the median observation count for the level, and a
-    finished season): never a thin year like 2025 (five MODIS composites on the catalogue). Returns it with the
-    later years skipped, so the answer can say why."""
+SEASON_LAST_DOY = 289          # app/place/area.py: the last Terra composite of the June–October season
+
+
+def season_complete(conn, year: int, today: date) -> tuple[bool, int]:
+    """(complete, last composite's day of year) for a MODIS season from the 'modis_season_last_doy' rows the
+    precompute writes (scripts/precompute_area.py --layers season). Without a row, a past year counts as complete
+    and the current year never does: the October composites are published in mid-November, so the calendar alone
+    can't say (1 Nov 2026: 17 composites to 30 September, the three October ones missing)."""
+    row = conn.execute("SELECT value FROM ward_history WHERE measure = 'modis_season_last_doy' AND level = 'state' "
+                       "AND unit = %s AND year = %s", (STATE, year)).fetchone()
+    if row is None or row[0] is None:
+        return year < today.year, 0
+    last = int(row[0])
+    return last >= SEASON_LAST_DOY, last
+
+
+def headline_year(conn, measure: str, compare: str, loaded: list[int], today: date) -> tuple[int, list[int], list[tuple[int, int]]]:
+    """The latest year with normal data: a complete season in the catalogue (season_complete) and at least 60 % of
+    the median observation count for the level. Never a thin year like 2025 (five composites) and never a season
+    the catalogue hasn't finished (2026 until mid-November). Returns (year, thin years skipped, unfinished years
+    skipped as (year, last day of year)), so the answer says why."""
     counts = {}
     for y in loaded:
         row = conn.execute("SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY n_obs) FROM ward_history WHERE measure = %s "
@@ -380,10 +403,28 @@ def headline_year(conn, measure: str, compare: str, loaded: list[int], today: da
         counts[y] = float(row[0]) if row and row[0] is not None else None
     known = sorted(c for c in counts.values() if c is not None)
     need = 0.6 * known[len(known) // 2] if known else 0.0
-    done = [y for y in loaded if y < today.year or (y == today.year and today.month > 10)]   # the June–October season is over
+    season = {y: season_complete(conn, y, today) for y in loaded if y >= today.year - 1}
+    done = [y for y in loaded if season.get(y, (True, 0))[0]]
     normal = [y for y in done if counts.get(y) is None or counts[y] >= need]
     y = max(normal) if normal else max(done) if done else loaded[-1]
-    return y, [x for x in loaded if x > y and counts.get(x) is not None and counts[x] < need]
+    later = [x for x in loaded if x > y]
+    # the current year's season is 'not complete yet'; an earlier year the catalogue stopped short on (2025: day
+    # 177) has 'too few clear images so far', like a year of thin counts
+    unfinished = [(x, season[x][1]) for x in later if x == today.year and x in season and not season[x][0]]
+    thin = [x for x in later if x not in dict(unfinished) and
+            ((counts.get(x) is not None and counts[x] < need) or (x in season and not season[x][0]))]
+    return y, thin, unfinished
+
+
+def doy_text(doy: int, year: int, lang: str) -> str:
+    """'30 September' for a day of year (the composite's start day)."""
+    from datetime import timedelta
+    d = date(year, 1, 1) + timedelta(days=max(doy, 1) - 1)
+    months = {"en": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
+                     "November", "December"],
+              "ha": ["Janairu", "Fabrairu", "Maris", "Afrilu", "Mayu", "Yuni", "Yuli", "Agusta", "Satumba", "Oktoba",
+                     "Nuwamba", "Disamba"]}[lang if lang == "ha" else "en"]
+    return f"{d.day} {months[d.month - 1]}"
 
 
 # --- the data ---------------------------------------------------------------------------------------------------------
@@ -687,11 +728,11 @@ def area_answer(conn, question: str, english: str, lang: str, level: str, unit: 
         return AreaAnswer(t["no_year"].format(short=t["short"][key], year=want, first=loaded[0], last=loaded[-1]), False,
                           level=compare, unit=unit, measure=measure)
     elif key == "flood" and map_years:                   # no year named: the latest year with an official map
-        y, skipped = max(map_years), []
+        y, skipped, unfinished = max(map_years), [], []
     else:                                                # the latest year with normal data: never a thin year
-        y, skipped = headline_year(conn, measure, compare, loaded, today)
+        y, skipped, unfinished = headline_year(conn, measure, compare, loaded, today)
     if want is not None or spec["first"] == 0 or (key == "flood" and map_years):
-        skipped = []
+        skipped, unfinished = [], []
     what = t["wards"] if compare == "ward" else t["lgas"]
     period = f"{loaded[0]}–{loaded[-1]}" if spec["first"] else "1984–2020"      # the years actually loaded
     res = {"greenness": "250 m", "flood": "200 m", "flood_map": "375 m", "water": "30 m", "bare": "200 m", "rain": "~9 km"}[key]
@@ -715,9 +756,7 @@ def area_answer(conn, question: str, english: str, lang: str, level: str, unit: 
         lines.append(plain)
     if trend_asked(text) and lead_key == key and spec["first"]:         # 'over the years': the unit's own trend first
         lines.append(trend_sentence(conn, lang, measure, "lga" if level == "lga" else "state", unit, of))
-    if skipped:
-        lines.append(t["skipped_years"].format(years=", ".join(str(x) for x in skipped), year=y,
-                                               verb=t["skipped_verb"]["one" if len(skipped) == 1 else "many"]))
+    lines.append(skipped_line(t, lang, y, skipped, unfinished))
     lines += summary_lines(main, lang, area, what)
     lines.append(missing_line(conn, main, lang, compare, within, what))
     lines.append(ranking_lines(main, lang, what))
@@ -746,6 +785,22 @@ def area_answer(conn, question: str, english: str, lang: str, level: str, unit: 
     lines.append(t["sources"].format(source="; ".join(dict.fromkeys(sources))))
     return AreaAnswer("\n\n".join(x for x in lines if x), True, "\n".join(working), partial=partial, specs=specs,
                       level=compare, unit=unit, measure=MEASURES[lead_key]["measure"], year=y)
+
+
+def skipped_line(t: dict, lang: str, y: int, thin: list[int], unfinished: list[tuple[int, int]]) -> str:
+    """Why later years don't lead: too few clear images (2025), or a season the catalogue hasn't finished (2026)."""
+    parts = []
+    if unfinished:
+        parts.append(t["unfinished_years"].format(years=", ".join(str(x) for x, _ in unfinished),
+                                                  last=t["and"].join(doy_text(d, x, lang) for x, d in unfinished),
+                                                  verb=t["unfinished_verb"]["one" if len(unfinished) == 1 else "many"]))
+    if thin:
+        parts.append(t["thin_years"].format(years=", ".join(str(x) for x in thin),
+                                            verb=t["skipped_verb"]["one" if len(thin) == 1 else "many"]))
+    if not parts:
+        return ""
+    s = t["skipped_years"].format(why="; ".join(parts), year=y)
+    return s[0].upper() + s[1:]
 
 
 def trend_of(conn, measure: str, level: str, unit: str) -> tuple[str, int, int, int]:
@@ -823,7 +878,7 @@ def ward_answer(conn, question: str, english: str, lang: str, wardcode: str, tod
     if want is not None and want not in loaded:
         return AreaAnswer(t["no_year"].format(short=t["short"][key], year=want, first=loaded[0], last=loaded[-1]), False,
                           level="ward", unit=wardcode, measure=measure)
-    y, skipped = (want, []) if want is not None else headline_year(conn, measure, "ward", loaded, today)
+    y, skipped, unfinished = (want, [], []) if want is not None else headline_year(conn, measure, "ward", loaded, today)
     short = t["short"][key]
     lines = [t["head_ward"].format(short=short[0].upper() + short[1:], ward=ward, likely=likely, lga=lga),
              t["ward_scope"].format(ward=ward, likely=likely, lga=lga)]
@@ -857,9 +912,7 @@ def ward_answer(conn, question: str, english: str, lang: str, wardcode: str, tod
                                                m=len(ranked), state=_fmt(spec, float(state_row[0]))))
         else:
             lines.append(t["ward_year_norain"].format(year=y, ward=ward, how=how, value=_fmt(spec, mine[2]), usual=_fmt(spec, usual)))
-    if skipped:
-        lines.append(t["skipped_years"].format(years=", ".join(str(x) for x in skipped), year=y,
-                                               verb=t["skipped_verb"]["one" if len(skipped) == 1 else "many"]))
+    lines.append(skipped_line(t, lang, y, skipped, unfinished))
     res = {"greenness": "250 m", "flood": "200 m", "flood_map": "375 m", "water": "30 m", "bare": "200 m", "rain": "~9 km"}[key]
     period = f"{loaded[0]}–{loaded[-1]}" if spec["first"] else "1984–2020"
     lines.append(budget_block(conn, lang, "lga", lga_pcode, today))

@@ -197,24 +197,36 @@ def test_trend_words_in_both_languages() -> None:
 
 
 class _Counts:
-    """A connection whose only answer is the median observation count per year."""
+    """A connection answering the median observation count per year and the season's last composite day."""
 
-    def __init__(self, medians):
-        self.medians = medians
+    def __init__(self, medians, last_doy=None):
+        self.medians, self.last_doy = medians, last_doy or {}
 
     def execute(self, q, args):
-        year = args[2]
-        m = self.medians.get(year)
+        if "modis_season_last_doy" in q:
+            v = self.last_doy.get(args[1])
+            return type("R", (), {"fetchone": staticmethod(lambda: None if v is None else (v,))})()
+        m = self.medians.get(args[2])
         return type("R", (), {"fetchone": staticmethod(lambda: (m,))})()
 
 
-def test_the_headline_year_skips_thin_years_and_unfinished_seasons() -> None:
+def test_the_headline_year_skips_thin_years_and_seasons_the_catalogue_has_not_finished() -> None:
     medians = {y: 16.0 for y in range(2001, 2025)}
     medians[2025], medians[2026] = 5.0, 18.0
     loaded = sorted(medians)
-    assert P.headline_year(_Counts(medians), "modis_peak", "ward", loaded, date(2026, 10, 31)) == (2024, [2025])
-    assert P.headline_year(_Counts(medians), "modis_peak", "ward", loaded, date(2026, 11, 1)) == (2026, [])
-    assert P.headline_year(_Counts(medians), "modis_peak", "ward", loaded, date(2025, 12, 1)) == (2024, [2025])
+    # the catalogue on 1 Nov 2026: 2026's last composite starts day 273 (30 September), 2025's day 177
+    cat = {y: 297 for y in range(2001, 2025)} | {2025: 177, 2026: 273}
+    assert P.headline_year(_Counts(medians, cat), "modis_peak", "ward", loaded, date(2026, 11, 1)) == (2024, [2025], [(2026, 273)])
+    assert P.headline_year(_Counts(medians, cat), "modis_peak", "ward", loaded, date(2026, 10, 31)) == (2024, [2025], [(2026, 273)])
+    cat[2026] = 289                                                        # the 16 October composite published
+    assert P.headline_year(_Counts(medians, cat), "modis_peak", "ward", loaded, date(2026, 11, 20)) == (2026, [], [])
+    # no season rows at all (an older precompute): a past year counts as complete, the current year never
+    assert P.headline_year(_Counts(medians), "modis_peak", "ward", loaded, date(2026, 11, 1)) == (2024, [2025], [(2026, 0)])
+    assert P.headline_year(_Counts(medians), "modis_peak", "ward", loaded, date(2027, 2, 1)) == (2026, [], [])
+    assert P.doy_text(273, 2026, "en") == "30 September" and P.doy_text(177, 2025, "ha") == "26 Yuni"
+    assert P.skipped_line(P.W["en"], "en", 2024, [2025], [(2026, 273)]) == \
+        "2026's season is not complete in the satellite catalogue yet (composites to 30 September); 2025 has too few " \
+        "clear images so far, so 2024 is the latest year with normal data."
 
 
 def test_the_plain_class_agrees_with_the_rain_check() -> None:
@@ -239,12 +251,13 @@ def test_the_ward_answer_names_the_ward_gives_the_trend_and_never_headlines_a_th
     assert lines[2].startswith("Since 20") and "Bado's farmland greenness" in lines[2] and "Wamakko LGA's" in lines[2] \
         and "the state's" in lines[2]
     assert a.year == 2024 and "In 2024 Bado was" in a.text and "2025 has too few clear images so far" in a.text
+    assert "2026's season is not complete in the satellite catalogue yet (composites to 30 September)" in a.text
     assert "232" not in a.text and "*Ranking" not in a.text and "MODIS NDVI" not in a.text     # technical words in working
     assert a.working.startswith("Measure: peak rainy-season greenness") and "Series (Bado" in a.working
     assert a.specs == [{"kind": "area_map", "measure": "modis_peak", "key": "greenness", "year": 2024, "level": "ward",
                         "unit": "NG034021", "highlight": "62102"}]
     later = P.area_answer(conn, q, "", "en", "ward", "62102", date(2026, 11, 1), place=PIN)
-    assert later.year == 2026 and "too few clear images" not in later.text                   # the 2026 season is complete
+    assert later.year == 2024 and "composites to 30 September" in later.text        # the calendar alone never finishes a season
     ha = P.area_answer(conn, "Yaya noma ya canza a unguwata tun shekaru?", "", "ha", "ward", "62102", TODAY, place=PIN)
     assert ha.text.startswith("*Koriyar ƙololuwa: gundumar Bado (wataƙila), Ƙaramar Hukumar Wamakko*")
     assert "Wurinka yana gundumar Bado" in ha.text and "Tun 20" in ha.text and " sun fi koriya" not in ha.text

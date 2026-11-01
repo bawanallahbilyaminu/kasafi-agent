@@ -58,6 +58,8 @@ NORMALLY_DRY = 50.0           # JRC recurrence (%) under which a cell is normall
 MODIS = "modis-13Q1-061"
 S2 = stac.S2
 SEASON_DOY = (145, 300)       # MODIS composites starting June–October
+SEASON_LAST_DOY = 289         # the last Terra composite of the season (16 October start): a year's season is complete in
+                              # the catalogue only once it is published (mid-November), never by the calendar alone
 S1_MONTHS = ("08-01", "10-31")     # the Rima floods peak late September–October (2022: 1–25 October per UNOSAT)
 DRY_MONTHS = ("02-01", "04-30")
 WORKERS = 6
@@ -241,12 +243,36 @@ def jrc(grid: Grid) -> tuple[np.ndarray, np.ndarray] | None:
 
 def modis_items(grid: Grid, year: int) -> list[dict]:
     its = items(MODIS, grid, f"{year}-05-20", f"{year}-10-31", ["id", "properties.datetime", "properties.platform"])
-    out = []
+    out, seen = [], set()
     for it in its:
         doy = int(it["id"].split(".")[1][5:8]) if ".A" in it["id"] else 0
-        if SEASON_DOY[0] <= doy <= SEASON_DOY[1] and "h18v07" in it["id"]:
+        key = (it["id"].split(".")[0], doy)                  # one composite per platform and start day (2026 listed
+        if SEASON_DOY[0] <= doy <= SEASON_DOY[1] and "h18v07" in it["id"] and key not in seen:   # DOY 217 twice)
+            seen.add(key)
             out.append(it)
     return out
+
+
+def modis_season(grid: Grid, year: int) -> tuple[int, int]:
+    """(the last composite's start day of year, distinct composites) in the catalogue for the year's season: the
+    season is complete when the last is at or after SEASON_LAST_DOY. 1 Nov 2026: 2026 ran to day 273 (30 September)
+    with the three October composites unpublished; 2025 stopped at day 177."""
+    its = modis_items(grid, year)
+    doys = [int(it["id"].split(".")[1][5:8]) for it in its]
+    return (max(doys) if doys else 0, len(doys))
+
+
+def season_rows(grid: Grid, years: range) -> list[tuple[str, str, str, int, float | None, int | None, str]]:
+    """State-level rows 'modis_season_last_doy' per year (value: the last composite's day of year; n_obs: distinct
+    composites), read by the planner's headline-year rule."""
+    from app.place.planner import STATE
+    rows = []
+    for year in years:
+        last, n = modis_season(grid, year)
+        rows.append((STATE, "state", "modis_season_last_doy", year, float(last), n, SOURCES["modis"]))
+        log.info("area: MODIS season %d: %d composites, last day %d%s", year, n, last,
+                 "" if last >= SEASON_LAST_DOY else " (incomplete)")
+    return rows
 
 
 def modis_year(grid: Grid, units: Units, crop: np.ndarray, year: int, workers: int = WORKERS
