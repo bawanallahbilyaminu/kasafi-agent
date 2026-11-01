@@ -791,9 +791,12 @@ def skipped_line(t: dict, lang: str, y: int, thin: list[int], unfinished: list[t
     """Why later years don't lead: too few clear images (2025), or a season the catalogue hasn't finished (2026)."""
     parts = []
     if unfinished:
-        parts.append(t["unfinished_years"].format(years=", ".join(str(x) for x, _ in unfinished),
-                                                  last=t["and"].join(doy_text(d, x, lang) for x, d in unfinished),
-                                                  verb=t["unfinished_verb"]["one" if len(unfinished) == 1 else "many"]))
+        s = t["unfinished_years"].format(years=", ".join(str(x) for x, _ in unfinished),
+                                         last=t["and"].join(doy_text(d, x, lang) for x, d in unfinished if d),
+                                         verb=t["unfinished_verb"]["one" if len(unfinished) == 1 else "many"])
+        if not all(d for _, d in unfinished):      # no catalogue row: the reason without a date
+            s = s[:s.rindex(" (")]
+        parts.append(s)
     if thin:
         parts.append(t["thin_years"].format(years=", ".join(str(x) for x in thin),
                                             verb=t["skipped_verb"]["one" if len(thin) == 1 else "many"]))

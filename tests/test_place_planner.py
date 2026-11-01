@@ -227,6 +227,8 @@ def test_the_headline_year_skips_thin_years_and_seasons_the_catalogue_has_not_fi
     assert P.skipped_line(P.W["en"], "en", 2024, [2025], [(2026, 273)]) == \
         "2026's season is not complete in the satellite catalogue yet (composites to 30 September); 2025 has too few " \
         "clear images so far, so 2024 is the latest year with normal data."
+    assert P.skipped_line(P.W["en"], "en", 2024, [], [(2026, 0)]) == \
+        "2026's season is not complete in the satellite catalogue yet, so 2024 is the latest year with normal data."
 
 
 def test_the_plain_class_agrees_with_the_rain_check() -> None:
