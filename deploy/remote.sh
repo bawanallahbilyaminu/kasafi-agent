@@ -206,6 +206,32 @@ sync-geo)
   exit 1
   ;;
 
+sync-place)
+  # deploy.sh uploads a tar of place/floodmaps/*.gpkg and geo/water_bodies.* (unpacked under /data, where the app
+  # reads them through KASAFI_PLACE_DIR and KASAFI_GEO_DIR) and a data-only dump of ward_history, sat_cache and
+  # plot_outline_cache (per cell and unit, never per user). The tables are replaced in one transaction.
+  INCOMING=$APP/deploy/place.incoming.tar
+  INCOMING_SQL=$APP/deploy/place.incoming.sql.gz
+  [ -s "$INCOMING" ] || { say "no $INCOMING uploaded"; exit 1; }
+  [ -s "$INCOMING_SQL" ] || { say "no $INCOMING_SQL uploaded"; exit 1; }
+  dc up -d --wait db
+  if dc exec -T api sh -c 'mkdir -p /data/place/floodmaps /data/geo && tar -x -m -C /data' < "$INCOMING" \
+     && { echo "TRUNCATE ward_history, sat_cache, plot_outline_cache;"; gunzip -c "$INCOMING_SQL"; } \
+        | dc exec -T db psql -q -1 -v ON_ERROR_STOP=1 -U kasafi -d kasafi >/dev/null; then
+    rm -f "$INCOMING" "$INCOMING_SQL"
+    counts=$(dc exec -T db psql -At -U kasafi -d kasafi -c "SELECT (SELECT count(*) FROM ward_history)||' ward_history rows, '||(SELECT count(*) FROM sat_cache)||' cached cell-years, '||(SELECT count(*) FROM plot_outline_cache)||' outlines'")
+    files=$(dc exec -T api sh -c 'ls /data/place/floodmaps/*.gpkg | wc -l; ls -la /data/geo/water_bodies.geojson | cut -c1-60' | tr '\n' ' ')
+    say "place data loaded: $counts; files: $files"
+    log "sync-place ok: $counts"
+    echo "RESULT=ok COMMIT=$(git rev-parse HEAD)"
+    exit 0
+  fi
+  rm -f "$INCOMING" "$INCOMING_SQL"
+  log "sync-place FAILED; previous tables kept"
+  echo "RESULT=rolled_back COMMIT=$(git rev-parse HEAD)"
+  exit 2
+  ;;
+
 sync-corrections)
   # deploy.sh uploads a tar holding data/geo/facility_corrections.yaml only; it is applied to the facility table
   # (scripts/import_geo.py --corrections), with no full geo import

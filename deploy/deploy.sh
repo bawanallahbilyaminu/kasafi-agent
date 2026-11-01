@@ -14,6 +14,11 @@
 #                                  index and OCR them there (Muse Spark vision, ~$1.4) and load data/official_outlooks.yaml
 #   deploy/deploy.sh --sync-hints  copy data/private/partners_hints.json (not in git) to deploy/private/ on the
 #                                  server, mounted read-only into the app; takes effect on the next deploy/restart
+#   deploy/deploy.sh --sync-place  place history (docs/place-history.md): copy the UNOSAT flood maps
+#                                  (data/place/floodmaps/*.gpkg) to /data/place, the water-body layer
+#                                  (data/geo/water_bodies.geojson + .yaml) to /data/geo, and the precomputed
+#                                  ward_history plus the per-cell satellite caches (sat_cache, plot_outline_cache:
+#                                  no user data) from the dev DB, so the server never recomputes them
 #
 # SSH host alias: KASAFI_SSH_HOST (default "vps"; see deploy/README.md for the ~/.ssh/config entry).
 # The server's IP is never stored in this repo. Server-side steps live in deploy/remote.sh.
@@ -26,6 +31,8 @@ REMOTE_INDEX=/opt/kasafi-agent/deploy/index.incoming.sql.gz
 REMOTE_PDFS=/opt/kasafi-agent/deploy/pdfs.incoming.tar
 REMOTE_GEO=/opt/kasafi-agent/deploy/geo.incoming.tar
 REMOTE_ADVISORIES=/opt/kasafi-agent/deploy/advisories.incoming.tar
+REMOTE_PLACE=/opt/kasafi-agent/deploy/place.incoming.tar
+REMOTE_PLACE_SQL=/opt/kasafi-agent/deploy/place.incoming.sql.gz
 # Keys the server may receive. DATABASE_URL is left out until the production database exists
 # (the local one points at dev Postgres).
 ALLOWED_KEYS='ADMIN_USER|ADMIN_PASSWORD|KASAFI_OPEN_READER|KASAFI_OPEN_READ_TIMEOUT_S|KASAFI_OPEN_STAGES|KASAFI_OPEN_STAGE_TIMEOUT_S|FIREWORKS_API_KEY|ORS_API_KEY|FIRMS_MAP_KEY|KASAFI_HAZARD_FETCH|KASAFI_ADVISORIES_FETCH|KASAFI_ADVISORIES_MONTHLY_USD|KASAFI_ALERTS|KASAFI_ALERTS_DRY_RUN|KASAFI_ALERTS_DAILY_CAP|KASAFI_ALERT_TEMPLATE_LANGS|KASAFI_ALERTS_NUMBER_KEY|KASAFI_OPEN_ACCESS|KASAFI_ALLOW_SECURITY_BUDGET|KASAFI_PILOT_NUMBERS|KASAFI_EXEMPT_NUMBERS|KASAFI_HASH_KEY|KASAFI_VOICE_PER_DAY|KASAFI_QUESTIONS_PER_DAY|KASAFI_DAILY_SPEND_CAP_USD|KASAFI_COST_PER_VOICE_USD|KASAFI_COST_PER_QUESTION_USD|KASAFI_FETCHES_PER_DAY|META_API_KEY|BASETEN_API_KEY|SERPER_API_KEY|RELIEFWEB_APPNAME|DTMAPI_SUBSCRIPTION_KEY|DTMHNA_SUBSCRIPTION_KEY|KASAFI_TOPIC_BUDGET_S|WHATSAPP_TOKEN|WHATSAPP_PHONE_NUMBER_ID|WHATSAPP_VERIFY_TOKEN|WHATSAPP_APP_SECRET|WHATSAPP_BUSINESS_ACCOUNT_ID|WHATSAPP_WABA_ID|WABA_ID'
@@ -145,6 +152,24 @@ case "${1:-}" in
     echo "→ uploading $(du -h "$tmp" | cut -f1) to $HOST"
     "$SSH" "$HOST" "umask 077; cat > $REMOTE_INDEX" < "$tmp"; rm -f "$tmp"
     remote_and_report sync-index
+    ;;
+  --sync-place)
+    ls data/place/floodmaps/*.gpkg > /dev/null 2>&1 || die "no data/place/floodmaps/*.gpkg here (scripts/fetch_floodmaps.py)"
+    [ -f data/geo/water_bodies.geojson ] || die "no data/geo/water_bodies.geojson here (scripts/build_water_bodies.py)"
+    tmp=$(mktemp)
+    # two folders in one tar: place/floodmaps/*.gpkg and geo/water_bodies.*; unpacked under /data on the server
+    tar -c -f "$tmp" --transform 's,^data/,,' data/place/floodmaps/*.gpkg data/geo/water_bodies.geojson \
+      $(ls data/geo/water_bodies.yaml data/geo/osm_water_sokoto.json 2>/dev/null) \
+      || { rm -f "$tmp"; die "packing the place files failed"; }
+    echo "→ uploading $(du -h "$tmp" | cut -f1) of flood maps and the water layer to $HOST"
+    "$SSH" "$HOST" "umask 077; cat > $REMOTE_PLACE" < "$tmp"; rm -f "$tmp"
+    echo "→ dumping ward_history, sat_cache and plot_outline_cache from the dev database (per cell and unit; no user data)"
+    tmp=$(mktemp)
+    MSYS_NO_PATHCONV=1 docker compose exec -T db pg_dump -U kasafi -d kasafi --data-only --no-owner \
+      -t ward_history -t sat_cache -t plot_outline_cache | gzip > "$tmp" || { rm -f "$tmp"; die "pg_dump failed (is the dev DB running?)"; }
+    echo "→ uploading $(du -h "$tmp" | cut -f1) to $HOST"
+    "$SSH" "$HOST" "umask 077; cat > $REMOTE_PLACE_SQL" < "$tmp"; rm -f "$tmp"
+    remote_and_report sync-place
     ;;
   --sync-hints)
     f=data/private/partners_hints.json

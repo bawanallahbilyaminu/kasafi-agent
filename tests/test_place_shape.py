@@ -227,6 +227,37 @@ def test_corners_said_without_being_asked_use_the_recent_pins() -> None:
     memory.forget(key)
 
 
+def test_no_coordinates_or_shapes_are_persisted_or_logged(tmp_path, caplog) -> None:
+    """Privacy: a corner-pin conversation leaves no coordinate in the user store, the logs or the memory's repr."""
+    import logging
+    import sqlite3
+    s = make_settings()
+    db = tmp_path / "kasafi.db"
+    store = UserStore(str(db))
+    key = user_key("2348000000003", s)
+    store.create(key, "en")
+    store.give_consent(key)
+    memory.forget(key)
+    calls: list = []
+
+    async def answer(question, lang, *, settings, notify=None, history=None, place=None):
+        calls.append(place)
+        return FakeAnswer("ANSWER")
+    caplog.set_level(logging.DEBUG)
+    for lat, lon in [(13.0589127, 5.1673341), (13.0589127, 5.1693341), (13.0609127, 5.1693341), (13.0609127, 5.1673341)]:
+        asyncio.run(handle(_pin(lat, lon, "2348000000003"), None, store=store, settings=s, locate_fn=located, answer_fn=answer))
+    asyncio.run(handle(_text("these are the corners", "2348000000003"), None, store=store, settings=s, locate_fn=located,
+                       answer_fn=answer))
+    asyncio.run(handle(_text("How green was my farm in 2024?", "2348000000003"), None, store=store, settings=s,
+                       locate_fn=located, answer_fn=answer))
+    assert calls and calls[-1]["shape"]["method"] == "corners"
+    blob = " ".join(str(v) for row in sqlite3.connect(db).execute("SELECT * FROM users").fetchall() for v in row)
+    for needle in ("13.05", "13.06", "5.167", "5.169", "corners", "Polygon"):
+        assert needle not in blob and needle not in caplog.text
+    assert "13.05" not in repr(memory.recall(key)) and "Wamakko" in repr(memory.recall(key))
+    memory.forget(key)
+
+
 def test_memory_forgets_shapes_and_pins_with_the_rest() -> None:
     from app.geo.location import LocationMemory
     m = LocationMemory(ttl_s=0.01, corner_ttl_s=0.01)

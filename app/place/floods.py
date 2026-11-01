@@ -13,6 +13,7 @@ radar and green on optical, short floods fall between passes, optical water unde
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -24,7 +25,7 @@ from app.place.radar import Reference
 
 log = logging.getLogger(__name__)
 
-FLOODMAPS = Path("data/place/floodmaps")
+FLOODMAPS = Path(os.environ.get("KASAFI_PLACE_DIR", "data/place")) / "floodmaps"   # /data/place on the server
 _maps_cache: dict[str, object] = {}
 
 

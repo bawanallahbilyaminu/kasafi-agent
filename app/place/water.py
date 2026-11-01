@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -19,9 +20,10 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-LAYER = Path("data/geo/water_bodies.geojson")
-OVERRIDES = Path("data/geo/water_bodies.yaml")
-OSM_CACHE = Path("data/geo/osm_water_sokoto.json")
+GEO_DIR = Path(os.environ.get("KASAFI_GEO_DIR", "data/geo"))        # /data/geo on the server (deploy --sync-place)
+LAYER = GEO_DIR / "water_bodies.geojson"
+OVERRIDES = GEO_DIR / "water_bodies.yaml"
+OSM_CACHE = GEO_DIR / "osm_water_sokoto.json"
 OCCURRENCE = 50
 SEASONAL_OCCURRENCE = 10     # a seasonal lake (Kware Lake, Lake Kalmalo) holds water in 10–50% of the months
 MIN_BODY_HA = 0.3            # three 30 m pixels: single-pixel specks are noise

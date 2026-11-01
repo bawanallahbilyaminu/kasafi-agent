@@ -30,7 +30,7 @@ from app.place.floods import classify_water, flood_evidence
 from app.place.outline import Outline, plot_outline
 from app.place.raster import circle
 
-WATER_BODIES = Path("data/geo/water_bodies.yaml")
+from app.place.water import OVERRIDES as WATER_BODIES      # data/geo/water_bodies.yaml (KASAFI_GEO_DIR on the server)
 
 
 def water_body_name(lat: float, lon: float, lang: str, path: Path = WATER_BODIES) -> str:
