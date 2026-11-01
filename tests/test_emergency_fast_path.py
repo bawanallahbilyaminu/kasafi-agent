@@ -49,6 +49,14 @@ def _consented(store, lang="en"):
     return key
 
 
+def test_snakebite_in_the_present_perfect_fires() -> None:
+    # 'A snake has bitten my son' missed (the pattern allowed only 'snake bit'), found while testing the pins on 1 Nov
+    for q in ("A snake has bitten my son", "a snake just bit him", "the snake had bitten her", "snake bite",
+              "my son was bitten by a snake", "Maciji ya sare ɗana"):
+        assert em.detect(q).hit, q
+    assert not em.detect("How much is budgeted for snake antivenom?").hit
+
+
 def test_before_consent_a_phrase_fires_with_the_location_request_and_a_pin_answers_it() -> None:
     store, lookup = UserStore(":memory:"), Lookup()
     outs = _run("Matata tana zubar da jini", store, lookup)
@@ -57,7 +65,8 @@ def test_before_consent_a_phrase_fires_with_the_location_request_and_a_pin_answe
     outs = _run("", store, lookup, kind="location", location={"latitude": 13.06, "longitude": 5.24})
     assert lookup.calls == [(True, False, "")]
     assert outs[0].text.startswith("Babban asibiti mafi kusa: *Kware General Hospital*, kusan kilomita 2.4")
-    assert outs[1].location["name"] == "Kware General Hospital" and not any(o.location_request for o in outs)
+    assert "name" not in outs[1].location and not any(o.location_request for o in outs)
+    assert "*Kware General Hospital*: buɗe ainihin wurin a taswira: https://www.google.com/maps/search/?api=1&query=" in outs[0].text
     memory.forget(user_key(A, make_settings()))
 
 
@@ -74,7 +83,10 @@ def test_with_a_point_the_nearest_suitable_facility_and_its_pin_come_at_once() -
     # one line names the pin's hospital first, then the nearer facility of any kind
     assert "*Kware General Hospital*" in text.splitlines()[1]
     assert "; nearest facility of any kind: *Rinin Tawaye PHC* (primary)" in text.splitlines()[1]
-    assert outs[1].location["name"] == "Kware General Hospital" and len(outs) == 3
+    assert "name" not in outs[1].location and len(outs) == 3
+    loc = outs[1].location
+    assert f"*Kware General Hospital*: open the exact spot on the map: https://www.google.com/maps/search/?api=1&query=" \
+           f"{loc['latitude']:.6f},{loc['longitude']:.6f}" in text           # the pin's own point, named in the text
     assert "google.com/maps/dir" in outs[2].text      # the follow-up: no ORS key here, so the link alone
     assert lookup.calls == [(True, True, "")] and took < 3.0
     memory.forget(key)

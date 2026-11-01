@@ -86,7 +86,7 @@ _PATTERNS = [
     r"\bstopped breathing\b", r"\b(?:struggling|fighting) (?:to|for) breath", r"\bchoking\b",
     r"\bunconscious\b", r"\bpassed out\b", r"\bfainted\b", r"\bcollapsed\b", r"\bunresponsive\b",
     r"\b(?:won'?t|will not|not|isn'?t|can'?t) (?:wake|waking)\b", r"\bconvuls\w*", r"\bseizures?\b",
-    r"\bhaving (?:a )?fits?\b", r"\bfitting\b", r"\bsnake ?bite\b|\bbitten by a snake\b|\bsnake (?:has )?bit\b",
+    r"\bhaving (?:a )?fits?\b", r"\bfitting\b", r"\bsnake ?bite\b|\bbitten by a snake\b|\bsnake (?:has |had |just )?(?:bit|bitten)\b",
     r"\bscorpion\b", r"\bburn(?:t|ed)? (?:badly|severely|all over)|\bbadly burn|\bsevere burns?\b",
     r"\b(?:caught|on) fire\b", r"\bhouse (?:is )?burning\b", r"\bdrown\w*", r"\btrapped\b.{0,30}\b(?:flood|water)",
     r"\bswept away\b", r"\bbaby (?:is )?stuck\b", r"\blabou?r\b.{0,40}\b(?:stuck|too long|hours|complicat\w*|bleed\w*)",
@@ -227,7 +227,8 @@ WORDS = {
            "hospital": "Nearest general or specialist hospital{near}: *{name}*, {dist}, in {lga} LGA.",
            "any": "Nearest health facility{near}: *{name}* ({level}), {dist}.",
            "any_too": "; nearest facility of any kind: *{name}* ({level}), {dist}.",
-           "link": "🧭 Directions: {link}",
+           "link": "📍 *{name}*: open the exact spot on the map: {spot}\n🧭 Directions from your current location: {link}",
+           "spot": "📍 *{name}*: open the exact spot on the map: {spot}",
            "no_road": "(Road distance isn't available right now: straight-line distance shown.)",
            "road_next": "Road distance and directions follow in a moment.",
            "road_head": "🚗 *By road:*", "by_road": "*{name}*: {dist}",
@@ -241,7 +242,8 @@ WORDS = {
            "hospital": "Babban asibiti mafi kusa{near}: *{name}*, {dist}, a Ƙaramar Hukumar {lga}.",
            "any": "Cibiyar lafiya mafi kusa{near}: *{name}* ({level}), {dist}.",
            "any_too": "; cibiyar lafiya mafi kusa ta kowace iri: *{name}* ({level}), {dist}.",
-           "link": "🧭 Hanya: {link}",
+           "link": "📍 *{name}*: buɗe ainihin wurin a taswira: {spot}\n🧭 Hanya daga inda kake yanzu: {link}",
+           "spot": "📍 *{name}*: buɗe ainihin wurin a taswira: {spot}",
            "no_road": "(Ba a samu nisan hanya yanzu ba: an nuna nisa a miƙe.)",
            "road_next": "Nisan hanya da kwatance suna zuwa nan da ɗan lokaci.",
            "road_head": "🚗 *Ta hanya:*", "by_road": "*{name}*: {dist}",
@@ -280,11 +282,13 @@ def facility_lines(lang: str, picks: list[tuple[str, object]], near: str = "spot
         f = picks[1][1]
         out = [out[0].rstrip(".") + w["any_too"].format(name=f.name, level=w["levels"].get(f.level, f.level),
                                                         dist=distance_text(lang, f))]
-    if picks and near == "spot":
-        if follows:
-            return out + [w["road_next"]]
-        out.append(w["link"].format(link=maps_link(picks[0][1])))
-        if not routed:
+    if picks:                       # every pin goes with a coordinate link in the text (the pin carries no name)
+        from app.geo.facilities import spot_link
+        f = picks[0][1]
+        if near == "spot" and follows:
+            return out + [w["spot"].format(name=f.name, spot=spot_link(f.lat, f.lon)), w["road_next"]]
+        out.append(pin_links(lang, f))
+        if near == "spot" and not routed:
             out.append(w["no_road"])
     return out
 
@@ -296,5 +300,11 @@ def road_follow_up(lang: str, picks: list[tuple[str, object]], routed: bool) -> 
     w = WORDS[lang]
     rows = [w["by_road"].format(name=f.name, dist=distance_text(lang, f)) for _, f in picks
             if routed and f.road_km is not None]
-    link = w["link"].format(link=maps_link(picks[0][1]))
+    link = pin_links(lang, picks[0][1])
     return "\n".join([w["road_head"], *rows, link] if rows else [link, w["no_road"]])
+
+
+def pin_links(lang: str, f) -> str:
+    """The pin's facility named, its coordinate-only link and the directions link (the pin itself has no name)."""
+    from app.geo.facilities import maps_link, spot_link
+    return WORDS[lang]["link"].format(name=f.name, spot=spot_link(f.lat, f.lon), link=maps_link(f))

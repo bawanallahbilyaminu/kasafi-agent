@@ -74,7 +74,7 @@ class FakeWA:
         return {}
 
     async def send_location(self, to, latitude, longitude, name="", address=""):
-        FakeWA.sent.append(("location", to, name))
+        FakeWA.sent.append(("location", to, {"latitude": latitude, "longitude": longitude, "name": name, "address": address}))
         return {}
 
     async def send_image(self, to, jpeg, caption=""):
@@ -164,7 +164,7 @@ def fake_render(settings, specs, lang, today=None):
 @pytest.fixture
 def harness(monkeypatch, tmp_path):
     from cryptography.fernet import Fernet
-    senders = [f"23480000009{n:02d}" for n in range(1, 8)]
+    senders = [f"23480000009{n:02d}" for n in range(1, 12)]
     s = make_settings(database_url=DEV_DB, kasafi_alerts=True, kasafi_alerts_number_key=SecretStr(Fernet.generate_key().decode()),
                       kasafi_exempt_numbers=",".join(senders), kasafi_evidence_images=False,
                       kasafi_state_db=str(tmp_path / "state.db"))
@@ -264,7 +264,7 @@ def test_consent_language_pin_place_question_size_and_skip(harness):
 def test_pin_then_how_has_farming_evolved_in_my_ward_is_about_that_ward(harness):
     """The 1 Nov phone test: a pin, then 'How has farming evolved in my ward over the years' got a statewide 2025
     ranking of 232 wards. Now: that ward, named with its LGA, the trend over the years, one map."""
-    h, me = harness, "2348000000904"
+    h, me = harness, "2348000000908"
     consented(h, me, "en")
     sends = h.turn(pin(LAT, LON, me), 2, "pin")
     assert sends[1][2].startswith("📍 Got it: you're in")
@@ -284,7 +284,7 @@ def test_pin_then_how_has_farming_evolved_in_my_ward_is_about_that_ward(harness)
 
 
 def test_my_ward_in_hausa_and_the_pin_asked_for_when_none_is_on_file(harness):
-    h, me = harness, "2348000000905"
+    h, me = harness, "2348000000909"
     consented(h, me, "ha")
     sends = h.turn(text("Yaya noma ya canza a unguwata tun shekaru?", me), lambda s: s[-1][0] == "location_request", "no pin yet")
     assert "wurin kansa" in sends[-1][2]
@@ -327,6 +327,36 @@ def test_pin_nearest_hospital_then_the_next_one(harness):
     assert "hospital" in first[0][2].lower() or "Hospital" in first[0][2]
     nxt = h.turn(text("the next one?", me), lambda s: s and s[0][0] == "text", "next one")
     assert nxt[0][2] != first[0][2]
+
+
+def _pins_check(sends, label):
+    """Every pin sent carries the coordinates only (no name, no address: a name makes Google Maps search it and land
+    on another place), and a text in the same reply has the coordinate-only link to exactly that point, which is a
+    facility's stored point in the database."""
+    import psycopg
+    pins = [p for k, _, p in sends if k == "location"]
+    assert pins, f"no pin after {label}"
+    texts = "\n".join(str(p) for k, _, p in sends if k == "text")
+    with psycopg.connect(DEV_DB) as c:
+        for loc in pins:
+            assert not loc["name"] and not loc["address"], f"the pin carries a name or address after {label}: {loc}"
+            link = f"https://www.google.com/maps/search/?api=1&query={loc['latitude']:.6f},{loc['longitude']:.6f}"
+            assert link in texts, f"no coordinate link for the pin after {label}"
+            row = c.execute("SELECT name FROM facility WHERE abs(ST_Y(geom) - %s) < 1e-6 AND abs(ST_X(geom) - %s) < 1e-6",
+                            (loc["latitude"], loc["longitude"])).fetchone()
+            assert row is not None, f"the pin is not a stored facility point after {label}"
+            assert f"*{row[0]}*" in texts, f"the text doesn't name the pin's facility ({row[0]}) after {label}"
+
+
+def test_every_pin_has_no_name_and_a_coordinate_link_to_the_stored_point(harness):
+    h, me = harness, "2348000000910"
+    consented(h, me, "en")
+    h.turn(pin(LAT, LON, me), 2, "pin")
+    _pins_check(h.turn(text("nearest hospital", me), lambda s: s and s[0][0] == "text", "nearest hospital"), "nearest hospital")
+    _pins_check(h.turn(text("the next one?", me), lambda s: s and s[0][0] == "text", "next one"), "next one")
+    _pins_check(h.turn(text("route", me), lambda s: s and s[0][0] == "text", "route"), "route")
+    _pins_check(h.turn(text("My wife is in labour and the baby is stuck", me), lambda s: any(k == "location" for k, _, _ in s), "emergency"),
+                "emergency")
 
 
 def test_alert_sign_up_and_daina(harness):

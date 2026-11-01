@@ -204,6 +204,12 @@ def maps_link(f: Facility, profile: str = "car") -> str:
     return f"https://www.google.com/maps/dir/?api=1&destination={f.lat:.6f},{f.lon:.6f}&travelmode={mode}"
 
 
+def spot_link(lat: float, lon: float) -> str:
+    """Google Maps at the coordinates only: no name to search, so it opens the exact point (a pin named
+    'Arkilla Primary Health Center' made Maps search the name and land on 'Arkilla Basic Health Clinic')."""
+    return f"https://www.google.com/maps/search/?api=1&query={lat:.6f},{lon:.6f}"
+
+
 def address_of(f: Facility, lang: str) -> str:
     return WORDS[lang]["address"].format(lga=f.lga or f.lga_attr)
 
@@ -222,7 +228,11 @@ WORDS = {
            "emonc": {"bemonc": "emergency obstetric care", "cemonc": "comprehensive emergency obstetric care"},
            "emonc_tag": {"bemonc": "basic EmONC", "cemonc": "comprehensive EmONC"},
            "caution": "Kasafi can't confirm opening hours or services; call ahead if you can.",
-           "pin": "📍 The nearest one's location follows. Directions: {link}",
+           "pin": "📍 *{name}*: its pin follows.\nOpen the exact spot on the map: {spot}\nDirections from your current "
+                  "location: {link}",
+           "head_quick": "🏥 *Health facilities, quickest to reach first*{what}{where}:",
+           "summary_quick": "The quickest health facility to reach is {name}, {dist}.",
+           "summary_hospital_quick": "Quickest hospital to reach: {name}, {dist}.",
            "none": "No facility matching that ({what}) was found in Sokoto's facility list.",
            "next_none": "There are no more facilities matching that in the list.",
            "need_location": "To find the nearest facility, share your location, or tell me your LGA or town.",
@@ -244,7 +254,11 @@ WORDS = {
            "emonc": {"bemonc": "kulawar gaggawa ta haihuwa", "cemonc": "cikakkiyar kulawar gaggawa ta haihuwa"},
            "emonc_tag": {"bemonc": "EmONC na asali", "cemonc": "cikakken EmONC"},
            "caution": "Kasafi ba zai iya tabbatar da lokutan buɗewa ko ayyuka ba; ka kira kafin ka je idan za ka iya.",
-           "pin": "📍 Wurin mafi kusa yana zuwa. Hanya: {link}",
+           "pin": "📍 *{name}*: wurinta yana zuwa.\nBuɗe ainihin wurin a taswira: {spot}\nHanya daga inda kake yanzu: "
+                  "{link}",
+           "head_quick": "🏥 *Cibiyoyin lafiya, mafi saurin isa a farko*{what}{where}:",
+           "summary_quick": "Cibiyar lafiya mafi saurin isa ita ce {name}, {dist}.",
+           "summary_hospital_quick": "Asibiti mafi saurin isa: {name}, {dist}.",
            "none": "Ba a sami cibiyar da ta dace da haka ({what}) a jerin cibiyoyin lafiya na Sokoto ba.",
            "next_none": "Babu ƙarin cibiyoyi da suka dace da haka a jerin.",
            "need_location": "Don nemo cibiyar lafiya mafi kusa, raba wurinka, ko faɗa mini ƙaramar hukumarka ko "
@@ -276,7 +290,7 @@ def facilities_text(lang: str, found: list[Facility], filters: Filters, profile:
                     where: str = "spot", lga: str = "", start: int = 1) -> str:
     w = WORDS[lang]
     what = filters.describe(lang)
-    head = w["head"].format(what=f" ({what})" if what else "",
+    head = w["head_quick" if routed else "head"].format(what=f" ({what})" if what else "",
                             where=w["where_spot"] if where == "spot" else w["where_lga"].format(lga=lga))
     rows = []
     for n, f in enumerate(found, start):
@@ -369,7 +383,9 @@ def follow_up(text: str) -> str:
 
 
 def link_line(lang: str, f: Facility, profile: str = "car") -> str:
-    return WORDS[lang]["pin"].format(link=maps_link(f, profile))
+    """The facility's name, the coordinate-only link to its exact point and the directions link: the name goes in
+    the text, never in the location message (location_payload)."""
+    return WORDS[lang]["pin"].format(name=f.name, spot=spot_link(f.lat, f.lon), link=maps_link(f, profile))
 
 
 def route_text(lang: str, f: Facility, profile: str, routed: bool) -> str:
@@ -380,8 +396,15 @@ def route_text(lang: str, f: Facility, profile: str, routed: bool) -> str:
 
 
 def location_payload(f: Facility, lang: str) -> dict:
-    """A WhatsApp location message's fields for a facility (name and address set)."""
-    return {"latitude": f.lat, "longitude": f.lon, "name": f.name[:100], "address": address_of(f, lang)[:100]}
+    """A WhatsApp location message's fields: the coordinates only. With a name (or an address) set, Google Maps
+    searches that text when the pin is tapped and can land on another place with a similar name; the facility's
+    name is in the text message before it (link_line), with a coordinate-only link."""
+    return pin_payload(f.lat, f.lon)
+
+
+def pin_payload(lat: float, lon: float) -> dict:
+    """Any pin we send: coordinates, no name, no address."""
+    return {"latitude": round(float(lat), 6), "longitude": round(float(lon), 6)}
 
 
 def emergency_picks(conn, lat: float, lon: float, maternal: bool) -> list[tuple[str, Facility]]:
@@ -477,7 +500,7 @@ async def search_replies(settings, lat: float, lon: float, search: FacilitySearc
         line = await route_line(settings, lat, lon, found[0], search.profile) if route else []
         caption = "\n".join(text.splitlines()[1:len(found) + 1])          # the numbered rows: names and distances
         image = await asyncio.to_thread(_near_map, settings, lat, lon, found[0].lga, found, line, lang, caption)
-    summary = w["summary_hospital" if search.filters.levels else "summary"].format(
+    summary = w[("summary_hospital" if search.filters.levels else "summary") + ("_quick" if routed else "")].format(
         name=found[0].name, dist=distance_text(lang, found[0], search.profile))
     if any_nearer is not None:
         summary = summary.rstrip(".") + w["any_nearer"].format(

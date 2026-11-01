@@ -193,11 +193,13 @@ def test_the_first_line_names_the_pins_facility_and_a_nearer_one_of_any_kind(mon
     first = out[0][0].splitlines()[0]
     assert first == ("Nearest hospital: Kware General Hospital, about 9.0 km in a straight line; nearest facility "
                      "of any kind: Rinin Tawaye PHC (primary), about 3.0 km in a straight line.")
-    assert out[-1][1]["name"] == "Kware General Hospital"                   # the pin: the facility the line names
+    pin_at = out[-1][1]                                                     # the pin: the facility the line names
+    assert "name" not in pin_at and f"📍 *Kware General Hospital*: its pin follows.\nOpen the exact spot on the map: " \
+        f"https://www.google.com/maps/search/?api=1&query={pin_at['latitude']:.6f},{pin_at['longitude']:.6f}" in out[0][0]
     assert out[0][0].count("Rinin Tawaye") == 1                             # said once, in the first line
     plain = asyncio.run(fac.search_replies(s, 13.06, 5.17, fac.FacilitySearch(), "en", route=False, drawn=False))
     assert plain[0][0].startswith("The nearest health facility is Rinin Tawaye PHC")
-    assert plain[-1][1]["name"] == "Rinin Tawaye PHC"
+    assert "name" not in plain[-1][1] and "📍 *Rinin Tawaye PHC*: its pin follows." in plain[0][0]
 
 
 # --- 4. executive summary first, quotes on request ------------------------------------------------------------
@@ -287,8 +289,9 @@ def test_the_emergency_reply_goes_at_once_and_the_road_distance_follows(monkeypa
     sent, out = _emergency(monkeypatch, routes)
     (took, fast), (_, pin) = sent
     assert "This sounds like an emergency" in fast.text and "about 2.1 km in a straight line" in fast.text
-    assert "follow in a moment" in fast.text and "google.com" not in fast.text and took < 0.3
-    assert pin.location["name"] == "Specialist Hospital"
+    assert "follow in a moment" in fast.text and "maps/dir" not in fast.text and took < 0.3
+    assert "name" not in pin.location and "*Specialist Hospital*: open the exact spot on the map: " \
+        f"https://www.google.com/maps/search/?api=1&query={pin.location['latitude']:.6f},{pin.location['longitude']:.6f}" in fast.text
     assert out[0].text.startswith("🚗 *By road:*")
     assert "*Specialist Hospital*: 6 km by road, about 12 min" in out[0].text and "travelmode=driving" in out[0].text
 

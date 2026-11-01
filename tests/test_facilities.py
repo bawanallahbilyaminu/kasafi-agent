@@ -127,5 +127,18 @@ def test_maps_link_and_location_message() -> None:
     f = _f()
     assert fac.maps_link(f) == "https://www.google.com/maps/dir/?api=1&destination=13.200000,5.300000&travelmode=driving"
     assert "travelmode=walking" in fac.maps_link(f, "foot")
-    assert fac.location_payload(f, "en") == {"latitude": 13.2, "longitude": 5.3, "name": "Kware General Hospital",
-                                             "address": "Kware LGA, Sokoto State"}
+    # the pin carries the coordinates only: a name or address made Google Maps search the text and land elsewhere
+    assert fac.location_payload(f, "en") == {"latitude": 13.2, "longitude": 5.3}
+    assert fac.spot_link(13.2, 5.3) == "https://www.google.com/maps/search/?api=1&query=13.200000,5.300000"
+    line = fac.link_line("en", f)
+    assert line.startswith("📍 *Kware General Hospital*: its pin follows.")
+    assert "Open the exact spot on the map: https://www.google.com/maps/search/?api=1&query=13.200000,5.300000" in line
+    assert "Directions from your current location: https://www.google.com/maps/dir/" in line
+    assert "Buɗe ainihin wurin a taswira: https://www.google.com/maps/search/" in fac.link_line("ha", f)
+
+
+def test_a_list_ordered_by_road_time_says_quickest_to_reach_not_nearest() -> None:
+    f = _f()
+    assert fac.facilities_text("en", [f], fac.Filters(), routed=True).startswith("🏥 *Health facilities, quickest to reach first*")
+    assert fac.facilities_text("en", [f], fac.Filters(), routed=False).startswith("🏥 *Nearest health facilities*")
+    assert fac.facilities_text("ha", [f], fac.Filters(), routed=True).startswith("🏥 *Cibiyoyin lafiya, mafi saurin isa a farko*")

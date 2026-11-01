@@ -182,13 +182,19 @@ class WhatsAppClient:
 
     async def send_location(self, to: str, latitude: float, longitude: float, name: str = "",
                             address: str = "") -> dict:
-        """A location message (a facility's pin): tapping it opens the phone's maps app."""
+        """A location message (a facility's pin): tapping it opens the phone's maps app. Name and address are
+        left out unless given (app/geo/facilities.pin_payload gives neither): a name makes Maps search it."""
+        loc: dict = {"latitude": latitude, "longitude": longitude}
+        if name:
+            loc["name"] = name[:100]
+        if address:
+            loc["address"] = address[:100]
         resp = await self._http.post(f"/{self.phone_number_id}/messages", json={
             "messaging_product": "whatsapp",
             "recipient_type": "individual",
             "to": to,
             "type": "location",
-            "location": {"latitude": latitude, "longitude": longitude, "name": name[:100], "address": address[:100]},
+            "location": loc,
         })
         if not resp.is_success:
             log.warning("WhatsApp location to %s failed: HTTP %s, Graph error code %s",
