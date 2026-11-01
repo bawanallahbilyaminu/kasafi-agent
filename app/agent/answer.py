@@ -1649,7 +1649,8 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
         bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)
     # every figure bound to its row: the entity named next to it, the year, the unit and the kind (external review,
     # finding 01); a contradiction is composed again with the mismatch named, then refused
-    names = [x for e in (plan.need.entities if plan.need else []) for x in (e.resolved, e.name, e.code) if x]
+    # per entity: a name of another entity in a multi-entity plan never binds a figure (follow-up review, finding 1)
+    names = [[x for x in (e.resolved, e.name, e.code) if x] for e in (plan.need.entities if plan.need else [])]
     # a budget query's rows and arithmetic are computed in code (differences, shares): calculation checked, no binding
     att = (attribution.bind(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], names)
            if budget is None else attribution.Attribution("calculation checked"))

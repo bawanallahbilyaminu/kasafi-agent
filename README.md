@@ -69,11 +69,14 @@ from that publisher's own documents.
   "possibly relevant, not counted".
 - **Code does the arithmetic.** Totals, differences, shares, rankings and project status are SQL over the
   structured budget tables built at indexing time, not model arithmetic.
-- **Every figure is bound to its row.** On the page-based path, each figure in the answer must sit in a cited row
-  that names the same entity, year, unit and kind of figure (allocation or spending). An answer that gives a
-  figure to the wrong entity is rewritten once and refused if still wrong. Each answer carries a state:
-  *attribution checked*, *figures checked*, *calculation checked* or *unsupported*. The state is shown in
-  *show working* and on the admin trace ([`app/agent/attribution.py`](app/agent/attribution.py)).
+- **Figures are checked against their rows.** On the page-based path, each figure in the answer is looked up in
+  the cited rows and checked against the row's entity, the year and quarter period of its own column, its unit and
+  its kind (allocation or spending). A contradiction (another entity's or another column's figure) is rewritten
+  once and refused if still wrong. *Attribution checked* is given only when the row settles the entity, year and
+  period; when the evidence can't settle one of them (a table with two year columns and no label on the cell, or
+  one shared word like "Education" with two Education rows), the answer says *figures checked* instead. This is a
+  rule-based check of the cited text, not a full semantic verification. The state is shown in *show working* and
+  on the admin trace ([`app/agent/attribution.py`](app/agent/attribution.py)).
 - **Entity, level and period** of the rows used are compared with what was asked; a mismatch is redone once and
   then said plainly ([`app/agent/consistency.py`](app/agent/consistency.py)).
 - **Never silence.** Every reply ends in an answer or an apology within two minutes, and a failure is logged with
