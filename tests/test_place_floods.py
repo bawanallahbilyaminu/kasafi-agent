@@ -23,6 +23,21 @@ def test_the_vv_threshold_separates_the_reservoir_from_the_city_and_the_floodpla
     assert max(water) < radar.WATER_DB - 1.5 and min(cropland) > radar.WATER_DB + 2.0
 
 
+def test_dry_sand_that_is_dark_all_year_is_not_water_but_a_water_body_is() -> None:
+    # Gudu dunes (Nov 1 2026 probe): -15.3 dB in October and -15.7 dB in February–April
+    assert radar.is_water(-15.3, reference=-15.7) is False
+    assert radar.is_water(-15.3) is True                              # no reference known: the plain threshold
+    assert radar.is_water(-16.2, reference=-10.4) is True             # Wurno floodplain: 6 dB darker than its dry season
+    assert radar.is_water(-15.5, reference=-17.0, on_water=True) is True   # the reservoir is dark all year: water
+    assert radar.Reference(-15.7, 8, "2025–2026").dark and not radar.Reference(-10.4, 8).dark
+    rows = {2022: radar.RadarYear(2022, 3, ["2022-08-07", "2022-10-30"],
+                                  {"2022-08-07": -15.3, "2022-09-12": -11.0, "2022-10-30": -18.9})}
+    radar.rejudge(rows, -15.7, False)
+    assert rows[2022].water == ["2022-10-30"]                          # 3.2 dB under the reference; the -15.3 isn't
+    radar.rejudge(rows, None, False)
+    assert rows[2022].water == ["2022-08-07", "2022-10-30"]
+
+
 def test_plot_db_is_the_median_over_the_plot_and_needs_half_its_pixels() -> None:
     vv = np.array([[0.01, 0.02, 0.0], [0.0, 0.0, 0.0]])          # 0 = no data: 2 of 6 valid, under half
     inside = np.array([[True, True, True], [True, True, True]])

@@ -20,6 +20,7 @@ from pathlib import Path
 from app.place import radar
 from app.place.history import History, _fresh, _load, _save, cell_id
 from app.place.radar import SOURCE as RADAR_SOURCE
+from app.place.radar import Reference
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ class FloodEvidence:
     official: list[dict] = field(default_factory=list)       # [{"source", "code", "period_start", "period_end"}]
     maps_loaded: bool = False                                  # the clipped official maps exist on this server
     radar_source: str = RADAR_SOURCE
+    reference: Reference = field(default_factory=Reference)      # the plot's dry-season VV (radar.Reference)
 
     def radar_years_with_water(self) -> list[int]:
         return sorted(y for y, r in self.radar.items() if r.water)
@@ -45,10 +47,23 @@ class FloodEvidence:
 # --- radar, cached per cell and year --------------------------------------------------------------------------
 
 def radar_history(conn, lat: float, lon: float, geom: dict, *, today: date, years: list[int] | None = None,
-                  workers: int = radar.WORKERS) -> dict[int, radar.RadarYear]:
+                  workers: int = radar.WORKERS, on_water: bool = False
+                  ) -> tuple[dict[int, radar.RadarYear], radar.Reference]:
+    """The per-year passes (cached per cell and year) judged against the plot's dry-season reference (cached as
+    layer 's1ref'; refreshed once a year): the water dates are recomputed from the stored per-pass values, so a
+    changed rule needs no cache purge."""
     years = years or list(range(radar.FIRST_YEAR, today.year + 1))
     cell = cell_id(lat, lon)
     cached = _load(conn, cell) if conn is not None else {}
+    hit = cached.get(("s1ref", 0))
+    if hit is not None and (today - hit[1]).days < 365:
+        v = hit[0]
+        ref = radar.Reference(v.get("vv_db"), int(v.get("passes") or 0), str(v.get("seasons") or ""))
+    else:
+        ref = radar.dry_reference(lat, lon, geom, today, workers=workers)
+        if conn is not None:
+            _save(conn, cell, "s1ref", 0, {"vv_db": ref.vv_db, "passes": ref.passes, "seasons": ref.seasons},
+                  radar.SOURCE, ref.passes, today)
     rows: dict[int, radar.RadarYear] = {}
     missing = []
     for y in years:
@@ -59,13 +74,14 @@ def radar_history(conn, lat: float, lon: float, geom: dict, *, today: date, year
         else:
             missing.append(y)
     if missing:
-        fresh = radar.radar_years(lat, lon, geom, missing, workers=workers)
+        fresh = radar.radar_years(lat, lon, geom, missing, workers=workers, reference=ref.vv_db, on_water=on_water)
         for y, r in fresh.items():
             rows[y] = r
             if conn is not None:
                 _save(conn, cell, "s1", y, {"year": y, "passes": r.passes, "water": r.water, "vv_db": r.vv_db},
                       radar.SOURCE, r.passes, today)
-    return rows
+    radar.rejudge(rows, ref.vv_db, on_water)
+    return rows, ref
 
 
 # --- official flood maps ----------------------------------------------------------------------------------------
@@ -105,10 +121,12 @@ def official_maps_at(geom: dict, folder: Path = FLOODMAPS) -> list[dict]:
 
 # --- all three together ------------------------------------------------------------------------------------------
 
-def flood_evidence(conn, lat: float, lon: float, geom: dict, *, today: date, workers: int = radar.WORKERS) -> FloodEvidence:
+def flood_evidence(conn, lat: float, lon: float, geom: dict, *, today: date, workers: int = radar.WORKERS,
+                   on_water: bool = False) -> FloodEvidence:
+    """`on_water`: JRC or WorldCover already call the plot a water body, so a dark dry season is water, not sand."""
     ev = FloodEvidence()
     try:
-        ev.radar = radar_history(conn, lat, lon, geom, today=today, workers=workers)
+        ev.radar, ev.reference = radar_history(conn, lat, lon, geom, today=today, workers=workers, on_water=on_water)
     except Exception as e:                                   # noqa: BLE001 - radar is one of three sources
         log.warning("place: radar failed: %s", type(e).__name__)
     try:

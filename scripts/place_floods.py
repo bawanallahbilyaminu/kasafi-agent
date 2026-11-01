@@ -52,9 +52,11 @@ def main() -> None:
             t0 = time.perf_counter()
             h = point_history(conn, lat, lon, today=today, water=True)
             t1 = time.perf_counter()
-            h.floods = floods.flood_evidence(conn, lat, lon, circle(lon, lat), today=today)
+            h.floods = floods.flood_evidence(conn, lat, lon, circle(lon, lat), today=today, on_water=h.on_water)
             t2 = time.perf_counter()
-            print(f"\n=== {p['name']}  (history {t1 - t0:.1f}s, floods {t2 - t1:.1f}s)")
+            ref = h.floods.reference
+            print(f"\n=== {p['name']}  (history {t1 - t0:.1f}s, floods {t2 - t1:.1f}s; dry-season reference "
+                  f"{ref.vv_db} dB over {ref.passes} passes {ref.seasons}; on water: {h.on_water})")
             for y, r in sorted(h.floods.radar.items()):
                 print(f"  {y}: {r.passes:2} radar passes Jul–Oct, under water on {r.water_passes}: {', '.join(r.water) or '-'}"
                       f"   VV dB: {' '.join(f'{d[5:]}={v:.0f}' for d, v in sorted(r.vv_db.items()))}")

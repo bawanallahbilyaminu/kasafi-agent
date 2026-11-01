@@ -59,7 +59,7 @@ def main() -> None:
                       + [(u, lvl, "cropland_cells", 0, float(round(s * n)), n, area.SOURCES["cropland"])
                          for (lvl, u), (s, n) in shares.items()], today)
         logging.info("cropland: %.0fs", time.perf_counter() - t0)
-        dry = None
+        dry = s1_ref = None
         if "jrc" in layers or "s1" in layers:
             t0 = time.perf_counter()
             got = area.jrc(grid)
@@ -105,7 +105,10 @@ def main() -> None:
                 elif layer == "s1":
                     if dry is None:
                         break
-                    res = area.s1_year(grid, units, crop, dry, year, a.workers)
+                    if s1_ref is None:          # one dry-season reference for the run: sand is sand every year
+                        s1_ref = area.s1_reference(grid, today.year if today.month > 4 else today.year - 1, a.workers)
+                        logging.info("s1 reference: %.0fs", time.perf_counter() - t0)
+                    res = area.s1_year(grid, units, crop, dry, year, a.workers, reference=s1_ref)
                     rows = [(u, lvl, "s1_flood_share", year, v, n, area.SOURCES["s1"]) for (lvl, u), (v, n) in res.items()]
                 else:
                     res = fn(grid, units, crop, year, a.workers)

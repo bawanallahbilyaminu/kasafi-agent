@@ -68,3 +68,15 @@ def test_a_flood_cell_is_normally_dry_and_under_the_threshold_on_its_lowest_pass
     labels = np.ones((2, 2), dtype="int32")
     s = area.unit_share(flooded, labels, crop & dry)
     assert s[1] == (pytest.approx(1 / 3), 3)           # the wet cell (-16, not normally dry) isn't counted
+
+
+def test_a_flood_cell_must_be_darker_than_its_dry_season_and_off_the_frame_edge() -> None:
+    lowest = np.array([[-20.0, -15.5, -16.0], [-17.0, -10.0, np.inf]], dtype="float32")
+    reference = np.array([[-9.0, -15.7, np.nan], [-12.0, -9.0, -9.0]], dtype="float32")
+    f = area.flood_cells(lowest, reference)
+    # -20 vs -9: flood; -15.5 vs -15.7: sand; -16 with no reference: flood; -17 vs -12: 5 dB darker: flood
+    assert f.tolist() == [[True, False, True], [True, False, False]]
+    assert area.flood_cells(lowest, None).tolist() == [[True, True, True], [True, False, False]]
+    has = np.array([[True, True, True], [True, True, False], [True, True, True]])
+    edge = area.swath_edge(has)
+    assert edge.tolist() == [[False, False, True], [False, True, False], [False, False, True]]

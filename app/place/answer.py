@@ -218,6 +218,11 @@ W = {
                         "between passes, and optical water under cloud is masked, so a flood can still be missed.",
         "maps_covered": "UNOSAT, October 2022, September and November 2024",
         "radar_working": "{year}: {total} radar passes July–October, under water on {dates}; VV dB per pass {db}",
+        "radar_reference": "Radar rule: a pass counts as open water when the plot's VV is under {thr} dB and at least "
+                           "{darker} dB under its dry-season reference ({ref} dB, the median of {n} February–April "
+                           "passes in {seasons}); smooth dry sand is dark all year and is not counted.",
+        "radar_reference_water": "Radar rule for a water body: a pass counts as water when the plot's VV is under "
+                                 "{thr} dB (dry-season reference {ref} dB over {n} passes in {seasons}).",
         "official_working": "Official flood maps touching the plot: {items}",
         "short_months": ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"),
     },
@@ -342,6 +347,12 @@ W = {
         "maps_covered": "UNOSAT, Oktoba 2022, Satumba da Nuwamba 2024",
         "radar_working": "{year}: hotunan radar {total} na Yuli–Oktoba, ƙarƙashin ruwa a {dates}; VV dB a kowane "
                          "hoto {db}",
+        "radar_reference": "Ƙa'idar radar: hoto yana ƙidaya a matsayin ruwa a fili idan VV na gonar ya yi ƙasa da {thr} "
+                           "dB kuma aƙalla {darker} dB ƙasa da ma'aunin raninta ({ref} dB, matsakaicin hotuna {n} na "
+                           "Fabrairu–Afrilu a {seasons}); yashi bushasshe mai santsi duhu ne a kowane lokaci, ba a "
+                           "ƙidaya shi.",
+        "radar_reference_water": "Ƙa'idar radar ta tafkin ruwa: hoto yana ƙidaya a matsayin ruwa idan VV na gonar ya yi "
+                                 "ƙasa da {thr} dB (ma'aunin rani {ref} dB a hotuna {n} na {seasons}).",
         "official_working": "Taswirorin ambaliya na hukuma da suka taɓa gonar: {items}",
         "short_months": ("Jan", "Fab", "Mar", "Afr", "May", "Yun", "Yul", "Agu", "Sat", "Okt", "Nuw", "Dis"),
     },
@@ -561,6 +572,12 @@ def details(h: H.History, lang: str) -> str:
     if h.water_seen:
         out.append(t["turbid"])
     if h.floods is not None:
+        from app.place.radar import DARKER_DB, WATER_DB
+        ref = getattr(h.floods, "reference", None)
+        if ref is not None and h.floods.radar:
+            out.append(t["radar_reference_water" if h.on_water else "radar_reference"].format(
+                thr=f"{WATER_DB:.0f}", darker=f"{DARKER_DB:.0f}", ref=f"{ref.vv_db:.1f}" if ref.vv_db is not None
+                else t["none"], n=ref.passes, seasons=ref.seasons or t["none"]))
         for y, r in sorted(h.floods.radar.items()):
             if r.passes:
                 out.append(t["radar_working"].format(
@@ -689,7 +706,8 @@ async def place_answer(conn, settings, question: str, english: str, lang: str, p
     timing["history"] = time.perf_counter() - t1
     t3 = time.perf_counter()
     h.floods = await asyncio.to_thread(flood_evidence, conn, lat, lon,
-                                       outline.geometry if outline.is_plot else circle(lon, lat), today=today)
+                                       outline.geometry if outline.is_plot else circle(lon, lat), today=today,
+                                       on_water=h.on_water)
     h.water_type = classify_water(h, h.floods)
     if h.water_type in ("permanent", "seasonal"):
         h.water_name = water_body_name(lat, lon, lang)

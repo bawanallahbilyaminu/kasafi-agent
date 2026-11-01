@@ -9,8 +9,10 @@ masked to cropland (ESA WorldCover 2021, class 40, majority per cell):
   composites with half the unit's cropland cells good.
 - jrc_recurrence_share, jrc_occurrence_mean (year 0): JRC Global Surface Water 1984–2020, averaged to 200 m.
 - s1_flood_share (per year, 2017→): Sentinel-1 RTC VV averaged to 200 m over the August–October passes; a cell
-  floods when its lowest pass is under WATER_DB and it is normally dry (JRC recurrence under 50%); the share of
-  such cells among the unit's normally dry cropland cells; n_obs = passes covering the unit.
+  floods when its lowest pass (frame edges excluded) is under WATER_DB and DARKER_DB under the cell's dry-season
+  reference (the February–April median: smooth dry sand is dark all year), and it is normally dry (JRC
+  recurrence under 50%); the share of such cells among the unit's normally dry cropland cells; n_obs = passes
+  covering the unit.
 - unosat_share (2022, 2024): the share of cropland cells inside UNOSAT's satellite-detected water extents
   (data/place/floodmaps).
 - bsi_share, bsi_median (per year, 2017→): dry-season (February–April) Sentinel-2 BSI from the two clearest
@@ -41,7 +43,7 @@ from shapely import wkb
 
 from app.place import indices, rain, stac
 from app.place.history import DATA_API, TIMEOUT
-from app.place.radar import WATER_DB, S1, to_db
+from app.place.radar import DARKER_DB, WATER_DB, S1, to_db
 
 log = logging.getLogger(__name__)
 
@@ -276,10 +278,43 @@ def modis_year(grid: Grid, units: Units, crop: np.ndarray, year: int, workers: i
     return out
 
 
-def s1_year(grid: Grid, units: Units, crop: np.ndarray, dry: np.ndarray, year: int, workers: int = WORKERS
-            ) -> dict[tuple[str, str], tuple[float | None, int]]:
-    """Per unit: (share of normally dry cropland cells under water on any August–September pass, passes covering
-    the unit)."""
+def swath_edge(has: np.ndarray) -> np.ndarray:
+    """Cells with a value next to a cell without one: a frame's edge, where 'average' resampling blends nodata
+    into dark values (8% of the 2022 'flooded' cells in the Nov 1 2026 probe sat on one)."""
+    gap = ~has
+    edge = np.zeros_like(has)
+    edge[1:, :] |= gap[:-1, :]
+    edge[:-1, :] |= gap[1:, :]
+    edge[:, 1:] |= gap[:, :-1]
+    edge[:, :-1] |= gap[:, 1:]
+    return has & edge
+
+
+def s1_reference(grid: Grid, year: int, workers: int = WORKERS) -> np.ndarray | None:
+    """Each cell's dry-season VV (dB): the median over the February–April frames of the year. Smooth dry sand
+    (Gudu's dunes) reads under WATER_DB all year, so a wet-season pass counts as a flood only when it is DARKER_DB
+    under this."""
+    its = items(S1, grid, f"{year}-{DRY_MONTHS[0]}", f"{year}-{DRY_MONTHS[1]}", ["id", "properties.datetime"])
+    stack = []
+    with httpx.Client(timeout=TIMEOUT * 5) as client, ThreadPoolExecutor(max_workers=workers) as ex:
+        for got in ex.map(lambda it: window(S1, it["id"], ["vv"], grid, "average", client), its):
+            if got is not None:
+                db = to_db(got["vv"]).astype("float32")
+                db[swath_edge(np.isfinite(db))] = np.nan
+                stack.append(db)
+    if not stack:
+        return None
+    ref = np.nanmedian(np.stack(stack), axis=0).astype("float32")
+    log.info("area: Sentinel-1 dry-season reference %d: %d frames; cells under %.0f dB: %d", year, len(stack), WATER_DB,
+             int((ref < WATER_DB).sum()))
+    return ref
+
+
+def s1_year(grid: Grid, units: Units, crop: np.ndarray, dry: np.ndarray, year: int, workers: int = WORKERS,
+            reference: np.ndarray | None = None) -> dict[tuple[str, str], tuple[float | None, int]]:
+    """Per unit: (share of normally dry cropland cells under water on any August–October pass, passes covering
+    the unit). A cell floods when its lowest pass is under WATER_DB, at least DARKER_DB under its dry-season
+    reference (when one is given), and not on a frame's edge on that pass."""
     its = items(S1, grid, f"{year}-{S1_MONTHS[0]}", f"{year}-{S1_MONTHS[1]}", ["id", "properties.datetime"])
     lowest = np.full(grid.shape, np.inf, dtype="float32")
     cover: dict[tuple[str, str], int] = {}
@@ -292,7 +327,8 @@ def s1_year(grid: Grid, units: Units, crop: np.ndarray, dry: np.ndarray, year: i
                 continue
             db = to_db(got["vv"])
             has = np.isfinite(db)
-            lowest = np.where(has & (db < lowest), db, lowest)
+            good = has & ~swath_edge(has)
+            lowest = np.where(good & (db < lowest), db, lowest)
             day = it["properties"]["datetime"][:10]
             has_by_date[day] = has_by_date[day] | has if day in has_by_date else has
     for has in has_by_date.values():
@@ -300,11 +336,20 @@ def s1_year(grid: Grid, units: Units, crop: np.ndarray, dry: np.ndarray, year: i
         for key, (share, _) in seen.items():
             if share >= GOOD_SHARE:
                 cover[key] = cover.get(key, 0) + 1
-    flooded = np.isfinite(lowest) & (lowest < WATER_DB)
+    flooded = flood_cells(lowest, reference)
     shares = per_unit(units, lambda labels: unit_share(flooded, labels, among))
     out = {key: (round(share, 4) if cover.get(key, 0) > 0 else None, cover.get(key, 0)) for key, (share, _) in shares.items()}
     log.info("area: Sentinel-1 %d: %d frames, flooded cells %d", year, len(its), int(flooded[among].sum()))
     return out
+
+
+def flood_cells(lowest: np.ndarray, reference: np.ndarray | None) -> np.ndarray:
+    """Under WATER_DB on the lowest pass and, where the dry-season reference is known, DARKER_DB under it."""
+    flooded = np.isfinite(lowest) & (lowest < WATER_DB)
+    if reference is not None:
+        known = np.isfinite(reference)
+        flooded &= ~known | ((reference - lowest) >= DARKER_DB)
+    return flooded
 
 
 def unosat_shares(grid: Grid, units: Units, crop: np.ndarray) -> dict[int, dict[tuple[str, str], tuple[float, int]]]:

@@ -15,7 +15,12 @@ line with the -15 to -18 dB thresholds the flood-mapping literature uses for VV.
 standing crops or trees (the stems bounce the beam back, so flooded vegetation reads bright, not dark), very
 rough wind-blown water, and floods between two passes. Answers say so.
 
-Cached per ~100 m cell and year in sat_cache (layer 's1'), never by user.
+Smooth dry sand also reads dark (Gudu's dunes: -15 to -16 dB in the dry season, Nov 1 2026 probe: 141 of 150
+"flooded" cells there were as dark in February–April as in October), so a pass counts as water only when the plot
+is also DARKER_DB under its own dry-season reference (the median VV of the last two February–April seasons),
+unless JRC already calls the plot a water body (dark all year because it is water).
+
+Cached per ~100 m cell and year in sat_cache (layer 's1'; the reference as layer 's1ref', year 0), never by user.
 """
 
 from __future__ import annotations
@@ -37,7 +42,10 @@ log = logging.getLogger(__name__)
 
 S1 = "sentinel-1-rtc"
 WATER_DB = -15.0
+DARKER_DB = 3.0             # a wet-season pass must be this much under the plot's dry-season VV to be water
 FLOOD_MONTHS = (7, 10)
+DRY_MONTHS = (2, 4)         # the reference season
+REF_SEASONS = 2             # dry seasons in the reference
 FIRST_YEAR = 2017
 MIN_PIXELS = 0.5            # share of the plot's pixels with a valid value for a pass to count
 SOURCE = "Copernicus Sentinel-1 RTC (VV backscatter), Microsoft Planetary Computer"
@@ -55,6 +63,19 @@ class RadarYear:
         return len(self.water)
 
 
+@dataclass
+class Reference:
+    """The plot's dry-season VV: the median over the February–April passes of the last REF_SEASONS seasons."""
+    vv_db: float | None = None
+    passes: int = 0
+    seasons: str = ""                                     # e.g. "2025–2026"
+
+    @property
+    def dark(self) -> bool:
+        """Dark in the dry season too: smooth bare ground (or water all year)."""
+        return self.vv_db is not None and self.vv_db < WATER_DB + DARKER_DB
+
+
 def to_db(power: np.ndarray) -> np.ndarray:
     p = power.astype(float)
     p[p <= 0] = np.nan
@@ -70,21 +91,44 @@ def plot_db(vv: np.ndarray, inside: np.ndarray) -> float | None:
     return float(np.median(vals))
 
 
-def is_water(db: float | None, threshold: float = WATER_DB) -> bool:
-    return db is not None and db < threshold
+def is_water(db: float | None, threshold: float = WATER_DB, reference: float | None = None,
+             on_water: bool = False) -> bool:
+    """Under the threshold, and (unless the plot is a water body) at least DARKER_DB under its dry-season
+    reference when one is known: dry sand that is dark all year is not a flood."""
+    if db is None or db >= threshold:
+        return False
+    if on_water or reference is None:
+        return True
+    return reference - db >= DARKER_DB
 
 
-def passes(lon: float, lat: float, start: date, end: date) -> list[dict]:
-    """Sentinel-1 RTC items over the point, July–October, one per day (two overlapping frames share a date)."""
+def passes(lon: float, lat: float, start: date, end: date, months: tuple[int, int] = FLOOD_MONTHS) -> list[dict]:
+    """Sentinel-1 RTC items over the point in the months, one per day (two overlapping frames share a date)."""
     items = stac.search(S1, lon, lat, start.isoformat(), end.isoformat(),
                         fields=["id", "properties.datetime", "properties.sat:orbit_state",
                                 "properties.sat:relative_orbit"])
     by_day: dict[str, dict] = {}
     for it in items:
         day = it["properties"]["datetime"][:10]
-        if FLOOD_MONTHS[0] <= int(day[5:7]) <= FLOOD_MONTHS[1] and day not in by_day:
+        if months[0] <= int(day[5:7]) <= months[1] and day not in by_day:
             by_day[day] = it
     return [by_day[d] for d in sorted(by_day)]
+
+
+def dry_reference(lat: float, lon: float, geom: dict, today: date, *, workers: int = WORKERS) -> Reference:
+    """The plot's median VV over the February–April passes of the last REF_SEASONS dry seasons."""
+    bbox, shape = bbox_of(geom), grid_shape(bbox_of(geom), lat)
+    last = today.year if today.month > DRY_MONTHS[1] else today.year - 1
+    first = last - REF_SEASONS + 1
+    todo = passes(lon, lat, date(first, DRY_MONTHS[0], 1), date(last, DRY_MONTHS[1], 30), DRY_MONTHS)
+    vals = []
+    with httpx.Client(timeout=TIMEOUT) as client, ThreadPoolExecutor(max_workers=workers) as ex:
+        for db in ex.map(lambda it: read_pass(client, it["id"], geom, bbox, shape), todo):
+            if db is not None:
+                vals.append(db)
+    ref = Reference(round(float(np.median(vals)), 1) if vals else None, len(vals), f"{first}–{last}")
+    log.info("place: radar dry-season reference %s dB over %d passes (%s)", ref.vv_db, ref.passes, ref.seasons)
+    return ref
 
 
 def read_pass(client: httpx.Client, item_id: str, geom: dict, bbox: tuple, shape: tuple[int, int]) -> float | None:
@@ -104,7 +148,8 @@ def read_pass(client: httpx.Client, item_id: str, geom: dict, bbox: tuple, shape
 
 
 def radar_years(lat: float, lon: float, geom: dict, years: list[int], *, workers: int = WORKERS,
-                threshold: float = WATER_DB) -> dict[int, RadarYear]:
+                threshold: float = WATER_DB, reference: float | None = None, on_water: bool = False
+                ) -> dict[int, RadarYear]:
     """Per year: the July–October passes and those with the plot under water (dates), side by side."""
     bbox, shape = bbox_of(geom), grid_shape(bbox_of(geom), lat)
     todo = [it for it in passes(lon, lat, date(min(years), FLOOD_MONTHS[0], 1), date(max(years), FLOOD_MONTHS[1], 31))
@@ -119,9 +164,15 @@ def radar_years(lat: float, lon: float, geom: dict, years: list[int], *, workers
                 continue
             r.passes += 1
             r.vv_db[day] = round(db, 1)
-            if is_water(db, threshold):
+            if is_water(db, threshold, reference, on_water):
                 r.water.append(day)
     return out
+
+
+def rejudge(rows: dict[int, RadarYear], reference: float | None, on_water: bool) -> None:
+    """The water dates recomputed from the stored per-pass values (cached years, or a new reference)."""
+    for r in rows.values():
+        r.water = [d for d, db in sorted(r.vv_db.items()) if is_water(db, WATER_DB, reference, on_water)]
 
 
 def summarize(rows: dict[int, RadarYear]) -> dict:
