@@ -43,6 +43,7 @@ from app.retrieval.indexer import accounting_negatives, index_document, needs_oc
 from app.retrieval.ocr import ocr_image
 
 log = logging.getLogger(__name__)
+_CARD_TASKS: set = set()        # background card builds (held so they aren't garbage collected mid-run)
 
 GAP_RETENTION_DAYS = 90
 BACKGROUND_OCR_PAGES = 60
@@ -225,6 +226,10 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
         scanned = [i for i, p in enumerate(pages, 1) if needs_ocr(i, p, image_pages)]
         if scanned:
             schedule_ocr(doc_id, path, scanned[:BACKGROUND_OCR_PAGES], settings)
+        # its document and section cards, in the background on Muse Spark Open (Baseten): the answer doesn't wait
+        from app.retrieval.cards import build_card_later
+        _CARD_TASKS.add(task := asyncio.ensure_future(build_card_later(doc_id, settings)))
+        task.add_done_callback(_CARD_TASKS.discard)
         usage.count("documents_fetched")
         return Acquired("indexed", doc_id, doc["title"], url, timings=t)
     except (FetchError, ParseError) as e:

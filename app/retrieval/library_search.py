@@ -137,12 +137,20 @@ def library_search(conn: psycopg.Connection, question: str, queries: list[str] |
     allowed = {d for d, c in cats.items() if d not in skip and (tables or c not in TABLE_CATEGORIES)}
     lists: dict[str, list[str]] = {}                 # list name -> documents in rank order
     best_chunk: dict[str, tuple[int, int]] = {}      # document -> (page, idx) of its best chunk in any list
-    if vectors and has_vectors(conn) and (v := _vector(" ".join(qs[:2]))):
+    v = _vector(" ".join(qs[:2])) if vectors and has_vectors(conn) else None
+    if v:
         rows = conn.execute(VEC_SQL, {"v": v, "skip": list(skip) or None, "tables": tables,
                                       "table_cats": list(TABLE_CATEGORIES)}).fetchall()
         lists["meaning"] = [d for d in _doc_order(rows) if d in allowed]
         for d, p, i in rows:
             best_chunk.setdefault(d, (p, i))
+    # document and section cards (app/retrieval/cards.py): what each document is about, its places, years and
+    # measures; a boost list like the others (never excludes), and a matching section's pages are read first
+    from app.retrieval.cards import card_matches
+    matches = [m for m in card_matches(conn, qs[0], v) if m.doc_id in allowed or (tables and m.doc_id not in skip)]
+    if matches:
+        lists["card"] = [m.doc_id for m in matches]
+    section_pages = {m.doc_id: m.pages for m in matches if m.pages}
     keyword: dict[str, int] = {}
     for q in qs:
         q = _GENERIC.sub(" ", q).strip()        # 'Sokoto', 'State': every document prints them; they rank nothing
@@ -167,7 +175,7 @@ def library_search(conn: psycopg.Connection, question: str, queries: list[str] |
     via: dict[str, set[str]] = {}
     agree: dict[str, int] = {}
     for name, order in lists.items():
-        weight = {"phrase": 1.5, "meaning": 1.2}.get(name, 1.0)
+        weight = {"phrase": 1.5, "meaning": 1.2, "card": 1.3}.get(name, 1.0)
         for rank, d in enumerate(order):
             scores[d] = scores.get(d, 0.0) + weight / (RRF_K + rank + 1)
             via.setdefault(d, set()).add(name)
@@ -181,7 +189,13 @@ def library_search(conn: psycopg.Connection, question: str, queries: list[str] |
         if chosen else {}
     out: list[LibHit] = []
     for d in chosen:
+        # the document's best pages by the question's words, plus the best page of its matching section card
         pages = [r[0] for r in conn.execute(PAGE_SQL, {"q": words, "d": d, "k": PAGES_PER_DOC}).fetchall()]
+        if d in section_pages:
+            lo, hi = min(section_pages[d]), max(section_pages[d])
+            sec = [r[0] for r in conn.execute(PAGE_SQL.replace("ORDER BY", "AND p.page BETWEEN %(lo)s AND %(hi)s ORDER BY"),
+                                              {"q": words, "d": d, "k": 1, "lo": lo, "hi": hi}).fetchall()] or [lo]
+            pages += [p for p in sec if p not in pages]
         if not pages and len(qs) > 1:
             pages = [r[0] for r in conn.execute(PAGE_SQL, {"q": " ".join(qs[1:]), "d": d,
                                                            "k": PAGES_PER_DOC}).fetchall()]

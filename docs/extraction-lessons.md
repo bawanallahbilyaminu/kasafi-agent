@@ -108,3 +108,18 @@ whole sentences ('This/It' carries the sentence before), a Total row takes its t
 figure that can't be found is answered marked "Not verified" (only a contradiction, or no figure found at all,
 refuses). `tests/test_library_search.py` (a fresh fixture document found unnamed on every path),
 `tests/test_prose_figures.py`, `evals/newdocs`, `evals/prose`.
+
+**L38 (2 Nov 2026): cards, adaptive reading, and three answer rules.** Document cards and section cards (migration
+0026, `app/retrieval/cards.py`) are written by Muse Spark Open on Baseten from the whole document (sections at
+headings and table titles; prose, titles and row labels with the digit columns dropped) and only boost documents
+in the library search: a card joins the boost list when it shares a content word or a place with the question
+(with no floor, the few carded documents topped every question), and its best section by shared words (meaning
+breaks ties) adds one page on top of the document's own best pages. Related documents share at least two topics
+and overlapping years, stored both ways with the reason; a broad question reads them, a simple one only gets a
+one-line "Related:" pointer. A simple fact reads up to 3 documents or sources, a broad question ("compare",
+"overview", "what do reports say", or three measures) up to 8, two pages each, with readings beyond the third on
+Muse Spark Open and the findings grouped by source; a budget comparison stays on the structured path. From the
+21:31 live test: "the documents don't print X" is said only after the whole document was searched (all pages and
+section cards; otherwise "I didn't find this in the pages I read", naming the pages that may cover it); two figures
+for overlapping groups are both given with what each covers (compose rule 6h); amounts are shown in house style
+("₦29.6 billion" for "NGN29,6 billion"), the printed form kept in show working. `tests/test_cards.py`.

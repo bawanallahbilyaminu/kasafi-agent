@@ -97,7 +97,8 @@ PLAN_SYSTEM = (
     "'Independent Revenue', 'Ministry of Health', 'Recurrent Expenditure'>\"], "
     '"doc_ids": ["<2-3 catalog ids most likely to contain the answer, best first; only 1 if it is certainly '
     "enough. Figures often appear in more than one document, e.g. debt stock in both the DSA and the MTEF / Fiscal "
-    "Strategy Paper. Choose by what each document is about (title, publisher, type), also when the question doesn't "
+    "Strategy Paper. Choose by what each document is about (title, publisher, type, and its card: about, topics, "
+    "covers), also when the question doesn't "
     "name it: a sector plan, a policy or a partner report can hold the answer. A question about an intention "
     "('plan to raise', 'proposed', 'target', 'aim', 'strategy', Hausa 'shirin', 'niyya') is answered by the plans "
     "and policies that state it: list them first, before budgets>\"], "
@@ -274,6 +275,10 @@ ANSWER_SYSTEM = (
     "6g. A dash (-), an ellipsis (…), 'n/a' or a blank in a table cell means the figure is NOT AVAILABLE: never "
     "read it as zero, 'none', 'no enrolment' or 'no spending'. Say the table prints no figure for that cell, and "
     "look for the figure in another table of the same document before saying it isn't published.\n"
+    "6h. When the evidence gives two figures for similar or overlapping groups (named agencies vs all agencies of a "
+    "kind, a subset vs its total, one programme vs the sector), give BOTH, each with exactly what it covers (e.g. "
+    "'₦1.29 billion for the three PHC agencies combined; ₦1.94 billion for all agencies involved with PHC "
+    "management'), never only one.\n"
     "6e. If the asked figure is NOT published in the evidence but can be derived exactly from figures that are "
     "(e.g. a year-on-year rate from two index values: (index this year / index a year earlier - 1) * 100), "
     "don't calculate it: say it isn't published (found=\"partial\"), give the published inputs, and propose "
@@ -331,6 +336,27 @@ _HAUSA_FIXES = [(re.compile(r"\bƙasaf"), "kasaf"), (re.compile(r"\bƘasaf"), "K
                 (re.compile(r"\bƙash(e|ew)"), r"kash\1"), (re.compile(r"\bƘash(e|ew)"), r"Kash\1")]
 
 
+_SCALED = re.compile(r"(?:₦|\bNGN|\bN(?=\s?\d))\s?(\d{1,3}(?:,\d{3})+|\d+(?:[.,]\d{1,3})?)\s?"
+                     r"(trillion|tiriliyan|billion|biliyan|million|miliyan|tn|bn|mn)\b", re.I)
+_SCALE_WORD = {"trillion": 0, "tiriliyan": 0, "tn": 0, "billion": 1, "biliyan": 1, "bn": 1, "million": 2,
+               "miliyan": 2, "mn": 2}
+
+
+def house_style(text: str, lang: str) -> str:
+    """Amounts as Kasafi writes them, whatever the document printed: 'NGN29,6 billion' -> '₦29.6 billion',
+    'N23.5billion' -> '₦23.5 billion', 'NGN 1.29bn' -> '₦1.29 billion', Hausa 'biliyan'. A decimal comma (one or
+    two digits) is a decimal point; a thousands comma before 'million' ('N12,026 million') stays. Display only:
+    the figure check and show working keep the printed form (2 Nov 2026)."""
+    words = _UNITS.get(lang, _UNITS["en"])
+
+    def sub(m: re.Match) -> str:
+        num = m.group(1)
+        if re.fullmatch(r"\d+,\d{1,2}", num):
+            num = num.replace(",", ".")
+        return f"₦{num} {words[_SCALE_WORD[m.group(2).lower()]]}"
+    return _SCALED.sub(sub, text or "")
+
+
 def readable_amounts(text: str, lang: str) -> str:
     """'₦118,827,792,994.59' -> '₦118.83 biliyan' (ha) / '₦118.83 billion' (en).
 
@@ -339,6 +365,7 @@ def readable_amounts(text: str, lang: str) -> str:
     only get the ₦ sign.
     """
     tri, bil, mil = _UNITS.get(lang, _UNITS["en"])
+    text = house_style(text, lang)
     # "Naira 9,076,557,198.38" would become "Naira ₦9.08 biliyan"; the ₦ sign replaces the word.
     # ("Naira nawa ...", how many naira, has no amount after it and stays.)
     text = re.sub(r"(?i)\bnaira\s+(?=₦?\d)", "", text)
@@ -412,6 +439,7 @@ class Plan:
     original: str = ""                                  # the message as sent (english_question is standalone)
     period_doc: str = ""                                # the report covering a period the question names
     skip_docs: list[str] = field(default_factory=list)  # that year's other reports: never read for this question
+    breadth: int = 3                                    # documents to read: 3 for a simple fact, 8 for a broad question
     words: dict = field(default_factory=dict)           # what the words settled, the overrides, the second opinion (traced)
 
     def assumption_for(self, lang: str) -> str:
@@ -496,9 +524,24 @@ def load_catalog(conn: psycopg.Connection) -> list[dict]:
             "SELECT id, original_format FROM documents WHERE original_format IS NOT NULL").fetchall()))
     except Exception:              # noqa: BLE001 - the column arrives with migration 0023
         conn.rollback()
-    # compact: the planner sees every indexed document (id, title, publisher, year, type), so a plan, policy or
-    # report can be chosen for a question that doesn't name it
-    return [{"id": r[0], "title": r[1], "by": r[4] or "", "type": r[2], "year": r[3]} for r in rows]
+    # compact: the planner sees every indexed document (id, title, publisher, year, type) and, when it has one, its
+    # card (what it is about, topics, geography, period), so a plan, policy or report can be chosen for a question
+    # that doesn't name it, whatever its title says
+    cards = {}
+    try:
+        cards = {r[0]: r[1:] for r in conn.execute(
+            "SELECT doc_id, summary, topics, geography, period FROM doc_cards").fetchall()}
+    except Exception:              # noqa: BLE001 - before migration 0026
+        conn.rollback()
+    out = []
+    for r in rows:
+        item = {"id": r[0], "title": r[1], "by": r[4] or "", "type": r[2], "year": r[3]}
+        if c := cards.get(r[0]):
+            item["about"] = re.split(r"(?<=[.!?])\s", (c[0] or "").strip(), maxsplit=1)[0][:200]
+            item["topics"] = [t["topic"] if isinstance(t, dict) else str(t) for t in (c[1] or [])][:5]
+            item["covers"] = f"{(c[2] or {}).get('level', '')} {c[3] or ''}".strip()
+        out.append(item)
+    return out
 
 
 def converted_note(doc_id: str, lang: str) -> str:
@@ -867,6 +910,7 @@ def prefer_newest_edition(conn: psycopg.Connection, plan: Plan, question: str) -
 
 
 LIB_EXTRA = 3                # library-wide pages read beyond the planned ones
+BROAD_PAGES_PER_DOC = 2      # a broad question: the top pages of each of its documents
 
 
 def library_candidates(conn: psycopg.Connection, plan: Plan, asked: str = "") -> list:
@@ -888,6 +932,102 @@ def library_candidates(conn: psycopg.Connection, plan: Plan, asked: str = "") ->
         log.info("library search: %s", ", ".join(f"{h.hit.doc_id} p{h.hit.page}{'*' if h.strong else ''}"
                                                  for h in hits[:6]))
     return hits
+
+
+BROAD_CONTEXT = ("SEVERAL DOCUMENTS: this question asks for a comparison or an overview. Group the findings by source "
+                 "(one item per document, its title first), give each source's own figures and years, and say where "
+                 "the sources differ (different figures, years, coverage or definitions). Never average them or "
+                 "pick one.")
+READING = {"en": "📚 This needs several documents: reading {n} of them, the most relevant pages of each… "
+                  "(this can take a minute)",
+           "ha": "📚 Wannan na buƙatar takardu da yawa: ina karanta {n}, shafukan da suka fi dacewa a kowace… "
+                 "(zai iya ɗaukar minti ɗaya)"}
+BROAD = re.compile(r"(?i)\b(?:compar\w*|analy[sz]\w*|comprehensive|overview|all\s+(?:the\s+)?(?:sources|documents|reports)|"
+                   r"what\s+do\s+(?:the\s+)?(?:reports|documents|sources)\s+say|across\s+(?:the\s+)?(?:documents|reports|"
+                   r"sources)|every\s+(?:source|report|document)|summari[sz]e\s+(?:the\s+)?(?:evidence|findings)|"
+                   r"kwatanta|nazari|duk\s+(?:majiyoyi|rahotanni|takardun))\b")
+SIMPLE_DOCS, BROAD_DOCS = 3, 8
+
+
+def breadth(question: str, plan: "Plan") -> int:
+    """How many documents to read: a simple fact or single figure -> 3; 'compare / analyse / comprehensive /
+    overview / all sources / what do reports say', or several measures asked -> 8 (only the top pages of each)."""
+    text = f"{question} {plan.english_question}"
+    measures = [m for m in (plan.need.measures if plan.need else []) if m and m != "other"]
+    hits = [m.group(0).lower() for m in BROAD.finditer(text)]
+    # 'compare the 2025 and 2026 health budgets' is a budget comparison: the structured path answers it, from
+    # the budgets; only the other broad words (analyse, overview, all sources ...) widen a money question
+    if hits and MONEY_WORDS.search(text) and all(re.match(r"compar|kwatanta", h) for h in hits):
+        hits = []
+    return BROAD_DOCS if hits or len(set(measures)) >= 3 else SIMPLE_DOCS
+
+
+def widen_for_breadth(conn: psycopg.Connection, plan: "Plan", question: str, n: int) -> list[str]:
+    """A broad question reads up to n documents: the planned ones, their related documents (same topic, place and
+    period, app/retrieval/cards.related), then the library search's candidates. A simple question is left as
+    planned (no related documents pulled in)."""
+    if n <= SIMPLE_DOCS or conn is None:
+        return list(plan.doc_ids)
+    from app.retrieval.cards import related
+    docs = list(plan.doc_ids)
+    docs += [d for d, _, _ in related(conn, docs, most=2) if d not in docs]
+    docs += [h.hit.doc_id for h in library_candidates(conn, plan, question) if h.hit.doc_id not in docs]
+    return list(dict.fromkeys(docs))[:n]
+
+
+ABSENT = re.compile(r"(?i)[^.\n]*\b(?:do(?:es)?\s*n[o']?t|do(?:es)?\s+not|is\s*n[o']?t|is\s+not|are\s*n[o']?t|are\s+not|"
+                    r"was\s*n[o']?t|were\s*n[o']?t)\s+(?:\w+\s+){0,2}(?:print|publish|report|give|list|break\w*\s+down|"
+                    r"include|provide|state|show|mention)\w*[^.\n]*[.\n]?|[^.\n]*\bnot\s+(?:separately\s+)?"
+                    r"(?:published|printed|reported|given|listed)\b[^.\n]*[.\n]?")
+NOT_READ = {"en": "I didn't find this in the pages I read (the document has other pages that may cover it: {pages}).",
+            "ha": "Ban samu wannan a shafukan da na karanta ba (takardar na da wasu shafuka da za su iya bayani a kai: "
+                  "{pages})."}
+
+
+def unread_pages(conn: psycopg.Connection, plan: "Plan", evidence: list, docs: list[str]) -> dict[str, list[int]]:
+    """Pages of these documents that match the question (keywords over all their chunks, and their matching
+    section cards) but weren't read. Empty: the whole document was searched and what matters was read."""
+    read = {(e.doc_id, e.page) for e in evidence}
+    out: dict[str, list[int]] = {}
+    queries = list(dict.fromkeys([plan.english_question, *plan.search_queries[:3]]))
+    for d in docs:
+        pages = []
+        for q in queries:
+            pages += [h.page for h in search(conn, q, k=12, doc_ids=[d])]
+        try:
+            for p0, p1 in conn.execute(
+                    "SELECT page_from, page_to FROM section_cards WHERE doc_id = %s AND to_tsvector('english', "
+                    "summary || ' ' || title || ' ' || topics::text || ' ' || measures::text) @@ to_tsquery('english', "
+                    "replace(websearch_to_tsquery('english', %s)::text, ' & ', ' | ')) LIMIT 3",
+                    (d, plan.english_question)).fetchall():
+                pages += list(range(p0, p1 + 1))
+        except Exception:          # noqa: BLE001 - before migration 0026
+            conn.rollback()
+        left = [p for p in dict.fromkeys(pages) if (d, p) not in read]
+        if left:
+            out[d] = left[:6]
+    return out
+
+
+def checked_absence(conn: psycopg.Connection, plan: "Plan", evidence: list, cited: list, text: str,
+                    lang: str) -> tuple[str, bool]:
+    """'The documents don't print X' is said only after the whole document was searched for X (all its pages and
+    section cards); otherwise that sentence becomes 'I didn't find this in the pages I read', naming the pages
+    that may cover it (2 Nov 2026). Returns (text, changed)."""
+    if conn is None or not ABSENT.search(text or ""):
+        return text, False
+    docs = list(dict.fromkeys([e.doc_id for e in cited] or [e.doc_id for e in evidence]))[:3]
+    left = unread_pages(conn, plan, evidence, docs)
+    if not left:
+        return text, False
+    titles = {e.doc_id: e.title for e in [*evidence, *cited]}
+    word = PAGE_WORD.get(lang, "page")
+    pages = "; ".join(f"{titles.get(d, d)}, {word} {', '.join(map(str, ps))}" for d, ps in left.items())
+    line = NOT_READ.get(lang, NOT_READ["en"]).format(pages=pages)
+    first = ABSENT.search(text)
+    out = text[:first.start()] + (" " if first.start() and not text[first.start() - 1].isspace() else "") + line + \
+        ABSENT.sub("", text[first.end():])          # any further absence claim: the one line says it
+    return re.sub(r"[ \t]{2,}", " ", out).strip(), True
 
 
 INTENT = re.compile(r"(?i)\b(?:plan(?:s|ned|ning)?\s+to|propos\w*|target\w*|aim(?:s|ed)?\s+to|intend\w*|"
@@ -974,9 +1114,24 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
     # One evidence item per page: the best hit plus the chunks either side of every hit on that page,
     # so a sector's total row comes with the rows around it.
     by_page: dict[tuple[str, int], list[Hit]] = {}
+    broad = plan.breadth > SIMPLE_DOCS
+    cap = BROAD_PAGES_PER_DOC * plan.breadth if broad else MAX_EVIDENCE
+    per_doc: dict[str, int] = {}
+    if broad:
+        # a broad question reads every planned document: each one's best pages by the question's own words first,
+        # at most BROAD_PAGES_PER_DOC each (an 800-page survey can't take every place)
+        for d in plan.doc_ids[:plan.breadth]:
+            for h in search(conn, plan.english_question or asked, k=BROAD_PAGES_PER_DOC, doc_ids=[d]):
+                if (h.doc_id, h.page) not in by_page and per_doc.get(d, 0) < BROAD_PAGES_PER_DOC:
+                    by_page[(h.doc_id, h.page)] = [h]
+                    per_doc[d] = per_doc.get(d, 0) + 1
     for h in ranked:
-        if (h.doc_id, h.page) in by_page or len(by_page) < MAX_EVIDENCE:
-            by_page.setdefault((h.doc_id, h.page), []).append(h)
+        key = (h.doc_id, h.page)
+        if key in by_page:
+            by_page[key].append(h)
+        elif len(by_page) < cap and (not broad or per_doc.get(h.doc_id, 0) < BROAD_PAGES_PER_DOC):
+            by_page[key] = [h]
+            per_doc[h.doc_id] = per_doc.get(h.doc_id, 0) + 1
     # the library-wide search (every indexed document, in meaning, keywords and the question's own phrases): its
     # best pages join beyond the planned ones, so a relevant document the plan didn't choose is always read (a
     # money question takes only strong ones: other budgets' pages are noise for it)
@@ -1525,6 +1680,16 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         if conn is not None:
             apply_period(conn, plan, question, today)        # a period named beats the newest report
             prefer_newest_edition(conn, plan, question)      # no year named: the newest edition of a series
+            # adaptive reading: a simple fact reads up to 3 documents, a broad question up to 8 (top pages each),
+            # with a longer compose window on Muse Spark Open inside the 120 s rule
+            plan.breadth = breadth(question, plan)
+            if plan.breadth > SIMPLE_DOCS:
+                plan.doc_ids = widen_for_breadth(conn, plan, question, plan.breadth)
+                settings = settings.model_copy(update={"kasafi_open_stage_timeout_s":
+                                                       max(settings.kasafi_open_stage_timeout_s, 40.0)})
+                log.info("broad question: reading up to %d documents: %s", plan.breadth, ", ".join(plan.doc_ids))
+                if notify and len(plan.doc_ids) > SIMPLE_DOCS:
+                    await notify(READING.get(lang, READING["en"]).format(n=len(plan.doc_ids)))
         drop_unnamed_splits(plan, question)                  # no kind of spending named: the total
         # health facilities from the registry: a count of a kind, or one facility by name (no money asked about)
         if conn is not None and settings.kasafi_shortcut_facilities and (fac := facility_route(question, plan, conn, lang)):
@@ -1616,7 +1781,8 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             tr = await topic_answer(conn, tid, question, plan.english_question, lang, client=client,
                                     settings=settings, notify=notify, today=today,
                                     previous=str(prev.get("question") or "")[:300] if hint else "",
-                                    geo_level=str(plan.need.geo_level or "") if plan.need else "")
+                                    geo_level=str(plan.need.geo_level or "") if plan.need else "",
+                                    most=plan.breadth, reader=second)
             t["topic"] = time.perf_counter() - t0
             if tr.found:
                 text, quotes, summary = await _led(question, tr.text, lang, settings, client)
@@ -2071,6 +2237,8 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
 
     t0 = time.perf_counter()
     context = " ".join(c for c in (context, edition_context(latest)) if c)
+    if plan.breadth > SIMPLE_DOCS and len({e.doc_id for e in evidence}) > 1:
+        context = (context + "\n" if context else "") + BROAD_CONTEXT
     if budget is not None:
         context = (context + "\n" if context else "") + context_text(budget, nmap)
     if prev and plan.followup != "none":
@@ -2142,7 +2310,12 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
     q_all = f"{question} {plan.english_question}"
     shown = {**d, "summary": drop_verdicts(str(d.get("summary") or d.get("answer") or ""), q_all),
              "items": [drop_verdicts(str(i), q_all) for i in (d.get("items") or [])[:TOP_ROWS]]}
-    body = added + (f"_{note}_\n\n" if note else "") + plain(render_answer(shown, lang))
+    rendered = plain(render_answer(shown, lang))
+    if budget is None:          # 'doesn't print X' only after the whole document was searched for X
+        rendered, softened = checked_absence(conn, plan, evidence, cited, rendered, lang)
+        if softened:
+            log.info("absence claim softened: other pages of the cited documents may cover it")
+    body = added + (f"_{note}_\n\n" if note else "") + rendered
     exact = answer_text(d)
     working = ""
     if budget is not None:
@@ -2159,6 +2332,8 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
         body += "\n\n" + scope
     if off := off_topic_note(conn, plan, question, cited, lang):
         body = f"{off}\n\n{body}"
+    if budget is None and (rel := related_line(conn, cited, f"{question} {plan.english_question}", lang)):
+        body += "\n\n" + rel                # a pointer only: nothing more is read unless the user asks
     problems = att.problems
     if partly:
         log.info("answered with %d figure(s) marked unverified: %s", len(unmarked), ", ".join(unmarked))
@@ -2168,6 +2343,23 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
     return Answer(f"{body}\n\n{tail}", True, True, cited, plan, t,
                   partial=found == "partial" or partly, exact=exact, acquired=acq, latest=latest, sources=sources,
                   offer=offer, budget=budget, working=working, verification=state, attribution=problems)
+
+
+RELATED = {"en": "📎 Related: {title} also covers this ({reason}).",
+           "ha": "📎 Mai alaƙa: {title} ma yana bayani a kan wannan ({reason})."}
+
+
+def related_line(conn, cited: list, question: str, lang: str) -> str:
+    """'Related: <title> also covers this (<shared topics>)' for a document linked to a cited one whose shared
+    topics share a word with the question; '' otherwise (2 Nov 2026)."""
+    if conn is None or not cited:
+        return ""
+    from app.retrieval.cards import _words, related
+    asked = _words(question)
+    for doc_id, title, reason in related(conn, list(dict.fromkeys(e.doc_id for e in cited)), most=3):
+        if asked & _words(reason):
+            return RELATED.get(lang, RELATED["en"]).format(title=title, reason=reason)
+    return ""
 
 
 UNMARKED = {

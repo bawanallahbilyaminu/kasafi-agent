@@ -37,7 +37,7 @@ def redact(text: str) -> str:
     return _LONG_DIGITS.sub("[number removed]", text)
 
 PLAN_FIELDS = ("original", "english_question", "doc_ids", "search_queries", "key_terms", "line_search",
-               "budget_query", "assumption", "missing_document", "latest", "followup")
+               "budget_query", "assumption", "missing_document", "latest", "followup", "breadth")
 
 
 def outcome(a) -> str:

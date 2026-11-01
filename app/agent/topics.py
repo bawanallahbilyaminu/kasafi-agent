@@ -1253,6 +1253,14 @@ def primary_sources(topic: Topic, sources: list[SourceResult], most: int = 2) ->
     return out[:most]
 
 
+def cap_sources(registry_pubs: list[Publisher], library_pubs: list[Publisher], most: int) -> list[Publisher]:
+    """At most `most` sources (3 for a simple fact, 8 for a broad question, 2 Nov 2026): the registry's in their
+    order, with the library's documents (found because their pages match the question) keeping at least one place,
+    a third of them for a broad question."""
+    keep = library_pubs[:max(1, most // 3)] if library_pubs else []
+    return registry_pubs[:max(0, most - len(keep))] + keep
+
+
 LIBRARY_PREFIX = "library:"
 LIBRARY_SOURCES = 2
 
@@ -1291,7 +1299,8 @@ def library_sources(conn: psycopg.Connection, question: str, have: set[str],
 async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, english: str, lang: str, *,
                        client: ChatClient, settings: Settings, notify: Notify | None = None,
                        today: date | None = None, http: httpx.AsyncClient | None = None,
-                       previous: str = "", geo_level: str = "") -> TopicResult:
+                       previous: str = "", geo_level: str = "", most: int = 3,
+                       reader: ChatClient | None = None) -> TopicResult:
     """`previous`: the earlier question when this message is a follow-up that names a source for it ('there's an
     NBS MPI report from 2022'): the earlier question is answered again, with that source required too."""
     t0 = time.perf_counter()
@@ -1321,16 +1330,24 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
                 named.append(pick)
                 own_topic[pick.id] = other
         if named:
-            primary, context = named[:3], []
+            primary, context = named[:max(3, most)], []
         # every indexed document whose pages match the question is a source too, not only the registry's
         # publishers (1 Nov 2026: the Health Resource Optimization Plan had the out-of-pocket share the NDHS,
         # MICS and UNFPA sweep couldn't give); a question naming its publishers reads only those
         lib_pages: dict[str, list[int]] = {}
         if not named:
             have = {d[0] for p in primary + context for d in local_documents(conn, p)}
-            for p, pages in library_sources(conn, ask, have):
-                primary.append(p)
-                lib_pages[p.id] = pages
+            lib = library_sources(conn, ask, have, most=max(LIBRARY_SOURCES, most // 2))
+            lib_pages = {p.id: pages for p, pages in lib}
+            # the cap (2 Nov 2026): a simple fact reads up to 3 sources, a broad question up to 8; the library's
+            # documents keep their places (they are there because their pages match the question)
+            primary = cap_sources(primary, [p for p, _ in lib], most)
+            lib_pages = {k: v for k, v in lib_pages.items() if k in {p.id for p in primary}}
+        # readings beyond the first three run on Muse Spark Open (Baseten), so a broad question costs no more Meta
+        order = {p.id: i for i, p in enumerate(primary)}
+
+        def reader_for(p: Publisher) -> ChatClient:
+            return reader if reader is not None and order.get(p.id, 0) >= 3 else client
         if notify and len(primary) > 1:
             await notify(PROGRESS.get(lang, PROGRESS["en"]).format(
                 n=len(primary), names=", ".join(short_pub(p) for p in primary)))
@@ -1342,7 +1359,8 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
                 doc_id = p.id.removeprefix(LIBRARY_PREFIX)
                 title = (conn.execute("SELECT title FROM documents WHERE id = %s", (doc_id,)).fetchone() or [""])[0]
                 src = SourceResult(p, doc_id, title, "ok")
-                src.cards = await fact_cards(conn, src, topic, ask, client, settings, first_pages=lib_pages[p.id])
+                src.cards = await fact_cards(conn, src, topic, ask, reader_for(p), settings,
+                                             first_pages=lib_pages[p.id])
                 if not src.cards:
                     src.status = "no_figure"
                 return src
@@ -1352,12 +1370,12 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
             src = await get_document(conn, p, its, today, http=http, robots=robots, client=client,
                                      settings=settings)
             if src.doc_id:
-                src.cards = await fact_cards(conn, src, its, ask, client, settings)
+                src.cards = await fact_cards(conn, src, its, ask, reader_for(p), settings)
                 if not src.cards and src.status == "ok" and p in named:
                     # a publisher the question names is required: an empty first read (the reader's variance, not
                     # the document's) is read once more before the answer says the source gave nothing
                     log.info("topic source %s gave no figure on the first read; reading again", p.id)
-                    src.cards = await fact_cards(conn, src, its, ask, client, settings)
+                    src.cards = await fact_cards(conn, src, its, ask, reader_for(p), settings)
                 if not src.cards and src.status == "ok":
                     src.status = "no_figure"
             return src

@@ -130,7 +130,7 @@ from app.agent.answer import readable_amounts, render_answer  # noqa: E402
     ("2,500,000,000,000.00", "₦2.50 tiriliyan", "₦2.50 trillion"),
     ("1,200,000.00", "₦1.20 miliyan", "₦1.20 million"),
     ("₦640,000.00", "₦640,000.00", "₦640,000.00"),
-    ("N104,450 million", "₦104,450 million", "₦104,450 million"),   # already in units
+    ("N104,450 million", "₦104,450 miliyan", "₦104,450 million"),   # already in units: house style (2 Nov 2026)
 ])
 def test_readable_amounts(raw: str, ha: str, en: str) -> None:
     assert readable_amounts(raw, "ha") == ha and readable_amounts(raw, "en") == en

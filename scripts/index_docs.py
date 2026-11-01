@@ -23,11 +23,23 @@ def main() -> int:
     ap.add_argument("--only", nargs="+", metavar="ID")
     ap.add_argument("--force", action="store_true", help="re-index even if the file is unchanged")
     ap.add_argument("--pdf-dir", type=Path, help="where the PDFs are (the server: /data/pdfs, named <id>.pdf)")
+    ap.add_argument("--no-cards", action="store_true",
+                    help="don't build document and section cards (Muse Spark Open on Baseten) for indexed documents")
     args = ap.parse_args()
     t0 = time.perf_counter()
     with psycopg.connect(get_settings().db_url(), connect_timeout=10) as conn:
         results = index_manifest(conn, ROOT / "data/manifest.json", only=args.only, force=args.force,
                                  pdf_dir=args.pdf_dir)
+    # a (re-)indexed document lost its cards with its old rows: they are built again (app/retrieval/cards.py)
+    fresh = [r.doc_id for r in results if r.status == "indexed"]
+    if fresh and not args.no_cards:
+        import asyncio
+
+        from app.retrieval.cards import build_card_later
+        for d in fresh:
+            asyncio.run(build_card_later(d))
+        print(f"cards built for: {', '.join(fresh)}")
+    with psycopg.connect(get_settings().db_url(), connect_timeout=10) as conn:
         totals = conn.execute("SELECT count(*), (SELECT count(*) FROM pages), (SELECT count(*) FROM chunks), "
                               "(SELECT count(*) FROM pages WHERE source = 'none') FROM documents").fetchone()
     print(f"{'document':<34} {'status':<10} {'pages':>5} {'empty':>5} {'chunks':>6}  detail")
