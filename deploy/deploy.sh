@@ -93,6 +93,8 @@ case "${1:-}" in
     git fetch -q origin main
     LOCAL=$(git rev-parse HEAD); REMOTE=$(git rev-parse origin/main)
     [ "$LOCAL" = "$REMOTE" ] || die "local main (${LOCAL:0:7}) != origin/main (${REMOTE:0:7}); push or pull first"
+    echo "→ running the end-to-end conversation suite (dev database required)"
+    KASAFI_E2E_REQUIRED=1 uv run pytest -q tests/test_e2e_conversation.py || die "end-to-end conversations failed; not deploying"
     echo "→ running tests"
     uv run pytest -q || die "tests failed; not deploying"
     echo "→ deploying ${LOCAL:0:7} to $HOST"

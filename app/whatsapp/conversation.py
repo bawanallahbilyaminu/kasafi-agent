@@ -350,6 +350,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         return outs
 
     if resume:                                   # the pin or the shape arrived: the place-history question goes on
+        if _sender(notify) is not None:          # "Got it…" goes out now, before the answer's own progress line
+            for o in before:
+                await notify(o)
+            before = []
         return before + await respond(resume, "", Out(t("echo", lang, text=resume[:500])))
 
     async def resolution_reply(res: Resolution, pending_q: str, reply: str = "") -> list[Out]:
