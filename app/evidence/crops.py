@@ -230,7 +230,22 @@ async def make_crop(req: CropRequest, settings: Settings) -> bytes | None:
     return jpeg
 
 
+def _stored_chart_crop(req: CropRequest, settings: Settings) -> bytes | None:
+    """A figure read from a chart label: the chart's own crop, kept at index time (app/retrieval/chart_build.py)."""
+    try:
+        import psycopg
+
+        from app.retrieval.chart_build import chart_crop
+        with psycopg.connect(settings.db_url(), connect_timeout=3) as conn:
+            return chart_crop(conn, req.doc_id, req.page, req.figure)
+    except Exception:              # noqa: BLE001 - no database or no charts table: the page crop as before
+        return None
+
+
 async def _make_crop(req: CropRequest, settings: Settings) -> bytes | None:
+    if settings.has_database and (chart := _stored_chart_crop(req, settings)):
+        log.info("evidence crop %s p%d: the chart (read from a chart label)", req.doc_id, req.page)
+        return chart
     path = pdf_path(req.doc_id, req.title, settings)
     if path is None:
         log.info("no PDF for %s: no evidence image", req.doc_id)

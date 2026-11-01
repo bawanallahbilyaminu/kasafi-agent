@@ -275,6 +275,13 @@ ANSWER_SYSTEM = (
     "6g. A dash (-), an ellipsis (…), 'n/a' or a blank in a table cell means the figure is NOT AVAILABLE: never "
     "read it as zero, 'none', 'no enrolment' or 'no spending'. Say the table prints no figure for that cell, and "
     "look for the figure in another table of the same document before saying it isn't published.\n"
+    "6j. A value marked '(read from a chart label)' is printed on a chart: give it and say where it was read, e.g. "
+    "'read from Figure 3 on page 16'. A '[Chart: ...]' line 'estimated from the chart's shape' has no figures: "
+    "never give a number for it; you may say which category is largest or smallest, saying it is read from the "
+    "chart's shape. When a chart and the text or a table of the same document disagree, give the text's or "
+    "table's figure and say the chart shows a different value.\n"
+    "6k. Copy organisation names and acronyms exactly as the evidence prints them (e.g. 'NPHCDA, SOCHEMA and "
+    "SOSMEA'): never correct, expand, update or respell them.\n"
     "6h. When the evidence gives two figures for similar or overlapping groups (named agencies vs all agencies of a "
     "kind, a subset vs its total, one programme vs the sector), give BOTH, each with exactly what it covers (e.g. "
     "'₦1.29 billion for the three PHC agencies combined; ₦1.94 billion for all agencies involved with PHC "
@@ -2266,6 +2273,17 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
                                    "figure is not available: say the table prints no figure for it, never zero or none.")
         bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)
         dash = dash_misread(answer_text(d))
+    # names and acronyms exactly as the cited pages print them: composed again once with the ones that aren't
+    names_bad = acronym_problems(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n]) \
+        if budget is None and _found(d) != "none" else []
+    if names_bad:
+        t["compose_retry"] = t.get("compose_retry", 0.0) + 1.0
+        d = await compose(question, lang, plan, evidence, client, settings, context=context, second=second,
+                          feedback=f"These names or acronyms are not printed in the cited pages: {', '.join(names_bad)}. "
+                                   "Copy organisation names and acronyms exactly as the pages print them.")
+        bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)
+        dash = dash_misread(answer_text(d))
+        names_bad = acronym_problems(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n])
     # every figure bound to its row: the entity named next to it, the year, the unit and the kind (external review,
     # finding 01); a contradiction is composed again with the mismatch named, then refused
     # per entity: a name of another entity in a multi-entity plan never binds a figure (follow-up review, finding 1)
@@ -2340,10 +2358,36 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
         log.info("answered with %d figure(s) marked unverified: %s", len(unmarked), ", ".join(unmarked))
         body += "\n\n" + UNMARKED.get(lang, UNMARKED["en"]).format(figures=", ".join(unmarked))
         problems = list(dict.fromkeys([f"unverified: {x}" for x in unmarked] + att.problems))
-    state = "calculation checked" if budget is not None else ("figures checked" if partly else att.state)
+    if names_bad:                       # still not as printed after the retry: said, never silently shown
+        log.info("names not as printed in the cited pages: %s", ", ".join(names_bad))
+        body += "\n\n" + NAMES_NOTE.get(lang, NAMES_NOTE["en"]).format(names=", ".join(names_bad))
+        problems = list(dict.fromkeys(problems + [f"name: {x}" for x in names_bad]))
+    state = "calculation checked" if budget is not None else ("figures checked" if partly or names_bad else att.state)
     return Answer(f"{body}\n\n{tail}", True, True, cited, plan, t,
                   partial=found == "partial" or partly, exact=exact, acquired=acq, latest=latest, sources=sources,
                   offer=offer, budget=budget, working=working, verification=state, attribution=problems)
+
+
+ACRONYM = re.compile(r"(?<![\w-])[A-Z][A-Z0-9]*[A-Z](?:[&/-][A-Z0-9]+)*(?:['’]?s)?(?![\w-])")
+ACRONYM_OK = {"LGA", "LGAS", "NGN", "USD", "US", "UK", "ID", "OK", "PDF", "FCT", "Q1", "Q2", "Q3", "Q4", "I", "II", "III",
+              "IV", "VI", "VII", "VIII", "IX", "XI", "XII", "AM", "PM", "GDP", "UN", "NB", "TV", "SMS"}
+NAMES_NOTE = {"en": "⚠️ Not found as written in the cited pages: {names}. Check these names against the source.",
+              "ha": "⚠️ Ba a samu waɗannan sunaye kamar yadda aka rubuta su a shafukan da aka ambata ba: {names}. "
+                    "A duba su a majiyar."}
+
+
+def acronym_problems(text: str, cited: list, titles: tuple[str, ...] = ()) -> list[str]:
+    """Organisation names and acronyms in the answer (two capitals or more) that its cited pages don't print as
+    written: 'NPHCDA, SOCHEMA and SOSMEA' must be the evidence's own spelling, never the model's correction
+    (2 Nov 2026). A plural 's' and a possessive are allowed; common units and words (LGA, NGN, Q2) are not checked."""
+    pool = " ".join([*(e.text or "" for e in cited), *(e.title or "" for e in cited), *titles])
+    out = []
+    for m in ACRONYM.finditer(text or ""):
+        a = re.sub(r"(?:['’]?s)$", "", m.group(0)) if not m.group(0).isupper() else m.group(0)
+        if len(a) < 2 or a.upper() in ACRONYM_OK or a in pool or m.group(0) in pool:
+            continue
+        out.append(a)
+    return list(dict.fromkeys(out))
 
 
 RELATED = {"en": "📎 Related: {title} also covers this ({reason}).",

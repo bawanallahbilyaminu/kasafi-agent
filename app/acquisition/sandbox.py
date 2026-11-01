@@ -76,6 +76,15 @@ async def locate_sandboxed(path: Path, page: int, figure: str, out: Path, scale:
     return await _run_worker(["evidence", str(path), str(page), figure, str(out), str(scale)], timeout)
 
 
+async def charts_sandboxed(path: Path, text_pages: set[int] | None, out_dir: Path,
+                           timeout: float = TIMEOUT_S) -> list[dict]:
+    """Chart regions on a PDF's text pages and a JPEG crop of each, found in the sandbox: fetched PDFs are
+    untrusted, and only the regions (JSON) and the crops leave it."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pages = ",".join(map(str, sorted(text_pages))) if text_pages else ""
+    return (await _run_worker(["charts", str(path), str(out_dir), pages], timeout))["regions"]
+
+
 async def render_pages_sandboxed(path: Path, pages: list[int], out_dir: Path,
                                  timeout: float = TIMEOUT_S) -> dict[int, Path]:
     """Render pages (1-based) to JPEG files for OCR. Only the images leave the sandbox."""

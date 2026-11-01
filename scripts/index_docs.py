@@ -23,7 +23,7 @@ def main() -> int:
     ap.add_argument("--only", nargs="+", metavar="ID")
     ap.add_argument("--force", action="store_true", help="re-index even if the file is unchanged")
     ap.add_argument("--pdf-dir", type=Path, help="where the PDFs are (the server: /data/pdfs, named <id>.pdf)")
-    ap.add_argument("--no-cards", action="store_true",
+    ap.add_argument("--no-cards", action="store_true",  # charts and cards both
                     help="don't build document and section cards (Muse Spark Open on Baseten) for indexed documents")
     args = ap.parse_args()
     t0 = time.perf_counter()
@@ -35,10 +35,10 @@ def main() -> int:
     if fresh and not args.no_cards:
         import asyncio
 
-        from app.retrieval.cards import build_card_later
+        from app.retrieval.chart_build import build_charts_later      # charts first, so the cards see them
         for d in fresh:
-            asyncio.run(build_card_later(d))
-        print(f"cards built for: {', '.join(fresh)}")
+            asyncio.run(build_charts_later(d))
+        print(f"charts and cards built for: {', '.join(fresh)}")
     with psycopg.connect(get_settings().db_url(), connect_timeout=10) as conn:
         totals = conn.execute("SELECT count(*), (SELECT count(*) FROM pages), (SELECT count(*) FROM chunks), "
                               "(SELECT count(*) FROM pages WHERE source = 'none') FROM documents").fetchone()

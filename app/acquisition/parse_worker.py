@@ -26,6 +26,18 @@ def main() -> int:
         if mode == "evidence":
             print(json.dumps(locate_and_render(path, int(sys.argv[3]), sys.argv[4], Path(sys.argv[5]), float(sys.argv[6]))))
             return 0
+        if mode == "charts":      # chart regions on the text pages, each with its crop (app/retrieval/charts.py)
+            from app.retrieval.chart_read import crop_region
+            from app.retrieval.charts import detect_document
+            out_dir = Path(sys.argv[3])
+            text_pages = {int(p) for p in sys.argv[4].split(",") if p} if len(sys.argv) > 4 else None
+            regions = []
+            for i, r in enumerate(detect_document(path, text_pages)):
+                f = out_dir / f"chart{i}.jpg"
+                f.write_bytes(crop_region(path, r.page, r.box))
+                regions.append({**r.__dict__, "crop": str(f)})
+            print(json.dumps({"regions": regions}))
+            return 0
         if mode == "text":
             max_pages = int(sys.argv[3])
             n = len(pdfium.PdfDocument(str(path)))

@@ -227,8 +227,9 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
         if scanned:
             schedule_ocr(doc_id, path, scanned[:BACKGROUND_OCR_PAGES], settings)
         # its document and section cards, in the background on Muse Spark Open (Baseten): the answer doesn't wait
-        from app.retrieval.cards import build_card_later
-        _CARD_TASKS.add(task := asyncio.ensure_future(build_card_later(doc_id, settings)))
+        # its charts read once (Muse Spark Open on Baseten), then its document and section cards
+        from app.retrieval.chart_build import build_charts_later
+        _CARD_TASKS.add(task := asyncio.ensure_future(build_charts_later(doc_id, settings)))
         task.add_done_callback(_CARD_TASKS.discard)
         usage.count("documents_fetched")
         return Acquired("indexed", doc_id, doc["title"], url, timings=t)
