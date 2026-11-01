@@ -154,6 +154,15 @@ def test_under_five_never_contradicts_and_other_tables_ages_do_not_either() -> N
     assert att.state == "attribution checked", att.problems
 
 
+def test_items_running_together_do_not_lend_their_place_to_the_figure_before() -> None:
+    page = Evidence(1, "ndhs-2024", "Nigeria Demographic and Health Survey 2024 Final Report", 2024, 366, "text",
+                    "Table 11.1—Continued\nHeight-for-age\nSokoto 14.8 42.8 −2.0 332\nTotal 18.4 39.5 −1.6 10,396")
+    text = ("In Sokoto, 42.8% of children under 5 are stunted (below -2 SD) [1]. Nationally, 39.5% are stunted [1]. "
+            "Sokoto stunted (below −2 SD): 42.8 [1] National stunted (below −2 SD) - Total row: 39.5 [1]")
+    att = A.bind(text, [page])
+    assert att.state == "attribution checked", att.problems
+
+
 def test_every_named_source_scopes_the_search() -> None:
     from app.agent.routing import all_sources
     assert all_sources("Birth registration in Sokoto: what did MICS 2021 and NDHS 2024 each find?") == ["MICS", "NDHS"]

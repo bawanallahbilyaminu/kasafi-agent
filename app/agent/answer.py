@@ -1855,8 +1855,8 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
     added += f"{ed}\n\n" if ed else ""
     sources = cited_sources(conn, cited)
     if bad or (not att.ok and budget is None):
-        log.warning("answer refused: %d unverifiable figure(s), attribution %s: %s", len(bad), att.state,
-                    "; ".join(att.problems[:3]))
+        log.warning("answer refused: %d unverifiable figure(s), attribution %s: %s | composed: %s", len(bad), att.state,
+                    "; ".join(att.problems[:3]), answer_text(d)[:1000].replace("\n", " / "))
         return Answer(f"{added}{UNVERIFIED.get(lang, UNVERIFIED['en'])}\n\n{format_citations(cited, lang)}",
                       True, False, cited, plan, t, acquired=acq, latest=latest, sources=sources,
                       verification="unsupported", attribution=[f"missing: {x}" for x in bad] + att.problems)

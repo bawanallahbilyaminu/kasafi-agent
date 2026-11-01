@@ -154,7 +154,10 @@ def _kind(text: str) -> str:
 
 
 def sentences(text: str) -> list[str]:
-    text = re.sub(r"\[\d+\]|\[L\d+\]", " ", text or "")
+    """The answer's sentences and items: a citation mark followed by a capital ends one ('… 42.8 [1] National …':
+    the items of an answer run together with spaces)."""
+    text = re.sub(r"(?:\[\d+\]|\[L\d+\])\s+(?=[A-ZƁƊƘƳ•])", ". ", text or "")
+    text = re.sub(r"\[\d+\]|\[L\d+\]", " ", text)
     parts = re.split(r"(?<=[.;!?])\s+(?=[A-ZƁƊƘƳ•]|\d)|\n+|(?<=\s)•\s*", text)
     return [p.strip(" •-") for p in parts if p and p.strip(" •-")]
 
@@ -235,7 +238,8 @@ STATES = ("abia", "adamawa", "akwa ibom", "anambra", "bauchi", "bayelsa", "benue
           "yobe", "zamfara", "fct", "abuja")
 NATIONAL = re.compile(r"(?i)\b(?:nigeria(?:'s|’s)?|national(?:ly)?|nationwide|country-?wide|the\s+country|"
                       r"all\s+of\s+nigeria|ƙasa\s+baki\s+ɗaya|kasa\s+baki\s+daya|faɗin\s+ƙasa|fadin\s+kasa|"
-                      r"najeriya)\b")
+                      r"najeriya|na\s+ƙasa|na\s+kasa|ƙasa\s+gaba\s+ɗaya|gaba\s+ɗayan\s+ƙasa|matsakaicin\s+ƙasa|"
+                      r"ƙasar\s+najeriya|kasar\s+najeriya)\b")
 SOKOTO = re.compile(r"(?i)\bsokoto\b(?!\s+(?:north|south|ta\s+arewa|ta\s+kudu))|\bjihar\b|\bthe\s+state\b")
 AGE = re.compile(r"(?i)\b(\d{1,2})\s*[-–]\s*(\d{1,2})\s*(?:months?|years?|watanni|shekaru)?\b|"
                  r"\bunder[-\s]?(?:age\s+|the\s+age\s+of\s+)?(?:5|five)\b|\b(?:ƙasa|kasa)\s+da\s+shekar\w*\s+(?:5|biyar)\b")
@@ -266,6 +270,10 @@ _CONNECT = re.compile(r"(?i),|;|\(|\)|\band\b|\bbut\b|\bagainst\b|\bcompared\b|\
                       r"\bwhereas\b|\bda\b|\bamma\b|\bidan\s+aka\s+kwatanta\b")
 
 
+_CONTINUES = re.compile(r"(?i)^\s*(?:%|percent|per\s+cent)?\s*(?:nationally|statewide|state-wide|in|for|among|of|across|"
+                        r"at|within|a|na|ga|daga|cikin|wa)\b")
+
+
 def claim_geography(c: Claim) -> set[str]:
     """The place a figure is given for: the words just before it, back to the last connector ('In Sokoto 22.5%',
     'and in North West 47.4%'); else the words just after it up to the next connector ('57.3% nationally'); else
@@ -276,9 +284,26 @@ def claim_geography(c: Claim) -> set[str]:
     after = c.window[len(c.segment):]
     after = re.sub(r"^\s*[\d.,]+%?", "", after)                 # the figure itself
     after_part = _CONNECT.split(after)[0]
-    if len(after_part.split()) <= 12 and (geo := geo_of(after_part)):      # '22.5% of children under 5 in Sokoto had…'
+    # '22.5% of children under 5 in Sokoto had…', '57.3% nationally': the words after the figure belong to it only
+    # when they continue its phrase; a new item starting with a capital ('42.8 National stunted …') does not
+    if _CONTINUES.match(after_part) and len(after_part.split()) <= 12 and (geo := geo_of(after_part)):
         return geo
     in_sentence = geo_of(c.sentence)
+    return in_sentence if len(in_sentence) == 1 else set()
+
+
+def claim_age_groups(c: Claim) -> set[str]:
+    """The age group a figure is given for, like its geography: the words just before it back to the last
+    connector, else just after it, else the sentence when it names one age group only (a sentence giving the
+    12-23 months vaccination figure and the under-5 registration figure assigns neither to the other)."""
+    before = _CONNECT.split(c.segment)[-1]
+    if ages := _ages(before):
+        return ages
+    after = re.sub(r"^\s*[\d.,]+%?", "", c.window[len(c.segment):])
+    after_part = _CONNECT.split(after)[0]
+    if _CONTINUES.match(after_part) and len(after_part.split()) <= 12 and (ages := _ages(after_part)):
+        return ages
+    in_sentence = _ages(c.sentence)
     return in_sentence if len(in_sentence) == 1 else set()
 
 
@@ -354,7 +379,7 @@ def _survey(c: Claim, holding: list, spans: list | None = None) -> tuple[str, st
     indicator, year and sub-population the answer gives it."""
     claim_geo = claim_geography(c)
     # 'under 5' is the population of most child tables, never a contradiction; a range (12-23 months) is checked
-    claim_ages = (_ages(c.segment) or _ages(c.sentence)) - {"under5"}
+    claim_ages = claim_age_groups(c) - {"under5"}
     rows = [(x, row_geo(_survey_label(x[0]))) for x in holding]
     # a national table's rows are indicators, not places ('No vaccinations 0.3 17.7 17.8'): they are the national
     # figures when the page is the survey's national table ('Nigeria MICS, 2021' in its header, no 'State' rows)
