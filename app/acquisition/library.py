@@ -202,6 +202,13 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
             dl.path.replace(fetch_dir / f"{doc_id}{EXTENSIONS[provenance['original_format']]}")
         got_series = series or (meta.get("series") if meta.get("series") in SERIES else None)
         got_edition = edition or (meta.get("edition") if valid_edition(meta.get("edition")) else None)
+        if got_series and got_edition and not edition:     # no edition asked: a newer one in the library wins
+            newer = conn.execute("SELECT id, edition FROM documents WHERE series = %s AND edition > %s "
+                                 "ORDER BY edition DESC LIMIT 1", (got_series, got_edition)).fetchone()
+            if newer:
+                log.info("not indexing %s %s: the library holds the newer %s (%s)", got_series, got_edition, newer[0], newer[1])
+                return Acquired("known", newer[0], url=url, detail=f"a newer edition is in the library ({newer[1]})",
+                                timings=t)
         year = meta.get("year") if isinstance(meta.get("year"), int) else None
         doc = {"id": doc_id, "title": str(meta.get("title") or description)[:300],
                "category": meta.get("category") if meta.get("category") in CATEGORIES else None,

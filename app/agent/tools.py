@@ -16,6 +16,7 @@ import httpx
 
 from app.agent.capabilities import Cell
 from app.agent.need import Need
+from app.retrieval.line_search import _CELL_TEXT, is_blank_cell
 from app.sources import dtm as dtm_api
 from app.sources.lga_names import pcode
 
@@ -56,6 +57,22 @@ def _perf_row(conn, code: str, kind: str, year: int, quarter: int | None):
         "ORDER BY quarter DESC, seq LIMIT 1", (code, kind, year, quarter, quarter)).fetchone()
 
 
+_MEASURE_WORDS = {"approved": ("approved",), "original": ("original",), "revised": ("revised",),
+                  "quarter_spent": ("q{q} performance", "quarter"), "actual_ytd": ("year to date", "ytd", "january to")}
+
+
+def dash_printed(row_text: str, measure: str, year: int | None, quarter: int | None) -> bool:
+    """The row prints a dash (or '…', 'n/a', nothing) in the column this measure was read from: the structured
+    core stores it as 0 (a Budget Implementation Report prints '-' beside its own '0.0%' performance), but the
+    reply says no figure is printed (1 Nov 2026)."""
+    words = tuple(w.format(q=quarter or "") for w in _MEASURE_WORDS.get(measure, ()))
+    for label, value in _CELL_TEXT.findall(row_text or ""):
+        low = label.lower()
+        if (year is None or str(year) in low) and any(w in low for w in words) and "%" not in low:
+            return is_blank_cell(value)
+    return False
+
+
 def budget_fill(conn, cells: list[Cell]) -> Filled:
     out = Filled(cells)
     seen: dict[str, Source] = {}
@@ -89,6 +106,8 @@ def budget_fill(conn, cells: list[Cell]) -> Filled:
         src = seen.get(row_id) or _source(conn, row_id)
         seen[row_id] = src
         c.source, c.by = f"{src.title}, p. {src.page}", "budget_core"
+        if c.value == 0 and dash_printed(src.row_text, c.measure, c.year, c.quarter):
+            c.note = "dash"                                   # the page prints '-': said so, never ₦0.00
     out.sources = list({s.row_id: s for s in seen.values()}.values())
     return out
 

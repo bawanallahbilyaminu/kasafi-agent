@@ -23,7 +23,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from app import usage
 from app.config import Settings
 from app.providers.chat import ChatClient
-from app.retrieval.line_search import MAX_LINES, Cell, Line, groups, ministry_of, names_a_kind
+from app.retrieval.line_search import is_blank_cell, MAX_LINES, Cell, Line, groups, ministry_of, names_a_kind
 
 log = logging.getLogger(__name__)
 
@@ -234,7 +234,8 @@ def kind_of(x: Line) -> str:
 def listing(lines: list[Line]) -> str:
     out = []
     for i, x in enumerate(lines, 1):
-        cols = " | ".join(f"{c.column}: {fmt(c.amount)}" for c in x.cells)
+        cols = " | ".join(f"{c.column}: {'- (no figure printed)' if is_blank_cell(c.printed) and c.printed else fmt(c.amount)}"
+                          for c in x.cells)
         code = f" | code {x.code}" if x.code else ""
         code += f" | level: {level(x)}" if level(x) else ""
         code += f" | spending: {kind_of(x)}" if kind_of(x) else ""

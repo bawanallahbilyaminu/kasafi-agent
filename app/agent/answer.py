@@ -267,6 +267,9 @@ ANSWER_SYSTEM = (
     "6d. Brackets around a number in running text are plain parentheses, not a minus sign: 'Sokoto (3.01%)' "
     "means 3.01%; write it without brackets. Negatives appear with a minus sign in the evidence (e.g. -6.10%, "
     "-56,893,525,653.90); keep the minus.\n"
+    "6g. A dash (-), an ellipsis (…), 'n/a' or a blank in a table cell means the figure is NOT AVAILABLE: never "
+    "read it as zero, 'none', 'no enrolment' or 'no spending'. Say the table prints no figure for that cell, and "
+    "look for the figure in another table of the same document before saying it isn't published.\n"
     "6e. If the asked figure is NOT published in the evidence but can be derived exactly from figures that are "
     "(e.g. a year-on-year rate from two index values: (index this year / index a year earlier - 1) * 100), "
     "don't calculate it: say it isn't published (found=\"partial\"), give the published inputs, and propose "
@@ -466,6 +469,19 @@ CONVERTED_WORKING = {
     "ha": "Shafukan {titles} shafukan PDF ne da Kasafi ya canza daga asalin Word (fayil ɗin Word ba shi da tsayayyun "
           "lambobin shafi); an ajiye asalin da PDF ɗin tare da hash ɗinsu.",
 }
+
+
+DASH_MISREAD = re.compile(r"(?i)\b(?:no|zero|none|nil|0|ba\s+(?:a|su|ta|ya)\s+(?:yi|samu|da)|babu)\b"
+                          r"(?![^.\n]{0,80}?\b(?:figure|number|value|amount|adadi|alkalum\w*|lamba|publish\w*|print\w*|"
+                          r"buga|available)\b)[^.\n]{0,80}?"
+                          r"(?:\(\s*|['\"\s])[-–—…]+(?:\s*(?:in|on|shown|printed|a)\s+(?:the\s+)?(?:table|cell|column|tebur\w*))?"
+                          r"|\b(?:dash|'-'|\"-\")\b[^.\n]{0,60}\b(?:means|is|=)\s+(?:zero|none|no|0)\b")
+
+
+def dash_misread(text: str) -> str:
+    """The wording that read a table's dash as a figure ('Dange Shuni shows no enrolment (- in the table)'), or ''."""
+    m = DASH_MISREAD.search(text or "")
+    return m.group(0).strip()[:80] if m else ""
 
 
 def load_catalog(conn: psycopg.Connection) -> list[dict]:
@@ -741,6 +757,109 @@ def state_row_pages(conn: psycopg.Connection, evidence: list[Evidence], most: in
     return extra
 
 
+COUNT_Q = re.compile(r"(?i)\bhow\s+many\s+(?P<what>[a-z][a-z\- ]{2,60}?)\s+(?:are|is|were|does|do|exist)\b|"
+                     r"\b(?:number|count)\s+of\s+(?P<what2>[a-z][a-z\- ]{2,60}?)\s+(?:in|at|for|by)\b|"
+                     r"\b(?P<what3>[a-z][a-z\- ]{2,40}?)\s+(?:nawa|guda\s+nawa)\b")
+
+
+def count_queries(text: str) -> list[str]:
+    """For 'how many senior secondary schools are in Dange Shuni': the phrases a count table prints ('Number of
+    Schools', 'Number of Senior Secondary Schools'), so the table with the count column joins the evidence; a
+    keyword search ranks enrolment tables that repeat the school words above it."""
+    m = COUNT_Q.search(text or "")
+    if not m:
+        return []
+    what = (m.group("what") or m.group("what2") or m.group("what3") or "").strip()
+    words = [w for w in re.findall(r"[a-z]+", what.lower()) if w not in ("the", "of", "in", "public", "private", "all")]
+    if not words:
+        return []
+    head = words[-1]
+    out = [f"Number of {what}", f"Number of {head}", f"No. of {head}"]
+    return list(dict.fromkeys(q for q in out if len(q) > 10))
+
+
+def count_table_pages(conn: psycopg.Connection, scope: list[str] | None, text: str, most: int = 3) -> list[Hit]:
+    """For 'how many senior secondary schools are in Dange Shuni': the pages of the planned statistics documents
+    that print the place's row AND a 'Number of <X>' column (the header may be broken over lines: 'Number / of /
+    Schools'), the ones whose title names the subject first. Keyword search ranks the enrolment pages, which
+    repeat the subject words, above the one count table (ASC 2023/24 p53, Table 3.14; 1 Nov 2026)."""
+    if not scope or not (counts := count_queries(text)):
+        return []
+    from app.sources.lga_names import CANONICAL
+    low = (text or "").lower()
+    places = [n for n in CANONICAL if n.lower() in low]
+    if not places:
+        return []
+    docs = conn.execute("SELECT id, title, year FROM documents WHERE id = ANY(%s) AND category = 'statistics'",
+                        (scope,)).fetchall()
+    if not docs:
+        return []
+    head = re.findall(r"[a-z]+", counts[0].lower())[-1]                       # 'schools'
+    subject = [w for w in re.findall(r"[a-z]{4,}", counts[0].lower()) if w not in ("number", head)]
+    col = re.compile(rf"(?is)\b(?:number|no\.?)\s+of\s+(?:[a-z]+\s+){{0,3}}{re.escape(head)}\b")
+    place_row = re.compile(rf"(?im)^\s*{re.escape(places[0])}\s+[\d,.\-–—]", re.I)
+    scored = []
+    for doc_id, title, year in docs:
+        for page, page_text in conn.execute("SELECT page, text FROM pages WHERE doc_id = %s AND text ~* %s ORDER BY page",
+                                            (doc_id, rf"\m{re.escape(places[0])}\M")).fetchall():
+            t = page_text or ""
+            if not col.search(t) or not place_row.search(t):
+                continue
+            title_line = next((ln for ln in t.splitlines()[:8] if re.match(r"(?i)\s*table\s", ln)), "").lower()
+            named = sum(w in title_line for w in subject)                       # 'senior secondary' in the title
+            scored.append((-named, page, Hit(doc_id, title, year, page, t[:3000], 1.0, 0)))
+    scored.sort(key=lambda s: s[:2])
+    if scored and scored[0][0] < 0:                 # a table titled with the subject beats one that is not
+        scored = [s for s in scored if s[0] == scored[0][0]]
+    return [s[2] for s in scored[:most]]
+
+
+def statistics_scope(conn: psycopg.Connection, scope: list[str] | None) -> bool:
+    """Every planned document is a statistics report (a survey, a census): their pages are read whole."""
+    if not scope:
+        return False
+    try:
+        rows = conn.execute("SELECT category FROM documents WHERE id = ANY(%s)", (scope,)).fetchall()
+    except Exception:              # noqa: BLE001
+        return False
+    return bool(rows) and all(r[0] == "statistics" for r in rows)
+
+
+def prefer_newest_edition(conn: psycopg.Connection, plan: Plan, question: str) -> None:
+    """A question that names no year or period about a series the library holds in several editions (the school
+    census 2022/23 and 2023/24, a budget, an implementation report) reads the newest edition: older editions the
+    planner listed are dropped, and the newest one joins when the planner listed an older one only."""
+    from app.agent.periods import asked_period
+    text = f"{question} {plan.english_question}"
+    if asked_period(question, plan.english_question) or re.search(r"\b(?:19|20)\d\d\b", text) or plan.period_doc:
+        return
+    if not plan.doc_ids:
+        return
+    try:
+        rows = conn.execute("SELECT id, series, edition FROM documents WHERE series IS NOT NULL AND edition IS NOT NULL").fetchall()
+    except Exception:              # noqa: BLE001
+        return
+    newest: dict[str, tuple[str, str]] = {}
+    series_of: dict[str, str] = {}
+    for doc_id, series, edition in rows:
+        series_of[doc_id] = series
+        if series not in newest or edition > newest[series][1]:
+            newest[series] = (doc_id, edition)
+    kept, dropped = [], []
+    for d in plan.doc_ids:
+        s = series_of.get(d)
+        if s and newest[s][0] != d:
+            dropped.append(d)
+            if newest[s][0] not in kept:
+                kept.append(newest[s][0])
+        elif d not in kept:
+            kept.append(d)
+    if dropped:
+        plan.doc_ids = kept
+        plan.skip_docs = list(dict.fromkeys([*plan.skip_docs, *dropped]))
+        log.info("newest edition preferred: %s dropped for %s", ", ".join(dropped), ", ".join(kept))
+
+
 def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
     """Search the planned documents first; widen to all documents only if nothing is found. A question naming a
     survey or a publisher searches that source's documents, and budget rows join only when money is asked."""
@@ -757,6 +876,9 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
     per_query = [search(conn, q, k=6, doc_ids=scope) for q in plan.search_queries]
     if not money and (table_hits := survey_table_pages(conn, scope, asked)):
         key_hits = [table_hits] + key_hits              # a survey's state table named by its title leads
+    if not money and (counts := count_queries(asked)):  # 'how many X in Y': the 'Number of X' column or table
+        key_hits = [count_table_pages(conn, scope, asked)] + \
+            [phrase_search(conn, q, k=2, doc_ids=scope) for q in counts] + key_hits
     if narrative_asked(plan):
         # what a report corrected, changed, explained or noted is in its narrative, not its tables: the running
         # text leads (the tables still follow). The planner's key terms search the prose too: its long queries
@@ -796,8 +918,9 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
     ranked = [hs[0] for hs in by_page.values()]
     texts = {}
     # a narrative section runs across a page's chunks: the whole page is read; so is a survey's table page (its
-    # Sokoto row is a chunk the keyword search never matched: MICS p125's family-planning row)
-    whole = narrative_asked(plan) or (bool(plan.statistics) and not money)
+    # Sokoto row is a chunk the keyword search never matched: MICS p125's family-planning row), and any page of
+    # a statistics document (the school census: an LGA's row sits far from the table's header chunk)
+    whole = narrative_asked(plan) or (not money and (bool(plan.statistics) or statistics_scope(conn, scope)))
     for (doc_id, page), hs in by_page.items():
         hit_idx = [h.idx for h in hs]
         wanted = page_chunks_wanted(hit_idx, whole)
@@ -1306,6 +1429,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         prev = history[-1] if history else None
         if conn is not None:
             apply_period(conn, plan, question, today)        # a period named beats the newest report
+            prefer_newest_edition(conn, plan, question)      # no year named: the newest edition of a series
         drop_unnamed_splits(plan, question)                  # no kind of spending named: the total
         # health facilities from the registry: a count of a kind, or one facility by name (no money asked about)
         if conn is not None and settings.kasafi_shortcut_facilities and (fac := facility_route(question, plan, conn, lang)):
@@ -1382,7 +1506,8 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             t0 = time.perf_counter()
             tr = await topic_answer(conn, tid, question, plan.english_question, lang, client=client,
                                     settings=settings, notify=notify, today=today,
-                                    previous=str(prev.get("question") or "")[:300] if hint else "")
+                                    previous=str(prev.get("question") or "")[:300] if hint else "",
+                                    geo_level=str(plan.need.geo_level or "") if plan.need else "")
             t["topic"] = time.perf_counter() - t0
             if tr.found:
                 text, quotes, summary = await _led(question, tr.text, lang, settings, client)
@@ -1847,6 +1972,15 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
                           feedback=f"These figures are not in the cited evidence: {', '.join(bad)}. "
                                    "Use only figures copied exactly from the evidence, and cite them.")
         bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)
+    # a dash read as zero ('shows no enrolment (- in the table)'): composed again with the rule, then refused
+    dash = ""
+    if (misread := dash_misread(answer_text(d))) and _found(d) != "none":
+        t["compose_retry"] = t.get("compose_retry", 0.0) + 1.0
+        d = await compose(question, lang, plan, evidence, client, settings, context=context, second=second,
+                          feedback=f"You read a dash as a figure ({misread}). A dash, '…', 'n/a' or a blank cell means the "
+                                   "figure is not available: say the table prints no figure for it, never zero or none.")
+        bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)
+        dash = dash_misread(answer_text(d))
     # every figure bound to its row: the entity named next to it, the year, the unit and the kind (external review,
     # finding 01); a contradiction is composed again with the mismatch named, then refused
     # per entity: a name of another entity in a multi-entity plan never binds a figure (follow-up review, finding 1)
@@ -1875,12 +2009,14 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
     ed = edition_note(latest, lang)
     added += f"{ed}\n\n" if ed else ""
     sources = cited_sources(conn, cited)
-    if bad or (not att.ok and budget is None):
-        log.warning("answer refused: %d unverifiable figure(s), attribution %s: %s | composed: %s", len(bad), att.state,
-                    "; ".join(att.problems[:3]), answer_text(d)[:1000].replace("\n", " / "))
+    if bad or dash or (not att.ok and budget is None):
+        log.warning("answer refused: %d unverifiable figure(s), attribution %s: %s%s | composed: %s", len(bad), att.state,
+                    "; ".join(att.problems[:3]), f"; a dash read as a figure: {dash}" if dash else "",
+                    answer_text(d)[:1000].replace("\n", " / "))
         return Answer(f"{added}{UNVERIFIED.get(lang, UNVERIFIED['en'])}\n\n{format_citations(cited, lang)}",
                       True, False, cited, plan, t, acquired=acq, latest=latest, sources=sources,
-                      verification="unsupported", attribution=[f"missing: {x}" for x in bad] + att.problems)
+                      verification="unsupported", attribution=[f"missing: {x}" for x in bad] + att.problems
+                      + ([f"dash: a '-' cell read as a figure ({dash})"] if dash else []))
     note = plan.assumption_for(lang)
     q_all = f"{question} {plan.english_question}"
     shown = {**d, "summary": drop_verdicts(str(d.get("summary") or d.get("answer") or ""), q_all),
@@ -2134,6 +2270,7 @@ STRUCT_WORDS = {
            "performance_pct": "share of the revised budget spent", "idp_count": "IDPs",
            "personnel": "Personnel (salaries)", "overhead": "Overhead (running costs)", "capital": "Capital",
            "total": "Total", "calc": "Kasafi's calculation", "change": "change", "of_total": "of its total",
+           "dash": "no figure printed (a dash in the table)",
            "lead": "For {ent}, the {label} is {val}.",
            "claim_rise": "rise", "claim_fall": "fall",
            "premise_fell": "It didn't {claim}: the {m} fell from {a} to {b}, so there is no rise to explain.",
@@ -2147,6 +2284,7 @@ STRUCT_WORDS = {
            "performance_pct": "kason kasafin da aka sabunta da aka kashe", "idp_count": "'yan gudun hijira",
            "personnel": "Albashi", "overhead": "Kuɗin gudanarwa", "capital": "Manyan ayyuka", "total": "Jimilla",
            "calc": "lissafin Kasafi", "change": "bambanci", "of_total": "na jimillarsa",
+           "dash": "ba a buga adadi ba (alamar '-' ce a tebur)",
            "lead": "Ga {ent}, {label} shi ne {val}.",
            "claim_rise": "karu", "claim_fall": "ragu",
            "premise_fell": "Bai {claim} ba: {m} ya ragu daga {a} zuwa {b}, don haka babu ƙari da za a bayyana.",
@@ -2278,6 +2416,8 @@ def write_budget_cells(need: Need, cells: list, lang: str, conn=None) -> tuple[s
                 label = w[c.measure].format(q=c.quarter or "")
                 label = f"{c.year} {label}" if len({x.year for x in row}) > 1 else label
                 val = f"{c.value}%" if c.measure == "performance_pct" else _struct_money(c.value, lang)
+                if c.note == "dash":                           # the page prints '-': not a figure, never ₦0.00
+                    val = w.get("dash", STRUCT_WORDS["en"]["dash"])
                 parts.append(f"{label} {val}" + (f" ({w['calc']})" if c.note == "calc" else ""))
                 if first is None:
                     plain = {"en": {"personnel": "salaries", "overhead": "running costs", "capital": "capital"},
@@ -2286,9 +2426,10 @@ def write_budget_cells(need: Need, cells: list, lang: str, conn=None) -> tuple[s
                     kind = f" ({plain.get(split, split)})" if split != "total" else ""
                     first = (shown_ent, f"{label}{kind}", val)
                 shown = f"{c.value}%" if c.measure == "performance_pct" else fmt(Decimal(c.value))   # as printed
+                shown = "- (a dash: no figure printed; counted as nil)" if c.note == "dash" else shown
                 exact.append(f"{ent} | {split} | {c.measure} {c.year}{' Q' + str(c.quarter) if c.quarter else ''}: "
                              f"{shown} [{c.source}]")
-            money = [c for c in row if c.measure != "performance_pct"]
+            money = [c for c in row if c.measure != "performance_pct" and c.note != "dash"]   # no change from a dash
             if len(money) == 2 and money[0].measure == money[1].measure and money[0].year != money[1].year:
                 a, b = sorted(money, key=lambda c: c.year)
                 diff = Decimal(b.value) - Decimal(a.value)

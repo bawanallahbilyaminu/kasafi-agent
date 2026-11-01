@@ -70,3 +70,22 @@ PDF with LibreOffice in the parser's sandbox and indexed like any PDF, so every 
 its page numbers are the converted PDF's, and the citation says so. Macro-enabled files, external links, embedded
 objects and zip bombs are rejected with a reason before conversion (`docs/architecture.md`, "Office documents";
 `tests/test_office_docs.py`).
+
+**L36 (1 Nov 2026): a dash is not a figure; the newest edition answers.** The blind test "How many Senior
+Secondary Schools are in Dange Shuni" (18:20) fetched the 2022/23 school census (the 2023/24 one Bilyaminu had
+indexed was not on the server: `--sync-index` had failed on a migration mismatch at 18:01 and the 18:27 sync
+came after the question), read the 2022/23 enrolment table's dash as "no enrolment", and swept the NDHS, a
+state-level survey, for an LGA count. The rules now: (1) a dash, "…", "n/a" or a blank cell means *not
+available*, never zero or "none": the line listing prints "- (no figure printed)" (`Cell.printed`, from the
+row's own text), the compose rules (6g) and the topic reader say so, a composed answer that reads a dash as a
+figure is composed again and then refused (`dash_misread`), and the structured core, whose sums keep a dash
+as nil (a Budget Implementation Report prints "-" beside its own "0.0%" performance), writes "no figure
+printed (a dash in the table)" and computes no change from it (`dash_printed`, `tools.budget_fill`);
+(2) a question that names no year reads the newest edition of a series (`prefer_newest_edition`; the school
+census is the series `sokoto_asc`, edition = the session's first year), and an older edition found on the web
+is not indexed when the library holds a newer one; (3) "how many X" adds the count table's own phrases
+("Number of Senior Secondary Schools") to the search, and the pages of a statistics document are read whole,
+so the LGA row far below the header chunk is seen (p53, Table 3.14: 8 public and 11 private SSS); (4) the
+topic sweep drops publishers whose finest geography is coarser than the question's (`choose_publishers`,
+`geo_level`); (5) `deploy.sh --sync-index` refuses when the server's migration differs from dev's, and the
+sync replaces live-fetched documents (they are re-fetched on demand). `tests/test_dash_cells.py`.

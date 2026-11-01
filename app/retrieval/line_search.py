@@ -95,6 +95,23 @@ class Cell:
     measure: str
     period: str
     amount: Decimal
+    printed: str = ""          # '-' when the page prints a dash for this cell: not available, never zero
+
+
+_CELL_TEXT = re.compile(r" \| ([^|:]{3,90}): ([^|]+?)(?= \||$)")
+
+
+def printed_cell(row_text: str, column: str) -> str:
+    """What the page prints for a column of a row ('-', '…', 'n/a' or the figure), from the row's own text."""
+    for label, value in _CELL_TEXT.findall(row_text or ""):
+        if label.strip() == column.strip():
+            return value.strip()
+    return ""
+
+
+def is_blank_cell(printed: str) -> bool:
+    """A dash, blank, ellipsis or n/a: the figure is not available (not zero)."""
+    return printed.strip().lower() in ("-", "–", "—", "", "…", "...", "n/a", "na", "n.a.", "nil")
 
 
 @dataclass
@@ -339,7 +356,8 @@ def search_lines(conn: psycopg.Connection, terms: list[str], *, year: int | None
         for lid, col, yr, measure, period, amount in conn.execute(
                 "SELECT line_id, column_label, year, measure, period, amount_naira FROM budget_rows "
                 "WHERE line_id = ANY(%s) ORDER BY id", ([x.id for x in lines],)).fetchall():
-            by_id[lid].cells.append(Cell(col, yr, measure, period, Decimal(amount)))
+            by_id[lid].cells.append(Cell(col, yr, measure, period, Decimal(amount),
+                                         printed=printed_cell(by_id[lid].row_text, col)))
     return lines
 
 
@@ -402,7 +420,8 @@ def _with_cells(conn: psycopg.Connection, lines: list[Line]) -> list[Line]:
         for lid, col, yr, measure, period, amount in conn.execute(
                 "SELECT line_id, column_label, year, measure, period, amount_naira FROM budget_rows "
                 "WHERE line_id = ANY(%s) ORDER BY id", ([x.id for x in lines],)).fetchall():
-            by_id[lid].cells.append(Cell(col, yr, measure, period, Decimal(amount)))
+            by_id[lid].cells.append(Cell(col, yr, measure, period, Decimal(amount),
+                                         printed=printed_cell(by_id[lid].row_text, col)))
     return lines
 
 

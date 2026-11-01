@@ -148,6 +148,12 @@ case "${1:-}" in
     remote_and_report sync-advisories
     ;;
   --sync-index)
+    # the dump carries dev's columns: the server must be at the same migration (1 Nov 2026: a sync failed and the
+    # previous index was kept because dev had migration 0024 and the server did not; deploy first)
+    local_rev=$(uv run alembic current 2>/dev/null | grep -oE '^[0-9a-f]+' | head -1)
+    server_rev=$(run_remote migration 2>/dev/null | grep -oE 'REVISION=[0-9a-f]+' | cut -d= -f2)
+    [ -n "$local_rev" ] && [ -n "$server_rev" ] && [ "$local_rev" != "$server_rev" ] \
+      && die "the server's database is at migration $server_rev, dev at $local_rev: run deploy/deploy.sh first"
     echo "→ dumping documents/pages/chunks from the dev database (public documents only)"
     tmp=$(mktemp)
     MSYS_NO_PATHCONV=1 docker compose exec -T db pg_dump -U kasafi -d kasafi --data-only --no-owner       -t documents -t pages -t chunks -t budget_lines -t budget_rows       -t budget_items -t projects -t perf_items -t entity_builds | gzip > "$tmp" || { rm -f "$tmp"; die "pg_dump failed (is the dev DB running?)"; }

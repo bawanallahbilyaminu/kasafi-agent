@@ -62,6 +62,9 @@ SERIES: dict[str, Series] = {s.key: s for s in [
            "Sokoto State {edition} Approved Budget", anchor="start"),
     Series("sokoto_audited_fs", "Sokoto State Audited Financial Statements", "yearly", 200,
            "Sokoto State {edition} Audited Financial Statements Accountant-General's Report"),
+    # the edition key is the session's first year: 2023 for the 2023/2024 census (published the next year)
+    Series("sokoto_asc", "Sokoto State Annual School Census (ASC) Report", "yearly", 400,
+           "Sokoto State Annual School Census Report ASC {edition}"),
 ]}
 
 _KEY = {"monthly": re.compile(r"^\d{4}-(0[1-9]|1[0-2])$"), "quarterly": re.compile(r"^\d{4}-Q[1-4]$"),

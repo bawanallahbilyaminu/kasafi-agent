@@ -117,10 +117,18 @@ class TopicResult:
 
 # --- 1. publishers ---------------------------------------------------------------------------------------------
 
-def choose_publishers(topic: Topic, n: int = MAX_SOURCES) -> tuple[list[Publisher], list[Publisher]]:
+def choose_publishers(topic: Topic, n: int = MAX_SOURCES, geo_level: str = "") -> tuple[list[Publisher], list[Publisher]]:
     """Primary sources (tiers 1-2, state / LGA level and tier 1 first; ones we may fetch from before ones we may
-    not) and related context (tier 3)."""
+    not) and related context (tier 3). `geo_level` (the question's: lga | state | …): publishers reporting only
+    coarser geography are left out when finer ones exist (an LGA school count never reads the NDHS, a
+    state-level survey; 1 Nov 2026)."""
+    from app.acquisition.registry import LEVEL_RANK
     primary = [p for p in topic.publishers if p.tier < 3 and (p.is_verified or not p.domains)]
+    want = LEVEL_RANK.get((geo_level or "").lower())
+    if want is not None:
+        fine = [p for p in primary if p.level_rank <= want]
+        if fine:
+            primary = fine
     primary.sort(key=lambda p: (p.level_rank > 1, p.tier, p.level_rank))
     return primary[:n], [p for p in topic.publishers if p.tier == 3]
 
@@ -499,7 +507,8 @@ CARD_SYSTEM = (
     "'March 2026', '2023'), geography (Sokoto State, an LGA, Sokoto town ...) and page (the page number shown). "
     "Where the page prints a rate for what is asked (e.g. the unemployment rate, the % of children stunted), "
     "give that headline rate first, then counts. Only figures printed on these pages; never compute, round or "
-    "combine. {extra}"
+    "combine. A dash (-), '…', 'n/a' or a blank cell means the figure is not available: never give it as 0, none "
+    "or 'no'; skip that cell. {extra}"
     "based_on: whose figure the page itself says it is when that is another publisher's report or count, with its "
     "year or round (e.g. a 'Source: IOM DTM R19' line, 'according to the 2022 Nigeria MPI' -> 'NBS MPI 2022'), "
     "else ''. "
@@ -1243,7 +1252,7 @@ def primary_sources(topic: Topic, sources: list[SourceResult], most: int = 2) ->
 async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, english: str, lang: str, *,
                        client: ChatClient, settings: Settings, notify: Notify | None = None,
                        today: date | None = None, http: httpx.AsyncClient | None = None,
-                       previous: str = "") -> TopicResult:
+                       previous: str = "", geo_level: str = "") -> TopicResult:
     """`previous`: the earlier question when this message is a follow-up that names a source for it ('there's an
     NBS MPI report from 2022'): the earlier question is answered again, with that source required too."""
     t0 = time.perf_counter()
@@ -1256,7 +1265,7 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
         if PUBLISHERS_Q.search(f"{question} {english}"):
             text = await publishers_answer(conn, topic, lang, settings, http)
             return TopicResult(topic_id, text, True, False, [], [], [], {"topic": time.perf_counter() - t0})
-        primary, context = choose_publishers(topic)
+        primary, context = choose_publishers(topic, geo_level=geo_level)
         own_topic: dict[str, Topic] = {}                 # a publisher from another topic reads with that topic
         # "according to NBS ... according to SBS": each named publisher's own document is required, also when the
         # question spans two topics ("unemployment according to NBS, and the JIPS/DRC survey for IDPs")

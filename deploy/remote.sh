@@ -168,6 +168,13 @@ sync-env)
   exit 1
   ;;
 
+migration)
+  # the database's current alembic revision, for deploy.sh --sync-index to compare with dev's
+  rev=$(dc run --rm --no-deps api alembic current 2>/dev/null | grep -oE '^[0-9a-f]+' | head -1)
+  echo "REVISION=${rev:-unknown}"
+  exit 0
+  ;;
+
 sync-index)
   # deploy.sh first uploads a gzipped data-only pg_dump of documents/pages/chunks (public
   # documents only, no user data) to index.incoming.sql.gz. It replaces the server's copy
