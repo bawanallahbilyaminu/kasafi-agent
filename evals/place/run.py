@@ -50,6 +50,9 @@ def check(case: dict, text: str, working: str, level: str, unit: str) -> list[st
     for s in e.get("must_not", []):
         if s.lower() in body.lower():
             wrong.append(f"must not '{s}'")
+    for s in e.get("text_must_not", []):          # technical words belong in show working, never in the answer
+        if s.lower() in text.lower():
+            wrong.append(f"answer must not '{s}'")
     return wrong
 
 
@@ -76,12 +79,13 @@ def main() -> None:
             if a.full:
                 text, working, level, unit = asyncio.run(run_full(c, conn))
             else:
-                r = P.area_route(c["question"])
+                r = P.area_route(c["question"], "", c.get("place"))
                 if r is None:
                     text, working, level, unit = "", "", "", ""
                 else:
-                    ans = P.area_answer(conn, c["question"], "", c["lang"], r[0], r[1], date.today())
-                    text, working, level, unit = ans.text, ans.working, ans.level if r[0] == "lga" else "state", ans.unit
+                    ans = P.area_answer(conn, c["question"], "", c["lang"], r[0], r[1], date.today(), place=c.get("place"))
+                    text, working, unit = ans.text, ans.working, ans.unit
+                    level = "ward" if r[0] == "ward" else ans.level if r[0] == "lga" else "state"
             dt = time.perf_counter() - t0
             times.append(dt)
             wrong = check(c, text, working, level, unit)

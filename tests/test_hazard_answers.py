@@ -200,8 +200,8 @@ def test_the_users_point_reaches_the_answer_but_only_from_memory() -> None:
     memory.remember(key, Spot(13.06, 5.24, "NG034016", "Sokoto North"))
     run()
     # a pin also carries the farm shape the user gave (none yet) and the place path's leave to ask for one
-    assert got[-1] == {"lat": 13.06, "lon": 5.24, "lga_pcode": "NG034016", "lga": "Sokoto North", "shape": None,
-                       "ask_size": True}
+    assert got[-1] == {"lat": 13.06, "lon": 5.24, "lga_pcode": "NG034016", "lga": "Sokoto North", "ward": "", "wardcode": "",
+                       "ward_likely": False, "shape": None, "ask_size": True}
     memory.forget(key)
     store.set_last_lga(key, "NG034006")
     run()

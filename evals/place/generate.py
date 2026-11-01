@@ -67,7 +67,7 @@ def main() -> None:
             if not years:
                 continue
             for pcode in picked:
-                year = 0 if spec["first"] == 0 else max(y for y in years if y < today.year) if any(y < today.year for y in years) else years[-1]
+                year = 0 if spec["first"] == 0 else P.headline_year(conn, spec["measure"], "ward", years, today)[0]
                 rows = P.rows_for(conn, spec["measure"], "ward", year, pcode)
                 cut = P.low_data_cut(rows, spec["measure"])
                 ranked = sorted([r for r in rows if r[2] is not None and (r[3] is None or r[3] > cut)], key=lambda r: -r[2])
@@ -131,6 +131,38 @@ def main() -> None:
                 else:
                     continue
                 break
+        # scope: 'my ward / my LGA / the state' with a location on file (the 1 Nov phone test), and with none
+        year = P.headline_year(conn, "modis_peak", "ward", P.years_loaded(conn, "modis_peak", "ward"), today)[0]
+        for pcode in picked[:4]:
+            rows = P.rows_for(conn, "modis_peak", "ward", year, pcode)
+            ranked = sorted([r for r in rows if r[2] is not None], key=lambda r: -r[2])
+            if not ranked:
+                continue
+            code, ward = ranked[len(ranked) // 2][0], ranked[len(ranked) // 2][1]
+            place = {"lga_pcode": pcode, "lga": name_of(pcode), "ward": ward, "wardcode": code, "ward_likely": False}
+            for lang, q, must in (("en", "How has farming evolved in my ward over the years",
+                                   [f"{ward} ward, {name_of(pcode)} LGA", f"Your pin is in {ward} ward", "Since 20", f"In {year} {ward} was"]),
+                                  ("ha", "Yaya noma ya canza a unguwata tun shekaru?",
+                                   [f"gundumar {ward}", "Wurinka yana gundumar", "Tun 20"])):
+                n += 1
+                cases.append({"id": f"a{n:03d}", "family": "scope_ward", "lang": lang, "level": "ward", "unit": code, "year": year,
+                              "question": q, "place": place,
+                              "expect": {"must_have": must, "must_not": ["*Ranking", "232 wards", "244 wards", "sun fi koriya"],
+                                         "text_must_not": ["NDVI", "90th percentile"]}})
+            n += 1
+            cases.append({"id": f"a{n:03d}", "family": "scope_lga", "lang": "en", "level": "lga", "unit": pcode, "year": year,
+                          "question": "How has farming evolved in my LGA over the years", "place": place,
+                          "expect": {"top": ranked[0][1], "must_have": [f"wards of {name_of(pcode)} LGA, {year}", f"Since 20"],
+                                     "must_not": [], "text_must_not": ["NDVI", "90th percentile"]}})
+        n += 1
+        cases.append({"id": f"a{n:03d}", "family": "scope_state", "lang": "en", "level": "state", "unit": "NG034", "year": year,
+                      "question": "How has farming evolved across the state over the years", "place": place,
+                      "expect": {"must_have": [f"the 23 LGAs of Sokoto State, {year}", "Sokoto State's farmland greenness"],
+                                 "must_not": [], "text_must_not": ["NDVI", "90th percentile"]}})
+        n += 1
+        cases.append({"id": f"a{n:03d}", "family": "scope_none", "lang": "en", "level": "ward", "unit": "", "year": year,
+                      "question": "How has farming evolved in my ward over the years",
+                      "expect": {"must_have": ["I need the spot itself"], "must_not": ["Ranking"]}})
     out = {"_about": "Generated planner place-history cases: expected values from ward_history (evals/place/generate.py). "
                      "Checked in code by evals/place/run.py; --full runs them through answer_question.",
            "generated": today.isoformat(), "cases": cases}

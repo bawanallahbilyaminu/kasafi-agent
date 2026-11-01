@@ -116,6 +116,13 @@ VOICE_Q = SpeechResult(transcript="Nawa aka ware wa noma a 2026?", english="How 
 async def recorded_answer(question: str, lang: str, *, settings, notify=None, history=None, place=None):
     """The model-backed answer, replaced by recorded replies keyed on the question's words."""
     q = question.lower()
+    from app.place import planner as P
+    if (r := P.area_route(question, "", place)):             # a ward / LGA / state question: the real code path
+        import psycopg
+        from datetime import date
+        with psycopg.connect(DEV_DB) as c:
+            aa = P.area_answer(c, question, "", lang, r[0], r[1], date.today(), place=place)
+        return Stub(aa.text, aa.found, needs_pin=aa.needs_pin, working=aa.working, maps=aa.specs)
     if "farm" in q or "gonata" in q:
         if not place or place.get("lat") is None:
             return Stub(conversation.t("echo", lang, text=question), False, needs_pin=True)
@@ -252,6 +259,38 @@ def test_consent_language_pin_place_question_size_and_skip(harness):
     sends = h.turn(text("skip", me), lambda s: [k for k, _, _ in s] == ["text", "text", "image", "image"], "skip")
     assert sends[0][2].startswith("🛰️") and "satellite record" in sends[1][2] and "circle of about 1 ha" in sends[1][2]
     h.turn(text("show working", me), 1, "show working")
+
+
+def test_pin_then_how_has_farming_evolved_in_my_ward_is_about_that_ward(harness):
+    """The 1 Nov phone test: a pin, then 'How has farming evolved in my ward over the years' got a statewide 2025
+    ranking of 232 wards. Now: that ward, named with its LGA, the trend over the years, one map."""
+    h, me = harness, "2348000000904"
+    consented(h, me, "en")
+    sends = h.turn(pin(LAT, LON, me), 2, "pin")
+    assert sends[1][2].startswith("📍 Got it: you're in")
+    sends = h.turn(text("How has farming evolved in my ward over the years", me),
+                   lambda s: [k for k, _, _ in s][-2:] == ["text", "image"], "my ward")
+    body = [p for k, _, p in sends if k == "text"][-1]
+    assert body.startswith("*Peak greenness: ") and " ward" in body.split("\n")[0] and "Your pin is in" in body
+    assert "Since 20" in body and "232 wards" not in body and "244 wards" not in body and "MODIS NDVI" not in body
+    sends = h.turn(text("How has farming evolved in my LGA over the years", me),
+                   lambda s: [k for k, _, _ in s][-2:] == ["text", "image"], "my LGA")
+    body = [p for k, _, p in sends if k == "text"][-1]
+    assert body.startswith("*Peak greenness: wards of ") and "Since 20" in body and "*Ranking (" in body
+    sends = h.turn(text("How has farming evolved across the state over the years", me),
+                   lambda s: [k for k, _, _ in s][-2:] == ["text", "image"], "the state")
+    body = [p for k, _, p in sends if k == "text"][-1]
+    assert body.startswith("*Peak greenness: the 23 LGAs of Sokoto State") and "Sokoto State's farmland greenness" in body
+
+
+def test_my_ward_in_hausa_and_the_pin_asked_for_when_none_is_on_file(harness):
+    h, me = harness, "2348000000905"
+    consented(h, me, "ha")
+    sends = h.turn(text("Yaya noma ya canza a unguwata tun shekaru?", me), lambda s: s[-1][0] == "location_request", "no pin yet")
+    assert "wurin kansa" in sends[-1][2]
+    sends = h.turn(pin(LAT, LON, me), lambda s: s[-1][0] == "image", "pin resumes the question")
+    body = [p for k, _, p in sends if k == "text" and "Wurinka yana gundumar" in str(p)]
+    assert body and body[0].startswith("*Koriyar ƙololuwa: gundumar ") and "Tun 20" in body[0]
 
 
 def test_a_size_in_kadada_gives_the_circle_of_that_area(harness):

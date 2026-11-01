@@ -1043,10 +1043,10 @@ async def settle_by_words(plan: Plan, question: str, planned_q: str, catalog: li
         log.warning("words: settle failed: %s", type(e).__name__)
 
 
-def place_question(question: str, english: str = "") -> bool:
+def place_question(question: str, english: str = "", place: dict | None = None) -> bool:
     """A place-history question (a pin's record, or a ward/LGA/state comparison): answered in code, never by a
     clarifying question from the planner."""
-    return bool(place_route(question, english) or area_route(question, english))
+    return bool(place_route(question, english) or area_route(question, english, place))
 
 
 async def answer_question(question: str, lang: str, conn: psycopg.Connection, **kw) -> Answer:
@@ -1104,7 +1104,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             box["plan"] = plan            # the loop's budget can stop us; it keeps what was verified
         # two readings, both can't be shown: ask; never for a place-history question (the planner may ask "where is
         # your farm?" without knowing the pin travels with the question: the place path asks for one itself)
-        if plan.clarify and plan.followup == "none" and not place_question(question, plan.english_question):
+        if plan.clarify and plan.followup == "none" and not place_question(question, plan.english_question, place):
             return Answer(plan.clarify["question"], False, True, plan=plan, timings=t,
                           clarify=plan.clarify["options"])
         prev = history[-1] if history else None
@@ -1116,12 +1116,12 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             t["facilities"] = 0.0
             return Answer(fac, True, True, plan=plan, timings=t, exact=fac)
         # place history for a ward, an LGA or the state (docs/place-history.md §5): the precomputed measures
-        if conn is not None and (ar := area_route(question, plan.english_question)):
+        if conn is not None and (ar := area_route(question, plan.english_question, place)):
             t0 = time.perf_counter()
-            aa = area_answer(conn, question, plan.english_question, lang, ar[0], ar[1], today)
+            aa = area_answer(conn, question, plan.english_question, lang, ar[0], ar[1], today, place=place)
             t["place_area"] = time.perf_counter() - t0
             return Answer(aa.text, aa.found, True, plan=plan, timings=t, exact=aa.text, working=aa.working,
-                          partial=aa.partial, maps=aa.specs)
+                          partial=aa.partial, maps=aa.specs, needs_pin=aa.needs_pin)
         # place history (docs/place-history.md): what the satellite record shows for the user's pin, in code
         if conn is not None and place_route(question, plan.english_question):
             t0 = time.perf_counter()

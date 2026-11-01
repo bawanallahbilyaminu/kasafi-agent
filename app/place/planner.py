@@ -61,14 +61,25 @@ MEASURE_WORDS = [
                          r"ponds?|wetland|fadama|ruwa(?:n)?\s+(?:fili|tafki)|ruwa\s+ke\s+yawan|yawan\s+ruwa|tafk\w*)\b")),
     ("flood", re.compile(r"(?i)\b(?:flood\w*|under\s+water|inundat\w*|ambaliya\w*|ruwa\s+ya\s+rufe)\b")),
     ("bare", re.compile(r"(?i)\b(?:bare\s+soil|bare\b|erosion|sand|degrad\w*|ƙasa\s+mara\s+ciyayi|kasa\s+mara\s+ciyayi|hamada|zaizay\w*)\b")),
-    ("greenness", re.compile(r"(?i)\b(?:green\w*|vegetat\w*|crop\s+(?:cover|growth)|ndvi|koriya\w*|ciyayi|shuke-?shuke)\b")),
+    ("greenness", re.compile(r"(?i)\b(?:green\w*|vegetat\w*|crop\s+(?:cover|growth)|crops?|farm(?:ing|land)?|ndvi|koriya\w*|ciyayi|"
+                             r"shuke-?shuke|noma|amfanin\s+gona)\b")),
     ("rain", re.compile(r"(?i)\b(?:rain(?:fall)?|ruwan\s+sama|damina)\b")),
 ]
 AREA_WORDS = re.compile(r"(?i)\b(?:wards?|lgas?|local\s+government\w*|across|which\s+(?:wards?|lgas?|areas?|parts?)|"
                         r"state-?wide|the\s+state|sokoto\s+state|all\s+(?:wards|lgas)|gundum\w*|ƙaramar\s+hukuma\w*|"
                         r"karamar\s+hukuma\w*|ƙananan\s+hukumomi|kananan\s+hukumomi|jihar?\s+sokoto|fa[ɗd]in\s+jiha\w*|"
                         r"wa[ɗd]anne\b)\b")
-MINE = re.compile(r"(?i)\b(?:my\s+(?:farm|plot|land|field)|gonata|gona\s+ta|filina|wannan\s+wuri|this\s+spot|here)\b")
+MY_FARM = re.compile(r"(?i)\b(?:my\s+(?:farm|plot|land|field)|gonata|gona\s+ta|filina|wannan\s+wuri|this\s+spot)\b")
+MY_WARD = re.compile(r"(?i)\b(?:my\s+(?:ward|area|village|community|neighbou?rhood)|(?:around\s+)?here|unguwata|unguwa\s+ta|"
+                     r"gundumata|gunduma\s+ta|yankina|yanki\s+na|ƙauyena|kauyena|garina|(?:a\s+)?nan\b)\b")
+MY_LGA = re.compile(r"(?i)\b(?:my\s+(?:lga|local\s+government(?:\s+area)?)|ƙaramar\s+hukumata|karamar\s+hukumata|"
+                    r"ƙaramar\s+hukuma\s+ta|karamar\s+hukuma\s+ta)\b")
+STATE_WORDS = re.compile(r"(?i)\b(?:the\s+state|state-?wide|sokoto\s+state|all\s+(?:wards|lgas)|which\s+lgas|jihar?\s+sokoto|"
+                         r"fa[ɗd]in\s+jiha\w*|dukkan\s+(?:gundumomi|ƙananan|kananan))\b")
+TREND = re.compile(r"(?i)\b(?:over\s+the\s+years|over\s+time|evolv\w*|chang\w*|trend\w*|since\s+(?:19|20)\d\d|"
+                   r"(?:the\s+)?last\s+\d+\s+years|history|tun\s+(?:shekaru|shekarar|20\d\d)|ya\s+canza|ta\s+canza|"
+                   r"sun\s+canza|canji|tarihi\w*|cikin\s+shekaru)\b")
+MINE = MY_FARM                                                 # kept for callers
 TOP_N = 5
 NEAR = {"greenness": 0.05, "bare": 0.05, "rain": 0.15}        # within this of the unit's own usual: "about as usual"
 LITTLE_SHARE = 0.01                                           # a flood share under this is "little"
@@ -85,6 +96,7 @@ class AreaAnswer:
     unit: str = ""               # the LGA pcode, or NG034 for the state
     measure: str = ""
     year: int = 0
+    needs_pin: bool = False      # 'my ward' with no location on file: the pin first, then the answer
 
 
 W = {
@@ -103,6 +115,31 @@ W = {
         # the plain first sentence
         "plain_green": "Most of {of} farmland was {how} in {year}; {low} was the least green {unit}{rain}.",
         "plain_green_how": {"near": "about as green as usual", "above": "greener than usual", "below": "less green than usual"},
+        "plain_green_rain_how": {"near": "about as green as the rain would suggest", "above": "greener than the rain would suggest",
+                                 "below": "less green than the rain would suggest"},
+        "head_plain": "*{short}: {area}{year}* — experimental",
+        "head_ward": "*{short}: {ward} ward{likely}, {lga} LGA* — experimental",
+        "likely": " (likely)",
+        "ward_scope": "Your pin is in {ward} ward{likely} of {lga} LGA, so this answer is about that ward, compared with the "
+                      "whole of {lga} LGA and the state.",
+        "ward_scope_no_ward": "Your location gives {lga} LGA but not a ward, so this answer is about the LGA's wards.",
+        "trend_head": "Since {first}, {ward}'s farmland greenness {dir}; {lga} LGA's {lga_dir}, and the state's {state_dir} "
+                      "({first}–{last}, {n} years with normal data).",
+        "trend_dir": {"rising": "has been rising", "falling": "has been falling", "no clear change": "shows no clear change",
+                      "": "has too few years to call"},
+        "trend_unit": "Since {first}, {of} farmland greenness {dir} ({n} years with normal data).",
+        "ward_year": "In {year} {ward} was {how}: {value} against its usual {usual}. {lga} LGA's wards ranged {lo}–{hi}, "
+                     "with {ward} {rank} of {m}; the state's cropland median was {state}.",
+        "ward_green_how": {"near": "about as green as usual", "above": "greener than usual", "below": "less green than usual"},
+        "ward_green_rain_how": {"near": "about as green as the rain would suggest", "above": "greener than the rain would suggest",
+                                "below": "less green than the rain would suggest"},
+        "ward_year_norain": "In {year} {ward} was {how}: {value} against its usual {usual}.",
+        "skipped_years": "{years} {verb} too few clear images so far, so {year} is the latest year with normal data.",
+        "skipped_verb": {"one": "has", "many": "have"},
+        "missing_units": "{no_crop} {what} have no cropland in the 2021 land-cover map; {no_data} {what_data} have no data that year.",
+        "missing_crop_only": "{no_crop} {what} have no cropland in the 2021 land-cover map, so they carry no value.",
+        "missing_data_only": "{no_data} {what} have no data for that year.",
+        "working_series": "Series ({measure}, {res}): {rows}",
         "plain_rain_clause": {"below": ", but its rain was also low", "above": ", although its rain was above usual",
                               "near": ", although its rain was about usual", "": ""},
         "plain_bare": "Most of {of} farmland showed {how} bare soil in the dry season of {year}; {top} was the most bare {unit}.",
@@ -119,17 +156,18 @@ W = {
                      "farmland inside it ({val}) and {low} the least ({lo_val}).",
         "plain_water": "{few} of {of} {units} have farmland that is often under water; {top} has the most ({val}).",
         "plain_water_few": {"few": "Few", "some": "Some", "many": "Many"},
-        "rain_adj": "Against each ward's own years and that season's rain: {parts}.",
+        "rain_adj": "Against each {unit}'s own years and that season's rain: {parts}.",
         "rain_below": "{units} were less green than the rain would suggest",
         "rain_above": "{units} were greener than usual for the rain",
-        "rain_adj_none": "no ward stood out against its own years and the rain",
-        "rain_adj_units": "{n} wards had too few years for a rain comparison",
+        "rain_adj_none": "no {unit} stood out against its own years and the rain",
+        "rain_adj_units": "{n} {what} had too few years for a rain comparison",
         "low_data": "Low data: {units} ({n} or fewer observations that year) are marked ~ and not ranked.",
         "resolution": "Period {period}; resolution {res}. Cropland only (ESA WorldCover 2021).",
         "ranking_head": "*Ranking ({n} {what})*",
         "top_head": "Highest:", "bottom_head": "Lowest:",
         "row": "{i}. {name}: {value} ({n} obs)",
         "working_head": "All {what}, {measure}, {year}: value (observations behind it; ~ low data; rain flag where fitted).",
+        "working_measure": "Measure: {label}. Period {period}; resolution {res}. Cropland only (ESA WorldCover 2021).",
         "working_row": "{name} [{code}]: {value} ({n}){flag}",
         "flag_below": " below-rain", "flag_above": " above-rain",
         # floods: the official map first, radar as a lower bound
@@ -159,6 +197,7 @@ W = {
         "sources": "Sources: {source}; boundaries GRID3 wards and OCHA COD-AB LGAs.",
         "neutral": "Kasafi reports what the satellite record shows; it makes no judgement of causes or of anyone's work.",
         "and": " and ", "ward": "ward", "wards": "wards", "lga": "LGA", "lgas": "LGAs",
+        "unit_of": {"ward": "ward", "lga": "LGA"},
     },
     "ha": {
         "head": "*{label}: {area}, {year}* — na gwaji",
@@ -176,6 +215,32 @@ W = {
         "plain_green": "Mafi yawan gonakin {of} sun kasance {how} a {year}; {low} ce {unit} mafi ƙarancin koriya{rain}.",
         "plain_green_how": {"near": "kamar yadda aka saba a koriya", "above": "sun fi koriya fiye da yadda aka saba",
                             "below": "ba su yi koriya kamar yadda aka saba ba"},
+        "plain_green_rain_how": {"near": "kamar yadda ruwan sama ya nuna a koriya", "above": "sun fi koriya fiye da yadda ruwan sama ya nuna",
+                                 "below": "ba su yi koriya kamar yadda ruwan sama ya nuna ba"},
+        "head_plain": "*{short}: {area}{year}* — na gwaji",
+        "head_ward": "*{short}: gundumar {ward}{likely}, Ƙaramar Hukumar {lga}* — na gwaji",
+        "likely": " (wataƙila)",
+        "ward_scope": "Wurinka yana gundumar {ward}{likely} ta Ƙaramar Hukumar {lga}, saboda haka wannan amsa ta wannan gunduma ce, "
+                      "an kwatanta ta da dukkan Ƙaramar Hukumar {lga} da jihar.",
+        "ward_scope_no_ward": "Wurinka ya nuna Ƙaramar Hukumar {lga} amma ba gunduma ba, saboda haka wannan amsa ta gundumomin ƙaramar hukumar ce.",
+        "trend_head": "Tun {first}, koriyar gonakin {ward} {dir}; ta Ƙaramar Hukumar {lga} {lga_dir}, ta jiha kuma {state_dir} "
+                      "({first}–{last}, shekaru {n} masu bayanai na yau da kullum).",
+        "trend_dir": {"rising": "tana ƙaruwa", "falling": "tana raguwa", "no clear change": "ba ta nuna canji a fili",
+                      "": "ba ta da isassun shekaru"},
+        "trend_unit": "Tun {first}, koriyar gonakin {of} {dir} (shekaru {n} masu bayanai na yau da kullum).",
+        "ward_year": "A {year} {ward} ta kasance {how}: {value} idan aka kwatanta da yadda ta saba {usual}. Gundumomin Ƙaramar "
+                     "Hukumar {lga} sun tashi daga {lo} zuwa {hi}, {ward} ta {rank} cikin {m}; matsakaicin jiha kuma {state}.",
+        "ward_green_how": {"near": "kamar yadda ta saba a koriya", "above": "ta fi koriya fiye da yadda ta saba",
+                           "below": "ba ta yi koriya kamar yadda ta saba ba"},
+        "ward_green_rain_how": {"near": "kamar yadda ruwan sama ya nuna a koriya", "above": "ta fi koriya fiye da yadda ruwan sama ya nuna",
+                                "below": "ba ta yi koriya kamar yadda ruwan sama ya nuna ba"},
+        "ward_year_norain": "A {year} {ward} ta kasance {how}: {value} idan aka kwatanta da yadda ta saba {usual}.",
+        "skipped_years": "{years} {verb} da hotuna bayyanannu kaɗan har yanzu, saboda haka {year} ce shekara ta ƙarshe mai bayanai na yau da kullum.",
+        "skipped_verb": {"one": "ba ta", "many": "ba su"},
+        "missing_units": "{what} {no_crop} ba su da gona a taswirar yanayin ƙasa ta 2021; {what_data} {no_data} ba su da bayanai a shekarar.",
+        "missing_crop_only": "{what} {no_crop} ba su da gona a taswirar yanayin ƙasa ta 2021, saboda haka ba su da ƙima.",
+        "missing_data_only": "{what} {no_data} ba su da bayanai na shekarar.",
+        "working_series": "Jerin ({measure}, {res}): {rows}",
         "plain_rain_clause": {"below": ", amma ruwan samanta ma ya yi ƙaranci", "above": ", duk da cewa ruwan samanta ya wuce yadda aka saba",
                               "near": ", duk da cewa ruwan samanta ya kasance kamar yadda aka saba", "": ""},
         "plain_bare": "Mafi yawan gonakin {of} sun nuna ƙasa mara ciyayi {how} a ranin {year}; {top} ce {unit} mafi ƙasa mara ciyayi.",
@@ -192,17 +257,19 @@ W = {
                      "yawan gonaki a cikinta ({val}), {low} kuma mafi ƙaranci ({lo_val}).",
         "plain_water": "{few} daga cikin {units} na {of} ne ke da gonakin da ruwa ke yawan rufewa; {top} ce ta fi yawa ({val}).",
         "plain_water_few": {"few": "Kaɗan", "some": "Wasu", "many": "Da yawa"},
-        "rain_adj": "Idan aka kwatanta kowace gunduma da shekarunta da ruwan saman daminar: {parts}.",
+        "rain_adj": "Idan aka kwatanta kowace {unit} da shekarunta da ruwan saman daminar: {parts}.",
         "rain_below": "{units} sun yi ƙasa da abin da ruwan saman ya nuna",
         "rain_above": "{units} sun fi koriya fiye da yadda ruwan saman ya nuna",
-        "rain_adj_none": "babu gundumar da ta bambanta da shekarunta da ruwan sama",
-        "rain_adj_units": "gundumomi {n} ba su da isassun shekaru don kwatancen ruwan sama",
+        "rain_adj_none": "babu {unit_of} da ta bambanta da shekarunta da ruwan sama",
+        "rain_adj_units": "{what} {n} ba su da isassun shekaru don kwatancen ruwan sama",
+        "unit_of": {"ward": "gundumar", "lga": "ƙaramar hukumar"},
         "low_data": "Ƙarancin bayanai: {units} (lura {n} ko ƙasa a shekarar) an yi musu alamar ~ kuma ba a jera su ba.",
         "resolution": "Lokaci {period}; ƙuduri {res}. Gonaki kawai (ESA WorldCover 2021).",
         "ranking_head": "*Jeri ({n} {what})*",
         "top_head": "Mafi girma:", "bottom_head": "Mafi ƙanƙanta:",
         "row": "{i}. {name}: {value} (lura {n})",
         "working_head": "Dukkan {what}, {measure}, {year}: ƙima (lura a bayanta; ~ ƙarancin bayanai; alamar ruwan sama inda aka kwatanta).",
+        "working_measure": "Ma'auni: {label}. Lokaci {period}; ƙuduri {res}. Gonaki kawai (ESA WorldCover 2021).",
         "working_row": "{name} [{code}]: {value} ({n}){flag}",
         "flag_below": " ƙasa-da-ruwan-sama", "flag_above": " sama-da-ruwan-sama",
         "map_label": "Taswirar ambaliya ta tauraron ɗan adam ta MDD ta {period} (UNOSAT, VIIRS mita 375)",
@@ -247,15 +314,28 @@ def _t(lang: str) -> dict:
 
 # --- the route ------------------------------------------------------------------------------------------------------
 
-def area_route(question: str, english: str = "") -> tuple[str, str] | None:
-    """(level, unit) when a place-history question is about an area, not the user's pin: ('lga', pcode) for an
-    LGA named, ('state', NG034) for the state or 'which wards/LGAs'; None otherwise."""
+def area_route(question: str, english: str = "", place: dict | None = None) -> tuple[str, str] | None:
+    """(level, unit) when a place-history question is about an area, not the user's pin: ('ward', wardcode) for
+    'my ward / here / my area' with a pin or saved location, ('lga', pcode) for 'my LGA' or an LGA named,
+    ('state', NG034) only for the state, Sokoto or 'all wards / which LGAs'; None otherwise."""
     from app.hazards.advisories import lgas_in
     from app.place.answer import NOT_PLACE, place_route
     text = f"{question} {english}"
-    if MINE.search(text) or NOT_PLACE.search(text):
+    if MY_FARM.search(text) or NOT_PLACE.search(text):
         return None
     measure = measure_word(text)              # a satellite measure must be named: "most IDPs by LGA" is not ours
+    place = place or {}
+    if measure is not None and STATE_WORDS.search(text) and not lgas_in(text):
+        return ("state", STATE)                                   # 'the state', 'faɗin jihar Sokoto': only these
+    if measure is not None and not STATE_WORDS.search(text):
+        if MY_LGA.search(text) and place.get("lga_pcode"):
+            return ("lga", str(place["lga_pcode"]))
+        if MY_WARD.search(text) and place.get("wardcode"):
+            return ("ward", str(place["wardcode"]))
+        if MY_WARD.search(text) and place.get("lga_pcode"):   # no ward known: the LGA, said as such in the answer
+            return ("lga", str(place["lga_pcode"]))
+        if (MY_WARD.search(text) or MY_LGA.search(text)) and not lgas_in(text):
+            return ("ward", "")                               # nothing on file: the answer asks for the pin
     lgas = lgas_in(text)
     if not (AREA_WORDS.search(text) or lgas):
         return None
@@ -281,8 +361,29 @@ def measure_asked(text: str) -> str:
 
 
 def year_asked(text: str, today: date) -> int | None:
-    m = re.findall(r"\b((?:19|20)\d\d)\b", text)
+    m = re.findall(r"\b((?:19|20)\d\d)\b", re.sub(r"(?i)\bsince\s+(?:19|20)\d\d|\btun\s+20\d\d", " ", text))
     return int(m[0]) if m else None
+
+
+def trend_asked(text: str) -> bool:
+    return bool(TREND.search(text or ""))
+
+
+def headline_year(conn, measure: str, compare: str, loaded: list[int], today: date) -> tuple[int, list[int]]:
+    """The latest year with normal data (at least 60 % of the median observation count for the level, and a
+    finished season): never a thin year like 2025 (five MODIS composites on the catalogue). Returns it with the
+    later years skipped, so the answer can say why."""
+    counts = {}
+    for y in loaded:
+        row = conn.execute("SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY n_obs) FROM ward_history WHERE measure = %s "
+                           "AND level = %s AND year = %s AND n_obs IS NOT NULL", (measure, compare, y)).fetchone()
+        counts[y] = float(row[0]) if row and row[0] is not None else None
+    known = sorted(c for c in counts.values() if c is not None)
+    need = 0.6 * known[len(known) // 2] if known else 0.0
+    done = [y for y in loaded if y < today.year or (y == today.year and today.month > 10)]   # the June–October season is over
+    normal = [y for y in done if counts.get(y) is None or counts[y] >= need]
+    y = max(normal) if normal else max(done) if done else loaded[-1]
+    return y, [x for x in loaded if x > y and counts.get(x) is not None and counts[x] < need]
 
 
 # --- the data ---------------------------------------------------------------------------------------------------------
@@ -438,16 +539,15 @@ def plain_sentence(conn, b: Block, lang: str, compare: str, level: str, unit: st
     units_word = t["wards"] if compare == "ward" else t["lgas"]
     top, low = b.ranked[0], b.ranked[-1]
     if b.key in ("greenness", "bare", "rain"):
-        kinds = [versus_usual(r[2], b.usual.get(r[0]), b.key) for r in b.ranked]
-        kinds = [k for k in kinds if k]
-        how = max(("near", "above", "below"), key=lambda k: kinds.count(k)) if kinds else "near"
+        how = plain_class(b)
         if b.key == "greenness":
             rain = ""
             rains = series(conn, "rain_season_mm", compare, low[0])
             if b.year in rains:
                 others = sorted(v for y, v in rains.items() if y != b.year)
                 rain = versus_usual(rains[b.year], others[len(others) // 2] if len(others) >= 3 else None, "rain")
-            return t["plain_green"].format(of=of, how=t["plain_green_how"][how], year=b.year, low=low[1], unit=unit_word,
+            words = t["plain_green_rain_how"] if b.flags and any(b.flags.values()) else t["plain_green_how"]
+            return t["plain_green"].format(of=of, how=words[how], year=b.year, low=low[1], unit=unit_word,
                                            rain=t["plain_rain_clause"][rain])
         if b.key == "bare":
             return t["plain_bare"].format(of=of, how=t["plain_bare_how"][how], year=b.year, top=top[1], unit=unit_word)
@@ -474,6 +574,24 @@ def plain_sentence(conn, b: Block, lang: str, compare: str, level: str, unit: st
     return ""
 
 
+def plain_class(b: Block) -> str:
+    """The class the plain sentence states, from the same numbers as the details: for greenness, the rain-adjusted
+    flags when any ward was fitted (most 'normal' -> 'about as green as the rain would suggest'; a majority below
+    or above -> that), else each unit against its own usual. The summary can never say 'less green than usual'
+    while the rain check found nothing standing out."""
+    if b.key == "greenness" and b.flags and any(b.flags.values()):
+        fitted = [f for f in b.flags.values() if f]
+        below, above = fitted.count("below"), fitted.count("above")
+        if below * 2 > len(fitted):
+            return "below"
+        if above * 2 > len(fitted):
+            return "above"
+        return "near"
+    kinds = [versus_usual(r[2], b.usual.get(r[0]), b.key) for r in b.ranked]
+    kinds = [k for k in kinds if k]
+    return max(("near", "above", "below"), key=lambda k: kinds.count(k)) if kinds else "near"
+
+
 def summary_lines(b: Block, lang: str, area: str, what: str, radar_block: bool = False) -> list[str]:
     """The figures sentence, the rain-adjusted sentence (greenness) and the low-data line."""
     t = _t(lang)
@@ -497,16 +615,17 @@ def summary_lines(b: Block, lang: str, area: str, what: str, radar_block: bool =
         below = [names[u] for u, f in b.flags.items() if f == "below"]
         above = [names[u] for u, f in b.flags.items() if f == "above"]
         unfit = sum(1 for f in b.flags.values() if f == "")
+        kind = "ward" if what == t["wards"] else "lga"
         parts = []
         if below:
             parts.append(t["rain_below"].format(units=", ".join(below)))
         if above:
             parts.append(t["rain_above"].format(units=", ".join(above)))
         if not parts:
-            parts.append(t["rain_adj_none"])
+            parts.append(t["rain_adj_none"].format(unit=t[kind], unit_of=t["unit_of"][kind]))
         if unfit:
-            parts.append(t["rain_adj_units"].format(n=unfit))
-        s = t["rain_adj"].format(parts="; ".join(parts))
+            parts.append(t["rain_adj_units"].format(n=unfit, what=what))
+        s = t["rain_adj"].format(unit=t[kind], parts="; ".join(parts))
         lines.append(s[0].upper() + s[1:])
     if b.low:
         lines.append(t["low_data"].format(units=", ".join(r[1] for r in b.low[:6]) + (" …" if len(b.low) > 6 else ""), n=b.cut))
@@ -541,13 +660,15 @@ def working_lines(b: Block, lang: str, what: str, period: str) -> list[str]:
 
 
 def area_answer(conn, question: str, english: str, lang: str, level: str, unit: str, today: date,
-                measure_key: str | None = None, year: int | None = None) -> AreaAnswer:
+                measure_key: str | None = None, year: int | None = None, place: dict | None = None) -> AreaAnswer:
     from app.sources.lga_names import name_of
     t = _t(lang)
     text = f"{question} {english}"
     key = measure_key or measure_asked(text)
     spec = MEASURES[key]
     measure = spec["measure"]
+    if level == "ward":
+        return ward_answer(conn, question, english, lang, unit, today, key, year, place or {})
     compare = "ward" if level == "lga" else ("ward" if re.search(r"(?i)\bwards?\b|gundum", text) and level == "state" else "lga")
     within = unit if level == "lga" else None
     area = (t["area_lga"].format(lga=name_of(unit)) if level == "lga" else
@@ -566,9 +687,11 @@ def area_answer(conn, question: str, english: str, lang: str, level: str, unit: 
         return AreaAnswer(t["no_year"].format(short=t["short"][key], year=want, first=loaded[0], last=loaded[-1]), False,
                           level=compare, unit=unit, measure=measure)
     elif key == "flood" and map_years:                   # no year named: the latest year with an official map
-        y = max(map_years)
-    else:
-        y = max(x for x in loaded if x < today.year) if any(x < today.year for x in loaded) else loaded[-1]
+        y, skipped = max(map_years), []
+    else:                                                # the latest year with normal data: never a thin year
+        y, skipped = headline_year(conn, measure, compare, loaded, today)
+    if want is not None or spec["first"] == 0 or (key == "flood" and map_years):
+        skipped = []
     what = t["wards"] if compare == "ward" else t["lgas"]
     period = f"{loaded[0]}–{loaded[-1]}" if spec["first"] else "1984–2020"      # the years actually loaded
     res = {"greenness": "250 m", "flood": "200 m", "flood_map": "375 m", "water": "30 m", "bare": "200 m", "rain": "~9 km"}[key]
@@ -583,14 +706,23 @@ def area_answer(conn, question: str, english: str, lang: str, level: str, unit: 
         return AreaAnswer(t["none"].format(area=area), False, level=compare, unit=unit, measure=measure, year=y)
     label = (t["map_label"].format(period=map_period(y, lang)) if lead_key == "flood_map" and y else
              spec[lang if lang == "ha" else "en"] if lead_key == key else MEASURES[lead_key][lang if lang == "ha" else "en"])
-    lines.append((t["head"] if y else t["head_noyear"]).format(label=label, area=area, year=y))
+    short = t["short"][lead_key]
+    lines.append(t["head_plain"].format(short=short[0].upper() + short[1:], area=area, year=f", {y}" if y else ""))
+    if place and (place.get("lga_pcode") == unit) and MY_WARD.search(text) and not place.get("wardcode"):
+        lines.append(t["ward_scope_no_ward"].format(lga=name_of(unit)))
     plain = plain_sentence(conn, main, lang, compare, level, unit, of)
     if plain:
         lines.append(plain)
+    if trend_asked(text) and lead_key == key and spec["first"]:         # 'over the years': the unit's own trend first
+        lines.append(trend_sentence(conn, lang, measure, "lga" if level == "lga" else "state", unit, of))
+    if skipped:
+        lines.append(t["skipped_years"].format(years=", ".join(str(x) for x in skipped), year=y,
+                                               verb=t["skipped_verb"]["one" if len(skipped) == 1 else "many"]))
     lines += summary_lines(main, lang, area, what)
-    lines.append(t["resolution"].format(period=period if lead_key == key else f"{min(map_years)}–{max(map_years)}",
-                                        res="375 m" if lead_key == "flood_map" else res))
+    lines.append(missing_line(conn, main, lang, compare, within, what))
     lines.append(ranking_lines(main, lang, what))
+    working.append(t["working_measure"].format(label=label, period=period if lead_key == key else f"{min(map_years)}–{max(map_years)}",
+                                               res="375 m" if lead_key == "flood_map" else res))
     working += working_lines(main, lang, what, period)
     specs.append({"kind": "area_map", "measure": MEASURES[lead_key]["measure"], "key": lead_key, "year": y, "level": compare,
                   "unit": unit})
@@ -614,6 +746,139 @@ def area_answer(conn, question: str, english: str, lang: str, level: str, unit: 
     lines.append(t["sources"].format(source="; ".join(dict.fromkeys(sources))))
     return AreaAnswer("\n\n".join(x for x in lines if x), True, "\n".join(working), partial=partial, specs=specs,
                       level=compare, unit=unit, measure=MEASURES[lead_key]["measure"], year=y)
+
+
+def trend_of(conn, measure: str, level: str, unit: str) -> tuple[str, int, int, int]:
+    """(direction, first year, last year, years) of a unit's series without its low-data years."""
+    vals = series(conn, measure, level, unit)
+    if not vals:
+        return "", 0, 0, 0
+    tr = fitting.trend(vals)
+    years = sorted(vals)
+    return (tr[0] if tr else ""), years[0], years[-1], len(years)
+
+
+def trend_sentence(conn, lang: str, measure: str, level: str, unit: str, of: str) -> str:
+    t = _t(lang)
+    d, first, last, n = trend_of(conn, measure, level, unit)
+    if not n:
+        return ""
+    return t["trend_unit"].format(first=first, of=of, dir=t["trend_dir"][d], n=n)
+
+
+def coverage(conn, compare: str, within: str | None, rows: list[tuple], cut: int) -> dict[str, int]:
+    """The units of the level (the wards of an LGA, all wards, or the LGAs): how many carry a value that year, how
+    many have no cropland in the land-cover map (so no row at all), how many are low data, and how many have no
+    data for another reason. The answer's missing line and the map's caption both come from this."""
+    if compare == "ward":
+        q = "SELECT wardcode FROM ward" + (" WHERE lga_pcode = %s" if within else "")
+        units = {r[0] for r in conn.execute(q, (within,) if within else ()).fetchall()}
+    else:
+        units = {r[0] for r in conn.execute("SELECT pcode FROM lga").fetchall()}
+    valued = {r[0] for r in rows if r[2] is not None and (r[3] is None or r[3] > cut)}
+    low = {r[0] for r in rows if r[2] is not None and r[3] is not None and r[3] <= cut}
+    no_crop = {r[0] for r in conn.execute(
+        "SELECT unit FROM ward_history WHERE measure = 'cropland_cells' AND level = %s AND value = 0", (compare,)).fetchall()}
+    no_crop &= units - valued - low
+    no_data = units - valued - low - no_crop
+    return {"total": len(units), "valued": len(valued), "low": len(low), "no_crop": len(no_crop), "no_data": len(no_data)}
+
+
+def missing_line(conn, b: Block, lang: str, compare: str, within: str | None, what: str) -> str:
+    """Why units are missing from the ranking: no cropland in the land-cover map, or no data that year."""
+    t = _t(lang)
+    c = coverage(conn, compare, within, b.rows, b.cut)
+    if not c["no_crop"] and not c["no_data"]:
+        return ""
+    if c["no_data"] == 0:
+        return t["missing_crop_only"].format(no_crop=c["no_crop"], what=what)
+    if c["no_crop"] == 0:
+        return t["missing_data_only"].format(no_data=c["no_data"], what=what)
+    return t["missing_units"].format(no_crop=c["no_crop"], what=what, no_data=c["no_data"], what_data=what)
+
+
+def ward_answer(conn, question: str, english: str, lang: str, wardcode: str, today: date, key: str,
+                year: int | None, place: dict) -> AreaAnswer:
+    """'My ward', 'here', 'my area' with a pin: that ward against its LGA and the state. 'Over the years' gives the
+    trend over all years with normal data; a single year only when one is asked; otherwise the latest year with
+    normal data, said why. The ward and LGA used are named, 'likely' when the pin sits near a ward border."""
+    from app.sources.lga_names import name_of
+    t = _t(lang)
+    text = f"{question} {english}"
+    spec = MEASURES[key]
+    measure = spec["measure"]
+    if not wardcode:
+        from app.place.answer import W as PW
+        return AreaAnswer(PW["ha" if lang == "ha" else "en"]["need_pin"], False, level="ward", needs_pin=True)
+    row = conn.execute("SELECT name, lga_pcode FROM ward WHERE wardcode = %s", (wardcode,)).fetchone()
+    if row is None:
+        return AreaAnswer(t["none"].format(area=t["ward"]), False, level="ward", unit=wardcode, measure=measure)
+    ward, lga_pcode = row
+    lga = name_of(lga_pcode)
+    likely = t["likely"] if place.get("ward_likely") else ""
+    loaded = years_loaded(conn, measure, "ward")
+    if not loaded:
+        return AreaAnswer(t["none"].format(area=f"{ward}, {lga}"), False, level="ward", unit=wardcode, measure=measure)
+    want = year if year is not None else year_asked(text, today)
+    if want is not None and want not in loaded:
+        return AreaAnswer(t["no_year"].format(short=t["short"][key], year=want, first=loaded[0], last=loaded[-1]), False,
+                          level="ward", unit=wardcode, measure=measure)
+    y, skipped = (want, []) if want is not None else headline_year(conn, measure, "ward", loaded, today)
+    short = t["short"][key]
+    lines = [t["head_ward"].format(short=short[0].upper() + short[1:], ward=ward, likely=likely, lga=lga),
+             t["ward_scope"].format(ward=ward, likely=likely, lga=lga)]
+    wanted_trend = trend_asked(text) or want is None
+    if wanted_trend and spec["first"]:
+        wd, first, last, n = trend_of(conn, measure, "ward", wardcode)
+        ld = trend_of(conn, measure, "lga", lga_pcode)[0]
+        sd = trend_of(conn, measure, "state", STATE)[0]
+        if n:
+            lines.append(t["trend_head"].format(first=first, last=last, n=n, ward=ward, dir=t["trend_dir"][wd], lga=lga,
+                                                lga_dir=t["trend_dir"][ld], state_dir=t["trend_dir"][sd]))
+    # the headline year: the ward against its own usual, its LGA's wards and the state
+    rows = rows_for(conn, measure, "ward", y, lga_pcode)
+    cut = low_data_cut(rows, measure)
+    ranked = sorted([r for r in rows if r[2] is not None and (r[3] is None or r[3] > cut)], key=lambda r: -r[2])
+    mine = next((r for r in rows if r[0] == wardcode), None)
+    usual = usual_of(conn, measure, "ward", [wardcode], y).get(wardcode)
+    flags = rain_flags(conn, "ward", [wardcode], y) if key == "greenness" else {}
+    state_row = conn.execute("SELECT value FROM ward_history WHERE measure = %s AND level = 'state' AND unit = %s AND year = %s",
+                             (measure, STATE, y)).fetchone()
+    if mine is not None and mine[2] is not None:
+        b = Block(key, spec, y, rows, [mine], [], [], cut, mine[2], flags, {wardcode: usual})
+        how_key = plain_class(b)
+        words = (t["ward_green_rain_how"] if flags.get(wardcode) else t["ward_green_how"]) if key == "greenness" else \
+            t["plain_rain_how"] if key == "rain" else t["plain_bare_how"]
+        how = words.get(how_key, how_key)
+        pos = next((i for i, r in enumerate(ranked, 1) if r[0] == wardcode), None)
+        if ranked and pos is not None and state_row and state_row[0] is not None:
+            lines.append(t["ward_year"].format(year=y, ward=ward, how=how, value=_fmt(spec, mine[2]), usual=_fmt(spec, usual),
+                                               lga=lga, lo=_fmt(spec, ranked[-1][2]), hi=_fmt(spec, ranked[0][2]), rank=pos,
+                                               m=len(ranked), state=_fmt(spec, float(state_row[0]))))
+        else:
+            lines.append(t["ward_year_norain"].format(year=y, ward=ward, how=how, value=_fmt(spec, mine[2]), usual=_fmt(spec, usual)))
+    if skipped:
+        lines.append(t["skipped_years"].format(years=", ".join(str(x) for x in skipped), year=y,
+                                               verb=t["skipped_verb"]["one" if len(skipped) == 1 else "many"]))
+    res = {"greenness": "250 m", "flood": "200 m", "flood_map": "375 m", "water": "30 m", "bare": "200 m", "rain": "~9 km"}[key]
+    period = f"{loaded[0]}–{loaded[-1]}" if spec["first"] else "1984–2020"
+    lines.append(budget_block(conn, lang, "lga", lga_pcode, today))
+    lines.append(t["neutral"])
+    source = conn.execute("SELECT source FROM ward_history WHERE measure = %s LIMIT 1", (measure,)).fetchone()[0]
+    lines.append(t["sources"].format(source=source))
+    working = [t["working_measure"].format(label=spec[lang if lang == "ha" else "en"], period=period, res=res)]
+    for lvl, u, name in (("ward", wardcode, ward), ("lga", lga_pcode, lga), ("state", STATE, "Sokoto State")):
+        rows_s = conn.execute("SELECT year, value, n_obs FROM ward_history WHERE measure = %s AND level = %s AND unit = %s "
+                              "AND year > 0 ORDER BY year", (measure, lvl, u)).fetchall()
+        working.append(t["working_series"].format(measure=f"{name}, {measure}", res=res, rows="; ".join(
+            f"{yy} {_fmt(spec, float(v)) if v is not None else '–'} ({n if n is not None else '–'})" for yy, v, n in rows_s)))
+    if flags:
+        working.append(t["working_row"].format(name=ward, code=wardcode, value=_fmt(spec, mine[2] if mine else None),
+                                               n=mine[3] if mine else "–", flag={"below": t["flag_below"], "above": t["flag_above"]}.get(flags.get(wardcode, ""), "")))
+    specs = [{"kind": "area_map", "measure": measure, "key": key, "year": y, "level": "ward", "unit": lga_pcode,
+              "highlight": wardcode}]
+    return AreaAnswer("\n\n".join(x for x in lines if x), True, "\n".join(working), specs=specs, level="ward",
+                      unit=wardcode, measure=measure, year=y)
 
 
 def statewide_totals(conn, year: int | None = None) -> tuple[dict[str, tuple[int, float]], str, int] | None:

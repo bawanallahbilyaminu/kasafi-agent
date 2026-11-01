@@ -273,26 +273,34 @@ BARE_RAMP = ("#f4efe6", "#e4cfae", "#d0a870", "#b07c3c", "#7a4f1d")        # one
 RAIN_RAMP = FLOOD_RAMP
 A = {
     "en": {"title": "{short}, {area}, {year}", "title_noyear": "{short}, {area}",
-           "legend": "Colour: {what} per {unit}, five equal-count classes. Grey hatched: low data or no cropland.",
-           "caption": "{short} by {unit} in {area}{year}: {lo} to {hi}; darkest = highest.",
-           "low": "Low data / no cropland", "ward": "ward", "lga": "LGA",
+           "legend": "Colour: {what} per {unit}, five equal-count classes. Grey hatched: no cropland, low data or no data.",
+           "caption": "{short} by {unit} in {area}{year}: {lo} to {hi} across {valued} of {total} {units}; darkest = highest.{missing}",
+           "missing": " Hatched: {parts}.", "no_crop": "{n} with no cropland in the 2021 land-cover map",
+           "low_data": "{n} with low data", "no_data": "{n} with no data that year", "mine": "Your ward: {ward}",
+           "low": "No cropland / low data / no data", "ward": "ward", "lga": "LGA", "wards": "wards", "lgas": "LGAs",
            "area_lga": "{lga} LGA", "area_state": "Sokoto State",
            "src": "{source}; boundaries GRID3 wards, OCHA COD-AB LGAs."},
     "ha": {"title": "{short}, {area}, {year}", "title_noyear": "{short}, {area}",
-           "legend": "Launi: {what} a kowace {unit}, aji biyar masu yawan daidai. Toka mai layuka: ƙarancin bayanai ko babu gona.",
-           "caption": "{short} a kowace {unit} a {area}{year}: daga {lo} zuwa {hi}; mafi duhu = mafi girma.",
-           "low": "Ƙarancin bayanai / babu gona", "ward": "gunduma", "lga": "ƙaramar hukuma",
+           "legend": "Launi: {what} a kowace {unit}, aji biyar masu yawan daidai. Toka mai layuka: babu gona, ƙarancin bayanai ko babu bayanai.",
+           "caption": "{short} a kowace {unit} a {area}{year}: daga {lo} zuwa {hi} a {units} {valued} cikin {total}; mafi duhu = mafi girma.{missing}",
+           "missing": " Masu layuka: {parts}.", "no_crop": "{n} ba su da gona a taswirar yanayin ƙasa ta 2021",
+           "low_data": "{n} masu ƙarancin bayanai", "no_data": "{n} ba su da bayanai na shekarar", "mine": "Gundumarka: {ward}",
+           "low": "Babu gona / ƙarancin bayanai / babu bayanai", "ward": "gunduma", "lga": "ƙaramar hukuma",
+           "wards": "gundumomi", "lgas": "ƙananan hukumomi",
            "area_lga": "Ƙaramar Hukumar {lga}", "area_state": "Jihar Sokoto",
            "src": "{source}; iyakoki gundumomin GRID3, ƙananan hukumomin OCHA COD-AB."},
 }
 
 
 def area_map(conn, s: dict, lang: str, today: date | None = None) -> MapImage | None:
-    """{"kind": "area_map", "measure", "key", "year", "level": ward | lga, "unit": LGA pcode | NG034}."""
+    """{"kind": "area_map", "measure", "key", "year", "level": ward | lga, "unit": LGA pcode | NG034, "highlight":
+    a ward code to outline (the user's ward)}. Classes come from the values that exist (never NaN: a pandas column
+    of None and floats turns None into NaN, which once printed 'nan' legend classes); the caption says how many
+    units are coloured and why the rest are hatched, from the same coverage count as the answer."""
     import geopandas as gpd
     from shapely import wkb
     from app.maps.render import base, _draw_base
-    from app.place.planner import MEASURES, W as PW, low_data_cut, rows_for
+    from app.place.planner import MEASURES, W as PW, coverage, low_data_cut, rows_for
     from app.sources.lga_names import name_of
     t, pw = A["ha" if lang == "ha" else "en"], PW["ha" if lang == "ha" else "en"]
     key, measure, year, level, unit = s["key"], s["measure"], int(s["year"]), s["level"], s["unit"]
@@ -302,7 +310,8 @@ def area_map(conn, s: dict, lang: str, today: date | None = None) -> MapImage | 
     if not rows:
         return None
     cut = low_data_cut(rows, measure)
-    vals = {code: v for code, _, v, n in rows if v is not None and (n is None or n > cut)}
+    vals = {code: float(v) for code, _, v, n in rows
+            if v is not None and not math.isnan(float(v)) and (n is None or n > cut)}
     if level == "ward":
         q = "SELECT wardcode, name, ST_AsBinary(geom) FROM ward" + (" WHERE lga_pcode = %s" if within else "")
         recs = conn.execute(q, (within,) if within else ()).fetchall()
@@ -310,10 +319,9 @@ def area_map(conn, s: dict, lang: str, today: date | None = None) -> MapImage | 
         recs = conn.execute("SELECT pcode, name, ST_AsBinary(geom) FROM lga").fetchall()
     gdf = gpd.GeoDataFrame({"code": [r[0] for r in recs], "name": [r[1] for r in recs]},
                            geometry=[wkb.loads(bytes(r[2])) for r in recs], crs="EPSG:4326")
-    gdf["value"] = [vals.get(c) for c in gdf["code"]]
     ramp = {"greenness": AREA_RAMP, "flood": FLOOD_RAMP, "flood_map": FLOOD_RAMP, "water": FLOOD_RAMP,
             "bare": BARE_RAMP, "rain": RAIN_RAMP}[key]
-    have = sorted(v for v in gdf["value"] if v is not None)
+    have = sorted(v for c, v in vals.items() if c in set(gdf["code"]))
     if not have:
         return None
     breaks = [have[min(len(have) - 1, int(len(have) * q))] for q in (0.2, 0.4, 0.6, 0.8)]
@@ -325,12 +333,15 @@ def area_map(conn, s: dict, lang: str, today: date | None = None) -> MapImage | 
     fig, ax = plt.subplots(figsize=FIGSIZE)
     fig.subplots_adjust(left=0.02, right=0.98, top=0.86, bottom=0.27)
     for _, r in gdf.iterrows():
-        if r["value"] is None:
+        v = vals.get(r["code"])
+        if v is None:
             gpd.GeoSeries([r.geometry], crs="EPSG:4326").plot(ax=ax, facecolor="#e6e4df", edgecolor="#9a9890", hatch="///",
                                                               linewidth=0.5, zorder=2)
         else:
-            gpd.GeoSeries([r.geometry], crs="EPSG:4326").plot(ax=ax, facecolor=ramp[cls(r["value"])], edgecolor="#ffffff",
+            gpd.GeoSeries([r.geometry], crs="EPSG:4326").plot(ax=ax, facecolor=ramp[cls(v)], edgecolor="#ffffff",
                                                               linewidth=0.7, zorder=2)
+    highlight = s.get("highlight")
+    mine = gdf[gdf["code"] == highlight] if highlight else None
     frame = lgas[lgas["pcode"] == within] if within else lgas
     frame.boundary.plot(ax=ax, color=INK, linewidth=1.4, zorder=4)
     if within:
@@ -338,9 +349,12 @@ def area_map(conn, s: dict, lang: str, today: date | None = None) -> MapImage | 
         pad = max(maxx - minx, maxy - miny) * 0.06
         ax.set_xlim(minx - pad, maxx + pad)
         ax.set_ylim(miny - pad, maxy + pad)
-        # the top three and bottom three named on the map
-        ranked = sorted([r for r in gdf.itertuples() if r.value is not None], key=lambda r: -r.value)
-        for r in ranked[:3] + ranked[-3:]:
+        # the top three and bottom three named on the map, and the user's ward
+        ranked = sorted([r for r in gdf.itertuples() if r.code in vals], key=lambda r: -vals[r.code])
+        named = ranked[:3] + ranked[-3:]
+        if mine is not None and len(mine) and not any(r.code == highlight for r in named):
+            named.append(next(r for r in gdf.itertuples() if r.code == highlight))
+        for r in named:
             c = r.geometry.representative_point()
             ax.annotate(r.name, (c.x, c.y), fontsize=SMALL, color=INK, ha="center", va="center", zorder=7,
                         bbox={"boxstyle": "round,pad=0.2", "fc": "#ffffff", "ec": "none", "alpha": 0.85})
@@ -350,13 +364,18 @@ def area_map(conn, s: dict, lang: str, today: date | None = None) -> MapImage | 
             for r in lgas.itertuples():
                 c = r.geometry.representative_point()
                 ax.annotate(r.name, (c.x, c.y), fontsize=pt(13), color=INK, ha="center", va="center", zorder=7)
+    if mine is not None and len(mine):                      # the user's ward: a thick dark outline, in the legend
+        mine.boundary.plot(ax=ax, color=PIN, linewidth=2.4, zorder=6)
     labels = []
     lo_edges = [have[0]] + breaks
     hi_edges = breaks + [have[-1]]
     for i in range(5):
-        labels.append(f"{spec['fmt'].format(lo_edges[i])} – {spec['fmt'].format(hi_edges[i])}")
+        lo, hi = spec["fmt"].format(lo_edges[i]), spec["fmt"].format(hi_edges[i])
+        labels.append(lo if lo == hi else f"{lo} – {hi}")
     handles = [Patch(facecolor=ramp[i], edgecolor="#ffffff", label=labels[i]) for i in range(5)]
     handles.append(Patch(facecolor="#e6e4df", edgecolor="#9a9890", hatch="///", label=t["low"]))
+    if mine is not None and len(mine):
+        handles.append(Line2D([], [], color=PIN, linewidth=2.4, label=t["mine"].format(ward=str(mine.iloc[0]["name"]))))
     fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.09), ncol=2, fontsize=LEGEND, frameon=False,
                handlelength=1.6, borderaxespad=0.0)
     area = t["area_lga"].format(lga=name_of(unit)) if within else t["area_state"]
@@ -365,9 +384,15 @@ def area_map(conn, s: dict, lang: str, today: date | None = None) -> MapImage | 
     source = conn.execute("SELECT source FROM ward_history WHERE measure = %s LIMIT 1", (measure,)).fetchone()[0]
     unit_word = t[level]
     jpeg = _finish(fig, ax, title, t["legend"].format(what=short, unit=unit_word), t["src"].format(source=source))
+    cov = coverage(conn, level, within, rows, cut)
+    parts = ([t["no_crop"].format(n=cov["no_crop"])] if cov["no_crop"] else []) + \
+            ([t["low_data"].format(n=cov["low"])] if cov["low"] else []) + \
+            ([t["no_data"].format(n=cov["no_data"])] if cov["no_data"] else [])
     caption = t["caption"].format(short=short[0].upper() + short[1:], unit=unit_word, area=area,
                                   year=f", {year}" if year else "", lo=spec["fmt"].format(have[0]),
-                                  hi=spec["fmt"].format(have[-1]))
+                                  hi=spec["fmt"].format(have[-1]), valued=len(have), total=cov["total"],
+                                  units=t["wards" if level == "ward" else "lgas"],
+                                  missing=t["missing"].format(parts="; ".join(parts)) if parts else "")
     return MapImage(jpeg, caption)
 
 

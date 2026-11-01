@@ -33,6 +33,7 @@ from app.geo.facilities import FACILITY as FACILITY_WORD
 from app.geo.facility_info import NAMED, ROUTE_TO, as_facility, card, counted, is_count, lookup
 from app.geo.location import SHARE, Spot, locate_point, pin_of, place_from_text
 from app.place.answer import place_route
+from app.place.planner import area_route
 from app.maps.render import render_specs
 from app.geo.location import memory as location_memory
 from app.guardrails import scope
@@ -232,7 +233,8 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             location_memory.add_pin(key, *pin)                                            # a corner candidate
         if pin and (spot := location_memory.recall(key)) and (q := location_memory.waiting_question(key)):
             before += await _after_location(q, key, lang, settings, facility_fn, spot)    # the question that asked
-            if place_route(q) and not is_facility_query(q):
+            if (place_route(q) or area_route(q, "", {"lga_pcode": spot.lga_pcode, "wardcode": spot.wardcode})) \
+                    and not is_facility_query(q):                 # the farm's record, or 'my ward / my LGA'
                 resume = q
         if not resume:
             return before
@@ -298,7 +300,8 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                 await notify(Out(text))
             # the user's point (memory, 30 min) or LGA on file, for 'here' and hazards; only when there is one
             spot, last = location_memory.recall(key), store.get_last_lga(key)
-            place = ({"lat": spot.lat, "lon": spot.lon, "lga_pcode": spot.lga_pcode, "lga": spot.lga} if spot else
+            place = ({"lat": spot.lat, "lon": spot.lon, "lga_pcode": spot.lga_pcode, "lga": spot.lga, "ward": spot.ward,
+                      "wardcode": spot.wardcode, "ward_likely": spot.ward_likely} if spot else
                      {"lga_pcode": last} if last else None)
             if spot and spot.how == "pin":          # a farm pin: the shape the user gave, or ask when none can be drawn
                 place["shape"] = location_memory.shape(key)
@@ -552,7 +555,8 @@ async def _plot_shape(msg: dict[str, Any], text: str, key: str, lang: str, quest
         clat, clon = S.centroid(shape["geometry"])                      # the plot's centre is now the point
         spot = location_memory.recall(key)
         location_memory.remember(key, Spot(clat, clon, spot.lga_pcode if spot else "", spot.lga if spot else "",
-                                           spot.ward if spot else "", how="pin"))
+                                           spot.ward if spot else "", how="pin", ward_likely=bool(spot and spot.ward_likely),
+                                           wardcode=spot.wardcode if spot else ""))
         return [Out(w["shape_set"].format(ha=f"{shape['area_ha']:.1f}", n=shape["corners"],
                                           next="" if question else w["shape_next"]).strip(), lang=lang)], question
     if not question:
@@ -597,7 +601,8 @@ async def _location(msg: dict[str, Any], key: str, lang: str, store: UserStore, 
         log.info("location: outside Sokoto (pin)")
         return outs + [Out(t("location_outside", lang))]
     return outs + _located(key, lang, store, Spot(pin[0], pin[1], area.lga_pcode, area.lga, area.ward,
-                                                  ward_likely=getattr(area, "ward_likely", False)))
+                                                  ward_likely=getattr(area, "ward_likely", False),
+                                                  wardcode=getattr(area, "wardcode", "")))
 
 
 def _located(key: str, lang: str, store: UserStore, spot: Spot) -> list[Out]:
