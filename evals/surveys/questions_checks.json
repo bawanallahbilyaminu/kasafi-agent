@@ -21,7 +21,7 @@
   "s18": {"any": [["22.5", "19.0"], ["22.5", "19%"]], "all_re": ["(?i)different surveys|not (?:directly )?comparable|differ(?:ent)? (?:in )?(?:method|sample)|MICS.{0,200}NDHS"], "must_not": "(?i)couldn't verify|fell by|dropped by|decline of", "source": "MICS 2021 p337 Sokoto 22.5; NDHS 2024 p73 Sokoto 19.0; two surveys with different samples and methods: side by side, no computed change"},
   "s19": {"any": [["0.409", "90.5", "45.2"]], "must_not": "(?i)couldn't verify", "source": "NBS MPI 2022 Appendix D p123: Sokoto 0.409 (0.391-0.427) 90.5 (88.2-92.8) 45.2 (44.0-46.4)"},
   "s20": {"any": [["90.5"]], "must_not": "(?i)ban iya tabbatar|couldn't verify", "source": "as s19: incidence (H) 90.5%"},
-  "s21": {"any": [["59.1"]], "all_re": ["0\\.239|0\\.23853"], "must_not": "(?i)couldn't verify", "source": "SBS MPI 2025 p13: '59.1% multidimensionally poor', MPI 0.239; p33: headcount ratio 59.1%"},
+  "s21": {"any": [["59.1"]], "must_not": "(?i)couldn't verify|\\b90\\.5\\b.{0,30}SBS|\\b91%.{0,40}SBS", "source": "SBS MPI 2025 p13: '59.1% multidimensionally poor' (MPI 0.239); p33: headcount ratio 59.1%; the headcount alone was asked"},
   "s22": {"all_re": ["(?i)EmONC|Emergency Obstetric", "(?i)Wamakko"], "must_not": "(?i)couldn't verify|Reply .next.|Directions from your current location|^🏥|Primary Health Center\\*?, Primary \\(", "source": "emonc-sokoto (UNFPA EmONC Assessment, Sokoto State): Wamakko on p17-18 (uptake), p40 (8 facilities, 100.0%), the referral tables p320-322; never the registry card"},
   "s23": {"all_re": ["(?i)EmONC|Emergency Obstetric|UNFPA", "(?i)Wamakko"], "must_not": "(?i)ban iya tabbatar|couldn't verify|Rubuta .na gaba.|Hanya daga inda kake", "source": "as s22"}
  }

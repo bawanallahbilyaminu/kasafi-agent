@@ -581,9 +581,28 @@ def named_source_docs(conn: psycopg.Connection, text: str) -> list[str]:
     name = names_a_source(text)
     if not name:
         return []
-    like = f"%{name}%"
-    rows = conn.execute("SELECT id FROM documents WHERE title ILIKE %s OR publisher ILIKE %s", (like, like)).fetchall()
-    return [r[0] for r in rows]
+    out: list[str] = []
+    for alias in SOURCE_ALIASES.get(name.lower(), [name]):
+        like = f"%{alias}%"
+        out += [r[0] for r in conn.execute("SELECT id FROM documents WHERE title ILIKE %s OR publisher ILIKE %s",
+                                           (like, like)).fetchall()]
+    return list(dict.fromkeys(out))
+
+
+# a source's acronym to the names the library's titles and publishers print (a question says 'NBS', the CPI's
+# publisher is 'National Bureau of Statistics')
+SOURCE_ALIASES = {
+    "nbs": ["NBS", "National Bureau of Statistics"], "sbs": ["SBS", "Sokoto State Bureau of Statistics"],
+    "npc": ["NPC", "National Population Commission"], "ncdc": ["NCDC", "Nigeria Centre for Disease Control"],
+    "nimet": ["NiMet", "Nigerian Meteorological"], "nihsa": ["NIHSA", "Hydrological"],
+    "iom": ["IOM", "International Organization for Migration", "Displacement Tracking"], "dtm": ["DTM", "Displacement Tracking", "Population Flow"],
+    "unhcr": ["UNHCR"], "unfpa": ["UNFPA"], "unicef": ["UNICEF"], "who": ["WHO", "World Health Organization"],
+    "world bank": ["World Bank"], "worldbank": ["World Bank"], "ophi": ["OPHI", "Oxford Poverty"],
+    "mics": ["MICS", "Multiple Indicator Cluster Survey"], "ndhs": ["NDHS", "Demographic and Health Survey"],
+    "dhs": ["DHS", "Demographic and Health Survey"], "nlfs": ["NLFS", "Labour Force Survey"],
+    "mpi": ["MPI", "Multidimensional Poverty", "Multi-dimensional Poverty"], "cpi": ["CPI", "Consumer Price Index"],
+    "emonc": ["EmONC", "Emergency Obstetric"], "jips": ["JIPS"], "drc": ["DRC"], "ocha": ["OCHA"], "unocha": ["OCHA"],
+}
 
 
 STATE_ROW = re.compile(r"(?m)^\s*Sokoto\b(?!\s+(?:North|South))\s+[\d(]")
@@ -622,7 +641,8 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
     asked = f"{plan.original} {plan.english_question}"
     money = bool(MONEY_WORDS.search(asked))
     if not money and (named := named_source_docs(conn, asked)):
-        scope = named
+        # the planned documents of that source (the newest CPI edition the planner chose), else all of its documents
+        scope = [d for d in (plan.doc_ids or []) if d in named] or named
     # Stage 1: labelled table rows only ("[Table: Total Expenditure by Administrative Classification]
     # 017200000000 Ministry for Religious Affairs | ..."). Exact facts; whole-page keyword ranking buried
     # them under tables of contents and long project lists.
@@ -1734,7 +1754,7 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
             d = {"summary": "", "items": []}
     elif found == "none" or not cited or not answer_text(d).strip():
         return _not_found(conn, plan, lang, acq, t, gap=gap)
-    added = (f"{recheck_note}\n\n" if recheck_note else "") + _added_note(acq, lang, plan.missing_document)
+    added = (f"{recheck_note}\n\n" if recheck_note else "") + _added_note(acq, lang, plan.missing_document, conn)
     ed = edition_note(latest, lang)
     added += f"{ed}\n\n" if ed else ""
     sources = cited_sources(conn, cited)
@@ -3113,7 +3133,7 @@ def analysis_answer(conn, plan: Plan, res: AnalysisResult, lang: str, t: dict, a
         body += "\n\n" + ((rows_head + "\n") if rows_head else "") + readable_amounts("\n".join(bullets), lang)
     working = w["head"] + "\n" + "\n".join(f"• {x}" for x in res.working)
     note_a = plan.assumption_for(lang)
-    text = ((f"_{note_a}_\n\n" if note_a else "") + _added_note(acq, lang, plan.missing_document) + body + "\n\n"
+    text = ((f"_{note_a}_\n\n" if note_a else "") + _added_note(acq, lang, plan.missing_document, conn) + body + "\n\n"
             + sources_line(evidence, lang) + "\n" + w["offer"])
     log.info("analysis answer: %s, %d facts, %d rows", res.tool, len(res.facts), len(res.rows))
     return Answer(text, True, True, evidence, plan, t, partial=res.reason == "none_tagged", exact=exact,
@@ -3171,10 +3191,34 @@ MISSING_NOTE = {
 }
 
 
-def _added_note(acq: Acquired | None, lang: str, missing: str = "") -> str:
-    """'Found and added …' for a fetched document; for one that couldn't be got, that the answer is from others."""
+COVERED_NOTE = {
+    "en": "The budgets I have cover {first}–{last}; the newest is the {last} approved budget.",
+    "ha": "Kasafin da nake da su sun rufe {first}–{last}; mafi sabo shi ne kasafin {last} da aka amince da shi.",
+}
+
+
+def covered_years(conn, missing: str, lang: str) -> str:
+    """For a budget of a year the library doesn't have (2028 asked, budgets 2024–2026 held): which years it does
+    have, written by code so the answer always says what exists (the generated not_in_data family)."""
+    if conn is None or not re.search(r"(?i)budget|kasafi", missing or ""):
+        return ""
+    asked = [int(y) for y in _YEAR.findall(missing or "")]
+    try:
+        years = sorted({int(r[0]) for r in conn.execute(
+            "SELECT year FROM documents WHERE category = 'budget' AND year IS NOT NULL").fetchall()})
+    except Exception:              # noqa: BLE001 - no documents table (tests)
+        return ""
+    if not years or not asked or any(y in years for y in asked):
+        return ""
+    return COVERED_NOTE.get(lang, COVERED_NOTE["en"]).format(first=years[0], last=years[-1])
+
+
+def _added_note(acq: Acquired | None, lang: str, missing: str = "", conn=None) -> str:
+    """'Found and added …' for a fetched document; for one that couldn't be got, that the answer is from others
+    (and, for a budget year the library doesn't hold, which years it does)."""
     if acq is not None and not getattr(acq, "doc_id", None) and missing:
-        return MISSING_NOTE.get(lang, MISSING_NOTE["en"]).format(doc=missing[:120]) + "\n\n"
+        covered = covered_years(conn, missing, lang)
+        return MISSING_NOTE.get(lang, MISSING_NOTE["en"]).format(doc=missing[:120]) + (f" {covered}" if covered else "") + "\n\n"
     if not acq or getattr(acq, "status", "") != "indexed":
         return ""
     host = urlsplit(acq.url).hostname or ""

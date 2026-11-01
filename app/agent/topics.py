@@ -592,6 +592,21 @@ def printed_words(phrase: str, text: str) -> bool:
 SOKOTO_ROW = re.compile(r"(?i)\bsokoto\s+[−–-]?\d[\d.,]*\s+[−–-]?\d[\d.,]*\s+[−–-]?\d")
 
 
+_KEY_ROWS = re.compile(r"(?im)^\s*(?:Sokoto(?!\s+(?:North|South))|Total|Nigeria|North West|North-West)\b[^\n]*\d[^\n]*$")
+
+
+def page_excerpt(text: str, limit: int | None = None) -> str:
+    """The page for the reader: its first `limit` characters, and, when the page is longer, the rows the answer
+    needs that fell past the cut (the Sokoto, Total, Nigeria and North West rows: NDHS 2024 p258 prints Sokoto's
+    4+ ANC visits row after the zones, beyond the cut, and the reader said the page had no Sokoto figure)."""
+    limit = limit or PAGE_CHARS
+    head = text[:limit]
+    if len(text) <= limit:
+        return head
+    rows = [m.group(0).strip() for m in _KEY_ROWS.finditer(text[limit - 200:]) if m.group(0).strip() not in head]
+    return head + ("\n…\n" + "\n".join(dict.fromkeys(rows)) if rows else "")
+
+
 def quoted_from(value: str, page_text: str, topic: Topic, own: Publisher, own_year: int | None = None) -> str:
     """The registry publisher whose report the text just before the figure names, when it isn't the document's
     own ('According to the 2022 Nigeria Multidimensional Poverty Index, Sokoto ... 91%', 'the 2022 National MPI'):
@@ -713,7 +728,7 @@ async def fact_cards(conn: psycopg.Connection, src: SourceResult, topic: Topic, 
              if p.definition_note else "")
     if want:
         extra += f"Copy first, if printed for Sokoto: {want}. "
-    body = "\n\n".join(f"--- page {n} ---\n{continued_from(conn, src.doc_id, n, t)}{t[:PAGE_CHARS]}"
+    body = "\n\n".join(f"--- page {n} ---\n{continued_from(conn, src.doc_id, n, t)}{page_excerpt(t)}"
                        for n, t in pages.items())
     messages = [{"role": "system", "content": CARD_SYSTEM.format(extra=extra)},
                 {"role": "user", "content": f"QUESTION: {question}\nDOCUMENT: {src.title}\n\n{body}"}]
@@ -779,6 +794,7 @@ W = {
            "in_library": "In Kasafi's library now: {titles}.", "found_web": "Also found on partner websites "
            "(not read yet): {titles}.",
            "cited": "{origin}, as cited in {pub}",
+           "baseline": "an earlier survey's {year} figure",
            "change": "📈 Change in the {what}: {a} ({pa}) → {b} ({pb}): {direction} by {diff} (Kasafi's calculation).",
            "fell": "down", "rose": "up", "unchanged": "no change", "points": "percentage points",
            "relative": "{pct}% of the earlier value",
@@ -812,6 +828,7 @@ W = {
            "in_library": "A ɗakin karatun Kasafi yanzu: {titles}.", "found_web": "An kuma samu a shafukan abokan "
            "hulɗa (ba a karanta ba tukuna): {titles}.",
            "cited": "{origin}, kamar yadda {pub} ya ruwaito",
+           "baseline": "adadin {year} na wani binciken da ya gabata",
            "change": "📈 Canjin {what}: {a} ({pa}) → {b} ({pb}): {direction} da {diff} (lissafin Kasafi).",
            "fell": "ya ragu", "rose": "ya ƙaru", "unchanged": "bai canza ba", "points": "maki na kaso",
            "relative": "{pct}% na adadin farko",
@@ -870,9 +887,19 @@ def attribute_quotes(cards: list[Card]) -> list[Card]:
 def source_label(c: Card, lang: str) -> str:
     """Who the figure is from: its publisher, or the original publisher 'as cited in' the document that quotes it
     (never the quoting document's own figure)."""
+    w = W.get(lang, W["en"])
     if cited_from_other(c):
-        return W.get(lang, W["en"])["cited"].format(origin=c.based_on, pub=short_pub(c.publisher))
+        return w["cited"].format(origin=c.based_on, pub=short_pub(c.publisher))
+    if quoted_baseline(c):        # a 2022 baseline printed in a 2025 report is an earlier survey's, even unlabelled
+        return w["cited"].format(origin=w["baseline"].format(year=card_year(c)), pub=short_pub(c.publisher))
     return short_pub(c.publisher)
+
+
+def quoted_baseline(c: Card) -> bool:
+    """The figure is two or more years older than the edition printing it and names no source: a baseline quoted
+    from an earlier survey (SBS MPI 2025 p36's '2022 baseline 91%' is NBS's), never the report's own figure."""
+    editions = [int(y) for y in _YEAR.findall(c.edition or "")]
+    return bool(editions) and 0 < card_year(c) <= max(editions) - 2
 
 
 def quoted_earlier(c: Card) -> bool:
@@ -1271,6 +1298,9 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
             return src
 
         tasks = {asyncio.ensure_future(one(p)): p for p in primary + [c for c in context if not c.domains]}
+        if not tasks:                 # no publisher to read (1 Nov 2026: 'MICS 2021 and NDHS 2024' on a topic with
+            log.info("topic %s: no publisher to read; the document path answers", topic_id)   # neither): fall through
+            return TopicResult(topic_id, "", False, False, [], [], [], {"topic": time.perf_counter() - t0})
         done, pending = await asyncio.wait(tasks, timeout=budget / 2)
         if pending and notify:
             await notify(STILL.get(lang, STILL["en"]).format(
