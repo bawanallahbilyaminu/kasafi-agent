@@ -1005,6 +1005,12 @@ TIMED_OUT = {
 }
 
 
+def place_question(question: str, english: str = "") -> bool:
+    """A place-history question (a pin's record, or a ward/LGA/state comparison): answered in code, never by a
+    clarifying question from the planner."""
+    return bool(place_route(question, english) or area_route(question, english))
+
+
 async def answer_question(question: str, lang: str, conn: psycopg.Connection, **kw) -> Answer:
     """The loop around the paths: never crash on a malformed model reply (after one retry, ask the user to
     rephrase); keep a structured partial answer when the text paths do no better; say where a figure exists
@@ -1053,7 +1059,9 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         t["plan"] = time.perf_counter() - t0
         if box is not None:
             box["plan"] = plan            # the loop's budget can stop us; it keeps what was verified
-        if plan.clarify and plan.followup == "none":          # two readings, both can't be shown: ask
+        # two readings, both can't be shown: ask; never for a place-history question (the planner may ask "where is
+        # your farm?" without knowing the pin travels with the question: the place path asks for one itself)
+        if plan.clarify and plan.followup == "none" and not place_question(question, plan.english_question):
             return Answer(plan.clarify["question"], False, True, plan=plan, timings=t,
                           clarify=plan.clarify["options"])
         prev = history[-1] if history else None

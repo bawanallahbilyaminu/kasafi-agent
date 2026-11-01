@@ -269,3 +269,13 @@ def test_memory_forgets_shapes_and_pins_with_the_rest() -> None:
     m.remember_shape("k", {"method": "corners"})
     m.forget("k")
     assert m.shape("k") is None
+
+
+def test_a_place_question_is_never_turned_into_a_clarifying_question() -> None:
+    """The planner once replied 'Where is your farm?' to a pinned question (speed eval, 1 Nov): the place path
+    asks for the pin itself, so a planner clarify never pre-empts it."""
+    from app.agent.answer import place_question
+    assert place_question("How green was my farm in 2024?")
+    assert place_question("Which wards of Wurno LGA were greenest in 2024?")
+    assert not place_question("What is the 2026 budget for the Ministry of Agriculture?")
+    assert not place_question("How many IDPs are in Gada LGA?")
