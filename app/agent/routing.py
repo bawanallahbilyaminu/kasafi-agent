@@ -104,6 +104,23 @@ def own_source(text: str, own: tuple[str, ...]) -> bool:
     return bool(found) and found <= {o.lower() for o in own}
 
 
+OTHER_SUBJECT = re.compile(
+    r"(?i)\b(?:medical\s+officers?|doctors?|physicians?|nurses?|midwi(?:fe|ves)|chews?|chos?|community\s+health\s+"
+    r"(?:extension\s+)?(?:workers?|officers?)|health\s+(?:workers?|personnel|staff|workforce)|staff(?:ing|ed)?|"
+    r"workforce|human\s+resources?(?:\s+for\s+health)?|hrh|personnel|cadres?|pharmacists?|pharmacy\s+technicians?|"
+    r"lab(?:oratory)?\s+(?:scientists?|technicians?)|employees|workers|equipment|equipped|beds?|ambulances?|"
+    r"generators?|solar|drugs?|medicines?|vaccines?|commodities|supplies|services?|deliveries|patients?|visits?|"
+    r"utili[sz]ation|budget\w*|fund\w*|allocat\w*|expenditure|spending|cost\w*|likitoci|likita|"
+    r"ma['’]?aikata(?:n\s+lafiya)?|nas(?:o?shi)?|ungozoma|kayan\s+aiki|magunguna|kasafi\w*)\b")
+
+
+def other_subject(text: str) -> bool:
+    """The question counts or asks about something AT facilities (staff cadres, equipment, services, money), not the
+    facilities themselves: 'How many medical officers do Sokoto's primary health facilities need?' is a staffing
+    question for the planner, never the registry's '934 health facilities' (2 Nov 2026)."""
+    return bool(OTHER_SUBJECT.search(text or ""))
+
+
 def facility_intent(text: str) -> bool:
     """A named-facility shortcut (the registry card or the route to it) needs the question's own words to ask
     about a place: where it is, how far, directions, is it open, what about it."""

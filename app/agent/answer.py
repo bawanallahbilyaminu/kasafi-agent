@@ -54,7 +54,7 @@ from app.hazards.answer import MEASURE_LAYERS, days_asked, hazard_answer, layers
 from app.hazards.summary import hazard_summary
 from app.place.answer import place_answer, place_route
 from app.place.planner import area_answer, area_route
-from app.agent.routing import document_question, own_source
+from app.agent.routing import document_question, other_subject, own_source
 from app.agent.topics import note_of as topic_note
 from app.agent.topics import local_documents as topics_local
 from app.agent.topics import named_publishers
@@ -2459,6 +2459,23 @@ OFF_TOPIC = {
 }
 
 
+COMMITMENT = re.compile(r"(?i)\b(?:target\w*|plan(?:s|ned|ning)?|propos\w*|commit\w*|goals?|aims?|objectives?|"
+                        r"strateg\w*|interventions?|activit\w*|priorit\w*|will|renovat\w*|construct\w*|rehabilitat\w*|"
+                        r"upgrad\w*|recruit\w*|train\w*|procure\w*|cost(?:ed|ing)?|outputs?|milestones?|"
+                        r"shiri\w*|manufa|niyya\w*|burin)\b")
+
+
+def own_commitments(conn, text: str, cited: list[Evidence]) -> bool:
+    """A plan or policy cited for what it plans, targets or commits to (the 2025 health AOP's PHC renovations):
+    it is the primary source of those, whatever a survey says about the topic. A plan cited for a statistic it
+    quotes from elsewhere is not (that note still applies)."""
+    if conn is None or not cited or not COMMITMENT.search(text or ""):
+        return False
+    cats = dict(conn.execute("SELECT id, category FROM documents WHERE id = ANY(%s)",
+                             (list({e.doc_id for e in cited}),)).fetchall())
+    return any(cats.get(e.doc_id) in PLAN_CATEGORIES for e in cited)
+
+
 def off_topic_note(conn, plan: Plan, question: str, cited: list[Evidence], lang: str) -> str:
     """A statistics answer from documents none of whose publishers is a primary source for the topic (the MPI for
     an IDP count): said before the answer, never left to look like the figure."""
@@ -2467,6 +2484,8 @@ def off_topic_note(conn, plan: Plan, question: str, cited: list[Evidence], lang:
     named = named_source_docs(conn, f"{question} {plan.english_question}")   # by title or publisher, with aliases
     if named and any(e.doc_id in named for e in cited):
         return ""                                  # the source the question asked for is the one cited: no note
+    if own_commitments(conn, f"{question} {plan.english_question}", cited):
+        return ""                                  # a plan's own targets: it is their primary source (2 Nov 2026)
     topic = registry().topics.get(detect_topic(f"{question} {plan.english_question}") or plan.topic)
     if not topic or topic.answer_pattern != "multi_source":
         return ""
@@ -2495,6 +2514,8 @@ def facility_route(question: str, plan: Plan, conn, lang: str) -> str:
     text = f"{question} {plan.english_question}"
     measures = set(plan.need.measures) if plan.need else set()
     if MONEY_WORDS.search(text) or document_question(question):     # a report named: its findings, not the registry
+        return ""
+    if other_subject(question):         # staff, equipment, services AT facilities: the planner's (app/agent/routing.py)
         return ""
     if is_count(text) or "facility_count" in measures and is_count(f"how many {text}"):
         return count_answer(conn, text, lang)

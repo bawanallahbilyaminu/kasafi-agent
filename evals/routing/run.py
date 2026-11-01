@@ -29,7 +29,7 @@ def route_for(question: str, settings, conn=None, place: dict | None = None) -> 
     app/whatsapp/conversation.py (handle) then app/agent/answer.py (_answer_question) in their order; the
     structured budget tools and the topic path are the planner's own and count as 'planner'."""
     from app.agent.answer import MONEY_WORDS
-    from app.agent.routing import document_question, facility_intent, own_source
+    from app.agent.routing import document_question, facility_intent, other_subject, own_source
     from app.alerts.signup import INTENT, MENU, STOP
     from app.geo.facilities import is_facility_query
     from app.geo.facility_info import NAMED, ROUTE_TO, find_by_name, is_count
@@ -50,7 +50,7 @@ def route_for(question: str, settings, conn=None, place: dict | None = None) -> 
     if MAP_ONLY.match(q):
         return "map"
     doc = document_question(q)
-    if settings.kasafi_shortcut_facilities and not doc:
+    if settings.kasafi_shortcut_facilities and not doc and not (other_subject(q) and not is_facility_query(q)):
         if is_count(q):
             return "facility_count"
         if (FACILITY_WORD.search(q) or ROUTE_TO.search(q)) and (facility_intent(q) or ROUTE_TO.search(q)) \

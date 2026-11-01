@@ -34,7 +34,7 @@ from app.geo.facility_info import NAMED, ROUTE_TO, as_facility, card, counted, i
 from app.geo.location import SHARE, Spot, locate_point, pin_of, place_from_text
 from app.place.answer import place_route
 from app.place.planner import area_route
-from app.agent.routing import document_question, facility_intent
+from app.agent.routing import document_question, facility_intent, other_subject
 from app.privacy import strip_location
 from app.maps.render import render_specs
 from app.geo.location import memory as location_memory
@@ -759,6 +759,8 @@ async def _facilities(text: str, key: str, lang: str, store: UserStore, settings
                                        key)
     if document_question(text):          # a publisher, survey or report named: the document path answers
         return None                      # (the planner may add registry data as a supplement; app/agent/routing.py)
+    if other_subject(text) and not is_facility_query(text):   # staff, equipment, services, money AT facilities
+        return None                      # are the planner's (the nearest-facility search still takes 'nearest')
     if is_count(text):                   # 'how many PHCs in Sokoto?': the registry's count
         return [Out(await asyncio.to_thread(counted, settings, text, lang), lang=lang)]
     if not is_facility_query(text) and (named := await _named_facility(text, key, lang, settings, facility_fn, spot)):

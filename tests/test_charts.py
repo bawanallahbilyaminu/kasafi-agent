@@ -183,3 +183,25 @@ def test_every_acronym_in_an_answer_is_printed_in_its_cited_pages() -> None:
     assert acronym_problems("₦1.29 billion for NPHCDA, SOCHEMA and SOSMEA in the 2022 budget [1].", ev) == []
     assert acronym_problems("₦1.29 billion for SPHCDA, SOCHEMA and SOSMEA [1].", ev) == ["SPHCDA"]
     assert acronym_problems("Each LGA reports in Q2; NGN figures [1].", ev) == []
+
+
+# --- 5. routing and the primary-source note (2 Nov 2026) ------------------------------------------------------------
+
+@pytest.mark.parametrize("q, other", [
+    ("How many medical officers do Sokoto's primary health facilities need, and how many are there?", True),
+    ("Likitoci nawa ne a asibitocin Sokoto?", True), ("Ma'aikatan lafiya nawa ake bukata a cibiyoyin lafiya?", True),
+    ("How many health facilities have a functional ambulance?", True),
+    ("How many primary health centres are there in Wamakko?", False), ("Asibitoci nawa ne a Kebbe?", False),
+])
+def test_staff_equipment_and_services_at_facilities_are_not_facility_counts(q, other) -> None:
+    from app.agent.routing import other_subject
+    assert other_subject(q) is other
+
+
+def test_a_plan_is_the_primary_source_for_its_own_targets(conn) -> None:
+    from app.agent.answer import own_commitments
+    ev = [Evidence(1, "health-aop-2025", "2025 Health AOP", 2025, 40, "text", "Renovation of 50 PHCs")]
+    assert own_commitments(conn, "How many PHCs does the 2025 health plan target for renovation?", ev)
+    assert not own_commitments(conn, "What is the maternal mortality ratio in Sokoto?", ev)      # a statistic
+    ev2 = [Evidence(1, "ndhs-2024", "NDHS 2024", 2024, 40, "text", "x")]
+    assert not own_commitments(conn, "How many PHCs does the plan target for renovation?", ev2)

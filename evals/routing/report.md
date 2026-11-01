@@ -1,6 +1,6 @@
-# Routing eval (in code), 2026-11-01
+# Routing eval (in code), 2026-11-02
 
-56 cases, **0 wrong**, 0 skipped (no facility registry).
+64 cases, **0 wrong**, 0 skipped (no facility registry).
 
 | id | lang | expected | got | question |
 |---|---|---|---|---|
@@ -60,3 +60,11 @@
 | r54 | en | planner | planner | What did the UN flood map show for Goronyo in 2024? |
 | r55 | ha | planner | planner | Asibiti nawa ne a Ƙaramar Hukumar Wamakko a cewar rahoton UNFPA? |
 | r56 | en | map | map | Show me the map |
+| r57 | en | planner | planner | How many medical officers do Sokoto's primary health facilities need, and how many are there? |
+| r58 | en | planner | planner | How many nurses and midwives work in the PHCs of Wamakko? |
+| r59 | en | planner | planner | How many health facilities have a functional ambulance? |
+| r60 | en | planner | planner | How many CHEWs are in the primary health care centres in Sokoto? |
+| r61 | ha | planner | planner | Likitoci nawa ne a asibitocin sha-ka-tafi na Sokoto? |
+| r62 | ha | planner | planner | Ma'aikatan lafiya nawa ake bukata a cibiyoyin kiwon lafiya na Dange Shuni? |
+| r63 | en | facility_count | facility_count | How many primary health centres are there in Wamakko? |
+| r64 | ha | facility_count | facility_count | Asibitoci nawa ne a Kebbe? |
