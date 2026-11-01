@@ -35,6 +35,10 @@ from that publisher's own documents.
 
 ## What works today (1 Nov 2026)
 
+Checked against the deployed release `ca5d5ee`, live since 1 Nov 2026 (evening, Lagos time); `/version` on the
+server returns the serving commit. "Live" below means on that release, through the pre-deploy gate (see *How we
+evaluate*); each row is a capability this release serves, not a measurement of accuracy in the field.
+
 | Capability | Status |
 | --- | --- |
 | Budget and budget-performance answers, typed or by Hausa voice note, with citations, evidence crops and *show working* | Live |

@@ -681,7 +681,7 @@ All repository links below are pinned to the reviewed commit, except the explici
 ## Response to the follow-up review (Bilyaminu Bawan Allah / Kasafi, 1 Nov 2026)
 
 Each Appendix A probe was turned into a failing regression test first, then fixed, in the order given. Deployed as
-`DEPLOYED_COMMIT` on 1 Nov 2026 (`/version` confirmed), after the unit suite (1,620 tests), the end-to-end
+`ca5d5ee` on 1 Nov 2026 (`/version` confirmed), after the unit suite (1,620 tests), the end-to-end
 conversation suite and the pre-deploy evaluation sets at 0 wrong: fresh draw 52, topics 12, patterns 22, advisories 5,
 guardrails 104, place history 103 in code and 103 through the pipeline, the new routing set 56 and the new survey set
 23. Evaluation spend on the day was $13.76 under a one-off $14 cap (the default cap is $5).
