@@ -126,15 +126,46 @@ The registry drives three things:
 
 A question that names a publisher ("according to IOM") is answered from that publisher alone. A short dashboard whose text layer doesn't name Sokoto is read with OCR, because UNHCR prints its state figures only in a map. The Sokoto State Bureau of Statistics is a crawled library: its listing is read weekly.
 
+## Place history
+
+A farmer sends a pin (or the corners of the plot) and asks "how green was my farm in 2024?", "has it flooded?",
+"is bare soil spreading?"; a planner asks the same of a ward, an LGA or the state. Kasafi answers from the
+satellite record, in code, with no model in the loop (`app/place/`, design and findings in
+[`docs/place-history.md`](docs/place-history.md)).
+
+- **Sources** (all free, read through Microsoft's Planetary Computer unless noted): Copernicus Sentinel-2 L2A
+  (greenness NDVI and water NDWI at 10 m, bare soil BSI and the cloud mask at 20 m, 2017→), Sentinel-1 RTC radar
+  (open water under −15 dB VV and 3 dB under the plot's own dry-season reading; July–October passes, 2017→), JRC
+  Global Surface Water v1.3 (water occurrence 1984–2020, 30 m; also the water-body layer, named from
+  OpenStreetMap), ESA WorldCover 2021 (land cover; cropland mask), MODIS 13Q1 (250 m greenness since 2001 for
+  wards and LGAs), UNOSAT's satellite flood maps on HDX (VIIRS 375 m; October 2022, September and November 2024;
+  CC BY-SA), Open-Meteo's archive (rain, ~9 km), SAM 3.1 on the Meta Model API (the plot outline from a
+  Sentinel-2 chip), and the budget core for the LGA's agriculture, irrigation and erosion lines.
+- **Resolution is stated in every answer**, and so is what each source misses: radar sees only smooth open water
+  (floods under crops read bright), optical images miss water under cloud, the UN maps are generous at 375 m,
+  a year with too few clear images is said to be that and never filled. Flood answers lead with the official UN
+  map and give radar as a lower bound. Nothing is ever "never flooded": only "no flood water seen", with the
+  reason.
+- **Observation, not advice.** Kasafi reports what the images show against the plot's own years and that season's
+  rain; it names no cause, no input, no variety and no date, and refers farmers to the ADP extension service. It
+  refuses land ownership, boundaries, certificates, grazing routes and anything about leaving a place. Outlines
+  and ward figures are approximate and never a boundary.
+- **Privacy.** Coordinates, plot shapes and corner pins stay in the server's memory for at most 30 minutes; the
+  database caches satellite values per ~100 m cell and year, never per user; only the LGA is stored on the user
+  record. Precomputed ward and LGA figures carry no personal data at all.
+
 ## Status
 
 Work in progress. See [`docs/architecture.md`](docs/architecture.md) for the design and build plan.
 
-**Roadmap (after the hackathon):** place history (`docs/place-history.md`) adds the JRC yearly water history
-(1984–2024, published only through Google Earth Engine, whose non-commercial terms don't fit a startup product:
-a commercial Earth Engine licence or a self-hosted copy), extends the Sentinel-1 radar flood check from the plot
-to whole wards, and moves the weather and rainfall layers from Open-Meteo's free non-commercial tier to a paid key
-(the hazard answers and the place history use its forecast and archive APIs under those terms today).
+**Roadmap (after the hackathon):** place history adds the JRC yearly water history (1984–2024, published only
+through Google Earth Engine, whose non-commercial terms don't fit a startup product: a commercial Earth Engine
+licence or a self-hosted copy); Sentinel-1 flooded-vegetation detection (VV/VH and the temporal change under
+crops, so floods under standing rice stop being a blind spot) at plot and ward level; credit and insurance
+verification with partners (a lender or insurer checks a farmer's plot history with the farmer's consent, as a
+signed report, never a score); and the weather and rainfall layers move from Open-Meteo's free non-commercial
+tier to a paid key (the hazard answers and the place history use its forecast and archive APIs under those terms
+today).
 
 ## Built during the hackathon
 
