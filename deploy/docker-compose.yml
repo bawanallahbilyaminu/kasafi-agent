@@ -30,6 +30,7 @@ services:
       KASAFI_STATE_DB: /data/kasafi.db   # consent, language, limits (no phone numbers)
       KASAFI_FETCH_DIR: /data/fetched    # PDFs fetched live by the self-growing library (public documents)
       KASAFI_PDF_DIR: /data/pdfs         # source PDFs for evidence crops (deploy/deploy.sh --sync-pdfs)
+      KASAFI_BACKUP_DIR: /data/backups   # daily sqlite backups of the user store, next to the pg dumps taken before deploys
       KASAFI_PLACE_DIR: /data/place      # UNOSAT flood maps (deploy/deploy.sh --sync-place)
       KASAFI_GEO_DIR: /data/geo          # the water-body layer and names (deploy/deploy.sh --sync-place)
       # internal partner hints (deploy/deploy.sh --sync-hints; never in git or the image): only choose partner

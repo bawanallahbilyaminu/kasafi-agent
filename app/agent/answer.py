@@ -59,7 +59,7 @@ from app.agent.topics import local_documents as topics_local
 from app.agent.topics import named_publishers
 from app.agent.topics import short_pub
 from app.agent.budget_query import QueryResult, context_text, lga_in, render_working, run_budget_query
-from app.agent import trace
+from app.agent import attribution, trace
 from app import usage
 from app.agent.category import TOP_UNITS, CategoryResult, pct, run_category
 from app.agent.calculate import MIXED, CalcError, Calculation, MixedBases, offer_text, validate
@@ -443,6 +443,10 @@ class Answer:
     quotes: str = ""                                    # verbatim quotes, sent on "quotes" / "nuna rubutun"
     needs_pin: bool = False                             # a place-history question with no point known: ask for the pin
     needs_size: bool = False                            # no outline could be drawn: ask the farm's size or its corners
+    # what the checks established (app/agent/attribution.py): attribution checked | figures checked |
+    # calculation checked | unsupported; `verified` stays the one-word summary (False only for unsupported)
+    verification: str = ""
+    attribution: list[str] = field(default_factory=list)   # the binding problems found, for show working and the trace
 
 
 def load_catalog(conn: psycopg.Connection) -> list[dict]:
@@ -1065,6 +1069,7 @@ async def answer_question(question: str, lang: str, conn: psycopg.Connection, **
     a = keep_better(a, plan.held if plan is not None else None)
     if not a.found and not a.clarify and plan is not None and (gap := level_gap(plan.need, lang)):
         a.text = f"{a.text}\n\n{gap}"
+    settle_verification(a, lang)          # the verification state, in show working and the trace
     return a
 
 
@@ -1641,6 +1646,17 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
                           feedback=f"These figures are not in the cited evidence: {', '.join(bad)}. "
                                    "Use only figures copied exactly from the evidence, and cite them.")
         bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)
+    # every figure bound to its row: the entity named next to it, the year, the unit and the kind (external review,
+    # finding 01); a contradiction is composed again with the mismatch named, then refused
+    names = [x for e in (plan.need.entities if plan.need else []) for x in (e.resolved, e.name, e.code) if x]
+    att = attribution.bind(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], names)
+    if not att.ok and not bad and _found(d) != "none":
+        t["compose_retry"] = t.get("compose_retry", 0.0) + 1.0
+        d = await compose(question, lang, plan, evidence, client, settings, context=context, second=second,
+                          feedback=f"These figures are attributed to the wrong row: {att.feedback()}. Give each figure "
+                                   "exactly as its own row prints it, for the entity, year and column that row names.")
+        bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)
+        att = attribution.bind(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], names)
     t["answer"] = time.perf_counter() - t0
 
     cited = sorted({by_n[n].n: by_n[n] for n in d.get("cited") or [] if n in by_n}.values(), key=lambda e: e.n)
@@ -1655,10 +1671,12 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
     ed = edition_note(latest, lang)
     added += f"{ed}\n\n" if ed else ""
     sources = cited_sources(conn, cited)
-    if bad:
-        log.warning("answer had unverifiable figures after retry: %d", len(bad))
+    if bad or (not att.ok and budget is None):
+        log.warning("answer refused: %d unverifiable figure(s), attribution %s: %s", len(bad), att.state,
+                    "; ".join(att.problems[:3]))
         return Answer(f"{added}{UNVERIFIED.get(lang, UNVERIFIED['en'])}\n\n{format_citations(cited, lang)}",
-                      True, False, cited, plan, t, acquired=acq, latest=latest, sources=sources)
+                      True, False, cited, plan, t, acquired=acq, latest=latest, sources=sources,
+                      verification="unsupported", attribution=[f"missing: {x}" for x in bad] + att.problems)
     note = plan.assumption_for(lang)
     q_all = f"{question} {plan.english_question}"
     shown = {**d, "summary": drop_verdicts(str(d.get("summary") or d.get("answer") or ""), q_all),
@@ -1682,7 +1700,27 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
         body = f"{off}\n\n{body}"
     return Answer(f"{body}\n\n{tail}", True, True, cited, plan, t,
                   partial=found == "partial", exact=exact, acquired=acq, latest=latest, sources=sources,
-                  offer=offer, budget=budget, working=working)
+                  offer=offer, budget=budget, working=working,
+                  verification="calculation checked" if budget is not None else att.state, attribution=att.problems)
+
+
+def settle_verification(a: "Answer", lang: str) -> None:
+    """Every answer carries its verification state: the page path sets it from the binding; a structured path
+    (rows and arithmetic in code) is 'calculation checked'; the state goes into show working and the trace."""
+    if not a.verification:
+        if not a.verified:
+            a.verification = "unsupported"
+        elif a.lines is not None or a.budget is not None or a.category is not None or a.analysis is not None \
+                or (a.exact and not a.cited):
+            a.verification = "calculation checked"
+        elif a.topic is not None or a.cited:
+            a.verification = "figures checked"
+        else:
+            a.verification = "calculation checked" if a.found else "unsupported"
+    if a.found and a.verification:
+        n = len([b for b in attribution.claims_from(a.exact or a.text)]) if a.verification != "calculation checked" else 0
+        line = attribution.state_line(a.verification, lang, n, a.attribution)
+        a.working = f"{a.working}\n\n{line}" if a.working else line
 
 
 def scope_notes(conn, cited: list[Evidence]) -> str:

@@ -89,8 +89,8 @@ class AreaAnswer:
 
 W = {
     "en": {
-        "head": "*{label}: {area}, {year}*",
-        "head_noyear": "*{label}: {area}*",
+        "head": "*{label}: {area}, {year}* — experimental",
+        "head_noyear": "*{label}: {area}* — experimental",
         "area_lga": "wards of {lga} LGA", "area_state": "the 23 LGAs of Sokoto State", "area_state_wards": "the 244 wards of Sokoto State",
         "of_lga": "{lga} LGA's", "of_state": "Sokoto State's",
         "summary": "Across {area}, the {year} {short} ranged from {lo} ({lo_unit}) to {hi} ({hi_unit}); the median was "
@@ -161,8 +161,8 @@ W = {
         "and": " and ", "ward": "ward", "wards": "wards", "lga": "LGA", "lgas": "LGAs",
     },
     "ha": {
-        "head": "*{label}: {area}, {year}*",
-        "head_noyear": "*{label}: {area}*",
+        "head": "*{label}: {area}, {year}* — na gwaji",
+        "head_noyear": "*{label}: {area}* — na gwaji",
         "area_lga": "gundumomin Ƙaramar Hukumar {lga}", "area_state": "ƙananan hukumomi 23 na Jihar Sokoto",
         "area_state_wards": "gundumomi 244 na Jihar Sokoto",
         "of_lga": "Ƙaramar Hukumar {lga}", "of_state": "Jihar Sokoto",

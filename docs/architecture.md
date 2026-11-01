@@ -23,7 +23,7 @@ WhatsApp webhook (FastAPI on VPS)
  └─ Agent (Muse Spark via Meta Model API; Muse Spark Open via Baseten when available)
       1. PLAN       break question into sub-questions; list documents needed (max 3–4)
       2. FIND       for each doc: local index → partner APIs → web search (allowlist)
-      3. ACQUIRE    if not indexed: download → sandbox parse → read relevant pages (vision) → index
+      3. ACQUIRE    if not indexed: download → resource-limited subprocess parse → read relevant pages (vision) → index
       4. EVIDENCE   extract facts into an evidence list: {doc_id, page, quote/value, unit, year}
       5. ANSWER     write ONLY from the evidence list; every sentence cites [n]
       6. VERIFY     second pass checks each claim against its quote; drop/flag anything unsupported
@@ -37,7 +37,7 @@ WhatsApp webhook (FastAPI on VPS)
 |---|---|
 | `search_index(query, filters)` | Search indexed documents (chunks with page numbers). |
 | `find_document(description)` | Local index → ReliefWeb API / World Bank Documents API (partner reports) → Serper web search limited to allowlisted domains (`site:` + `filetype:pdf`, `gl=ng`). Returns candidates with URLs. |
-| `fetch_and_index(url)` | Allowlist check → download (size limit) → sandboxed parse → page text (vision OCR for scanned pages) → index with provenance. |
+| `fetch_and_index(url)` | Allowlist check → download (size limit) → parse in a resource-limited subprocess → page text (vision OCR for scanned pages) → index with provenance. |
 | `query_table(doc_id, filters)` | Structured budget lines extracted from tables (sector, MDA, LGA, year, approved/revised/released/spent, unit). |
 | `analysis(tool, ...)` | On the structured core (`budget_items`, `projects`, `perf_items`, built and reconciled at indexing by `app/retrieval/entities.py`): `project_status`, `lga_projects`, `ranking`, `mda_profile`, `function_profile`, `revenue`. Counts and sums in SQL; the reply is written by code from the facts (`app/agent/analysis.py`). |
 | `calculate(expression, inputs)` | Exact arithmetic (percentages, changes). Never do maths "in the head". |
@@ -139,7 +139,7 @@ kasafi-agent/
     whatsapp/          # send/receive, media download, signature check
     agent/             # planner, tools, evidence list, verifier, prompts (Hausa)
     retrieval/         # indexing, search, table extraction
-    acquisition/       # search providers, allowlist, fetch, sandboxed parse
+    acquisition/       # search providers, allowlist, fetch, parse in a resource-limited subprocess
     evidence/          # SAM 3.1 crops
     guardrails/        # political / war / medical refusal
     providers/         # Meta Model API, Baseten, Serper, ReliefWeb, World Bank (swappable)
@@ -156,7 +156,7 @@ kasafi-agent/
 | Wed Oct 28 | Index seed docs with page numbers; single-document answers with citations. Watch Agents 102. |
 | Thu Oct 29 | Agent loop + tools; evidence list; multi-document answers (2–3 docs). |
 | Fri Oct 30 | Self-growing library: find_document (Serper + ReliefWeb + World Bank), allowlist. Fireworks session. |
-| Sat–Sun Oct 31 – Nov 1 | fetch_and_index in sandbox, table extraction, verify pass, review queue, guardrails. |
+| Sat–Sun Oct 31 – Nov 1 | fetch_and_index in a resource-limited subprocess, table extraction, verify pass, review queue, guardrails. |
 | Mon Nov 2 | SAM 3.1 evidence crops; voice replies; Hausa polish. |
 | Tue Nov 3 | Evals, bug fixes, deploy hardening (last help day). |
 | Wed Nov 4 | Demo video (3 min), README, X post; **submit by the evening** (hard deadline 3 AM Nov 5). |

@@ -86,7 +86,6 @@ async def main() -> None:
             s, lga = slug(name), lga_of(p)
             cell = cell_id(lat, lon)
             if a.fresh:
-                conn.execute("DELETE FROM plot_outline_cache WHERE cell = %s", (cell,))
                 conn.execute("DELETE FROM sat_cache WHERE cell = %s", (cell,))
                 conn.commit()
             t0 = time.perf_counter()

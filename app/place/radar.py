@@ -154,7 +154,7 @@ def radar_years(lat: float, lon: float, geom: dict, years: list[int], *, workers
     bbox, shape = bbox_of(geom), grid_shape(bbox_of(geom), lat)
     todo = [it for it in passes(lon, lat, date(min(years), FLOOD_MONTHS[0], 1), date(max(years), FLOOD_MONTHS[1], 31))
             if int(it["properties"]["datetime"][:4]) in years]
-    log.info("place: %d radar passes for %d years at %.3f,%.3f", len(todo), len(years), lat, lon)
+    log.info("place: %d radar passes for %d years", len(todo), len(years))
     out = {y: RadarYear(y) for y in years}
     with httpx.Client(timeout=TIMEOUT) as client, ThreadPoolExecutor(max_workers=workers) as ex:
         for it, db in zip(todo, ex.map(lambda it: read_pass(client, it["id"], geom, bbox, shape), todo)):

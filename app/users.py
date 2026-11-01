@@ -167,6 +167,38 @@ class UserStore:
             self._db.execute("ALTER TABLE turns ADD COLUMN working TEXT")     # "nuna lissafi" / "show working"
         if "quotes" not in turn_cols:
             self._db.execute("ALTER TABLE turns ADD COLUMN quotes TEXT")      # "quotes" / "nuna rubutun"
+        log_cols = {row[1] for row in self._db.execute("PRAGMA table_info(alert_log)")}
+        if "failed" not in log_cols:             # the recipients a failed or partial send still owes (finding 02)
+            self._db.execute("ALTER TABLE alert_log ADD COLUMN failed TEXT")
+
+    def backup_to(self, folder: str, keep_days: int = 7, now: datetime | None = None) -> Path:
+        """A consistent copy of the whole store (sqlite3's online backup, not a file copy of a live WAL database)
+        into `folder` as kasafi-db-<UTC>.sqlite; copies older than `keep_days` are deleted. External review,
+        finding 19: the consent, language, turns, usage and subscriptions are backed up like PostgreSQL."""
+        now = now or datetime.now(timezone.utc)
+        out = Path(folder)
+        out.mkdir(parents=True, exist_ok=True)
+        dst_path = out / f"kasafi-db-{now.strftime('%Y%m%dT%H%M%SZ')}.sqlite"
+        n = 1
+        while dst_path.exists():                 # two copies in one second (tests): never overwrite one
+            n += 1
+            dst_path = out / f"kasafi-db-{now.strftime('%Y%m%dT%H%M%SZ')}-{n}.sqlite"
+        part = dst_path.with_suffix(".sqlite.part")
+        with self._lock:
+            dst = sqlite3.connect(str(part))
+            try:
+                self._db.backup(dst)
+            finally:
+                dst.close()
+        part.replace(dst_path)
+        for old in out.glob("kasafi-db-*.sqlite"):
+            try:
+                stamp = datetime.strptime(old.stem[len("kasafi-db-"):][:16], "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+                if (now - stamp).days >= keep_days:
+                    old.unlink()
+            except ValueError:
+                continue
+        return dst_path
 
     def _exec(self, sql: str, args: tuple = ()) -> sqlite3.Cursor:
         with self._lock:
@@ -344,27 +376,40 @@ class UserStore:
 
     def log_alert(self, hazard: str, lga_pcode: str, key: str, official: bool, status: str, recipients: int,
                   langs: dict | None = None, message: dict | None = None, note: str = "",
-                  now: datetime | None = None) -> None:
+                  now: datetime | None = None, failed: list[str] | None = None) -> None:
+        """`recipients` is the number actually delivered; `failed` the user keys still owed (status 'failed' or
+        'partial'), retried by the next round (external review, finding 02)."""
         now = now or datetime.now(timezone.utc)
         self._exec("INSERT INTO alert_log (at, day, hazard, lga_pcode, key, official, status, recipients, langs, "
-                   "message, note) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                   "message, note, failed) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                    (now.isoformat(), now.astimezone(LAGOS).date().isoformat(), hazard, lga_pcode, key, int(official),
-                    status, recipients, json.dumps(langs or {}), json.dumps(message or {}, ensure_ascii=False), note))
+                    status, recipients, json.dumps(langs or {}), json.dumps(message or {}, ensure_ascii=False), note,
+                    json.dumps(list(failed or []))))
         self._exec("DELETE FROM alert_log WHERE at < ?", ((now - timedelta(days=ALERT_LOG_DAYS)).isoformat(),))
 
     def alert_statuses(self, key: str) -> set[str]:
-        """The statuses logged for what fired (`key`): a key already sent (or dry-run sent) is not sent again."""
+        """The statuses logged for what fired (`key`)."""
         return {r[0] for r in self._exec("SELECT status FROM alert_log WHERE key=?", (key,)).fetchall()}
 
-    def alerted_today(self, hazard: str, lga_pcode: str, day: str) -> bool:
-        """At most one alert per hazard per LGA per (Lagos) day: sent, or sent in the dry run."""
-        return self._exec("SELECT 1 FROM alert_log WHERE day=? AND hazard=? AND lga_pcode=? AND status IN "
-                          "('sent', 'dry_run') LIMIT 1", (day, hazard, lga_pcode)).fetchone() is not None
+    def failed_recipients(self, key: str) -> set[str]:
+        """The user keys the latest failed or partial send of `key` still owes."""
+        row = self._exec("SELECT failed FROM alert_log WHERE key=? AND status IN ('failed', 'partial') ORDER BY at DESC "
+                         "LIMIT 1", (key,)).fetchone()
+        return set(json.loads(row[0] or "[]")) if row else set()
 
-    def alerts_sent(self, day: str) -> int:
-        """Template messages sent (or dry-run sent) on a Lagos day, for the global daily cap."""
-        row = self._exec("SELECT coalesce(sum(recipients), 0) FROM alert_log WHERE day=? AND status IN "
-                         "('sent', 'dry_run')", (day,)).fetchone()
+    def alerted_today(self, hazard: str, lga_pcode: str, day: str, live: bool = True, key: str = "") -> bool:
+        """At most one alert per hazard per LGA per (Lagos) day. Live sending counts live sends only (a dry run
+        never consumes a live send); the dry run counts dry runs too. A retry of the same key is not a second
+        alert."""
+        statuses = "('sent', 'partial')" if live else "('sent', 'partial', 'dry_run')"
+        return self._exec(f"SELECT 1 FROM alert_log WHERE day=? AND hazard=? AND lga_pcode=? AND status IN {statuses} "
+                          "AND key<>? LIMIT 1", (day, hazard, lga_pcode, key)).fetchone() is not None
+
+    def alerts_sent(self, day: str, dry: bool = False) -> int:
+        """Template messages delivered on a Lagos day (dry-run sends too, in the dry run), for the daily cap."""
+        statuses = "('sent', 'partial', 'dry_run')" if dry else "('sent', 'partial')"
+        row = self._exec(f"SELECT coalesce(sum(recipients), 0) FROM alert_log WHERE day=? AND status IN {statuses}",
+                         (day,)).fetchone()
         return int(row[0])
 
     def alert_log(self, limit: int = 200) -> list[dict]:

@@ -7,8 +7,9 @@
 3. The outline is accepted only when it contains the pin and its area is MIN_HA–MAX_HA; otherwise the 1 ha circle
    around the pin is used, and the answer says so. Every answer says the outline is approximate and never a boundary.
 
-Cached per ~100 m cell in plot_outline_cache (migration 0020): the cell, the polygon, the method, the area and the
-scene; never the user or the exact pin.
+Kept in this process's memory only, for 30 minutes, keyed by the ~100 m cell and the method version (external
+review, findings 04 and 05): a cached outline is reused only when it contains the requested pin, and plot
+geometry is never written to the database (the plot_outline_cache table of migration 0020 is dropped by 0022).
 """
 
 from __future__ import annotations
@@ -18,6 +19,8 @@ import io
 import json
 import logging
 import math
+import threading
+import time
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -216,33 +219,54 @@ async def segment_plot(settings, chip: Chip, lon: float, lat: float) -> Outline:
     return best or fallback(lon, lat, "no_segment", chip.scene)
 
 
-# --- cache -----------------------------------------------------------------------------------------------------
+# --- the in-memory cache ------------------------------------------------------------------------------------------
 
-def _load(conn, cell: str) -> Outline | None:
-    row = conn.execute("SELECT geometry, method, area_ha, scene, note FROM plot_outline_cache WHERE cell = %s",
-                       (cell,)).fetchone()
-    if row is None:
+METHOD_VERSION = "sam31-chip1km-v2"     # part of the key: a changed method never serves an old outline
+MEMORY_TTL_S = 30 * 60                  # the same rule as the pin itself (app/geo/location.py)
+_MEMORY: dict[str, tuple[Outline, float]] = {}
+_lock = threading.Lock()
+
+
+def cache_key(lat: float, lon: float) -> str:
+    return f"{cell_id(lat, lon)}:{METHOD_VERSION}"
+
+
+def cached(lat: float, lon: float) -> Outline | None:
+    """The outline kept for this pin's cell, only if it still holds the pin (two pins in one cell can lie on
+    different plots: the review's two-pin reproduction)."""
+    key, now = cache_key(lat, lon), time.monotonic()
+    with _lock:
+        for k in [k for k, (_, at) in _MEMORY.items() if now - at > MEMORY_TTL_S]:
+            del _MEMORY[k]
+        hit = _MEMORY.get(key)
+    if hit is None:
         return None
-    return Outline(row[0], row[1], float(row[2]), row[3] or "", row[4] or "", from_cache=True)
+    o = hit[0]
+    try:
+        if not shape(o.geometry).covers(Point(lon, lat)):
+            return None
+    except (ValueError, TypeError):
+        return None
+    return Outline(o.geometry, o.method, o.area_ha, o.scene, o.note, from_cache=True, corners=o.corners)
 
 
-def _save(conn, cell: str, o: Outline, today: date) -> None:
-    conn.execute(
-        "INSERT INTO plot_outline_cache (cell, geometry, method, area_ha, scene, note, computed_at) VALUES "
-        "(%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (cell) DO UPDATE SET geometry = EXCLUDED.geometry, method = "
-        "EXCLUDED.method, area_ha = EXCLUDED.area_ha, scene = EXCLUDED.scene, note = EXCLUDED.note, "
-        "computed_at = EXCLUDED.computed_at",
-        (cell, json.dumps(o.geometry), o.method, o.area_ha, o.scene, o.note, today))
-    conn.commit()
+def remember(lat: float, lon: float, o: Outline) -> None:
+    with _lock:
+        _MEMORY[cache_key(lat, lon)] = (o, time.monotonic())
+
+
+def forget_all() -> None:
+    with _lock:
+        _MEMORY.clear()
 
 
 async def plot_outline(conn, settings, lat: float, lon: float, *, today: date | None = None,
                        chip: Chip | None = None) -> Outline:
-    """The plot outline for a pin, from the cache or drawn now (the chip read and SAM 3.1 called)."""
+    """The plot outline for a pin, from memory (when it holds the pin) or drawn now (the chip read and SAM 3.1
+    called). `conn` is unused: geometry is never persisted."""
     today = today or date.today()
-    cell = cell_id(lat, lon)
-    if conn is not None and (cached := _load(conn, cell)) is not None:
-        return cached
+    if (hit := cached(lat, lon)) is not None:
+        return hit
     chip = chip or await asyncio.to_thread(true_colour, lon, lat, today)
     if chip is None:
         o = fallback(lon, lat, "no_chip")
@@ -250,6 +274,5 @@ async def plot_outline(conn, settings, lat: float, lon: float, *, today: date | 
         o = fallback(lon, lat, "sam_failed", chip.scene)
     else:
         o = await segment_plot(settings, chip, lon, lat)
-    if conn is not None:
-        _save(conn, cell, o, today)
+    remember(lat, lon, o)
     return o

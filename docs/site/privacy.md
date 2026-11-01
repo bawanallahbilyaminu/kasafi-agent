@@ -43,6 +43,14 @@ won't keep it. Only your LGA is remembered for follow-ups."*
   traces**. If you type coordinates into a question, they are removed before the question is logged.
 - Only your **LGA** is stored with your coded ID, for **90 days**, so "here" means your LGA in later questions. Send
   GOGE BAYANAI NA or DELETE MY DATA to delete it, along with any location still in memory.
+- **Place history (experimental).** When you ask what the satellite images show for a farm or a spot, Kasafi reads
+  satellite data for a small area around your pin. The pin itself, any plot outline drawn from the image, a size
+  you gave as a circle, and any corner pins stay in working memory for **up to 30 minutes** and are **never written
+  to the database or logs**. What Kasafi keeps is the satellite statistics for the **100 m cell** the pin falls in
+  (coordinates rounded to about 100 m, one row per year), shared by anyone asking about that cell and **not linked
+  to you or any coded ID**. To read the images, the area around your pin is sent to Microsoft's Planetary Computer
+  (satellite imagery) and a 1 km satellite image chip around the pin to Meta's SAM 3.1 service (to draw the plot
+  outline); neither receives your number, name or message. Rain comes from Open-Meteo for the same area.
 - A location outside Sokoto State isn't used: Kasafi only covers Sokoto State.
 
 Location data is personal data under the NDPA. Kasafi uses it only for the request you made.

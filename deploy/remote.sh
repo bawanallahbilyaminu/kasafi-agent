@@ -96,6 +96,15 @@ deploy)
     checkout "$PREV"; exit 1
   fi
   say "target:  $(short "$NEW")"
+  # the pre-deploy backup: a PostgreSQL dump and a consistent sqlite copy of the user store (consent, language,
+  # turns, usage, subscriptions), both into the backups folder (external review, finding 19)
+  if dc exec -T backup sh -c 'export PGPASSWORD="$POSTGRES_PASSWORD"; f=/backups/kasafi-$(date -u +%Y%m%dT%H%M%SZ)-predeploy.dump; pg_dump -Fc -f "$f.part" && mv "$f.part" "$f" && echo "$f"' 2>/dev/null \
+     && dc exec -T api python -c 'import os; from app.users import get_store; print(get_store().backup_to(os.environ.get("KASAFI_BACKUP_DIR", "/data/backups")))' 2>/dev/null; then
+    say "pre-deploy backup taken (postgres dump in deploy/backups, sqlite copy in the data volume)"
+  else
+    say "pre-deploy backup FAILED; refusing to deploy"
+    checkout "$PREV"; exit 1
+  fi
   if build_and_start "$NEW" && wait_healthy "$NEW"; then
     record_release "$NEW"
     log "deploy ok $(short "$PREV") -> $(short "$NEW")"
@@ -209,17 +218,17 @@ sync-geo)
 sync-place)
   # deploy.sh uploads a tar of place/floodmaps/*.gpkg and geo/water_bodies.* (unpacked under /data, where the app
   # reads them through KASAFI_PLACE_DIR and KASAFI_GEO_DIR) and a data-only dump of ward_history, sat_cache and
-  # plot_outline_cache (per cell and unit, never per user). The tables are replaced in one transaction.
+  # (per cell and unit, never per user; plot geometry is never stored). The tables are replaced in one transaction.
   INCOMING=$APP/deploy/place.incoming.tar
   INCOMING_SQL=$APP/deploy/place.incoming.sql.gz
   [ -s "$INCOMING" ] || { say "no $INCOMING uploaded"; exit 1; }
   [ -s "$INCOMING_SQL" ] || { say "no $INCOMING_SQL uploaded"; exit 1; }
   dc up -d --wait db
   if dc exec -T api sh -c 'mkdir -p /data/place/floodmaps /data/geo && tar -x -m -C /data' < "$INCOMING" \
-     && { echo "TRUNCATE ward_history, sat_cache, plot_outline_cache;"; gunzip -c "$INCOMING_SQL"; } \
+     && { echo "TRUNCATE ward_history, sat_cache;"; gunzip -c "$INCOMING_SQL"; } \
         | dc exec -T db psql -q -1 -v ON_ERROR_STOP=1 -U kasafi -d kasafi >/dev/null; then
     rm -f "$INCOMING" "$INCOMING_SQL"
-    counts=$(dc exec -T db psql -At -U kasafi -d kasafi -c "SELECT (SELECT count(*) FROM ward_history)||' ward_history rows, '||(SELECT count(*) FROM sat_cache)||' cached cell-years, '||(SELECT count(*) FROM plot_outline_cache)||' outlines'")
+    counts=$(dc exec -T db psql -At -U kasafi -d kasafi -c "SELECT (SELECT count(*) FROM ward_history)||' ward_history rows, '||(SELECT count(*) FROM sat_cache)||' cached cell-years'")
     files=$(dc exec -T api sh -c 'ls /data/place/floodmaps/*.gpkg | wc -l; ls -la /data/geo/water_bodies.geojson | cut -c1-60' | tr '\n' ' ')
     say "place data loaded: $counts; files: $files"
     log "sync-place ok: $counts"

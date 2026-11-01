@@ -107,7 +107,7 @@ W = {
                     "your farm or plot (or the pond, dam or field you mean).",
         "progress": "🛰️ I'm checking about {n} years of satellite images for this spot. I'll send it in about a "
                     "minute.",
-        "head": "*What the satellite record shows for this spot ({lga} LGA)*",
+        "head": "*What the satellite record shows for this spot ({lga} LGA)* — experimental",
         "peak": "This rainy season ({year}) the plot was {green} ({n} years with enough clear images, {first}–{last}). "
                 "June–October rain was {rain}, and the greenness is {verdict}.",
         "green_words": {"above": "greener than usual", "near": "about as green as in normal years",
@@ -148,7 +148,7 @@ W = {
         "outline_sam": "Plot outline: about {ha} ha, drawn from the satellite image (SAM 3.1, 10 m): approximate, "
                        "not a boundary.",
         "outline_circle": "No plot outline could be drawn from the satellite image, so the figures are for a "
-                          "circle of about 1 ha around your pin.",
+                          "circle of about 1 ha at your pin's 100 m cell.",
         "outline_given": "Plot shape: the circle of {ha} ha you gave, around your pin (no outline could be drawn "
                          "from the satellite image).",
         "outline_corners": "Plot shape: about {ha} ha, from your {n} corner pins: approximate, not a boundary.",
@@ -230,7 +230,7 @@ W = {
                     "gonarka ko filinka (ko tafki, madatsar ruwa ko filin da kake nufi).",
         "progress": "🛰️ Ina duba hotunan tauraron ɗan adam na kusan shekaru {n} na wannan wuri. Zan aiko nan da "
                     "kusan minti ɗaya.",
-        "head": "*Abin da hotunan tauraron ɗan adam suka nuna game da wannan wuri (Ƙaramar Hukumar {lga})*",
+        "head": "*Abin da hotunan tauraron ɗan adam suka nuna game da wannan wuri (Ƙaramar Hukumar {lga})* — na gwaji",
         "peak": "A daminar {year} gonar ta kasance {green} (shekaru {n} masu isassun hotuna bayyanannu, "
                 "{first}–{last}). Ruwan saman Yuni–Oktoba ya kasance {rain}, kuma koriyar {verdict}.",
         "green_words": {"above": "ta fi koriya fiye da yadda aka saba", "near": "kamar yadda take a shekarun da aka saba",
@@ -272,7 +272,7 @@ W = {
         "outline_sam": "Iyakar gona: kusan hekta {ha}, an zana ta daga hoton tauraron ɗan adam (SAM 3.1, mita 10): "
                        "kiyasi ce, ba iyakar mallaka ba.",
         "outline_circle": "Ba a iya zana iyakar gona daga hoton tauraron ɗan adam ba, saboda haka alƙaluman na "
-                          "da'ira ce ta kusan hekta 1 kewaye da wurinka.",
+                          "da'ira ce ta kusan hekta 1 a sel ɗin mita 100 na wurinka.",
         "outline_given": "Siffar gona: da'irar hekta {ha} da ka bayar, kewaye da wurinka (ba a iya zana iyaka daga "
                          "hoton tauraron ɗan adam ba).",
         "outline_corners": "Siffar gona: kusan hekta {ha}, daga wuraren kusurwoyi {n} da ka aiko: kiyasi ce, ba "
@@ -716,14 +716,15 @@ async def place_answer(conn, settings, question: str, english: str, lang: str, p
         await notify(t["progress"].format(n=today.year - H.GOOD_FROM + 1))
     timing["outline"] = time.perf_counter() - t0
     t1 = time.perf_counter()
-    h = await asyncio.to_thread(H.point_history, conn, lat, lon, today=today,
-                                polygon=outline.geometry if outline.is_plot else None,
+    # a plot's geometry (the satellite outline, a size circle, corner pins) is analysed in memory under its own key;
+    # a bare pin gets its ~100 m cell's shared, persisted results (external review, findings 04 and 05)
+    polygon = outline.geometry if outline.is_plot else None
+    h = await asyncio.to_thread(H.point_history, conn, lat, lon, today=today, polygon=polygon,
                                 water=water_asked(f"{question} {english}"))
     timing["history"] = time.perf_counter() - t1
     t3 = time.perf_counter()
-    h.floods = await asyncio.to_thread(flood_evidence, conn, lat, lon,
-                                       outline.geometry if outline.is_plot else circle(lon, lat), today=today,
-                                       on_water=h.on_water)
+    h.floods = await asyncio.to_thread(flood_evidence, conn, lat, lon, polygon or H.cell_circle(lat, lon), today=today,
+                                       on_water=h.on_water, key=h.cell)
     h.water_type = classify_water(h, h.floods)
     if h.water_type in ("permanent", "seasonal"):
         h.water_name = water_body_name(lat, lon, lang)

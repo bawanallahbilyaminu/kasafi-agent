@@ -113,7 +113,7 @@ def test_live_sends_decrypt_the_number_and_never_log_it(caplog) -> None:
     out = asyncio.run(dp.dispatch([_cand()], store, s2, NOON, send))
     assert out == {"sent": 1} and wa.sent == [("2348000000011", "kasafi_hazard_alert", "ha")]
     row = store.alert_log()[0]
-    assert row["recipients"] == 1 and "1 not delivered" in row["note"]
+    assert row["recipients"] == 1 and "1 not delivered (no number)" in row["note"] and store.failed_recipients(_cand().key) == set()
     assert "8000000011" not in caplog.text and "8000000011" not in str(store.alert_log())
 
 
@@ -290,7 +290,8 @@ def test_the_daily_cap_counts_messages_across_alerts() -> None:
     _subs(store, ("ha", "heat"), ("ha", "heat"), ("ha", "flood"))
     out = _run(store, [_cand(), _cand(key="flood:x", hazard="flood")], kasafi_alerts_daily_cap=2)
     assert out == {"dry_run": 1, "capped": 1}
-    assert store.alerts_sent(NOON.date().isoformat()) == 2
+    assert store.alerts_sent(NOON.date().isoformat(), dry=True) == 2       # dry-run sends count in the dry run
+    assert store.alerts_sent(NOON.date().isoformat()) == 0                 # and never against a live send
 
 
 def test_live_sending_without_a_cap_sends_nothing() -> None:

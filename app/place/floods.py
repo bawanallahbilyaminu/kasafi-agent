@@ -48,14 +48,14 @@ class FloodEvidence:
 # --- radar, cached per cell and year --------------------------------------------------------------------------
 
 def radar_history(conn, lat: float, lon: float, geom: dict, *, today: date, years: list[int] | None = None,
-                  workers: int = radar.WORKERS, on_water: bool = False
+                  workers: int = radar.WORKERS, on_water: bool = False, key: str | None = None
                   ) -> tuple[dict[int, radar.RadarYear], radar.Reference]:
-    """The per-year passes (cached per cell and year) judged against the plot's dry-season reference (cached as
-    layer 's1ref'; refreshed once a year): the water dates are recomputed from the stored per-pass values, so a
-    changed rule needs no cache purge."""
+    """The per-year passes (cached per cell and year, or in memory under a plot's key) judged against the plot's
+    dry-season reference (cached as layer 's1ref'; refreshed once a year): the water dates are recomputed from the
+    stored per-pass values, so a changed rule needs no cache purge."""
     years = years or list(range(radar.FIRST_YEAR, today.year + 1))
-    cell = cell_id(lat, lon)
-    cached = _load(conn, cell) if conn is not None else {}
+    cell = key or cell_id(lat, lon)
+    cached = _load(conn, cell)
     hit = cached.get(("s1ref", 0))
     if hit is not None and (today - hit[1]).days < 365:
         v = hit[0]
@@ -123,11 +123,13 @@ def official_maps_at(geom: dict, folder: Path = FLOODMAPS) -> list[dict]:
 # --- all three together ------------------------------------------------------------------------------------------
 
 def flood_evidence(conn, lat: float, lon: float, geom: dict, *, today: date, workers: int = radar.WORKERS,
-                   on_water: bool = False) -> FloodEvidence:
-    """`on_water`: JRC or WorldCover already call the plot a water body, so a dark dry season is water, not sand."""
+                   on_water: bool = False, key: str | None = None) -> FloodEvidence:
+    """`on_water`: JRC or WorldCover already call the plot a water body, so a dark dry season is water, not sand.
+    `key`: the history's cache key (a cell, or a plot's in-memory key)."""
     ev = FloodEvidence()
     try:
-        ev.radar, ev.reference = radar_history(conn, lat, lon, geom, today=today, workers=workers, on_water=on_water)
+        ev.radar, ev.reference = radar_history(conn, lat, lon, geom, today=today, workers=workers, on_water=on_water,
+                                               key=key)
     except Exception as e:                                   # noqa: BLE001 - radar is one of three sources
         log.warning("place: radar failed: %s", type(e).__name__)
     try:

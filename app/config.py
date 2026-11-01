@@ -66,6 +66,7 @@ class Settings(BaseSettings):
     kasafi_pending_ttl_minutes: int = 15
     kasafi_answer_timeout_s: float = 120.0      # every long job ends in an answer or an apology within this
     kasafi_second_plan_s: float = 4.0           # the Open model's second-opinion plan, only when the words conflict (0 = off)
+    kasafi_backup_dir: str = ""                 # daily consistent copies of the SQLite store (/data/backups on the server)
 
     # Our own test numbers: no per-number daily limits and no global spend cap. They still need
     # consent, and their usage still counts toward the daily spend total.

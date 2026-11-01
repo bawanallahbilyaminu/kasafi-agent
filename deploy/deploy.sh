@@ -17,8 +17,8 @@
 #   deploy/deploy.sh --sync-place  place history (docs/place-history.md): copy the UNOSAT flood maps
 #                                  (data/place/floodmaps/*.gpkg) to /data/place, the water-body layer
 #                                  (data/geo/water_bodies.geojson + .yaml) to /data/geo, and the precomputed
-#                                  ward_history plus the per-cell satellite caches (sat_cache, plot_outline_cache:
-#                                  no user data) from the dev DB, so the server never recomputes them
+#                                  ward_history plus the per-cell satellite cache (sat_cache: rounded 100 m cells,
+#                                  no user data, no plot geometry) from the dev DB, so the server never recomputes them
 #
 # SSH host alias: KASAFI_SSH_HOST (default "vps"; see deploy/README.md for the ~/.ssh/config entry).
 # The server's IP is never stored in this repo. Server-side steps live in deploy/remote.sh.
@@ -165,10 +165,10 @@ case "${1:-}" in
       || { rm -f "$tmp"; die "packing the place files failed"; }
     echo "→ uploading $(du -h "$tmp" | cut -f1) of flood maps and the water layer to $HOST"
     "$SSH" "$HOST" "umask 077; cat > $REMOTE_PLACE" < "$tmp"; rm -f "$tmp"
-    echo "→ dumping ward_history, sat_cache and plot_outline_cache from the dev database (per cell and unit; no user data)"
+    echo "→ dumping ward_history and sat_cache from the dev database (per cell and unit; no user data, no geometry)"
     tmp=$(mktemp)
     MSYS_NO_PATHCONV=1 docker compose exec -T db pg_dump -U kasafi -d kasafi --data-only --no-owner \
-      -t ward_history -t sat_cache -t plot_outline_cache | gzip > "$tmp" || { rm -f "$tmp"; die "pg_dump failed (is the dev DB running?)"; }
+      -t ward_history -t sat_cache | gzip > "$tmp" || { rm -f "$tmp"; die "pg_dump failed (is the dev DB running?)"; }
     echo "→ uploading $(du -h "$tmp" | cut -f1) to $HOST"
     "$SSH" "$HOST" "umask 077; cat > $REMOTE_PLACE_SQL" < "$tmp"; rm -f "$tmp"
     remote_and_report sync-place

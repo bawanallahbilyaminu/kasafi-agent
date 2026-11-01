@@ -111,7 +111,7 @@ The registry will never list every publisher. When registry channels and allowli
 3. Anything else: don't fetch. Queue the domain in the admin review page with the question that needed it, and tell the user the document was found on a site Kasafi hasn't approved yet.
 4. Approved domains are added to the registry, so the list grows from real use.
 
-Robots.txt, size limits, sandboxed parsing and the global exclusions still apply.
+Robots.txt, size limits, parsing in a resource-limited subprocess and the global exclusions still apply.
 
 ### 6. Coverage testing (instead of guessing user questions)
 

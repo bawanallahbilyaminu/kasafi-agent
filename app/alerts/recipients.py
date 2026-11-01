@@ -53,14 +53,15 @@ def decrypt(token: str | None, settings) -> str | None:
 
 
 def live_sender(store, settings, client):
-    """The send function for dispatch: decrypts the subscriber's number and sends the template; False when there
-    is no number or the send fails (the reason is logged without the number)."""
+    """The send function for dispatch: decrypts the subscriber's number and sends the template; None when there is
+    no number (nothing to retry), False when the send fails (retried next round; the reason is logged without the
+    number)."""
     from app.alerts.dispatch import TEMPLATE
 
-    async def send(user_key: str, lang: str, values: list[str]) -> bool:
+    async def send(user_key: str, lang: str, values: list[str]) -> bool | None:
         number = decrypt(store.alert_number(user_key), settings)
         if number is None:
-            return False
+            return None
         try:
             await client.send_template(number, TEMPLATE, lang, values)
             return True

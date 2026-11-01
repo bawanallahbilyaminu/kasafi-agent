@@ -119,6 +119,8 @@ def record(a) -> dict:
                          "facts": {k: str(v.value) for k, v in r.facts.items()}, "rows": len(r.rows)}
     if getattr(a, "working", ""):
         t["working"] = a.working[:4000]                      # shown to the user only on "nuna lissafi"
+    if getattr(a, "verification", ""):                       # attribution / figures / calculation checked, unsupported
+        t["verification"] = {"state": a.verification, "problems": list(getattr(a, "attribution", []) or [])[:6]}
     if a.budget is not None:
         t["budget"] = {"operation": a.budget.operation,
                        "total": str(a.budget.total) if a.budget.total is not None else None}

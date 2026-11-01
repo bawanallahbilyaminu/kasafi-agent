@@ -61,7 +61,6 @@ async def main() -> None:
                      "shape": {"declined": True}}
             cell = cell_id(lat, lon)
             conn.execute("DELETE FROM sat_cache WHERE cell = %s", (cell,))
-            conn.execute("DELETE FROM plot_outline_cache WHERE cell = %s", (cell,))
             conn.commit()
             for q, lang in QUESTIONS[:1]:
                 first, notes, text = await ask(conn, s, q, lang, place)

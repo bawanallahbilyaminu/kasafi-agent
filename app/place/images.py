@@ -376,13 +376,13 @@ def area_map(conn, s: dict, lang: str, today: date | None = None) -> MapImage | 
 def draw_place(conn, s: dict, lang: str, today: date | None = None) -> MapImage | None:
     """{"kind": "place_chart" | "place_map", "lat", "lon", "lga"}: from the caches the answer just filled (the
     history, the outline), plus the chip and the JRC window for the map (two small requests)."""
-    from app.place.outline import Outline, _load, fallback
+    from app.place.outline import Outline, cached, fallback
     today = today or date.today()
     lat, lon, lga = float(s["lat"]), float(s["lon"]), str(s.get("lga") or "")
     if (shape := s.get("shape")) and shape.get("geometry"):          # the shape the user gave (memory only)
         outline = Outline.from_shape(shape)
-    else:
-        outline = (_load(conn, H.cell_id(lat, lon)) if conn is not None else None) or fallback(lon, lat, "no_segment")
+    else:                                                             # the outline drawn minutes ago (memory only)
+        outline = cached(lat, lon) or fallback(lon, lat, "no_segment")
     h = H.point_history(conn, lat, lon, today=today, polygon=outline.geometry if outline.is_plot else None,
                         water=bool(s.get("water")))
     if s["kind"] == "place_chart":

@@ -126,9 +126,9 @@ The registry drives three things:
 
 A question that names a publisher ("according to IOM") is answered from that publisher alone. A short dashboard whose text layer doesn't name Sokoto is read with OCR, because UNHCR prints its state figures only in a map. The Sokoto State Bureau of Statistics is a crawled library: its listing is read weekly.
 
-## Place history
+## Place history (experimental)
 
-A farmer sends a pin (or the corners of the plot) and asks "how green was my farm in 2024?", "has it flooded?",
+**Experimental**, and labelled so in every answer. A farmer sends a pin (or the corners of the plot) and asks "how green was my farm in 2024?", "has it flooded?",
 "is bare soil spreading?"; a planner asks the same of a ward, an LGA or the state. Kasafi answers from the
 satellite record, in code, with no model in the loop (`app/place/`, design and findings in
 [`docs/place-history.md`](docs/place-history.md)).
@@ -200,7 +200,8 @@ Kasafi finds and fetches by itself are recorded in the database with their URL, 
 `auto-indexed` until a person verifies them.
 
 - **Fetching rules.** Only https links on an allowlist of government and partner domains
-  (`app/acquisition/policy.py`), with a size limit, parsed in a sandboxed process. Text in documents is treated as
+  (`app/acquisition/policy.py`), with a size limit, parsed in a separate resource-limited subprocess (time and
+  memory limits; it is not an isolation sandbox). Text in documents is treated as
   data, never as instructions.
 - **robots.txt.** Every request identifies itself honestly as `KasafiBot/1.0 (+https://halalnumeriq.com.ng/kasafi)`
   and is checked against the site's robots.txt for that agent. A site that disallows us (or whose robots.txt can't be

@@ -165,6 +165,46 @@ def cell_id(lat: float, lon: float) -> str:
     return f"{lat:.3f},{lon:.3f}"
 
 
+def cell_centre(lat: float, lon: float) -> tuple[float, float]:
+    """The centre of the pin's ~100 m cell: what the persisted statistics are computed for (external review,
+    finding 05: cached results are coarse cell results, not the pin's)."""
+    return round(lat, 3), round(lon, 3)
+
+
+def cell_circle(lat: float, lon: float) -> dict:
+    """The 1 ha circle at the pin's cell centre (the shared, persisted geometry)."""
+    clat, clon = cell_centre(lat, lon)
+    return circle(clon, clat)
+
+
+METHOD_VERSION = "s2-v2"                   # part of a plot result's key: a changed method never serves old numbers
+MEMORY_TTL_S = 30 * 60                     # plot-specific results live as long as the pin (app/geo/location.py)
+_MEMORY: dict[str, tuple[dict, float]] = {}   # plot key -> ({(layer, year): (values, date)}, when)
+
+
+def plot_key(geometry: dict) -> str:
+    """The in-memory key of a plot's results: a hash of the geometry (coordinates rounded to ~1 m) and the method
+    version. Never persisted; never a user."""
+    import hashlib
+    coords = json.dumps(geometry.get("coordinates"), separators=(",", ":"),
+                        default=lambda x: round(float(x), 5))
+    rounded = json.dumps(json.loads(coords, parse_float=lambda s: round(float(s), 5)), separators=(",", ":"))
+    return "mem:" + hashlib.sha1(f"{METHOD_VERSION}|{geometry.get('type')}|{rounded}".encode()).hexdigest()[:20]
+
+
+def _memory(key: str) -> dict:
+    now = time.monotonic()
+    for k in [k for k, (_, at) in _MEMORY.items() if now - at > MEMORY_TTL_S]:
+        del _MEMORY[k]
+    store, _ = _MEMORY.get(key, ({}, now))
+    _MEMORY[key] = (store, now)
+    return store
+
+
+def forget_plots() -> None:
+    _MEMORY.clear()
+
+
 def bbox_of(geom: dict) -> tuple[float, float, float, float]:
     xs = [x for ring in geom["coordinates"] for x, _ in ring]
     ys = [y for ring in geom["coordinates"] for _, y in ring]
@@ -273,7 +313,7 @@ def compute_years(lat: float, lon: float, geom: dict, years: list[int], *, worke
     bbox, shape = bbox_of(geom), grid_shape(bbox_of(geom), lat)
     todo = scenes(lon, lat, date(min(years), 2, 1), date(max(years), 10, 31))
     todo = [s for s in todo if s.day.year in years]
-    log.info("place: %d scenes for %d years at %s", len(todo), len(years), cell_id(lat, lon))
+    log.info("place: %d scenes for %d years", len(todo), len(years))
     observations: list[Observation] = []
     with httpx.Client(timeout=TIMEOUT) as client, ThreadPoolExecutor(max_workers=workers) as ex:
         for i, obs in enumerate(ex.map(lambda s: observe(client, s, geom, bbox, shape), todo), 1):
@@ -441,12 +481,22 @@ def landcover(lon: float, lat: float, geom: dict) -> str | None:
 # --- cache ---------------------------------------------------------------------------------------------------
 
 def _load(conn, cell: str) -> dict[tuple[str, int], tuple[dict, date]]:
+    """A cell's persisted rows, or a plot's in-memory rows (a 'mem:' key)."""
+    if cell.startswith("mem:"):
+        return dict(_memory(cell))
+    if conn is None:
+        return {}
     rows = conn.execute("SELECT layer, year, values, computed_at FROM sat_cache WHERE cell = %s", (cell,)).fetchall()
     return {(layer, year): (vals, at) for layer, year, vals, at in rows}
 
 
 def _save(conn, cell: str, layer: str, year: int, values: dict, source: str, clear_obs: int | None,
           today: date) -> None:
+    if cell.startswith("mem:"):                 # plot geometry results: memory only, never the database
+        _memory(cell)[(layer, year)] = (values, today)
+        return
+    if conn is None:
+        return
     conn.execute(
         "INSERT INTO sat_cache (cell, layer, year, values, clear_obs, source, computed_at) VALUES (%s, %s, %s, %s, %s, "
         "%s, %s) ON CONFLICT (cell, layer, year) DO UPDATE SET values = EXCLUDED.values, clear_obs = EXCLUDED.clear_obs, "
@@ -474,15 +524,14 @@ def point_history(conn, lat: float, lon: float, *, today: date | None = None, po
     h = _point_history(conn, lat, lon, today=today, polygon=polygon, workers=workers, progress=progress)
     if water and not h.on_water:
         t0 = time.perf_counter()
-        cached = _load(conn, h.cell) if conn is not None else {}
+        cached = _load(conn, h.cell)
         near = cached.get(("nearest_water", 0), (None, None))[0]
         if ("nearest_water", 0) not in cached:
             try:
                 near = nearest_water(lon, lat) or {}
-                if conn is not None:
-                    _save(conn, h.cell, "nearest_water", 0, near, "JRC GSW v1.3", None, today)
+                _save(conn, h.cell, "nearest_water", 0, near, "JRC GSW v1.3", None, today)
             except (httpx.HTTPError, OSError) as e:
-                log.warning("place: nearest water failed: %s", e)
+                log.warning("place: nearest water failed: %s", type(e).__name__)
                 near = None
         if near:
             near = dict(near)
@@ -502,12 +551,17 @@ def point_history(conn, lat: float, lon: float, *, today: date | None = None, po
 
 def _point_history(conn, lat: float, lon: float, *, today: date, polygon: dict | None = None,
                    workers: int = WORKERS, progress=None) -> History:
-    cell = cell_id(lat, lon)
-    geom = polygon or circle(lon, lat)
+    """A pin alone: the 1 ha circle at its ~100 m cell centre, results persisted per cell (coarse, shared, no
+    user). A plot polygon (the satellite outline, a size circle, corner pins): results keyed by the geometry's
+    hash in memory for 30 minutes, never persisted."""
+    if polygon is None:
+        cell, geom = cell_id(lat, lon), cell_circle(lat, lon)
+    else:
+        cell, geom = plot_key(polygon), polygon
     years = list(range(FIRST_YEAR, today.year + 1))
     t0 = time.perf_counter()
     timing: dict[str, float] = {}
-    cached = _load(conn, cell) if conn is not None else {}
+    cached = _load(conn, cell)
     missing = [y for y in years if not _fresh(cached.get(("s2", y)), y, today)]
     rows: dict[int, YearRow] = {}
     for y in years:
@@ -517,8 +571,7 @@ def _point_history(conn, lat: float, lon: float, *, today: date, polygon: dict |
         fresh = compute_years(lat, lon, geom, missing, workers=workers, progress=progress)
         for y, r in fresh.items():
             rows[y] = r
-            if conn is not None:
-                _save(conn, cell, "s2", y, {k: v for k, v in asdict(r).items() if not k.startswith("rain")
+            _save(conn, cell, "s2", y, {k: v for k, v in asdict(r).items() if not k.startswith("rain")
                                             and k != "usable"},
                       "Sentinel-2 L2A, Planetary Computer", r.season_obs, today)
     timing["sentinel2"] = time.perf_counter() - t0
@@ -529,8 +582,7 @@ def _point_history(conn, lat: float, lon: float, *, today: date, polygon: dict |
         for y, vals in rain.by_year(daily).items():
             if y in years:
                 cached[("rain", y)] = (vals, today)
-                if conn is not None:
-                    _save(conn, cell, "rain", y, vals, "Open-Meteo archive (ERA5-Land)", None, today)
+                _save(conn, cell, "rain", y, vals, "Open-Meteo archive (ERA5-Land)", None, today)
     for y in years:
         if ("rain", y) in cached:
             v = cached[("rain", y)][0]
@@ -541,17 +593,15 @@ def _point_history(conn, lat: float, lon: float, *, today: date, polygon: dict |
     if ("jrc", 0) not in cached:
         try:
             cached[("jrc", 0)] = (jrc_summary(lon, lat, geom), today)
-            if conn is not None:
-                _save(conn, cell, "jrc", 0, cached[("jrc", 0)][0], "JRC GSW v1.3", None, today)
+            _save(conn, cell, "jrc", 0, cached[("jrc", 0)][0], "JRC GSW v1.3", None, today)
         except (httpx.HTTPError, OSError) as e:
-            log.warning("place: JRC summary failed: %s", e)
+            log.warning("place: JRC summary failed: %s", type(e).__name__)
     if ("landcover", 0) not in cached:
         try:
             cached[("landcover", 0)] = ({"class": landcover(lon, lat, geom)}, today)
-            if conn is not None:
-                _save(conn, cell, "landcover", 0, cached[("landcover", 0)][0], "ESA WorldCover 2021", None, today)
+            _save(conn, cell, "landcover", 0, cached[("landcover", 0)][0], "ESA WorldCover 2021", None, today)
         except (httpx.HTTPError, OSError) as e:
-            log.warning("place: WorldCover failed: %s", e)
+            log.warning("place: WorldCover failed: %s", type(e).__name__)
     timing["context"] = time.perf_counter() - t2
     h = History(cell, lat, lon, rows, jrc=cached.get(("jrc", 0), ({}, today))[0],
                 landcover=(cached.get(("landcover", 0), ({}, today))[0] or {}).get("class"), timing=timing,

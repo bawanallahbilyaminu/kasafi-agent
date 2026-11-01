@@ -28,12 +28,13 @@ LAGOS = timezone(timedelta(hours=1))
 TEMPLATE = "kasafi_hazard_alert"
 QUIET = (22, 6)                       # 22:00-06:00 Lagos
 VALUE_CHARS = 300
-DONE = {"sent", "dry_run", "no_template"}
+DONE = {"sent", "no_template"}            # a dry run is 'done' only for the next dry run, never for a live send
+RETRY = {"failed", "partial"}             # delivered to nobody / to some: the rest stays owed
 HAZARD_NAMES = {"en": {"heat": "heat", "dust": "harmattan dust", "flood": "flood", "outbreak": "disease outbreak"},
                 "ha": {"heat": "zafin rana", "dust": "ƙurar hunturu", "flood": "ambaliya",
                        "outbreak": "ɓarkewar cuta"}}
 # (user key, language, the four values) -> delivered; None: no way to reach a user key yet (see docs)
-SendFn = Callable[[str, str, list[str]], Awaitable[bool]]
+SendFn = Callable[[str, str, list[str]], Awaitable[bool | None]]   # True delivered, False failed (retry), None no number
 
 
 def clean(value: str) -> str:
@@ -72,10 +73,14 @@ async def dispatch(candidates: list[Candidate], store, settings, now: datetime |
 
     for c in candidates:
         seen = store.alert_statuses(c.key)
-        if seen & DONE:
+        # done: sent to everyone, or nothing to send; a dry run never consumes a later live send (finding 02)
+        if seen & DONE or (dry and "dry_run" in seen):
             continue
         subs = store.subscribers(c.lga_pcode, c.hazard)
-        if not subs or store.alerted_today(c.hazard, c.lga_pcode, day):
+        if seen & RETRY:                      # a failed or partial send: only the recipients still owed
+            owed = store.failed_recipients(c.key)
+            subs = [(k, lang) for k, lang in subs if k in owed]
+        if not subs or store.alerted_today(c.hazard, c.lga_pcode, day, live=not dry, key=c.key):
             continue
         langs = Counter(lang for _, lang in subs)
         message = {lang: values(c, lang) for lang in langs}
@@ -93,7 +98,7 @@ async def dispatch(candidates: list[Candidate], store, settings, now: datetime |
             once(c, "no_template", seen, 0, langs=dict(langs), message=message, note=note)
             continue
         limit = cap if (cap > 0 or not dry) else None
-        if limit is not None and store.alerts_sent(day) + len(ready) > limit:
+        if limit is not None and store.alerts_sent(day, dry=dry) + len(ready) > limit:
             once(c, "capped", seen, len(ready), langs=dict(langs), message=message,
                  note=f"daily cap {cap} (KASAFI_ALERTS_DAILY_CAP)")
             continue
@@ -106,13 +111,27 @@ async def dispatch(candidates: list[Candidate], store, settings, now: datetime |
             once(c, "no_recipient", seen, len(ready), langs=dict(langs), message=message,
                  note="no sender: live sending isn't set up")
             continue
-        delivered = sum([await send(k, lang, message[lang]) for k, lang in ready])
-        if delivered < len(ready):
-            note = "; ".join(x for x in (note, f"{len(ready) - delivered} not delivered (no number or send failed)")
-                             if x)
-        store.log_alert(c.hazard, c.lga_pcode, c.key, c.official, "sent", delivered, dict(langs), message,
-                        note, now=now)
-        out["sent"] += 1
+        # send() answers True (delivered), False (failed: retried next round) or None (no number: nothing to retry)
+        failed, skipped, delivered = [], 0, 0
+        for k, lang in ready:
+            result = await send(k, lang, message[lang])
+            if result is None:
+                skipped += 1
+            elif result:
+                delivered += 1
+            else:
+                failed.append(k)
+        notes = [note]
+        if skipped:
+            notes.append(f"{skipped} not delivered (no number)")
+        if failed:
+            notes.append(f"{len(failed)} not delivered (send failed); retried next round")
+        note = "; ".join(x for x in notes if x)
+        # never 'sent' with nobody reached: a failed send stays retryable, a partial one retries only the failures
+        status = ("partial" if delivered else "failed") if failed else ("sent" if delivered else "no_recipient")
+        store.log_alert(c.hazard, c.lga_pcode, c.key, c.official, status, delivered, dict(langs), message, note,
+                        now=now, failed=failed)
+        out[status] += 1
     return out
 
 
