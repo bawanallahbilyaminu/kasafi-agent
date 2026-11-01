@@ -29,10 +29,11 @@ MEASURES = {
                         "composites)", "ha": "koriyar damina a ƙololuwa ta gonaki (MODIS NDVI, mita 250, kashi na 90 na "
                                             "hotunan Yuni–Oktoba)",
                   "high_en": "greenest", "low_en": "least green", "high_ha": "mafi koriya", "low_ha": "mafi ƙarancin koriya"},
-    "flood": {"measure": "s1_flood_share", "first": 2017, "pct": True, "fmt": "{:.0%}",
-              "en": "share of normally dry cropland under water on at least one August–September radar pass "
-                    "(Sentinel-1, 200 m)", "ha": "kashin gonakin da a kullum suka bushe da ruwa ya rufe a aƙalla hoton "
-                                                 "radar ɗaya na Agusta–Satumba (Sentinel-1, mita 200)",
+    "flood": {"measure": "s1_flood_share", "first": 2017, "pct": True, "fmt": "{:.1%}",
+              "en": "share of normally dry cropland under water on at least one August–October radar pass "
+                    "(Sentinel-1, 200 m: a cell counts only when most of its 4 ha is open water)",
+              "ha": "kashin gonakin da a kullum suka bushe da ruwa ya rufe a aƙalla hoton radar ɗaya na Agusta–Oktoba "
+                    "(Sentinel-1, mita 200: sel ɗaya tana ƙidaya ne kawai idan mafi yawan hekta 4 nata ruwa ne a fili)",
               "high_en": "most flooded", "low_en": "least flooded", "high_ha": "mafi ambaliya", "low_ha": "mafi ƙarancin ambaliya"},
     "flood_map": {"measure": "unosat_share", "first": 2022, "pct": True, "fmt": "{:.0%}",
                   "en": "share of cropland inside the UN satellite flood map (UNOSAT, VIIRS 375 m)",
