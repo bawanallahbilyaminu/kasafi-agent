@@ -46,14 +46,19 @@ class LocationMemory:
         self._spots: dict[str, tuple[Spot, float]] = {}
         self._needs: dict[str, tuple[str, float]] = {}       # a question waiting for a location
         self._searches: dict[str, tuple[Any, float]] = {}    # the last facility search, for "next" / "route?"
-        self._shapes: dict[str, tuple[dict, float]] = {}     # the plot shape a farmer gave (app/place/shape.py)
+        # the plot shape a farmer gave (app/place/shape.py), with the point of the plot it was given for: a new point
+        # outside that plot starts a new plot and drops it (follow-up review, finding 2)
+        self._shapes: dict[str, tuple[dict, float, tuple[float, float] | None]] = {}
         self._pins: dict[str, list[tuple[float, float, float]]] = {}   # recent pins (lat, lon, when): corner candidates
         self._lock = threading.Lock()
 
-    def remember_shape(self, key: str, shape: dict) -> None:
-        """A plot shape the user gave (a circle of a size, or corner pins), or {"declined": True}."""
+    def remember_shape(self, key: str, shape: dict, at: tuple[float, float] | None = None) -> None:
+        """A plot shape the user gave (a circle of a size, or corner pins), or {"declined": True}, for the plot at
+        `at` (default: the point now in memory)."""
         with self._lock:
-            self._shapes[key] = (shape, time.monotonic())
+            if at is None and (hit := self._spots.get(key)):
+                at = (hit[0].lat, hit[0].lon)
+            self._shapes[key] = (shape, time.monotonic(), at)
 
     def shape(self, key: str) -> dict | None:
         with self._lock:
@@ -97,7 +102,13 @@ class LocationMemory:
             return None
 
     def remember(self, key: str, spot: Spot) -> None:
+        """The user's point. A point outside the remembered plot is another farm: its shape is dropped, so it is
+        never analysed with the previous farm's size or corners (corner pins go through add_pin, not here)."""
+        from app.place.shape import fits
         with self._lock:
+            hit = self._shapes.get(key)
+            if hit and not fits(hit[0], hit[2], spot.lat, spot.lon):
+                self._shapes.pop(key, None)
             self._spots[key] = (spot, time.monotonic())
             if len(self._spots) > MAX_KEPT:
                 for k in sorted(self._spots, key=lambda k: self._spots[k][1])[: len(self._spots) - MAX_KEPT]:

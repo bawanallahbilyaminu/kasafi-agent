@@ -221,7 +221,8 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     waiting = location_memory.peek_question(key) or ""
     sizing = waiting.startswith(SIZE_WAIT)
     if sizing or (text and shape_words(text) and location_memory.recent_pins(key)):
-        shaped = await _plot_shape(msg, text, key, lang, waiting[len(SIZE_WAIT):] if sizing else "")
+        shaped = await _plot_shape(msg, text, key, lang, waiting[len(SIZE_WAIT):] if sizing else "",
+                                   settings=settings, locate_fn=locate_fn, store=store)
         if shaped is not None:
             before, resume = shaped
             if not resume:
@@ -524,7 +525,8 @@ def shape_words(text: str) -> bool:
     return bool(CORNER_WORDS.search(text) or DONE_WORDS.match(text))
 
 
-async def _plot_shape(msg: dict[str, Any], text: str, key: str, lang: str, question: str
+async def _plot_shape(msg: dict[str, Any], text: str, key: str, lang: str, question: str, *,
+                      settings: Settings | None = None, locate_fn: LocateFn | None = None, store: UserStore | None = None
                       ) -> tuple[list[Out], str] | None:
     """The plot shape a farmer gives (app/place/shape.py): a corner pin (counted), 'done' (the pins joined into
     the plot, the point moved to its centre), a size ('3 acres'), or 'skip' (the 1 ha circle). Returns the
@@ -548,15 +550,24 @@ async def _plot_shape(msg: dict[str, Any], text: str, key: str, lang: str, quest
             _, _, why = S.corners_polygon(pins[-S.MAX_CORNERS:])
             location_memory.clear_pins(key)
             return [Out(w["corner_bad"].format(n=len(pins), why=w["corner_why"].get(why, why)), lang=lang)], ""
-        location_memory.remember_shape(key, shape)
         location_memory.clear_pins(key)
         if question:
             location_memory.waiting_question(key)
         clat, clon = S.centroid(shape["geometry"])                      # the plot's centre is now the point
         spot = location_memory.recall(key)
-        location_memory.remember(key, Spot(clat, clon, spot.lga_pcode if spot else "", spot.lga if spot else "",
-                                           spot.ward if spot else "", how="pin", ward_likely=bool(spot and spot.ward_likely),
-                                           wardcode=spot.wardcode if spot else ""))
+        centre = Spot(clat, clon, spot.lga_pcode if spot else "", spot.lga if spot else "", spot.ward if spot else "",
+                      how="pin", ward_likely=bool(spot and spot.ward_likely), wardcode=spot.wardcode if spot else "")
+        if locate_fn is not None and settings is not None:              # the centre may sit in another ward or LGA
+            try:
+                if (area := await locate_fn(settings, clat, clon)) is not None:
+                    centre = Spot(clat, clon, area.lga_pcode, area.lga, area.ward, how="pin",
+                                  ward_likely=getattr(area, "ward_likely", False), wardcode=getattr(area, "wardcode", ""))
+                    if store is not None:
+                        store.set_last_lga(key, area.lga_pcode)
+            except Exception as e:      # noqa: BLE001 - PostGIS down: the corner pins' area stands
+                log.warning("plot centre lookup failed: %s", type(e).__name__)
+        location_memory.remember(key, centre)                           # the point first, then its plot's shape
+        location_memory.remember_shape(key, shape, at=(clat, clon))
         return [Out(w["shape_set"].format(ha=f"{shape['area_ha']:.1f}", n=shape["corners"],
                                           next="" if question else w["shape_next"]).strip(), lang=lang)], question
     if not question:

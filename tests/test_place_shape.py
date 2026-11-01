@@ -279,3 +279,103 @@ def test_a_place_question_is_never_turned_into_a_clarifying_question() -> None:
     assert place_question("Which wards of Wurno LGA were greenest in 2024?")
     assert not place_question("What is the 2026 budget for the Ministry of Agriculture?")
     assert not place_question("How many IDPs are in Gada LGA?")
+
+
+# --- follow-up review (1 Nov), finding 2: farm A -> size -> farm B never analyses farm A's shape -----------------
+
+async def located_by_lon(settings, lat, lon):
+    """Wamakko west of 5.25°E, Sokoto North east of it: a move across an LGA boundary."""
+    from app.geo import Area
+    return Area("NG034021", "Wamakko", "Gumbi", "62109") if lon < 5.25 else Area("NG034016", "Sokoto North", "Magajin Gari A", "61601")
+
+
+def _flow_by_lon():
+    key, calls, _ = _flow()
+    s, store = make_settings(), UserStore(":memory:")
+    store.create(key, "en")
+    store.give_consent(key)
+
+    async def answer(question, lang, *, settings, notify=None, history=None, place=None):
+        calls.append(place)
+        if place and place.get("ask_size") and not place.get("shape"):
+            return FakeAnswer(A.W["en"]["ask_size"], False, needs_size=True)
+        shape = (place or {}).get("shape") or {}
+        return FakeAnswer(f"ANSWER {shape.get('method', 'none')} {shape.get('area_ha', '')}")
+
+    def run(msg):
+        return asyncio.run(handle(msg, None, store=store, settings=s, locate_fn=located_by_lon, answer_fn=answer))
+    return key, calls, run
+
+
+@pytest.mark.parametrize("b_lat,b_lon,b_lga", [(LAT + 0.02, LON + 0.02, "Wamakko"),     # ~3 km away, same LGA
+                                              (LAT, 5.30, "Sokoto North")])            # across the LGA boundary
+def test_farm_a_size_then_farm_b_asks_again_and_never_uses_farm_a_circle(b_lat, b_lon, b_lga) -> None:
+    from shapely.geometry import Point, shape
+    key, calls, run = _flow_by_lon()
+    run(_text("How green was my farm in 2024?"))
+    run(_text("3 acres"))
+    assert calls[-1]["shape"]["method"] == "given_circle"
+    out = run(_pin(b_lat, b_lon))                                       # farm B: a new ordinary pin
+    assert any(f"{b_lga} LGA" in o.text for o in out)                   # its own area, re-resolved
+    out = run(_text("How green was my farm in 2024?"))
+    place = calls[-1]
+    assert (place["lat"], place["lon"]) == (b_lat, b_lon) and place["lga"] == b_lga
+    assert not place.get("shape") and out[-1].text.startswith("I couldn't draw")   # asked for farm B's size
+    out = run(_text("2 ha"))
+    assert calls[-1]["shape"]["area_ha"] == 2.0 and shape(calls[-1]["shape"]["geometry"]).covers(Point(b_lon, b_lat))
+    memory.forget(key)
+
+
+def test_the_same_farm_keeps_its_shape_and_a_repeat_pin_inside_it_too() -> None:
+    key, calls, run = _flow_by_lon()
+    run(_text("How green was my farm in 2024?"))
+    run(_text("3 acres"))
+    run(_pin(LAT + 0.0001, LON + 0.0001))                               # ~15 m: inside the 1.21 ha circle
+    out = run(_text("Was it flooded in 2022?"))
+    assert out[-1].text.startswith("ANSWER given_circle 1.21")
+    memory.forget(key)
+
+
+def test_farm_a_corners_then_farm_b_across_the_boundary_drops_the_corners() -> None:
+    key, calls, run = _flow_by_lon()
+    run(_text("Yaya koriyar gonata?"))
+    for lat, lon in [(13.0, 5.240), (13.0, 5.242), (13.002, 5.242), (13.002, 5.240)]:
+        run(_pin(lat, lon))
+    out = run(_text("an gama"))
+    assert calls[-1]["shape"]["method"] == "corners" and calls[-1]["lga"] == "Wamakko"
+    run(_pin(13.001, 5.30))                                             # farm B in Sokoto North
+    out = run(_text("How green was my farm in 2024?"))
+    assert not calls[-1].get("shape") and calls[-1]["lga"] == "Sokoto North" and out[-1].text.startswith("I couldn't draw")
+    memory.forget(key)
+
+
+def test_corners_whose_centre_crosses_the_boundary_take_the_centre_area() -> None:
+    key, calls, run = _flow_by_lon()
+    memory.remember(key, Spot(13.0, 5.240, "NG034021", "Wamakko", "Gumbi", how="pin"))
+    run(_text("Yaya koriyar gonata?"))
+    for lat, lon in [(13.0, 5.249), (13.0, 5.253), (13.002, 5.253), (13.002, 5.249)]:   # centre at 5.251°E
+        run(_pin(lat, lon))
+    run(_text("an gama"))
+    assert calls[-1]["shape"]["method"] == "corners" and calls[-1]["lga"] == "Sokoto North"
+    memory.forget(key)
+
+
+def test_place_answer_ignores_a_shape_that_does_not_contain_the_pin(monkeypatch) -> None:
+    from app.place.floods import FloodEvidence
+
+    async def no_outline(conn, settings, lat, lon, **kw):
+        return fallback(lon, lat, "too_big")
+    seen: dict = {}
+
+    def history(conn, lat, lon, *, today, polygon=None, water=False, **kw):
+        seen["polygon"] = polygon
+        return _history()
+    monkeypatch.setattr(A, "plot_outline", no_outline)
+    monkeypatch.setattr(A.H, "point_history", history)
+    monkeypatch.setattr(A, "flood_evidence", lambda *a, **k: FloodEvidence())
+    place = {"lat": LAT + 0.02, "lon": LON + 0.02, "lga": "Wamakko", "lga_pcode": "NG034021",
+             "shape": S.shape_from_size(LAT, LON, 1.21)}                 # farm A's circle, farm B's pin
+    pa = asyncio.run(A.place_answer(None, None, "how green was my farm in 2024?", "", "en", place, TODAY, ask_size=True))
+    assert pa.needs_size and "polygon" not in seen
+    pa = asyncio.run(A.place_answer(None, None, "how green was my farm in 2024?", "", "en", place, TODAY))
+    assert pa.found and seen["polygon"] is None and "circle of about 1 ha" in pa.text

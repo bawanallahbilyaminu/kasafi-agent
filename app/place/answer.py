@@ -698,6 +698,11 @@ async def place_answer(conn, settings, question: str, english: str, lang: str, p
     lat, lon = float(place["lat"]), float(place["lon"])
     lga, pcode = str(place.get("lga") or ""), str(place.get("lga_pcode") or "")
     shape = place.get("shape") or {}
+    if shape.get("geometry"):
+        from app.place.shape import fits
+        if not fits(shape, None, lat, lon):     # a shape for another plot is never analysed for this pin
+            log.warning("place: a given shape does not contain the pin; ignored")
+            shape = {}
     timing: dict[str, float] = {}
     t0 = time.perf_counter()
     # the one progress line of a first request, before the outline when no size question can follow (a shape

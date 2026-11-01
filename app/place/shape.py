@@ -121,3 +121,26 @@ def shape_from_corners(points: list[tuple[float, float]]) -> dict | None:
     if geom is None:
         return None
     return {"geometry": geom, "method": "corners", "area_ha": area_ha, "corners": len(points)}
+
+
+FIT_M = 30.0              # a point this close to the plot (or to a declined plot's pin) is the same farm
+
+
+def fits(shape: dict | None, anchor: tuple[float, float] | None, lat: float, lon: float, tol_m: float = FIT_M) -> bool:
+    """Whether a remembered shape belongs to the farm at (lat, lon): its polygon contains the point (within a few
+    metres); a declined size ({"declined": True}) belongs to the pin it was declined for (within `tol_m`). A new
+    farm pin outside the plot starts a new plot (follow-up review, finding 2: farm B was analysed with farm A's
+    circle)."""
+    import math
+
+    from shapely.geometry import Point, shape as to_shape
+    if not shape:
+        return True
+    if shape.get("geometry"):
+        deg = tol_m / 111_320.0
+        return to_shape(shape["geometry"]).buffer(deg).covers(Point(lon, lat))
+    if anchor is None:
+        return True
+    dy = (lat - anchor[0]) * 111_320.0
+    dx = (lon - anchor[1]) * 111_320.0 * math.cos(math.radians(lat))
+    return math.hypot(dx, dy) <= tol_m
