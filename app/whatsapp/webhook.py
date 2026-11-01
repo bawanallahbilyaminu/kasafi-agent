@@ -12,6 +12,7 @@ Privacy: logs carry masked numbers and message types only, never message text.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import logging
@@ -29,6 +30,8 @@ from app.whatsapp.client import WhatsAppClient, mask_phone
 from app.whatsapp.conversation import handle
 
 log = logging.getLogger(__name__)
+
+CROP_DEADLINE_S = 45.0     # an answer's evidence crops: sent within this after the text, or left out
 router = APIRouter()
 
 class _SeenIds:
@@ -154,8 +157,12 @@ async def _reply(messages: list[dict[str, Any]]) -> None:
                 for out in await handle(msg, client, store=store, settings=settings, notify=send):
                     await send(out)
                     if crops := unique_crops(out.crops, turn):   # after the text: a slow crop never delays it
-                        n = await send_evidence(client, msg["from"], crops, out.lang, settings)
-                        log.info("evidence images sent: %d of %d", n, len(crops))
+                        try:                                     # and never holds the rest past its own deadline
+                            n = await asyncio.wait_for(send_evidence(client, msg["from"], crops, out.lang, settings),
+                                                       CROP_DEADLINE_S)
+                            log.info("evidence images sent: %d of %d", n, len(crops))
+                        except asyncio.TimeoutError:
+                            log.warning("evidence images not sent within %.0f s", CROP_DEADLINE_S)
                 log.info("reply sent to %s", mask_phone(msg["from"]))
             except Exception as e:  # one failed reply must not stop the rest; the user never gets silence
                 log.exception("reply to %s failed", mask_phone(msg.get("from", "")))

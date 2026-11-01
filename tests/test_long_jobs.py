@@ -155,3 +155,90 @@ def test_the_failure_trace_row_is_written_with_the_reason(monkeypatch) -> None:
     trace.save_failure(make_settings(database_url="postgresql://x:y@h/d"), "How green was my farm?", "en",
                        "timeout after 120s", 120.4, "Sorry …")
     assert rows and rows[0][2] == "failed" and '"failure": "timeout after 120s"' in rows[0][5] and rows[0][4] == 120.4
+
+
+# --- follow-up review (1 Nov), finding 5: the checked text goes first; maps follow under their own deadline -------
+
+def test_the_text_goes_before_a_stalled_map_and_the_map_has_its_own_deadline(monkeypatch) -> None:
+    import time as _time
+
+    from app.whatsapp import conversation as C
+    from tests.helpers import make_settings
+    s = make_settings(database_url="postgresql://x:y@127.0.0.1:1/none", kasafi_answer_timeout_s=5)
+    store = UserStore(":memory:")
+    key = user_key("2348000000088", s)
+    store.create(key, "en")
+    store.give_consent(key)
+    memory.forget(key)
+    sent: list[tuple[float, str]] = []
+    t0 = _time.perf_counter()
+
+    class Reply:
+        text = "ANSWER"
+        maps = [{"kind": "synthetic"}]
+
+    async def answer(*a, **k):
+        return Reply()
+
+    async def notify(out):
+        sent.append((_time.perf_counter() - t0, out.text))
+
+    def stalled_map(*a, **k):
+        _time.sleep(0.6)
+        return []
+
+    async def none(*a, **k):
+        return None
+    monkeypatch.setattr(C, "render_specs", stalled_map)
+    monkeypatch.setattr(C, "MAP_DEADLINE_S", 0.1)
+    monkeypatch.setattr(C, "_facilities", none)
+    msg = {"from": "2348000000088", "id": "w-map", "type": "text", "text": {"body": "What is the agriculture budget in 2026?"}}
+    took = {}
+
+    async def run():
+        out = await C.handle(msg, None, store=store, settings=s, answer_fn=answer, guard_fn=_ok_guard,
+                             place_fn=none, notify=notify)
+        took["handle"] = _time.perf_counter() - t0                # the turn's last send is ready here
+        return out
+    outs = asyncio.run(run())                                     # (asyncio.run then waits for the abandoned thread)
+    answered = [at for at, text in sent if text == "ANSWER"]
+    assert answered and answered[0] < 0.1                         # the text went before the map was tried
+    assert outs[0].text == "ANSWER" and outs[-1].text.startswith("(The map")   # the note, at the map's deadline
+    assert took["handle"] < 0.4                                   # the stalled map (0.6 s) never held the turn
+
+
+def test_a_timed_out_answer_can_never_send_afterwards(monkeypatch) -> None:
+    from app.whatsapp import conversation as C
+    from tests.helpers import make_settings
+    s = make_settings(kasafi_answer_timeout_s=0.1)
+    store = UserStore(":memory:")
+    key = user_key("2348000000089", s)
+    store.create(key, "en")
+    store.give_consent(key)
+    memory.forget(key)
+    sent: list[str] = []
+    late: list = []
+
+    async def answer(question, lang, *, settings, notify=None, history=None, place=None):
+        async def finish_later():                 # a task the answer started, outliving its cancellation
+            await asyncio.sleep(0.2)
+            await notify("FINAL ANSWER (late)")
+        late.append(asyncio.create_task(finish_later()))
+        await asyncio.sleep(5)
+
+    async def notify(out):
+        sent.append(out.text)
+
+    async def run():
+        msg = {"from": "2348000000089", "id": "w-late", "type": "text", "text": {"body": "What is the 2026 health budget?"}}
+        outs = await C.handle(msg, None, store=store, settings=s, answer_fn=answer, guard_fn=_ok_guard, notify=notify)
+        await asyncio.sleep(0.3)                  # the late task runs to the end
+        return outs
+    outs = asyncio.run(run())
+    assert "couldn't" in outs[-1].text.lower() or "sorry" in outs[-1].text.lower() or "yi haƙuri" in outs[-1].text.lower()
+    assert "FINAL ANSWER (late)" not in sent and late and late[0].done()
+
+
+async def _ok_guard(*a, **k):
+    from app.guardrails.scope import Verdict
+    return Verdict("ok", "none")

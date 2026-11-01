@@ -79,8 +79,11 @@ from that publisher's own documents.
   on the admin trace ([`app/agent/attribution.py`](app/agent/attribution.py)).
 - **Entity, level and period** of the rows used are compared with what was asked; a mismatch is redone once and
   then said plainly ([`app/agent/consistency.py`](app/agent/consistency.py)).
-- **Never silence.** Every reply ends in an answer or an apology within two minutes, and a failure is logged with
-  its reason on the admin page.
+- **An answer or an apology.** While the server is running, the answer function has a 120-second limit; past it
+  the user gets an apology, and nothing from that job can be sent afterwards. The checked text is sent as soon as it
+  is ready. Maps follow under their own 30-second limit (or a note says the map couldn't be drawn), and evidence
+  crops under a 45-second one. A failure is logged with its reason on the admin page. Incoming messages are not yet
+  persisted before processing, so a job lost to a server restart is not recovered (roadmap).
 
 ## How we evaluate
 

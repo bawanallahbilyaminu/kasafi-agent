@@ -289,6 +289,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         if not satellite:
             await notify(Out(t(searching_key(question), lang)))   # planning + search + answer: median ~10 s
         sent: list[str] = []
+        closed = False                            # set when the answer timed out: nothing of it is sent after that
 
         async def still_working() -> None:        # a slow answer (a second search, a fallback) gets one more word
             await asyncio.sleep(SLOW_ANSWER_S)
@@ -298,6 +299,9 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         started = time.perf_counter()
         try:
             async def send_now(text: str) -> None:   # e.g. "Ina neman takardar…" while a document is fetched
+                if closed:                            # a job past its limit (a worker thread, a task it started)
+                    log.warning("a message from a timed-out answer was dropped")   # can never send after the apology
+                    return
                 sent.append(text)
                 await notify(Out(text))
             # the user's point (memory, 30 min) or LGA on file, for 'here' and hazards; only when there is one
@@ -323,6 +327,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             store.add_turn(key, lang, question, body, getattr(result, "sources", []), getattr(result, "working", ""),
                            getattr(result, "quotes", ""))
         except asyncio.TimeoutError:
+            closed = True
             seconds = time.perf_counter() - started
             log.error("answer timed out after %.0fs (limit %.0fs): %s", seconds, settings.kasafi_answer_timeout_s,
                       "satellite" if satellite else "documents")
@@ -351,7 +356,16 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         outs = [Out(text_out, CALC_BUTTONS.get(lang, CALC_BUTTONS["en"]) if offer else None, crops or None, lang)]
         if (specs := getattr(result, "maps", None)) and store.images_on(key) and settings.has_database:
             from app.agent.answer import lagos_today           # 'tomorrow' on tomorrow's map, not 'today'
-            drawn = await asyncio.to_thread(render_specs, settings, specs, lang, lagos_today())
+            # the checked text goes now; the maps follow under their own deadline (follow-up review, finding 5).
+            # The webhook skips the identical text when the list returns and sends its crops after it.
+            if _sender(notify) is not None:
+                await notify(outs[0])
+            try:
+                drawn = await asyncio.wait_for(asyncio.to_thread(render_specs, settings, specs, lang, lagos_today()),
+                                               MAP_DEADLINE_S)
+            except asyncio.TimeoutError:
+                log.warning("maps not drawn within %.0f s: the answer went without them", MAP_DEADLINE_S)
+                drawn = []
             outs += [Out(m.caption, lang=lang, image=m.jpeg) for m in drawn]
             if len(drawn) < len(specs):            # the answer always has its map; when it can't be drawn, say so
                 outs.append(Out(t("map_failed", lang), lang=lang))
@@ -821,6 +835,7 @@ async def _facility_replies(spot: Spot, search: FacilitySearch, lang: str, setti
 
 
 MAP_REPEAT_S = 600
+MAP_DEADLINE_S = 30.0       # an answer's maps: drawn within this, after the text has gone, or a note says so
 _maps_sent: dict[str, tuple[str, float]] = {}       # in memory: the last near-you map's hash per search, 10 minutes
 
 
