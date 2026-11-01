@@ -206,7 +206,7 @@ def test_the_store_backup_is_a_consistent_copy_and_old_copies_are_pruned(tmp_pat
 
 
 def test_the_daily_backup_runs_once_a_day_when_a_folder_is_set(tmp_path: Path, monkeypatch) -> None:
-    from app.hazards import fetch
+    from app import maintenance as fetch
     store = UserStore(":memory:")
     monkeypatch.setattr("app.users.get_store", lambda: store)
     fetch._backup_day.clear()
@@ -216,3 +216,29 @@ def test_the_daily_backup_runs_once_a_day_when_a_folder_is_set(tmp_path: Path, m
     assert fetch.daily_store_backup(s, "2026-11-01") is False and fetch.daily_store_backup(s, "2026-11-02") is True
     assert len(list((tmp_path / "b").glob("kasafi-db-*.sqlite"))) == 2
     fetch._backup_day.clear()
+
+
+def test_the_daily_backup_runs_with_hazard_fetching_off(tmp_path: Path, monkeypatch) -> None:
+    """Follow-up review §5.1: the backup lived in the hazard loop, which never starts without hazard fetching."""
+    import time as _time
+
+    from app import maintenance
+    from app.hazards.fetch import start_scheduler
+    store = UserStore(":memory:")
+    monkeypatch.setattr("app.users.get_store", lambda: store)
+    maintenance._backup_day.clear()
+    maintenance._started.clear()
+    s = make_settings(kasafi_backup_dir=str(tmp_path / "b"), kasafi_hazard_fetch=False)
+    start_scheduler(s)                                   # off: hazard fetching is off
+    assert maintenance.start_maintenance(make_settings()) is None          # no folder: nothing to maintain
+    th = maintenance.start_maintenance(s, every_s=0.05)
+    assert th is not None and th.is_alive() and th.name == "maintenance"
+    deadline = _time.monotonic() + 3
+    while not list((tmp_path / "b").glob("kasafi-db-*.sqlite")) and _time.monotonic() < deadline:
+        _time.sleep(0.02)
+    assert len(list((tmp_path / "b").glob("kasafi-db-*.sqlite"))) == 1   # once a day, though checked often
+    _time.sleep(0.2)
+    assert len(list((tmp_path / "b").glob("kasafi-db-*.sqlite"))) == 1
+    assert maintenance.start_maintenance(s) is th        # started once per process
+    maintenance._started.clear()
+    maintenance._backup_day.clear()

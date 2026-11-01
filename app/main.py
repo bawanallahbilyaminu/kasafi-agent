@@ -51,6 +51,8 @@ async def _hazard_fetchers() -> None:
     from app.config import get_settings
     from app.hazards.fetch import start_scheduler
     start_scheduler(get_settings())
+    from app.maintenance import start_maintenance       # the daily store backup, whatever hazard fetching is set to
+    start_maintenance(get_settings())
 
 
 _crawler: set = set()

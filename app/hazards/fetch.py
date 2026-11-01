@@ -285,23 +285,8 @@ async def run_due(conn, settings) -> dict[str, int]:
 CHECK_EVERY_S = 600
 
 
-_backup_day: list[str] = []
-
-
-def daily_store_backup(settings, today: str | None = None) -> bool:
-    """One consistent sqlite copy of the user store a day into KASAFI_BACKUP_DIR (external review, finding 19);
-    False when none is due or no folder is set."""
-    if not settings.kasafi_backup_dir:
-        return False
-    from datetime import datetime, timezone
-    day = today or datetime.now(timezone.utc).date().isoformat()
-    if _backup_day and _backup_day[-1] == day:
-        return False
-    from app.users import get_store
-    path = get_store().backup_to(settings.kasafi_backup_dir)
-    _backup_day[:] = [day]
-    log.info("store backup written: %s", path.name)
-    return True
+# the daily store backup runs in its own maintenance thread (app/maintenance.py), not in this loop
+from app.maintenance import daily_store_backup  # noqa: E402,F401 - kept importable from here
 
 
 def start_scheduler(settings) -> None:
@@ -329,10 +314,6 @@ def start_scheduler(settings) -> None:
                         log.info("alerts round: %s", dict(dispatch.run(conn, get_store(), settings)))
             except Exception as e:      # noqa: BLE001 - the loop must outlive any one failure
                 log.warning("hazard fetch round failed: %s", type(e).__name__)
-            try:
-                daily_store_backup(settings)
-            except Exception as e:      # noqa: BLE001
-                log.warning("store backup failed: %s", type(e).__name__)
             time.sleep(CHECK_EVERY_S)
     threading.Thread(target=loop, name="hazard-fetch", daemon=True).start()
     log.info("hazard fetch scheduler started")
