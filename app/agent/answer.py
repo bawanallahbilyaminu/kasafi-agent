@@ -71,7 +71,7 @@ from app.retrieval.line_search import (MAX_LINES, name_key, names_a_kind, neares
                                        project_phrases, search_lines)
 from app.config import Settings, get_settings
 from app.providers.baseten import BasetenClient
-from app.providers.fireworks import FireworksClient, OpenModel
+from app.providers.fireworks import FireworksClient, OpenModel, batch_factory
 from app.providers.chat import ChatClient
 from app.providers.meta import MetaClient
 from app.providers.stt import parse_json_reply
@@ -1501,6 +1501,8 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
     planned_q = with_location(question, place)
     if place and names_place(question):
         place = None
+    if client_factory is MetaClient and (batch := batch_factory(settings)):
+        client_factory = batch                  # an eval run or batch job on Muse Spark Open (never set live)
     async with client_factory(settings) as client, open_reader(settings) as second:
         t0 = time.perf_counter()
         catalog = load_catalog(conn)

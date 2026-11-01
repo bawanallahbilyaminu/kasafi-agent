@@ -190,6 +190,9 @@ async def check(texts: list[str], *, settings: Settings | None = None,
         return Verdict(cat, "keyword")
     if not needs_model(texts):
         return Verdict("ok", "none")
+    if client_factory is MetaClient:
+        from app.providers.fireworks import batch_factory
+        client_factory = batch_factory(settings) or client_factory     # an eval run on Muse Spark Open
     for attempt in (1, 2):                    # a reply that doesn't parse gets one more try before allowing
         try:
             async with client_factory(settings) as client:

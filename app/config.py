@@ -137,6 +137,10 @@ class Settings(BaseSettings):
     # query 2 of 3 times (Muse Spark ~1 of 5), so it stays on Muse Spark
     kasafi_open_stages: str = "compose"
     kasafi_open_stage_timeout_s: float = 15.0
+    # Eval runs and batch jobs on Muse Spark Open instead of Muse Spark (1 Nov 2026: Meta credits kept for live users
+    # and the demo): "baseten" (then Fireworks) or "fireworks" (then Baseten). Set per run in the shell
+    # (KASAFI_BATCH_PROVIDER=baseten uv run python evals/...), never on the server; empty = Muse Spark as live.
+    kasafi_batch_provider: str = ""
 
     # Web search
     serper_api_key: SecretStr | None = None
