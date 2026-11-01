@@ -30,14 +30,17 @@ CASES = [
     {"id": "p3_project-01", "lang": "en", "q": "How much is budgeted for Procurment of 5n0 peugout 406 saloon for members and secretary in 2026?",
      "any": [["10,000,000.00", "10.00 million"]], "all": [], "any2": [], "not": ["25.98 billion"]},
     {"id": "p4_narrative-02", "lang": "en", "q": "What does the Sokoto State Budget Implementation Report Q3 2025 say about Revenue Performance, and what reasons does it give?",
-     "any": [["526,882,142,484.39", "526.88 billion"]], "all": [], "any2": [], "not": [], "cite": ["bir-2025-q3", 4]},
+     "any": [["413,074,379,419.18", "413.07 billion"]], "all": [], "any2": [["270,022,", "270.02 billion"], ["reason", "timing", "due in", "because", "administrative"]],
+     "not": [], "cite": ["bir-2025-q3", 4]},
     {"id": "spend_quarter-04", "lang": "en", "q": "How much had teh State Enviromental Protection Agency spent by the end of Q3 2025, agianst its revised budget?",
      "any": [["516,538,439.45", "516.54 million"]], "all": [], "any2": [["679,769,984.28", "679.77 million"]], "not": []},
+    # the follow-up "its …" after a question about the Fertilizer company: the company's own 2025 rows (p. 13, 14, 16
+    # of the 2025 budget), not the Scholarship board's figures the generator's follow-up form had paired it with
     {"id": "split-06", "lang": "en", "q": "What are its personnel, overhead and capital allocations in 2025?",
      "history": [{"question": "Menene allocation na personnel, overhead da capital na Fertilizer and Agricultral Supplies Company a 2026?",
                   "answer": "Ga Fertilizer and Agricultral Supplies Company, kasafin da aka amince (albashi) shi ne ₦68.17 miliyan.",
-                  "sources": [{"doc_id": "budget-2026-approved", "page": 53}]}],
-     "any": [["39.78 million", "39,780,000"]], "all": [], "any2": [["4,481,100,000.00", "4.48 billion"], ["47,090,000.00", "47.09 million"]], "not": []},
+                  "sources": [{"doc_id": "budget-2026-approved", "page": 20}]}],
+     "any": [["37,510,520.61", "37.51 million"]], "all": [], "any2": [["23,500,000.00", "23.50 million"], ["98,000,000.00", "98.00 million"]], "not": []},
 ]
 
 
