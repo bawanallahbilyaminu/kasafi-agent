@@ -43,6 +43,7 @@ evaluate*); each row is a capability this release serves, not a measurement of a
 | --- | --- |
 | Budget and budget-performance answers, typed or by Hausa voice note, with citations, evidence crops and *show working* | Live |
 | Finding, fetching and indexing a missing document from allowlisted sites | Live |
+| Word documents (DOCX, DOC, ODT, RTF) in the library, converted to PDF with LibreOffice and indexed like any PDF; citations say the pages are the converted PDF's | Live |
 | Questions that need several publishers (IDPs, poverty, employment), answered side by side | Live |
 | Weather, air quality, river and fire answers with a map; official advisories and outlooks (NEMA, NIHSA, NiMet); NCDC outbreak figures | Live |
 | Nearest health facility, route and road distance | Live |

@@ -25,7 +25,9 @@ import httpx
 import psycopg
 
 from app import usage
+from app.acquisition.convert import ConversionError, convert_to_pdf
 from app.acquisition.fetch import FetchError, download_pdf
+from app.acquisition.filetype import EXTENSIONS, sniff
 from app.acquisition.find import find_local, rank_candidates, search_candidates
 from app.acquisition.policy import USER_AGENT, Robots, host_allowed
 from app.acquisition.review import open_web_candidates, open_web_trusted, queue_domain
@@ -122,8 +124,11 @@ def unique_id(conn: psycopg.Connection, wanted: str) -> str:
 
 
 def _known(conn: psycopg.Connection, *, url: str = "", sha: str = "") -> str | None:
+    """By URL, by the indexed PDF's hash, or by a Word-type original's hash (its converted PDF isn't byte-stable
+    across LibreOffice versions)."""
     row = conn.execute("SELECT id FROM documents WHERE (%s <> '' AND (source_url = %s OR final_url = %s)) "
-                       "OR (%s <> '' AND sha256 = %s) LIMIT 1", (url, url, url, sha, sha)).fetchone()
+                       "OR (%s <> '' AND (sha256 = %s OR original_sha256 = %s)) LIMIT 1",
+                       (url, url, url, sha, sha, sha)).fetchone()
     return row[0] if row else None
 
 
@@ -153,9 +158,27 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
                                 **({"timeout": download_timeout} if download_timeout else {}))
         t["download"] = time.perf_counter() - t0
         pdf, sha = dl.path, dl.sha256
-        if dl.kind == "zip":
+        provenance: dict = {}
+        if known := _known(conn, sha=sha):             # same file under another URL (a Word original's hash too)
+            return Acquired("known", known, url=url, timings=t)
+        ft = sniff(dl.path)                            # what the bytes are, whatever the name or Content-Type
+        if ft.rejected:
+            return Acquired("failed", url=url, detail=f"{ft.kind}: {ft.reason}", timings=t)
+        if ft.office:                                  # DOCX, DOC, ODT, RTF: to PDF in the converter's sandbox
+            t0 = time.perf_counter()
+            try:
+                conv = await convert_to_pdf(dl.path, unzipped)
+            except ConversionError as e:
+                return Acquired("failed", url=url, detail=f"{ft.kind}: {e}", timings=t)
+            t["convert"] = time.perf_counter() - t0
+            pdf, sha = conv.pdf, conv.sha256
+            provenance = {"original_format": ft.kind, "original_sha256": dl.sha256, "converter": conv.converter}
+            log.info("converted a %s to PDF in %.1fs with %s", ft.kind, conv.seconds, conv.converter)
+        elif ft.kind == "zip":
             pdf = await unzip_pdf_sandboxed(dl.path, unzipped, MAX_BYTES)
             sha = sha256_file(pdf)                     # provenance is the PDF we index
+        elif ft.kind != "pdf":
+            return Acquired("failed", url=url, detail=ft.reason or "not a document", timings=t)
         if known := _known(conn, sha=sha):             # same file under another URL
             return Acquired("known", known, url=url, timings=t)
         t0 = time.perf_counter()
@@ -174,6 +197,8 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
         doc_id = unique_id(conn, str(meta.get("id") or meta.get("title") or ""))
         path = fetch_dir / f"{doc_id}.pdf"
         pdf.replace(path)
+        if provenance:                                 # the original kept beside its PDF (outside git)
+            dl.path.replace(fetch_dir / f"{doc_id}{EXTENSIONS[provenance['original_format']]}")
         got_series = series or (meta.get("series") if meta.get("series") in SERIES else None)
         got_edition = edition or (meta.get("edition") if valid_edition(meta.get("edition")) else None)
         year = meta.get("year") if isinstance(meta.get("year"), int) else None
@@ -182,7 +207,7 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
                "year": year, "publisher": str(meta.get("publisher") or "")[:200] or None,
                "source_url": url, "final_url": dl.final_url, "fetched_at": dl.fetched_at,
                "acquisition": "scheduled" if scheduled else "fetched",
-               "series": got_series, "edition": got_edition if got_series else None}
+               "series": got_series, "edition": got_edition if got_series else None, **provenance}
         t0 = time.perf_counter()
         res = index_document(conn, doc, path, pages=pages, sha=sha, image_pages=image_pages)
         conn.commit()      # searchable now, and visible to the background OCR's own connection

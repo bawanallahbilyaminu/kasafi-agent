@@ -458,9 +458,29 @@ class Answer:
     attribution: list[str] = field(default_factory=list)   # the binding problems found, for show working and the trace
 
 
+CONVERTED: dict[str, str] = {}       # doc id -> original format, for documents converted from Word-type files
+CONVERTED_NOTE = {"en": " (PDF converted from the Word original)", "ha": " (PDF da aka canza daga asalin Word)"}
+CONVERTED_WORKING = {
+    "en": "Pages of {titles} are pages of the PDF Kasafi converted from the Word original (a Word file has no fixed "
+          "page numbers); the original and the PDF are kept with their hashes.",
+    "ha": "Shafukan {titles} shafukan PDF ne da Kasafi ya canza daga asalin Word (fayil ɗin Word ba shi da tsayayyun "
+          "lambobin shafi); an ajiye asalin da PDF ɗin tare da hash ɗinsu.",
+}
+
+
 def load_catalog(conn: psycopg.Connection) -> list[dict]:
     rows = conn.execute("SELECT id, title, category, year FROM documents ORDER BY category, year").fetchall()
+    try:                                   # which documents are converted Word files: said in every citation of them
+        CONVERTED.clear()
+        CONVERTED.update(dict(conn.execute(
+            "SELECT id, original_format FROM documents WHERE original_format IS NOT NULL").fetchall()))
+    except Exception:              # noqa: BLE001 - the column arrives with migration 0023
+        conn.rollback()
     return [{"id": r[0], "title": r[1], "type": r[2], "year": r[3]} for r in rows]
+
+
+def converted_note(doc_id: str, lang: str) -> str:
+    return CONVERTED_NOTE.get(lang, CONVERTED_NOTE["en"]) if doc_id in CONVERTED else ""
 
 
 def lagos_today() -> date:
@@ -935,7 +955,8 @@ def unverified_numbers(answer: str, evidence: list[Evidence], extra: list[str] |
 
 def format_citations(cited: list[Evidence], lang: str) -> str:
     word = PAGE_WORD.get(lang, "page")
-    return "\n".join(f"[{e.n}] {e.title}, {word} {e.page}" + (" (OCR)" if e.source == "ocr" else "") for e in cited)
+    return "\n".join(f"[{e.n}] {e.title}, {word} {e.page}" + (" (OCR)" if e.source == "ocr" else "")
+                     + converted_note(e.doc_id, lang) for e in cited)
 
 
 async def compose(question: str, lang: str, plan: Plan, evidence: list[Evidence], client: ChatClient,
@@ -1904,6 +1925,10 @@ def settle_verification(a: "Answer", lang: str) -> None:
         n = len([b for b in attribution.claims_from(a.exact or a.text)]) if a.verification != "calculation checked" else 0
         line = attribution.state_line(a.verification, lang, n, a.attribution)
         a.working = f"{a.working}\n\n{line}" if a.working else line
+    titles = list(dict.fromkeys(e.title for e in (a.cited or []) if e.doc_id in CONVERTED))
+    if titles:                             # a converted Word original: its page numbers are the PDF's
+        note = CONVERTED_WORKING.get(lang, CONVERTED_WORKING["en"]).format(titles="; ".join(titles))
+        a.working = f"{a.working}\n\n{note}" if a.working else note
 
 
 def scope_notes(conn, cited: list[Evidence]) -> str:
@@ -3135,11 +3160,13 @@ def sources_line(cited: list[Evidence], lang: str) -> str:
     """One line: 'Madogara: <document>, shafi 49, 61; <document>, shafi 12'."""
     w = ANALYSIS_WORDS.get(lang, ANALYSIS_WORDS["en"])
     pages: dict[str, list[int]] = {}
+    notes: dict[str, str] = {}
     for e in cited:
         pages.setdefault(e.title, [])
+        notes.setdefault(e.title, converted_note(e.doc_id, lang))
         if e.page not in pages[e.title]:
             pages[e.title].append(e.page)
-    return f"📄 *{w['sources']}:* " + "; ".join(f"{t}, {w['page']} {', '.join(str(p) for p in sorted(ps))}"
+    return f"📄 *{w['sources']}:* " + "; ".join(f"{t}, {w['page']} {', '.join(str(p) for p in sorted(ps))}{notes[t]}"
                                                for t, ps in pages.items())
 
 

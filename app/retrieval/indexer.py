@@ -64,16 +64,58 @@ def normalise_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", name.lower())
 
 
+OFFICE_EXTS = (".docx", ".doc", ".odt", ".rtf")
+
+
 def find_file(doc: dict, data_dir: Path) -> Path | None:
     """The manifest's `file` (relative to data/, e.g. advisories/nihsa-afo-2026.pdf), <id>.pdf, or a local file
-    named after the title (punctuation ignored), as in fetch_seed_docs.py."""
+    named after the title (punctuation ignored), as in fetch_seed_docs.py. A Word-type file (<id>.docx, a title-
+    named .docx/.doc/.odt/.rtf) counts too: index_manifest converts it to <id>.pdf first."""
     if doc.get("file") and (named := data_dir / doc["file"]).exists():
         return named
     by_id = data_dir / f"{doc['id']}.pdf"                 # the server's /data/pdfs holds them by id
     if by_id.exists():
         return by_id
+    for ext in OFFICE_EXTS:
+        if (office := data_dir / f"{doc['id']}{ext}").exists():
+            return office
     wanted = normalise_name(doc["title"])
-    return next((p for p in data_dir.glob("*.pdf") if normalise_name(p.stem) == wanted), None)
+    for ext in (".pdf", *OFFICE_EXTS):
+        if found := next((p for p in data_dir.glob(f"*{ext}") if normalise_name(p.stem) == wanted), None):
+            return found
+    return None
+
+
+def prepare_pdf(doc: dict, path: Path, data_dir: Path) -> tuple[Path, dict]:
+    """The PDF to index for a manifest file, and the provenance to record: the file itself when its bytes are a
+    PDF (whatever its name); a Word-type file (DOCX, DOC, ODT, RTF, by its bytes) converted to <id>.pdf beside
+    the original (docs/architecture.md, 'Office documents'). Raises ValueError for anything else or a rejected
+    file, ConversionError when LibreOffice fails."""
+    from app.acquisition.convert import convert_to_pdf_sync
+    from app.acquisition.filetype import sniff
+    ft = sniff(path)
+    if ft.rejected:
+        raise ValueError(f"{ft.kind}: {ft.reason}")
+    if ft.kind == "pdf":
+        return path, {}
+    if not ft.office:
+        raise ValueError(ft.reason or f"not a document ({ft.kind})")
+    pdf = data_dir / f"{doc['id']}.pdf"
+    original_sha = sha256_file(path)
+    stamp = data_dir / f"{doc['id']}.converted.json"
+    if pdf.exists() and stamp.exists():
+        try:
+            prev = json.loads(stamp.read_text(encoding="utf-8"))
+            if prev.get("original_sha256") == original_sha and prev.get("pdf_sha256") == sha256_file(pdf):
+                return pdf, {k: prev[k] for k in ("original_format", "original_sha256", "converter")}
+        except (ValueError, KeyError):
+            pass
+    conv = convert_to_pdf_sync(path, pdf)
+    provenance = {"original_format": ft.kind, "original_sha256": original_sha, "converter": conv.converter}
+    stamp.write_text(json.dumps({**provenance, "pdf_sha256": conv.sha256, "source": path.name}, indent=1),
+                     encoding="utf-8")
+    log.info("%s: converted %s (%s) to PDF with %s in %.1fs", doc["id"], path.name, ft.kind, conv.converter, conv.seconds)
+    return pdf, provenance
 
 
 def sha256_file(path: Path) -> str:
@@ -523,11 +565,12 @@ def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bo
         conn.execute("DELETE FROM documents WHERE id = %s", (doc["id"],))   # cascades to pages/chunks
         conn.execute(
             """INSERT INTO documents (id, title, category, year, publisher, source_url, acquisition, sha256, page_count,
-                                      final_url, fetched_at, series, edition)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                      final_url, fetched_at, series, edition, original_format, original_sha256, converter)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (doc["id"], doc["title"], doc.get("category"), doc.get("year"), doc.get("publisher"),
              doc.get("source_url"), doc.get("acquisition"), sha, len(pages), doc.get("final_url"),
-             doc.get("fetched_at"), doc.get("series"), doc.get("edition")),
+             doc.get("fetched_at"), doc.get("series"), doc.get("edition"), doc.get("original_format"),
+             doc.get("original_sha256"), doc.get("converter")),
         )
         n_chunks = 0
         with conn.cursor() as cur:
@@ -577,12 +620,20 @@ def index_manifest(conn: psycopg.Connection, manifest_path: Path, *, only: list[
     for doc in manifest["documents"]:
         if only and doc["id"] not in only:
             continue
-        path = find_file(doc, pdf_dir or manifest_path.parent)
+        data_dir = pdf_dir or manifest_path.parent
+        path = find_file(doc, data_dir)
         if path is None:
-            results.append(IndexResult(doc["id"], "missing", detail="no local PDF"))
+            results.append(IndexResult(doc["id"], "missing", detail="no local PDF or Word file"))
             continue
         try:
-            results.append(index_document(conn, doc, path, force=force))
+            pdf, provenance = prepare_pdf(doc, path, data_dir)
+            results.append(index_document(conn, {**doc, **provenance}, pdf, force=force))
         except pdfium.PdfiumError as e:
             results.append(IndexResult(doc["id"], "failed", detail=f"unreadable PDF: {e}"))
+        except ValueError as e:
+            results.append(IndexResult(doc["id"], "failed", detail=f"rejected: {e}"))
+        except Exception as e:                           # a conversion that failed or timed out: said, not retried
+            if type(e).__name__ != "ConversionError":
+                raise
+            results.append(IndexResult(doc["id"], "failed", detail=f"conversion: {e}"))
     return results

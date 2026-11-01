@@ -52,6 +52,40 @@ WhatsApp webhook (FastAPI on VPS)
 - **Versions:** prefer the latest or revised version, and say which version is cited.
 - **Index relevant pages first**, the rest in the background.
 
+### Office documents (added 1 Nov 2026)
+
+Government and partner sites also publish Word files, and local documents arrive as Word files. They join the
+library through the same path as PDFs:
+
+- **The type comes from the bytes**, never the file name or the server's Content-Type (`app/acquisition/filetype.py`):
+  `%PDF-`; a zip is a DOCX (`word/document.xml`), an ODT (`mimetype` + `content.xml`) or a zip holding a PDF (as
+  NBS ships reports); an OLE file with a `WordDocument` stream is a legacy DOC; `{\rtf` is RTF. Anything else is
+  rejected as before. A file named `.pdf` holding Word content, or the reverse, is handled by what it is.
+- **Unsafe files are rejected with a reason before anything is opened:** macro parts (DOCX `vbaProject.bin`, OLE
+  `Macros`/`VBA` storages, ODT `Basic/`), external targets (a relationship with `TargetMode="External"` other than
+  a plain hyperlink, an ODT `xlink:href` to a URL), embedded objects (OLE object parts, ODT `Object` parts, RTF
+  `\objdata`), and zip bombs (declared size over 300 MB, more than 3,000 members, or a ratio over 200:1).
+- **Conversion** (`app/acquisition/convert.py`): LibreOffice Writer headless (`libreoffice-writer-nogui` in the
+  image, with DejaVu and Liberation fonts for ɓ ɗ ƙ ƴ) in a child process with the parser's limits: a stripped
+  environment with no secrets, memory and CPU limits on Linux, a 120 s wall clock, its own throwaway profile and a
+  temporary directory deleted afterwards. The container has no network namespace, so external links are refused
+  before conversion rather than blocked during it. A failure or timeout is reported once with its reason; nothing
+  retries it. The converted PDF then goes through the sandboxed parse, index, OCR and evidence crops unchanged.
+- **Both entry paths:** the fetcher accepts PDF, ZIP, OLE and RTF bytes from allowlisted sites under the same
+  allowlist and robots rules; `fetch_and_index` converts before parsing and dedupes by the original's hash as well
+  as the PDF's (a converted PDF isn't byte-stable across LibreOffice versions). A local manifest entry whose file is
+  Word-type is converted to `<id>.pdf` beside the original, with a `<id>.converted.json` stamp so an unchanged
+  original isn't converted again; `deploy/deploy.sh --sync-pdfs` carries the originals with the PDFs.
+- **Provenance:** `documents.original_format`, `original_sha256` and `converter` (migration 0023). Citations say
+  "page N (PDF converted from the Word original)" and show working explains that a Word file has no fixed page
+  numbers; the original is kept next to the PDF, outside git.
+- **Limits:** the download limit (60 MB) applies to the original; the unzipped size, member count and ratio to a
+  zip; the page limit (800) to the converted PDF.
+- **Tests** build their fixtures in code (`tests/office_fixtures.py`): on a machine without LibreOffice the
+  conversion tests use a fake converter (a minimal PDF writer); the Hausa-letters test runs only with the real one.
+  Install LibreOffice locally with `winget install TheDocumentFoundation.LibreOffice` to run it and to add Word
+  documents to the local manifest.
+
 ### Multi-document answers: important rules
 
 - **Disagreeing figures** (approved vs revised vs released vs actual): show them side by side with sources and explain the difference. Never average them or silently pick one.

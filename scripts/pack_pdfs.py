@@ -14,6 +14,8 @@ sys.path.insert(0, str(ROOT))
 
 from app.retrieval.indexer import find_file  # noqa: E402
 
+OFFICE_EXTS = (".docx", ".doc", ".odt", ".rtf")
+
 
 def main() -> int:
     out = Path(sys.argv[1])
@@ -23,8 +25,11 @@ def main() -> int:
     for doc in manifest["documents"]:
         if path := find_file(doc, data):
             names[f"{doc['id']}.pdf"] = path
-    for path in sorted((data / "fetched").glob("*.pdf")):
-        if not path.name.startswith("incoming-"):
+            for ext in OFFICE_EXTS:                      # the Word-type original kept beside its converted PDF
+                if (orig := path.with_suffix(ext)).exists():
+                    names[f"{doc['id']}{ext}"] = orig
+    for path in sorted((data / "fetched").glob("*")):
+        if path.suffix in (".pdf", *OFFICE_EXTS) and not path.name.startswith("incoming-"):
             names.setdefault(path.name, path)
     with tarfile.open(out, "w") as tar:
         for name, path in sorted(names.items()):

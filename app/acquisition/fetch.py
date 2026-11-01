@@ -37,7 +37,7 @@ class Downloaded:
     url: str            # the URL we were asked to fetch
     final_url: str      # after redirects
     fetched_at: str     # ISO 8601, UTC
-    kind: str = "pdf"   # pdf | zip
+    kind: str = "pdf"   # pdf | zip | ole | rtf (by the first bytes; filetype.sniff settles what a zip or OLE holds)
 
 
 async def check_url(url: str, robots: Robots, allowed=host_allowed) -> None:
@@ -83,7 +83,10 @@ async def _download(url: str, dest: Path, http: httpx.AsyncClient, robots: Robot
     for _ in range(MAX_REDIRECTS + 2):
         await check_url(current, robots, allowed)
         async with http.stream("GET", current, headers={"User-Agent": USER_AGENT,
-                                                        "Accept": "application/pdf, application/zip, */*;q=0.5"},
+                                                        "Accept": "application/pdf, application/zip, "
+                                                                  "application/vnd.openxmlformats-officedocument.wordprocessingml.document, "
+                                                                  "application/vnd.oasis.opendocument.text, application/msword, "
+                                                                  "application/rtf, */*;q=0.5"},
                                follow_redirects=False, timeout=timeout) as resp:
             if resp.is_redirect:
                 current = urllib.parse.urljoin(current, resp.headers.get("location", ""))
@@ -118,10 +121,17 @@ async def _save(resp: httpx.Response, url: str, final_url: str, dest: Path, max_
         with tmp.open("wb") as f:
             async for chunk in resp.aiter_bytes(64 * 1024):
                 if first:
+                    # by the bytes, never the name or Content-Type: a zip is a DOCX, an ODT or a zip holding a PDF;
+                    # an OLE file a legacy DOC; RTF; sniffed in full after the download (app/acquisition/filetype.py)
                     if chunk.startswith(b"PK\x03\x04"):
                         kind = "zip"
+                    elif chunk.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
+                        kind = "ole"
+                    elif chunk.startswith(b"{\\rtf"):
+                        kind = "rtf"
                     elif not chunk.startswith(b"%PDF-"):
-                        raise FetchError(f"not a PDF (Content-Type: {resp.headers.get('content-type')})")
+                        raise FetchError(f"not a PDF, Word, OpenDocument or RTF file (Content-Type: "
+                                         f"{resp.headers.get('content-type')})")
                 first = False
                 size += len(chunk)
                 if size > max_bytes:

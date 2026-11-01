@@ -1,9 +1,11 @@
 # Kasafi API: FastAPI webhook server.
 FROM python:3.12-slim-bookworm
 
-# ffmpeg converts WhatsApp OGG/Opus voice notes to WAV (app/providers/audio.py).
+# ffmpeg converts WhatsApp OGG/Opus voice notes to WAV (app/providers/audio.py). LibreOffice Writer (headless, no
+# GUI packages) converts Word-type documents to PDF (app/acquisition/convert.py); DejaVu and Liberation fonts
+# render the Hausa letters ɓ ɗ ƙ ƴ in the converted pages.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get install -y --no-install-recommends ffmpeg libreoffice-writer-nogui fonts-dejavu-core fonts-liberation2 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /bin/uv

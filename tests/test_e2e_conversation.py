@@ -382,6 +382,62 @@ def test_budget_question_show_working_and_recheck(harness):
     assert "Checked again" in sends[1][2]
 
 
+def test_a_missing_document_is_fetched_as_a_word_file_converted_and_cited(harness, tmp_path, monkeypatch):
+    """Office documents: question -> the document isn't in the library -> a .docx on an allowlisted site is fetched
+    through the real acquisition path (allowlist, robots, type by bytes), converted to PDF, indexed, and the reply
+    cites a page of the converted PDF, saying so."""
+    import httpx
+    import psycopg
+
+    from app.acquisition import convert, library
+    from app.agent.answer import Evidence, format_citations, load_catalog
+    from app.retrieval.search import search
+    from tests.office_fixtures import docx_bytes, fake_converter
+    if convert.soffice_path() is None:
+        monkeypatch.setattr(convert, "CONVERTER", fake_converter)
+    url = "https://sokotostate.gov.ng/wp-content/uploads/2026/03/water-supply-plan-2026.docx"
+    body = docx_bytes(["Sokoto State Water Supply Plan 2026", "Budget lines by agency"],
+                      [["Agency", "2026 Approved Budget"], ["Rural Water and Sanitation Agency", "12,345,678.00"]])
+    responses = {"https://sokotostate.gov.ng/robots.txt": httpx.Response(200, text="User-agent: *\nAllow: /\n"),
+                 url: httpx.Response(200, content=body, headers={"content-type": "application/octet-stream"})}
+
+    async def confirm(description, pages, existing_ids, client, settings):
+        return {"match": True, "id": "e2e-office-plan", "title": "Sokoto State Water Supply Plan 2026", "category": "plan",
+                "year": 2026, "publisher": "Sokoto State Government"}
+    monkeypatch.setattr(library, "confirm_document", confirm)
+    s = make_settings(database_url=DEV_DB, kasafi_fetch_enabled=True, kasafi_fetch_dir=str(tmp_path / "fetched"))
+
+    async def answer(question, lang, *, settings, notify=None, history=None, place=None):
+        """What answer_from_documents does for a missing document, with the real fetch and index: the planner's
+        model calls are stood in for by the fixed URL and the confirm stub."""
+        await notify("📥 I don't have this document yet. Looking for it on government and partner sites…")
+        with psycopg.connect(DEV_DB) as conn:
+            async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: responses.get(str(r.url), httpx.Response(404)))) as http:
+                acq = await library.fetch_and_index(conn, url, "Sokoto water supply plan 2026", settings=s, client=None, http=http)
+            assert acq.status == "indexed", acq
+            load_catalog(conn)
+            hit = search(conn, "Rural Water and Sanitation Agency 12,345,678.00", k=1, doc_ids=[acq.doc_id])[0]
+            e = Evidence(1, acq.doc_id, acq.title, 2026, hit.page, "text", hit.text)
+        return Stub(f"The plan budgets ₦12,345,678.00 for the Rural Water and Sanitation Agency in 2026 [1].\n\n"
+                    f"📄 *Sources:*\n{format_citations([e], lang)}", working="rows: Rural Water and Sanitation Agency 12,345,678.00 (p. 1)")
+
+    import sys
+    monkeypatch.setattr(sys.modules[__name__], "recorded_answer", answer)   # the harness looks the stub up by name
+    h, me = harness, "2348000000911"
+    consented(h, me, "en")
+    try:
+        sends = h.turn(text("What does the Sokoto water supply plan 2026 budget for the Rural Water and Sanitation Agency?", me),
+                       lambda s_: [k for k, _, _ in s_][-1] == "text" and len(s_) >= 2, "missing document fetched as a Word file")
+        reply = [p for k, _, p in sends if k == "text"][-1]
+        assert "12,345,678.00" in reply and "page 1 (PDF converted from the Word original)" in reply
+        assert any("Looking for it" in str(p) for k, _, p in sends if k == "text")
+        assert (tmp_path / "fetched" / "e2e-office-plan.docx").exists() and (tmp_path / "fetched" / "e2e-office-plan.pdf").exists()
+    finally:
+        with psycopg.connect(DEV_DB) as conn:
+            conn.execute("DELETE FROM documents WHERE id = 'e2e-office-plan'")
+            conn.commit()
+
+
 def test_a_voice_note_is_transcribed_and_answered(harness):
     h, me = harness, "2348000000907"
     consented(h, me, "ha")

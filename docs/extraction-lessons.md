@@ -64,3 +64,9 @@ Read this before changing `app/retrieval/indexer.py`, `app/retrieval/quality.py`
 
 Failing documents are listed in the review queue: `SELECT missing_doc, detail FROM gaps WHERE reason = 'quality' AND status = 'open'`.
 As of 28 October 2026 only `appropriation-law-2026` fails (its schedules have no labelled rows).
+
+**L35 (1 Nov 2026): Word documents.** A DOCX, DOC, ODT or RTF file (by its bytes, never its name) is converted to
+PDF with LibreOffice in the parser's sandbox and indexed like any PDF, so every rule above applies to it unchanged;
+its page numbers are the converted PDF's, and the citation says so. Macro-enabled files, external links, embedded
+objects and zip bombs are rejected with a reason before conversion (`docs/architecture.md`, "Office documents";
+`tests/test_office_docs.py`).
