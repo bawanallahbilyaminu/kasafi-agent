@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 
 MAX_SECTION_PAGES = 6
 BATCH_CHARS = 28000            # condensed text per section-card call (fewer calls: less of Open's reasoning overhead)
-PAGE_CHARS = 1500              # condensed text kept per page
+PAGE_CHARS = 3500              # condensed text kept per page (2 Nov: 1,500 cut 1,615 of 3,796 report pages; 3,500 cuts 219)
 TABLE_PAGE_CHARS = 600         # ... per page of a table-heavy document
 TABLE_HEAVY = ("budget", "budget_performance", "accountability")
 CARD_TOKENS = 12000            # Open reasons; max_tokens counts reasoning too
