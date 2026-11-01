@@ -636,11 +636,28 @@ def _is_money_span(span: str) -> bool:
     return any(_is_money(m) for m in NUMBER.finditer(span))
 
 
+_TOTAL_ROW = re.compile(r"(?i)^\s*(?:grand\s+)?total\b")
+_TABLE_LINE = re.compile(r"(?im)^\s*\[?Table\s*\d*[^\n]{0,200}")
+
+
+def _row_terms(x) -> set[str]:
+    """A row's words; a Total row ('Total 29,617,906,608.4') is the total of its table, so the title of the table
+    above it ('Table 5: Sokoto 2022 total health budget by administrative units') adds its words."""
+    terms = _terms(x[0])
+    if _TOTAL_ROW.match(x[0]):
+        whole = x[4] if len(x) > 4 else ""
+        at = whole.find(x[0])
+        titles = _TABLE_LINE.findall(whole[:at] if at > 0 else whole)
+        if titles:
+            terms |= _terms(titles[-1])
+    return terms
+
+
 def _entity(c: Claim, spans, groups) -> tuple[str, list]:
     """('bound' | 'ambiguous' | 'contradiction' | 'unknown', the rows holding the figure that the claim's words
     or its entity's names fit)."""
     holding = [x for x in spans if _holds(x[0], c)]
-    fits = [x for x in holding if c.terms and c.terms <= _terms(x[0])]
+    fits = [x for x in holding if c.terms and c.terms <= _row_terms(x)]
     # the plan's names bind per entity: the group the claim's own words name, or the only one in the plan
     mine = [g for g in groups if any(_names_in(c.segment or c.sentence, n) for n in g)] or (groups if len(groups) == 1 else [])
     by_name = [x for x in holding if any(_names_in(x[0], n) for g in mine for n in g)]
@@ -658,7 +675,7 @@ def _entity(c: Claim, spans, groups) -> tuple[str, list]:
         # a contradiction: the claim's words name another row (all of them in it) that holds a different figure
         elsewhere = [x[0] for x in spans if c.terms <= _terms(x[0]) and not _holds(x[0], c) and NUMBER.search(x[0])
                      and _tabular(x[0])]
-        if elsewhere and not any(c.terms & _terms(x[0]) == c.terms for x in holding):
+        if elsewhere and not any(c.terms & _row_terms(x) == c.terms for x in holding):
             return "contradiction", holding
         if mine:
             named = [x[0] for x in spans if any(_names_in(x[0], n) for g in mine for n in g) and not _holds(x[0], c)

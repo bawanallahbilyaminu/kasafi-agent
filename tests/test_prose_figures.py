@@ -81,6 +81,15 @@ def test_a_real_contradiction_in_prose_still_refuses() -> None:
     assert att.state == "unsupported" and any(p.startswith("kind") for p in att.problems)
 
 
+def test_a_total_row_takes_its_table_titles_words() -> None:
+    table = ("Table 4 below shows the sector budget by unit.\nTable 4: Region 2024 total hospital budget by unit\n"
+             "Ministry of Hospitals 21,500,000,000.0\nHospitals Board 9,902,118,507.4\nTotal 31,402,118,507.4\n")
+    att = attribution.bind("The 2024 hospital budget was ₦31,402,118,507.45 [1].", [ev(table)])
+    assert att.ok and not any(p.startswith("entity") for p in att.problems), att.problems
+    wrong = attribution.bind("The Ministry of Hospitals budget was ₦31,402,118,507.4 [1].", [ev(table)])
+    assert wrong.state == "unsupported" and any(p.startswith("entity") for p in wrong.problems)
+
+
 def test_one_figure_not_found_marks_it_instead_of_refusing() -> None:
     answer = ("₦2.15 billion of the ₦31.40 billion budget went to district hospital agencies [1], and the plan "
               "proposed ₦5.5 billion for 2025 [1].")
