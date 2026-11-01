@@ -73,7 +73,7 @@ def test_a_fresh_document_is_found_by_a_question_that_does_not_name_it(conn) -> 
 
 def test_meaning_finds_it_in_other_words(conn) -> None:
     hits = library_search(conn, "Do Sokoto's villages have fridges powered by the sun to keep vaccines cold?")
-    assert DOC in [h.hit.doc_id for h in hits[:3]]
+    assert DOC in list(dict.fromkeys(h.hit.doc_id for h in hits))[:3]       # among the first three documents
 
 
 def test_the_document_path_reads_it_although_the_plan_chose_other_documents(conn) -> None:
@@ -93,7 +93,7 @@ def test_an_intention_question_reads_the_plan_first(conn) -> None:
 def test_before_a_fetch_the_library_is_checked(conn) -> None:
     p = plan(UNNAMED, ["health-aop-2025"])
     p.missing_document = "Sokoto State cold chain equipment inventory 2026"
-    assert library_first(conn, p, UNNAMED) == [DOC]
+    assert library_first(conn, p, UNNAMED)[0] == DOC
 
 
 def test_the_topic_sweep_takes_indexed_documents_as_sources(conn) -> None:

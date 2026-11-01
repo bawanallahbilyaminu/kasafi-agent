@@ -866,7 +866,7 @@ def prefer_newest_edition(conn: psycopg.Connection, plan: Plan, question: str) -
         log.info("newest edition preferred: %s dropped for %s", ", ".join(dropped), ", ".join(kept))
 
 
-LIB_EXTRA = 2                # library-wide pages read beyond the planned ones
+LIB_EXTRA = 3                # library-wide pages read beyond the planned ones
 
 
 def library_candidates(conn: psycopg.Connection, plan: Plan, asked: str = "") -> list:
@@ -876,8 +876,9 @@ def library_candidates(conn: psycopg.Connection, plan: Plan, asked: str = "") ->
     if cached is not None:
         return cached
     try:
+        money = bool(MONEY_WORDS.search(f"{plan.original} {plan.english_question} {asked}"))
         hits = library_search(conn, plan.english_question or plan.original or asked, plan.search_queries[:3],
-                              k=8, skip_docs=plan.skip_docs or None)
+                              k=8, skip_docs=plan.skip_docs or None, tables=money)
     except Exception as e:          # noqa: BLE001 - never lose the answer over the extra search
         conn.rollback()
         log.warning("library search failed: %s", e)
@@ -900,16 +901,16 @@ def intention_docs(conn: psycopg.Connection, question: str, plan: Plan) -> list[
     doesn't: 'double the PHC agencies' budget from NGN1.29 billion in 2022 to NGN4 billion in 2023'."""
     if conn is None or not INTENT.search(f"{question} {plan.english_question}"):
         return []
-    hits = library_candidates(conn, plan, question)
-    if not hits:
+    try:        # ranked without the budget tables ('budget' in the question would let them fill every place)
+        hits = library_search(conn, plan.english_question or question, plan.search_queries[:3], k=12, docs=6,
+                              skip_docs=plan.skip_docs or None, tables=False)
+    except Exception as e:          # noqa: BLE001
+        conn.rollback()
+        log.warning("intention search failed: %s", e)
         return []
     cats = dict(conn.execute("SELECT id, category FROM documents WHERE id = ANY(%s)",
-                             (list({h.hit.doc_id for h in hits}),)).fetchall())
-    out = []
-    for i, h in enumerate(hits):
-        if cats.get(h.hit.doc_id) in PLAN_CATEGORIES and (h.strong or i < 3) and h.hit.doc_id not in out:
-            out.append(h.hit.doc_id)
-    return out[:2]
+                             (list({h.hit.doc_id for h in hits}),)).fetchall()) if hits else {}
+    return list(dict.fromkeys(h.hit.doc_id for h in hits if cats.get(h.hit.doc_id) in PLAN_CATEGORIES))[:2]
 
 
 def library_first(conn: psycopg.Connection, plan: Plan, question: str) -> list[str]:
@@ -980,13 +981,26 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
     # best pages join beyond the planned ones, so a relevant document the plan didn't choose is always read (a
     # money question takes only strong ones: other budgets' pages are noise for it)
     planned_pages = set(by_page)
-    for lh in library_candidates(conn, plan, asked):
+    lib = library_candidates(conn, plan, asked)
+    # the planned documents' best pages by the question's words first (the plan chose the document, the library
+    # search confirms it, but its keyword hits were other pages: the Health ROP's p9 behind p3, p13, p16), then
+    # each other document's best page before any document's second
+    scope_docs = set(scope or [])
+    planned_lib = [lh for lh in lib if lh.hit.doc_id in scope_docs]
+    firsts, seconds, seen_docs = [], [], set()
+    for lh in lib:
+        if lh.hit.doc_id in scope_docs:
+            continue
+        (seconds if lh.hit.doc_id in seen_docs else firsts).append(lh)
+        seen_docs.add(lh.hit.doc_id)
+    for lh in planned_lib + firsts + seconds:
         h = lh.hit
         if len([k for k in by_page if k not in planned_pages]) >= LIB_EXTRA:
             break
         if (h.doc_id, h.page) in by_page or h.doc_id in plan.skip_docs or (money and not lh.strong):
             continue
         by_page[(h.doc_id, h.page)] = [h]
+    library_pages = set(by_page) - planned_pages             # read whole: the answer can be anywhere on the page
     ranked = [hs[0] for hs in by_page.values()]
     texts = {}
     # a narrative section runs across a page's chunks: the whole page is read; so is a survey's table page (its
@@ -995,7 +1009,7 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
     whole = narrative_asked(plan) or (not money and (bool(plan.statistics) or statistics_scope(conn, scope)))
     for (doc_id, page), hs in by_page.items():
         hit_idx = [h.idx for h in hs]
-        wanted = page_chunks_wanted(hit_idx, whole)
+        wanted = page_chunks_wanted(hit_idx, whole or (doc_id, page) in library_pages)
         rows = dict(conn.execute("SELECT idx, text FROM chunks WHERE doc_id = %s AND page = %s "
                                  "AND (%s::int[] IS NULL OR idx = ANY(%s::int[]))",
                                  (doc_id, page, wanted, wanted)).fetchall())
@@ -1570,13 +1584,15 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         # plan's pages answer first, before the budget tables and before any fetch (1 Nov 2026)
         if conn is not None and (wanted := intention_docs(conn, question, plan)):
             log.info("intention: the plans %s are read first", ", ".join(wanted))
-            before = (list(plan.doc_ids), plan.missing_document)
-            plan.doc_ids, plan.missing_document = list(dict.fromkeys([*wanted, *plan.doc_ids])), ""
-            a = await _page_path(conn, plan, question, lang, client, settings, t, acq=None, latest=None, prev=prev,
-                                 context="", recheck_note="", second=second)
+            # only the plans, searched with the question's own words (the planner's budget-shaped queries
+            # pull budget tables); the plan itself is untouched for the paths that follow
+            only_plans = replace(plan, doc_ids=list(wanted), missing_document="",
+                                 search_queries=list(dict.fromkeys([plan.english_question or question,
+                                                                    *plan.search_queries])))
+            a = await _page_path(conn, only_plans, question, lang, client, settings, t, acq=None, latest=None,
+                                 prev=prev, context="", recheck_note="", second=second)
             if a.found:
                 return a
-            plan.doc_ids, plan.missing_document = before
             log.info("intention: the plans gave no answer; the usual paths follow")
         # every cell of the need fillable by one structured tool (budget_core, dtm_api): answered from the data
         if (a := await structured_answer(conn, plan, lang, settings, t, today)) is not None:
