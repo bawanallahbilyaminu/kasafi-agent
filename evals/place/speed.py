@@ -68,7 +68,7 @@ async def main() -> None:
                 progress = any("🛰️" in n for n in notes)
                 again, notes2, text2 = await ask(conn, s, q, lang, place)
                 rows.append((p["name"], q, first, progress, again, "What the satellite" in text or "Abin da hotunan" in text,
-                             text == text2))
+                             text == text2, True))
                 print(f"{p['name']}: first {first:.1f}s (progress line {'sent' if progress else 'MISSING'}), cached "
                       f"{again:.1f}s, same answer {text == text2}")
                 if text != text2:
@@ -77,15 +77,17 @@ async def main() -> None:
                         print("   ", line[:240])
             q, lang = QUESTIONS[1]
             t, notes, text = await ask(conn, s, q, lang, place)
-            rows.append((p["name"], q, t, any("🛰️" in n for n in notes), t, bool(text), True))
+            rows.append((p["name"], q, t, any("🛰️" in n for n in notes), t, bool(text), True, False))
             print(f"{p['name']}: Hausa flood question from the cache {t:.1f}s")
-    ok = all(r[3] and r[4] <= CACHED_MAX_S for r in rows)
+    # a first request must send the progress line; every cached answer must come under CACHED_MAX_S
+    ok = all((r[3] or not r[7]) and r[4] <= CACHED_MAX_S and r[5] for r in rows)
     lines = [f"# Place history speed ({date.today()})", "",
              f"{len(rows)} questions on {len(set(r[0] for r in rows))} pins; cached answers must come under {CACHED_MAX_S:.0f} s "
              f"and a first request must send the progress line: **{'pass' if ok else 'FAIL'}**.", "",
              "| Pin | Question | First request | Progress line | Cached | Answered |", "| --- | --- | --- | --- | --- | --- |"]
-    for name, q, first, progress, again, answered, same in rows:
-        lines.append(f"| {name} | {q} | {first:.1f} s | {'yes' if progress else 'no'} | {again:.1f} s | {'yes' if answered else 'no'} |")
+    for name, q, first, progress, again, answered, same, fresh in rows:
+        lines.append(f"| {name} | {q} | {first:.1f} s{'' if fresh else ' (cached)'} | {'yes' if progress else 'n/a'} | "
+                     f"{again:.1f} s | {'yes' if answered else 'no'} |")
     lines += ["", "A first request reads ~12 years of Sentinel-2 windows, the Sentinel-1 passes and the plot outline "
                   "(SAM 3.1); the second reads the per-cell cache. Pin coordinates are not in this report."]
     Path(a.out).write_text("\n".join(lines) + "\n", encoding="utf-8")
