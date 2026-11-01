@@ -73,22 +73,66 @@ def conn():
     c.close()
 
 
-def test_the_lga_answer_names_the_wards_that_stand_out_and_ranks_them(conn) -> None:
+def test_versus_usual_and_the_plain_words() -> None:
+    assert P.versus_usual(0.60, 0.52, "greenness") == "above" and P.versus_usual(0.55, 0.52, "greenness") == "near"
+    assert P.versus_usual(0.40, 0.52, "greenness") == "below" and P.versus_usual(None, 0.5, "greenness") == ""
+    assert P.versus_usual(600, 500, "rain") == "above" and P.versus_usual(520, 500, "rain") == "near"
+    assert P.versus_usual(0.3, 0.5, "bare") == "below" and P.versus_usual(0.3, 0, "rain") == ""
+
+
+def test_the_lga_answer_opens_in_plain_words_then_names_the_wards_and_ranks_them(conn) -> None:
     a = P.area_answer(conn, "Which wards of Wurno LGA were greenest in 2024?", "", "en", "lga", "NG034022", TODAY)
     assert a.found and a.year == 2024 and a.level == "ward"
+    lines = a.text.split("\n\n")
+    assert lines[1].startswith("Most of Wurno LGA's farmland was") and "least green ward" in lines[1]   # plain words first
+    assert "its rain" in lines[1] and not any(ch.isdigit() for ch in lines[1].replace("2024", ""))
     assert "wards of Wurno LGA, 2024" in a.text and "Greenest:" in a.text and "Least green:" in a.text
     assert "Period " in a.text and "250 m" in a.text and "*Ranking (" in a.text
     assert "Kasafi reports what the satellite record shows" in a.text
     assert a.working.startswith("All wards, modis_peak, 2024") and a.specs[0]["kind"] == "area_map"
     ha = P.area_answer(conn, "Waɗanne gundumomin Wurno ne suka fi koriya a 2024?", "", "ha", "lga", "NG034022", TODAY)
     assert "gundumomin Ƙaramar Hukumar Wurno, 2024" in ha.text and "Mafi koriya:" in ha.text
+    assert ha.text.split("\n\n")[1].startswith("Mafi yawan gonakin Ƙaramar Hukumar Wurno")
+
+
+def test_no_budget_line_for_the_lga_gives_the_statewide_totals_never_just_no_line(conn) -> None:
+    a = P.area_answer(conn, "Which wards of Wurno LGA were greenest in 2024?", "", "en", "lga", "NG034022", TODAY)
+    if "budget lines for Wurno LGA" in a.text:
+        pytest.skip("Wurno has its own lines in this budget")
+    assert "No 2026 budget line names Wurno; statewide lines that may cover it:" in a.text
+    assert "• Agriculture: ₦" in a.text and "statewide lines are not split by LGA" in a.text
+    assert "matches agriculture" not in a.text
+    totals = P.statewide_totals(conn)
+    assert totals and totals[0]["agriculture"][0] > 0 and totals[2] == 2026
+
+
+def test_flood_answers_lead_with_the_un_map_and_give_radar_as_a_lower_bound(conn) -> None:
+    a = P.area_answer(conn, "Share of cropland flooded in 2022 across Sokoto State", "", "en", "state", "NG034", TODAY)
+    assert a.found and a.level == "lga" and a.year == 2022
+    assert a.text.startswith("*UN satellite flood map of 1–25 October 2022 (UNOSAT, VIIRS 375 m): the 23 LGAs of Sokoto State, 2022*")
+    assert a.text.split("\n\n")[1].startswith("The UN satellite flood map of 1–25 October 2022 covered")
+    assert "*Open floodwater seen by radar, a lower bound*" in a.text and "misses water under crops" in a.text
+    assert "The two differ because" in a.text
+    assert a.text.index("UN satellite flood map") < a.text.index("lower bound")
+    assert [s["key"] for s in a.specs] == ["flood_map", "flood"] and a.measure == "unosat_share"
+    assert "s1_flood_share" in a.working and "unosat_share" in a.working
+    b = P.area_answer(conn, "Which LGAs flooded most in 2020?", "", "en", "state", "NG034", TODAY)
+    assert b.text.startswith("*open floodwater seen by radar on normally dry cropland, a lower bound")
+    assert "No UN satellite flood map covers Sokoto for 2020" in b.text and [s["key"] for s in b.specs] == ["flood"]
+    c = P.area_answer(conn, "Which LGAs flood most?", "", "en", "state", "NG034", TODAY)
+    assert c.year == 2024 and c.specs[0]["key"] == "flood_map"          # no year: the latest year with an official map
+
+
+def test_rain_by_ward_says_the_wards_share_the_lga_figure(conn) -> None:
+    a = P.area_answer(conn, "wettest wards of Wurno by rainfall in 2024", "", "en", "lga", "NG034022", TODAY)
+    assert "for all of them, because the ~9 km rain grid" in a.text and "wettest ward" not in a.text
 
 
 def test_the_state_answer_compares_lgas_and_a_missing_year_is_said(conn) -> None:
     a = P.area_answer(conn, "Share of cropland inside the UN flood map in 2022 across Sokoto State", "", "en", "state",
                       "NG034", TODAY)
     assert a.found and a.level == "lga" and a.year == 2022 and "the 23 LGAs of Sokoto State, 2022" in a.text
-    assert "Budget lines are linked per LGA" in a.text
+    assert "Budget lines are linked per LGA" in a.text and "lower bound" not in a.text
     b = P.area_answer(conn, "greenness by LGA in 1999", "", "en", "state", "NG034", TODAY)
     assert not b.found and "1999" in b.text
 

@@ -646,6 +646,10 @@ def library_context(conn, lang: str, lga: str, lga_pcode: str, today: date) -> s
             rows = [t["budget_row"].format(name=r.name, amount=f"{r.amount:,.0f}", title=res.titles.get(r.doc_id, r.doc_id),
                                            page=r.page) for r in res.rows[:5]]
             parts.append(t["budget"].format(year=res.year, lga=res.subject) + "\n" + "\n".join(rows))
+        else:                                       # no line names the LGA: the statewide totals that may cover it
+            from app.place.planner import budget_block
+            if lga_pcode and (block := budget_block(conn, lang, "lga", lga_pcode, today)):
+                parts.append(block)
     if not parts:
         return t["no_context"].format(year=today.year, lga=lga or "–")
     return t["context"] + "\n" + "\n\n".join(parts)
