@@ -1261,6 +1261,11 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
                                      settings=settings)
             if src.doc_id:
                 src.cards = await fact_cards(conn, src, its, ask, client, settings)
+                if not src.cards and src.status == "ok" and p in named:
+                    # a publisher the question names is required: an empty first read (the reader's variance, not
+                    # the document's) is read once more before the answer says the source gave nothing
+                    log.info("topic source %s gave no figure on the first read; reading again", p.id)
+                    src.cards = await fact_cards(conn, src, its, ask, client, settings)
                 if not src.cards and src.status == "ok":
                     src.status = "no_figure"
             return src
