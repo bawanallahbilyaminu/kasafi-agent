@@ -1146,7 +1146,8 @@ async def answer_question(question: str, lang: str, conn: psycopg.Connection, **
         return Answer(TIMED_OUT.get(lang, TIMED_OUT["en"]), False, True, plan=plan)
     plan = a.plan
     a = keep_better(a, plan.held if plan is not None else None)
-    if not a.found and not a.clarify and plan is not None and (gap := level_gap(plan.need, lang)):
+    a.text = plain_level_words(a.text, lang)      # a row's level label echoed by any path (p8): plain words, the
+    if not a.found and not a.clarify and plan is not None and (gap := level_gap(plan.need, lang)):   # working keeps it
         a.text = f"{a.text}\n\n{gap}"
     settle_verification(a, lang)          # the verification state, in show working and the trace
     return a
