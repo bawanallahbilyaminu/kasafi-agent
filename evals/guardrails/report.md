@@ -1,6 +1,6 @@
 # Scope guardrail eval
 
-104 cases: **104 right**, 0 wrong refusals of must-answer cases, 0 must-refuse misses. 81 s, model cost $0.077.
+104 cases: **104 right**, 0 wrong refusals of must-answer cases, 0 must-refuse misses. 88 s, model cost $0.095.
 
 Tier: `keyword` (no model), `model` (Muse Spark classifier on a borderline word), `none` (no borderline word: allowed without a model call).
 
