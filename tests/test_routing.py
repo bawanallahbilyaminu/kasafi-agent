@@ -91,3 +91,17 @@ def test_the_post_plan_shortcuts_yield_to_a_named_source() -> None:
     assert hazard_route(plain, Plan(plain, [], [])) != []
     assert facility_route("What did UNFPA find out about health facilities in Wamakko",
                           Plan("What did UNFPA find out about health facilities in Wamakko", [], []), None, "en") == ""
+
+
+def test_gaps_and_findings_questions_take_the_document_path_not_the_topic_cards() -> None:
+    from app.agent.answer import Plan, topic_route
+    q = "According to the MICS by NBS, UNICEF, what are the gaps in child healthcare and civil registration for Sokoto State?"
+    plan = Plan(q, ["child health"], ["mics-2021"])
+    plan.statistics = True
+    assert topic_route(q, plan) == ""
+    q2 = "What did UNFPA find out about health facilities in Wamakko"
+    assert topic_route(q2, Plan(q2, [], [])) == ""
+    q3 = "What is Sokoto's MPI according to NBS?"
+    plan3 = Plan(q3, ["MPI"], [])
+    plan3.statistics = True
+    assert topic_route(q3, plan3) != ""                 # a single measure from a publisher's series: the topic path

@@ -1931,9 +1931,8 @@ def off_topic_note(conn, plan: Plan, question: str, cited: list[Evidence], lang:
     an IDP count): said before the answer, never left to look like the figure."""
     if conn is None or not cited or not (plan.statistics or plan.current):
         return ""
-    from app.agent.routing import names_a_source
-    name = names_a_source(f"{question} {plan.english_question}")
-    if name and any(name.lower() in f"{e.title} {e.doc_id}".lower() for e in cited):
+    named = named_source_docs(conn, f"{question} {plan.english_question}")   # by title or publisher, with aliases
+    if named and any(e.doc_id in named for e in cited):
         return ""                                  # the source the question asked for is the one cited: no note
     topic = registry().topics.get(detect_topic(f"{question} {plan.english_question}") or plan.topic)
     if not topic or topic.answer_pattern != "multi_source":
@@ -2074,10 +2073,21 @@ def names_source(topic_id: str, text: str) -> bool:
                        text))
 
 
+GAPS_Q = re.compile(r"(?i)\b(?:gaps?|challenges?|how\s+bad|weakest|worst|lowest\s+indicators?|shortfalls?|"
+                    r"gibi|ƙalubale|kalubale|matsal\w+|raun\w+)\b")
+FINDINGS_Q = re.compile(r"(?i)\bwhat\s+(?:did|does|do|has|have)\b.{0,60}\b(?:find|found|say|says|said|report|reported|"
+                        r"show|shows|showed|conclude|concluded|recommend\w*)\b|\b(?:ya|ta|sun|suka)\s+(?:gano|ce|nuna)\b")
+
+
 def topic_route(question: str, plan: Plan) -> str:
     """A statistics question on a multi-source topic (registry): its topic id, from the synonyms first and the
-    planner's topic as the fallback; '' when the question is about budget money or no topic fits."""
+    planner's topic as the fallback; '' when the question is about budget money or no topic fits. A question
+    about a survey's gaps or findings ('what are the gaps in child healthcare according to MICS', 'what did UNFPA
+    find') is answered from the report's own pages, not as one indicator card from each publisher (1 Nov 2026:
+    the live MICS question got '51.5% live-born child dried after birth' from the topic path)."""
     text = f"{question} {plan.english_question}"
+    if GAPS_Q.search(question) or FINDINGS_Q.search(question):
+        return ""
     # budget money asked about: the budget tools answer. The planner sometimes adds them to a statistics
     # question ("How many IDPs according to IOM?" got line_search): without money words, the topic path wins
     if (plan.line_search or plan.budget_query or plan.analysis or plan.category) and MONEY_WORDS.search(text):
