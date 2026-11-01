@@ -844,6 +844,29 @@ def cited_from_other(c: Card) -> bool:
     return bool(words) and not publisher_names(c.publisher) & words
 
 
+def attribute_quotes(cards: list[Card]) -> list[Card]:
+    """Fix 3 of docs/planner-variance.md: a figure printed in a later edition for an earlier year, equal to
+    another publisher's own figure for that measure, year and population, is that publisher's figure quoted
+    (SBS MPI 2025 p. 36's '2022 baseline 91%' is NBS's), whatever the page says around it. The reader's
+    `based_on` is advisory; the match in code settles it. Returns the cards relabelled."""
+    own = [c for c in cards if not cited_from_other(c) and not quoted_earlier(c) and c.number is not None]
+    relabelled = []
+    for c in cards:
+        if cited_from_other(c) or not quoted_earlier(c) or c.number is None:
+            continue
+        for o in own:
+            if (o.publisher.id != c.publisher.id and o.measure == c.measure and card_year(o) == card_year(c)
+                    and (o.population or "all") == (c.population or "all") and o.number is not None
+                    and abs(o.number - c.number) <= max(0.5, 0.005 * abs(o.number))):
+                # the origin's own short name, never one the quoting publisher shares (SBS's name also says MPI)
+                names = sorted(publisher_names(o.publisher) - publisher_names(c.publisher), key=len)
+                origin = names[0].upper() if names else short_pub(o.publisher)
+                c.based_on = f"{origin} {card_year(o)}"
+                relabelled.append(c)
+                break
+    return relabelled
+
+
 def source_label(c: Card, lang: str) -> str:
     """Who the figure is from: its publisher, or the original publisher 'as cited in' the document that quotes it
     (never the quoting document's own figure)."""
@@ -1031,6 +1054,7 @@ def compose(topic: Topic, sources: list[SourceResult], related: list[SourceResul
     label = MEASURE_LABEL.get(lang, MEASURE_LABEL["en"])
     # a document's quote of a figure its own publisher's document gives too (SBS quoting NBS's 91%, beside NBS's
     # report): shown once, from the source
+    attribute_quotes([c for s in sources for c in s.cards])
     own = [c for s in sources for c in s.cards if not cited_from_other(c)]
     missing = [short_pub(s.publisher) for s in sources if not s.cards]     # before: a quote dropped is no miss
     for s in sources:

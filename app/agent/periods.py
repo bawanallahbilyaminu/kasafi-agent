@@ -28,6 +28,15 @@ _PERIODS = [
      r"september\b|\b(?:third|3rd)\s+quarter\b", 3),
     (r"\bjan(?:uary)?\s*(?:-|–|to)\s*dec(?:ember)?\b|\b(?:end\s+of|by)\s+december\b|\b(?:fourth|4th)\s+quarter\b", 4),
     (r"\b(?:second|2nd)\s+quarter\b", 2),
+    # Hausa and code-switched: "Janairu zuwa Satumba", "zuwa ƙarshen Q2", "har zuwa ƙarshen watan Yuni", "rubu'i na uku"
+    (r"\bjanairu\s+(?:zuwa|har\s+zuwa|-|–)\s+maris\b|\brubu'?i\s+na\s+(?:farko|ɗaya|daya)\b", 1),
+    (r"\bjanairu\s+(?:zuwa|har\s+zuwa|-|–)\s+yuni\b|\b(?:har\s+)?zuwa\s+ƙ?karshen\s+(?:watan\s+)?yuni\b|"
+     r"\bƙ?karshen\s+(?:watan\s+)?yuni\b|\brubu'?i\s+na\s+biyu\b|\brabin\s+farko\b", 2),
+    (r"\bjanairu\s+(?:zuwa|har\s+zuwa|-|–)\s+satumba\b|\b(?:har\s+)?zuwa\s+ƙ?karshen\s+(?:watan\s+)?satumba\b|"
+     r"\bƙ?karshen\s+(?:watan\s+)?satumba\b|\brubu'?i\s+na\s+uku\b|\bwatanni\s+tara\s+na\s+farko\b", 3),
+    (r"\bjanairu\s+(?:zuwa|har\s+zuwa|-|–)\s+disamba\b|\b(?:har\s+)?zuwa\s+ƙ?karshen\s+(?:watan\s+)?disamba\b|"
+     r"\bƙ?karshen\s+(?:watan\s+)?disamba\b|\brubu'?i\s+na\s+huɗu\b|\brubu'?i\s+na\s+hudu\b", 4),
+    (r"\b(?:har\s+)?zuwa\s+ƙ?karshen\s+(?:na\s+)?q([1-4])\b", None),
     (r"\bq([1-4])\b", None),
 ]
 _WORDS = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4}
@@ -58,6 +67,17 @@ def asked_period(*texts: str) -> Period | None:
         years = [int(y) for y in YEAR.findall(text)]
         return Period(years[0] if years else None, quarter)
     return None
+
+
+def asked_quarters(text: str) -> set[int]:
+    """Every cumulative quarter the text names ('by the end of Q2 … January to September' names two): the words
+    conflict when there is more than one."""
+    low = (text or "").lower()
+    found: set[int] = set()
+    for pat, q in _PERIODS:
+        for m in re.finditer(pat, low):
+            found.add(int(m.group(1)) if q is None else _WORDS[m.group(1)] if q == "word" else q)
+    return found
 
 
 def report_for(conn, period: Period, today: date | None = None) -> tuple[str, int] | None:

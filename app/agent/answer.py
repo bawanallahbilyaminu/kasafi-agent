@@ -396,6 +396,7 @@ class Plan:
     original: str = ""                                  # the message as sent (english_question is standalone)
     period_doc: str = ""                                # the report covering a period the question names
     skip_docs: list[str] = field(default_factory=list)  # that year's other reports: never read for this question
+    words: dict = field(default_factory=dict)           # what the words settled, the overrides, the second opinion (traced)
 
     def assumption_for(self, lang: str) -> str:
         if not self.assumption:
@@ -574,6 +575,10 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
         # ('Sokoto State ... Q3 2025 revenue performance reasons') rank a report's intro over the section asked
         prose_queries = list(dict.fromkeys([*plan.search_queries, *[t for t in plan.key_terms if " " in t]]))
         key_hits = [search(conn, q, k=4, doc_ids=scope, prose=True) for q in prose_queries] + key_hits
+        # fix 2 (docs/planner-variance.md): the named report's pages headed with the subject asked ("say about
+        # Revenue Performance") join the evidence whatever the search queries found
+        if (subject := narrative_subject(plan)) and scope:
+            key_hits = [heading_pages(conn, scope, subject)] + key_hits
     if scope and not any(per_query) and not any(key_hits):
         key_hits = [search(conn, q, k=3, key_rows=True) for q in plan.search_queries]
         per_query = [search(conn, q, k=6) for q in plan.search_queries]
@@ -1005,6 +1010,35 @@ TIMED_OUT = {
 }
 
 
+async def settle_by_words(plan: Plan, question: str, planned_q: str, catalog: list[dict], names, second,
+                          settings: Settings, today: date, history, lang: str, t: dict) -> None:
+    """Fix 1 and fix 5 of docs/planner-variance.md: the fields the words settle are enforced on the plan (logged
+    as overrides); the fields the words leave in conflict are put to a second plan from the Open model, with a
+    time cap, and taken from it only where it is consistent with the words. Never raises."""
+    from app.agent import words as W
+    try:
+        facts = W.facts_from(question, plan.english_question)
+        overrides = W.enforce(plan, facts, {c["id"] for c in catalog})
+        if overrides:
+            log.info("words: %d override(s): %s", len(overrides), ", ".join(o["field"] for o in overrides))
+        fields = W.disputed_fields(plan, facts)
+        if fields and second is not None and settings.kasafi_second_plan_s > 0:
+            t0 = time.perf_counter()
+            try:
+                other = await asyncio.wait_for(plan_question(planned_q, catalog, second, settings, today, history, lang, names),
+                                               timeout=settings.kasafi_second_plan_s)
+                taken = W.take_second_opinion(plan, other, facts, fields)
+                plan.words["second_opinion"] = {"used": True, "fields": fields, "taken": taken,
+                                                "seconds": round(time.perf_counter() - t0, 2)}
+            except asyncio.TimeoutError:
+                plan.words["second_opinion"] = {"used": False, "fields": fields, "reason": "timeout",
+                                                "seconds": round(time.perf_counter() - t0, 2)}
+            t["second_plan"] = time.perf_counter() - t0
+            log.info("words: second opinion on %s: %s", fields, plan.words["second_opinion"])
+    except Exception as e:                      # noqa: BLE001 - the plan stands as the planner gave it
+        log.warning("words: settle failed: %s", type(e).__name__)
+
+
 def place_question(question: str, english: str = "") -> bool:
     """A place-history question (a pin's record, or a ward/LGA/state comparison): answered in code, never by a
     clarifying question from the planner."""
@@ -1054,9 +1088,13 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         place = None
     async with client_factory(settings) as client, open_reader(settings) as second:
         t0 = time.perf_counter()
-        plan = await plan_question(planned_q, load_catalog(conn), client, settings, today, history, lang,
-                                   names_for(conn) if conn is not None else None, second=second)
+        catalog = load_catalog(conn)
+        names = names_for(conn) if conn is not None else None
+        plan = await plan_question(planned_q, catalog, client, settings, today, history, lang, names, second=second)
         t["plan"] = time.perf_counter() - t0
+        # what the words settle (docs/planner-variance.md): clear patterns override the plan; conflicting ones go to
+        # a second-opinion plan from the Open model, capped; every override and conflict lands in the trace
+        await settle_by_words(plan, question, planned_q, catalog, names, second, settings, today, history, lang, t)
         if box is not None:
             box["plan"] = plan            # the loop's budget can stop us; it keeps what was verified
         # two readings, both can't be shown: ask; never for a place-history question (the planner may ask "where is
@@ -1289,6 +1327,49 @@ NARRATIVE = re.compile(r"(?i)\b(?:correct(?:ed|ion|ions)|explain\w*|explanation|
 def narrative_asked(plan: Plan) -> bool:
     """The question asks what a document explained, corrected, changed or noted (its narrative sections)."""
     return bool(NARRATIVE.search(f"{plan.original} {plan.english_question}"))
+
+
+NARRATIVE_SUBJECT = re.compile(r"(?i)\b(?:says?|said|states?|notes?|reports?|explains?|writes?|game\s+da|akan|kan)\s+"
+                               r"(?:about|on|regarding|of)?\s*(?:the\s+|its\s+)?([A-Za-z][A-Za-z &'’/-]{3,60}?)"
+                               r"(?=[,?.;]|\s+(?:and|in|for|kuma|a)\b|$)")
+
+
+def narrative_subject(plan: Plan) -> str:
+    """The section a narrative question is about ('what does the report say about Revenue Performance' ->
+    'revenue performance'), or ''."""
+    for text in (plan.english_question, plan.original):
+        if m := NARRATIVE_SUBJECT.search(text or ""):
+            subject = m.group(1).strip().lower()
+            if len(subject.split()) <= 6 and subject not in ("it", "this", "that"):
+                return subject
+    return ""
+
+
+def heading_pages(conn: psycopg.Connection, doc_ids: list[str], subject: str, k: int = 3) -> list[Hit]:
+    """The pages of the planned documents whose heading (the page's first lines; the indexer puts titles first)
+    names the subject: deterministic evidence for narrative questions."""
+    words = [w for w in re.findall(r"[a-z]{3,}", subject) if w not in ("the", "and", "its")]
+    if not words:
+        return []
+    like = "%" + " ".join(words) + "%"
+    rows = conn.execute(
+        "SELECT p.doc_id, d.title, d.year, p.page, p.text FROM pages p JOIN documents d ON d.id = p.doc_id "
+        "WHERE p.doc_id = ANY(%s) AND lower(p.text) LIKE %s ORDER BY p.doc_id, p.page LIMIT 40",
+        (list(doc_ids), like)).fetchall()
+    scored = []
+    for doc, title, year, page, text in rows:
+        head = text[:400].lower()
+        if "contents" in head or "list of reports" in head or "....." in head:   # the table of contents names everything
+            continue
+        digits = sum(ch.isdigit() for ch in text) / max(1, len(text))             # prose pages, not tables
+        if digits > 0.12:
+            continue
+        heading = re.search(rf"(?im)^\s*(?:\d+(?:\.[A-Z0-9]+)*\s+)?{re.escape(' '.join(words))}\b", text) is not None
+        scored.append((not heading, digits, page, Hit(doc, title, year, page, text[:1200], 1.0, 0)))
+    scored.sort(key=lambda s: s[:3])
+    if any(not s[0] for s in scored):                       # pages headed with the subject beat passing mentions
+        scored = [s for s in scored if not s[0]]
+    return [s[3] for s in scored[:k]]
 
 
 def headcount_asked(plan: Plan) -> bool:

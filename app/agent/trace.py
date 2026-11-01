@@ -93,6 +93,8 @@ def record(a) -> dict:
     if a.plan is not None and getattr(a.plan, "need", None) is not None:      # the information need, as checked
         from dataclasses import asdict
         plan["need"] = _scrub(asdict(a.plan.need))
+    if a.plan is not None and getattr(a.plan, "words", None):                 # overrides and conflicts: fields only
+        plan["words"] = a.plan.words
     t: dict = {"plan": plan, "timings": {k: round(v, 2) for k, v in a.timings.items()},
                "cited": [{"n": e.n, "doc": e.doc_id, "title": e.title, "page": e.page, "source": e.source}
                          for e in a.cited],

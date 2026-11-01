@@ -57,7 +57,11 @@ NEED_PROMPT = (
     "now (cholera, meningitis, Lassa, measles, diphtheria) are outbreak_cases; NIHSA's Annual Flood Outlook is "
     "flood_outlook; NiMet's Seasonal Climate Prediction (rainy season onset, cessation) is seasonal_outlook. "
     "How many health facilities of a kind (PHCs, hospitals) is facility_count; one facility by name is "
-    "facility_lookup. "
+    "facility_lookup. Budget measures: approved = the approved budget (budgeted, allocated, aka ware, aka "
+    "amince); revised = the revised or amended budget (kasafin da aka sabunta); actual_ytd = money spent so far "
+    "in the year (spent, actual, aka kashe); performance_pct = the share of the budget spent. Name every measure "
+    "the question asks for ('spent against its revised budget' is actual_ytd and revised), and every split it "
+    "names (personnel / albashi, overhead / gudanarwa, capital / jari). "
 )
 
 
