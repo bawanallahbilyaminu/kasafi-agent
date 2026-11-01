@@ -451,3 +451,18 @@ def test_a_complete_preferred_path_stops_the_other() -> None:
         return ans.Answer("pages", True, True)
     la, pa = asyncio.run(ans.first_complete(half(), full_pages(), prefer_lines=True))   # partial: wait for pages
     assert ans.better_answer(la, pa, prefer_lines=True).text == "pages"
+
+
+def test_the_redo_evidence_dedupes_hits_without_hashing_them(monkeypatch) -> None:
+    """A Hit is a plain dataclass (unhashable): the redo once died with TypeError on dict.fromkeys(hits) (fresh
+    eval, 1 Nov: 'Me ya sa kasafin kudin Social Sector … ya ragu daga 2025 zuwa 2026?')."""
+    from app.retrieval.search import Hit
+    hits = [Hit("budget-2026-approved", "Budget 2026", 2026, 12, "Social Sector 2026", 0.9, 0),
+            Hit("budget-2026-approved", "Budget 2026", 2026, 12, "Social Sector 2026", 0.8, 0),   # the same page twice
+            Hit("budget-2025-approved", "Budget 2025", 2025, 9, "Social Sector 2025", 0.7, 1)]
+    monkeypatch.setattr(ans, "search", lambda conn, q, *, k, doc_ids: hits)
+    have = [Evidence(1, "budget-2026-approved", "Budget 2026", 2026, 3, "text", "summary")]
+    out = ans.focused_evidence(None, Plan("q", ["x"], []), have, ["social sector", "2025"])
+    assert [(e.n, e.doc_id, e.page) for e in out] == [(1, "budget-2026-approved", 3), (2, "budget-2026-approved", 12),
+                                                     (3, "budget-2025-approved", 9)]
+    assert ans.focused_evidence(None, Plan("q", ["x"], []), have, ["ab"]) is have

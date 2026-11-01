@@ -71,6 +71,10 @@ async def main() -> None:
                              text == text2))
                 print(f"{p['name']}: first {first:.1f}s (progress line {'sent' if progress else 'MISSING'}), cached "
                       f"{again:.1f}s, same answer {text == text2}")
+                if text != text2:
+                    import difflib
+                    for line in difflib.unified_diff(text.splitlines(), text2.splitlines(), lineterm="", n=0):
+                        print("   ", line[:240])
             q, lang = QUESTIONS[1]
             t, notes, text = await ask(conn, s, q, lang, place)
             rows.append((p["name"], q, t, any("🛰️" in n for n in notes), t, bool(text), True))

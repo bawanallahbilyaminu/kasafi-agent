@@ -635,8 +635,9 @@ def focused_evidence(conn: psycopg.Connection, plan: Plan, have: list[Evidence],
     seen = {(e.doc_id, e.page) for e in have}
     hits = [h for h in search(conn, " ".join(terms), k=4, doc_ids=scope)
             if (h.doc_id, h.page) not in seen and h.doc_id not in plan.skip_docs]
+    unique = list({(h.doc_id, h.page, h.idx): h for h in hits}.values())     # a Hit isn't hashable: key it
     extra = [Evidence(len(have) + i, h.doc_id, h.title, h.year, h.page, "text", h.text)
-             for i, h in enumerate(dict.fromkeys(hits), 1)]
+             for i, h in enumerate(unique, 1)]
     log.info("redo: %d new pages for the missing part", len(extra))
     return [*have, *extra]
 
