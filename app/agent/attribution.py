@@ -325,12 +325,46 @@ GEO_WORDS = {"national": "the national (Total) figure", "sokoto": "the Sokoto fi
              "rural": "the rural figure"}
 
 
-def _survey(c: Claim, holding: list) -> tuple[str, str, object]:
+INDICATOR_SYNONYMS = {"stunt": ["height-for-age", "stunting"], "waste": ["weight-for-height", "wasting"],
+                      "under": ["weight-for-age", "underweight"], "vacci": ["immuni", "vaccin"], "immun": ["vaccin", "immuni"],
+                      "regis": ["regist"], "liter": ["litera"], "anaem": ["anaem", "anem"], "anemi": ["anaem", "anem"],
+                      "morta": ["mortal", "death"], "death": ["mortal", "death"], "anten": ["antenatal", "anc"],
+                      "contr": ["contracept", "family planning", "demand"], "unmet": ["unmet", "demand"],
+                      "poore": ["wealth", "quintile"], "wealt": ["wealth", "quintile"], "insec": ["insecur"],
+                      "hunge": ["insecur", "hunger"], "skill": ["skilled", "assistance"], "deliv": ["deliver"],
+                      "fully": ["basic antigens", "all antigens", "fully"], "rigak": ["vaccin", "immuni"],
+                      "rajis": ["regist"], "koriy": ["height-for-age", "stunting"], "karat": ["litera"]}
+
+
+def _indicator_on_pages(words: set[str], texts: list[str]) -> bool:
+    """A word of the claim (its 5-letter stem, or a synonym the tables use: 'stunted' is 'Height-for-age') on any
+    cited survey page, the table's start page included."""
+    low = " ".join(texts).lower()
+    for w in words:
+        stem = w[:5]
+        if stem in low:
+            return True
+        if any(syn in low for syn in INDICATOR_SYNONYMS.get(stem, [])):
+            return True
+    return False
+
+
+def _survey(c: Claim, holding: list, spans: list | None = None) -> tuple[str, str, object]:
     """('bound' | 'unknown' | 'contradiction', the problem text, the span): a survey figure against the geography,
     indicator, year and sub-population the answer gives it."""
     claim_geo = claim_geography(c)
-    claim_ages = _ages(c.segment) or _ages(c.sentence)
+    # 'under 5' is the population of most child tables, never a contradiction; a range (12-23 months) is checked
+    claim_ages = (_ages(c.segment) or _ages(c.sentence)) - {"under5"}
     rows = [(x, row_geo(_survey_label(x[0]))) for x in holding]
+    # a national table's rows are indicators, not places ('No vaccinations 0.3 17.7 17.8'): they are the national
+    # figures when the page is the survey's national table ('Nigeria MICS, 2021' in its header, no 'State' rows)
+    if "national" in claim_geo:
+        rows = [(x, g or ("national" if "nigeria" in x[1].lower() and not re.search(r"(?m)^\s*State\s*$", x[4])
+                          else g)) for x, g in rows]
+    # with an age group named, the pages printing it come first ('12-23 months' in the title)
+    if claim_ages:
+        rows.sort(key=lambda r: not (claim_ages & _ages(r[0][4])))
+        holding = [x for x, _ in rows]
     pick = None
     if claim_geo:
         fit = [x for x, g in rows if g in claim_geo]
@@ -341,10 +375,9 @@ def _survey(c: Claim, holding: list) -> tuple[str, str, object]:
                 what = GEO_WORDS.get(g, f"the {g.split(':')[-1].title()} figure")
                 return ("contradiction", f"geography: {c.number} is {what} in the row '{_survey_label(holding[0][0])}', "
                                          f"given for {'/'.join(sorted(claim_geo))}", holding[0])
-            # sub-population rows only: a different age group than the answer's is a contradiction
-            labels = {_survey_label(x[0]).lower().replace("–", "-").replace(" ", "") for x in holding}
-            if claim_ages and labels & {a for x in holding for a in _ages(_survey_label(x[0]))} == set() and \
-                    any(_ages(_survey_label(x[0])) for x in holding):
+            # sub-population rows only: every row an age group, none the answer's, is a contradiction
+            row_ages = [_ages(_survey_label(x[0])) for x in holding]
+            if claim_ages and all(row_ages) and not any(claim_ages & a for a in row_ages):
                 return ("contradiction", f"subpopulation: {c.number} is the row '{_survey_label(holding[0][0])}', given "
                                          f"for {', '.join(sorted(claim_ages))}", holding[0])
             return ("unknown", "", holding[0])
@@ -355,18 +388,19 @@ def _survey(c: Claim, holding: list) -> tuple[str, str, object]:
     # the survey year: the year the answer gives the figure must be the survey's (or printed on the page)
     if c.years and year and str(year) not in c.years and not any(y in full for y in c.years):
         return ("contradiction", f"year: {c.number} is from the {year} survey, given for {'/'.join(sorted(c.years))}", pick)
-    # a sub-population the answer names must be on the page ('under-five mortality' on a mortality page)
+    # an age group the answer names must be on the page, when every page holding the figure prints age groups
     if claim_ages:
         page_ages = _ages(full)
-        if page_ages and not claim_ages & page_ages:
+        if page_ages and not claim_ages & page_ages and all(_ages(x[4]) for x in holding):
             return ("contradiction", f"subpopulation: {c.number} is for {', '.join(sorted(page_ages))[:40]}, given for "
                                      f"{', '.join(sorted(claim_ages))}", pick)
     if not claim_geo:
         return ("unknown", "", pick)
-    # the indicator: a word of the claim on the page (its title or column headers); geography words don't count
+    # the indicator: a word of the claim on the cited survey pages (the table's title or column headers, on the page
+    # the table starts on when the figure is on a continuation page); geography words don't count
     words = {w for w in c.terms if w not in GEO_TERMS}
-    low = full.lower()
-    if words and not any(w in low for w in words):
+    texts = list(dict.fromkeys([full] + [x[4] for x in (spans or []) if x[3] == "survey"]))
+    if words and not _indicator_on_pages(words, texts):
         return ("unknown", "", pick)
     return ("bound", "", pick)
 
@@ -586,7 +620,7 @@ def bind(answer_text: str, evidence, entity_names=None) -> Attribution:
         b.found = True
         survey_rows = [x for x in holding if x[3] == "survey"]
         if survey_rows and len(survey_rows) == len(holding) or (survey_rows and not c.terms):
-            how, why, pick = _survey(c, survey_rows)
+            how, why, pick = _survey(c, survey_rows, spans)
             b.span = pick[0]
             if how == "contradiction":
                 b.problem = why.split(":")[0]

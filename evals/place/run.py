@@ -58,7 +58,7 @@ def check(case: dict, text: str, working: str, level: str, unit: str) -> list[st
 
 async def run_full(case: dict, conn) -> tuple[str, str, str, str]:
     from app.agent.answer import _answer_question
-    a = await _answer_question(case["question"], case["lang"], conn, today=date.today())
+    a = await _answer_question(case["question"], case["lang"], conn, today=date.today(), place=case.get("place"))
     spec = (a.maps or [{}])[0]
     return a.text, a.working, spec.get("level", ""), spec.get("unit", "")
 

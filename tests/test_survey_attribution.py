@@ -128,6 +128,32 @@ def test_the_geography_is_the_one_written_next_to_the_figure() -> None:
     assert A.bind(text, [NATIONAL]).state == "attribution checked"
 
 
+NATIONAL_VACC = Evidence(5, "mics-2021", MICS_TITLE, 2021, 187, "text",
+                         "Table TC.1.1: Vaccinations in the first years of life\nPercentage of children age 12-23 months and 24-35 "
+                         "months vaccinated, Nigeria MICS, 2021\nAntigen\nBCG 55.1 18.9 74.1 73.2\nFully vaccinated\n"
+                         "Basic antigens 40.5 2.6 44.2 36.2\nNo vaccinations 0.3 17.7 17.8 na 0.4 13.0 13.0 na")
+CHILD_LABOUR = Evidence(6, "mics-2021", MICS_TITLE, 2021, 433, "text",
+                        "Table PR.2.1: Children's involvement in economic activities\nPercentage of children age 5-17 years, "
+                        "Nigeria MICS, 2021\nAge\n5-11 16.0 0.3\n12-14 20.1 0.5\n15-17 25.0 0.3")
+
+
+def test_a_national_tables_indicator_rows_are_the_national_figures() -> None:
+    att = A.bind("Nationally 44.2% of children aged 12-23 months had all basic vaccinations and 17.8% had none [5].",
+                 [NATIONAL_VACC, VACC])
+    assert att.state == "attribution checked", att.problems
+
+
+def test_under_five_never_contradicts_and_other_tables_ages_do_not_either() -> None:
+    att = A.bind("In Sokoto 42.8% of children under 5 are stunted [1].",
+                 [Evidence(1, "ndhs-2024", "Nigeria Demographic and Health Survey 2024 Final Report", 2024, 366, "text",
+                           "Table 11.1—Continued\nHeight-for-age\nBackground characteristic\nMother's age at birth\n20-49 38.0\n"
+                           "Sokoto 14.8 42.8 −2.0 332")])
+    assert att.state == "attribution checked", att.problems
+    # the figure also sits on a child-labour page with other age groups: the vaccination page's figure is the one
+    att = A.bind("Nationally 17.8% of children aged 12-23 months had no vaccinations [5][6].", [CHILD_LABOUR, NATIONAL_VACC])
+    assert att.state == "attribution checked", att.problems
+
+
 def test_every_named_source_scopes_the_search() -> None:
     from app.agent.routing import all_sources
     assert all_sources("Birth registration in Sokoto: what did MICS 2021 and NDHS 2024 each find?") == ["MICS", "NDHS"]

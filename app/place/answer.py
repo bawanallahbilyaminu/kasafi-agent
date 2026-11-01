@@ -60,7 +60,8 @@ WATER_WORDS = re.compile(r"(?i)\b(?:pond|dam\b|lake|reservoir|flood\w*|under wat
                          r"tafki\w*|madatsa\w*|ambaliya\w*|ruwa\w*|kogi)\b")
 NOT_PLACE = re.compile(r"(?i)\b(?:budget\w*|allocat\w*|kasafi\w*|naira|spen[dt]\w*|expenditure|project\w*|aikin?|"
                        r"ware|kashe|kuɗi|kudi|forecast|tomorrow|gobe|today|yau|hospital|asibiti|clinic|idps?|"
-                       r"displac\w*|'yan\s+gudun\s+hijira|gudun\s+hijira)\b|₦")
+                       r"displac\w*|'yan\s+gudun\s+hijira|gudun\s+hijira|warnings?|alerts?|gargaɗ\w*|gargad\w*|"
+                       r"faɗakar\w*|fadakar\w*|this\s+week|next\s+week|mako\w*)\b|₦")   # a warning is a hazard question
 
 
 def place_route(question: str, english: str = "") -> str:

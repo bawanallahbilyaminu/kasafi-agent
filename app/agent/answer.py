@@ -1277,7 +1277,9 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             box["plan"] = plan            # the loop's budget can stop us; it keeps what was verified
         # two readings, both can't be shown: ask; never for a place-history question (the planner may ask "where is
         # your farm?" without knowing the pin travels with the question: the place path asks for one itself)
-        if plan.clarify and plan.followup == "none" and not place_question(question, plan.english_question, place):
+        # … nor for "what does the <report> say about X": the report's own wording answers, whichever reading
+        if plan.clarify and plan.followup == "none" and not place_question(question, plan.english_question, place) \
+                and not (document_question(question) and narrative_asked(plan)):
             return Answer(plan.clarify["question"], False, True, plan=plan, timings=t,
                           clarify=plan.clarify["options"])
         prev = history[-1] if history else None
