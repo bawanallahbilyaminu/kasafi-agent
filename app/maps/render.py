@@ -441,11 +441,18 @@ def render_specs(settings, specs: list[dict], lang: str, today: date | None = No
             for s in specs:
                 out += [m for m in [draw(conn, s, lang, today)] if m is not None]
     except Exception as e:                        # noqa: BLE001 - a map is extra; never lose the answer over it
-        logging.getLogger(__name__).warning("map failed: %s", type(e).__name__)
+        logging.getLogger(__name__).warning("map failed: %s (%s)", type(e).__name__, [x.get("kind") for x in specs],
+                                            exc_info=True)
     return out
 
 
 def draw(conn, s: dict, lang: str, today: date | None = None) -> MapImage | None:
+    if s["kind"] in ("place_chart", "place_map"):          # place history (app/place/images.py): no day in the spec
+        from app.place.images import draw_place
+        return draw_place(conn, s, lang, today)
+    if s["kind"] == "area_map":                             # a ward or LGA choropleth (planner answers)
+        from app.place.images import area_map
+        return area_map(conn, s, lang, today)
     day = date.fromisoformat(s["day"])
     if s["kind"] == "hazard":
         return hazard_map(conn, s["layer"], day, lang, s.get("highlight", ""), today, s.get("zoom", ""))
@@ -455,12 +462,6 @@ def draw(conn, s: dict, lang: str, today: date | None = None) -> MapImage | None
         return local_map(conn, s["layer"], day, s["lat"], s["lon"], lang, today, s.get("label", ""))
     if s["kind"] == "fires":
         return fires_map(conn, s.get("view", "state"), lang, s.get("pcode", ""), s.get("lat"), s.get("lon"))
-    if s["kind"] in ("place_chart", "place_map"):          # place history (app/place/images.py)
-        from app.place.images import draw_place
-        return draw_place(conn, s, lang, today)
-    if s["kind"] == "area_map":                             # a ward or LGA choropleth (planner answers)
-        from app.place.images import area_map
-        return area_map(conn, s, lang, today)
     return None
 
 

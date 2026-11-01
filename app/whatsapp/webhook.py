@@ -157,8 +157,20 @@ async def _reply(messages: list[dict[str, Any]]) -> None:
                         n = await send_evidence(client, msg["from"], crops, out.lang, settings)
                         log.info("evidence images sent: %d of %d", n, len(crops))
                 log.info("reply sent to %s", mask_phone(msg["from"]))
-            except Exception:  # one failed reply must not stop the rest
+            except Exception as e:  # one failed reply must not stop the rest; the user never gets silence
                 log.exception("reply to %s failed", mask_phone(msg.get("from", "")))
+                try:
+                    from app.agent.trace import save_failure
+                    from app.users import user_key
+                    from app.whatsapp.conversation import Out
+                    from app.whatsapp.messages import t
+                    user = store.get(user_key(msg["from"], settings)) if msg.get("from") else None
+                    lang = (user.lang if user and user.lang else None) or "ha"
+                    await send(Out(t("answer_failed", lang), lang=lang))
+                    if settings.has_database:
+                        save_failure(settings, "(reply failed)", lang, f"{type(e).__name__}: {e}"[:300], 0.0)
+                except Exception:                                   # noqa: BLE001
+                    log.exception("apology to %s failed too", mask_phone(msg.get("from", "")))
     finally:
         await client.aclose()
 

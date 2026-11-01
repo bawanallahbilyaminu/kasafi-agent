@@ -214,7 +214,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     # 5. Consented: limits (skipped for our own test numbers), then work
     lang = user.lang or "ha"
     resume = ""                                  # a place-history question that waited for this pin or shape
-    outs: list[Out] = []
+    before: list[Out] = []                       # the replies that go out before the resumed question's answer
     # the farm's size or its corner pins, asked for when no outline could be drawn (app/place/shape.py); or
     # "these are the corners" with recent pins. Shapes and pins stay in memory only.
     waiting = location_memory.peek_question(key) or ""
@@ -222,20 +222,20 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     if sizing or (text and shape_words(text) and location_memory.recent_pins(key)):
         shaped = await _plot_shape(msg, text, key, lang, waiting[len(SIZE_WAIT):] if sizing else "")
         if shaped is not None:
-            outs, resume = shaped
+            before, resume = shaped
             if not resume:
-                return outs
+                return before
     # a location pin, or "share my location": handled here (PostGIS, no model); the point stays in memory only
     if not resume and (kind == "location" or (text and SHARE.search(text))):
-        outs = await _location(msg, key, lang, store, settings, locate_fn)
+        before = await _location(msg, key, lang, store, settings, locate_fn)
         if (pin := pin_of(msg)) is not None:
             location_memory.add_pin(key, *pin)                                            # a corner candidate
         if pin and (spot := location_memory.recall(key)) and (q := location_memory.waiting_question(key)):
-            outs += await _after_location(q, key, lang, settings, facility_fn, spot)    # the question that asked
+            before += await _after_location(q, key, lang, settings, facility_fn, spot)    # the question that asked
             if place_route(q) and not is_facility_query(q):
                 resume = q
         if not resume:
-            return outs
+            return before
     # the reply to "share your location, or tell me your LGA or town": a typed place, from our own gazetteer
     if text and (waiting := location_memory.waiting_question(key)) is not None:
         if (typed := await place_fn(settings, text)) is not None:
@@ -279,14 +279,19 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             log.warning("daily spend cap reached")
             return [Out(t("busy", lang))]
         store.add_spend(settings.kasafi_cost_per_question_usd)
-        await notify(Out(t(searching_key(question), lang)))   # planning + search + answer: median ~10 s
+        # one progress line per request: a place-history question sends its own ("checking about N years of
+        # satellite images…", app/place/answer.py) on a first request and answers from the cache in seconds otherwise
+        satellite = bool(place_route(question))
+        if not satellite:
+            await notify(Out(t(searching_key(question), lang)))   # planning + search + answer: median ~10 s
         sent: list[str] = []
 
         async def still_working() -> None:        # a slow answer (a second search, a fallback) gets one more word
             await asyncio.sleep(SLOW_ANSWER_S)
-            if not sent:
+            if not sent and not satellite:
                 await notify(Out(t("still_working", lang)))
         slow = asyncio.create_task(still_working())
+        started = time.perf_counter()
         try:
             async def send_now(text: str) -> None:   # e.g. "Ina neman takardar…" while a document is fetched
                 sent.append(text)
@@ -299,17 +304,27 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                 place["shape"] = location_memory.shape(key)
                 place["ask_size"] = True
             try:
-                result = await answer(question, lang, settings=settings, notify=send_now,
-                                      history=store.recent_turns(key), **({"place": place} if place else {}))
+                # every long job ends in an answer or an apology within the limit, never silence
+                result = await asyncio.wait_for(
+                    answer(question, lang, settings=settings, notify=send_now, history=store.recent_turns(key),
+                           **({"place": place} if place else {})), timeout=settings.kasafi_answer_timeout_s)
             finally:
                 slow.cancel()
             body = result if isinstance(result, str) else result.text
             # Keep the turn for follow-ups ("check again", "what about 2024?"): 5 turns, 90 days, no number.
             store.add_turn(key, lang, question, body, getattr(result, "sources", []), getattr(result, "working", ""),
                            getattr(result, "quotes", ""))
+        except asyncio.TimeoutError:
+            seconds = time.perf_counter() - started
+            log.error("answer timed out after %.0fs (limit %.0fs): %s", seconds, settings.kasafi_answer_timeout_s,
+                      "satellite" if satellite else "documents")
+            body, result = t("satellite_failed" if satellite else "answer_timeout", lang), None
+            await _note_failure(settings, question, lang, f"timeout after {seconds:.0f}s", seconds, body)
         except Exception as e:  # DB or model down: tell the user rather than go silent
+            seconds = time.perf_counter() - started
             log.exception("answer failed: %s", type(e).__name__)
-            body, result = t("answer_failed", lang), None
+            body, result = t("satellite_failed" if satellite else "answer_failed", lang), None
+            await _note_failure(settings, question, lang, f"{type(e).__name__}: {e}"[:300], seconds, body)
         offer = getattr(result, "offer", None)
         store.set_pending_calc(key, offer.to_dict() if offer else None)
         text_out = f"{prefix}\n\n{body}" if prefix else body
@@ -334,8 +349,8 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                 outs.append(Out(t("map_failed", lang), lang=lang))
         return outs
 
-    if resume:                                   # the pin arrived: the place-history question now has its point
-        return outs + await respond(resume, "", Out(t("echo", lang, text=resume[:500])))
+    if resume:                                   # the pin or the shape arrived: the place-history question goes on
+        return before + await respond(resume, "", Out(t("echo", lang, text=resume[:500])))
 
     async def resolution_reply(res: Resolution, pending_q: str, reply: str = "") -> list[Out]:
         if res.kind == "ambiguous":            # replace or add? Ask once; the pending question stays
@@ -487,6 +502,14 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     if button == "consent_ok":
         return [Out(t("consent_thanks", lang))]
     return [Out(t("other", lang))]
+
+
+async def _note_failure(settings: Settings, question: str, lang: str, reason: str, seconds: float, apology: str) -> None:
+    """The failure reason for the admin page (a trace row with outcome 'failed'); never raises."""
+    if not settings.has_database:
+        return
+    from app.agent.trace import save_failure
+    await asyncio.to_thread(save_failure, settings, question, lang, reason, seconds, apology)
 
 
 def shape_words(text: str) -> bool:

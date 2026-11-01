@@ -181,6 +181,15 @@ TEXTS = {
         "ha": "Yi haƙuri, an sami matsala wajen neman amsar.\n\nDon Allah ka sake gwadawa nan da ɗan lokaci.",
         "en": "Sorry, something went wrong while looking up the answer.\n\nPlease try again in a little while.",
     },
+    "answer_timeout": {               # a long job that didn't finish within the limit (app/whatsapp/conversation.py)
+        "ha": "Yi haƙuri, ban iya kammala neman amsar a kan lokaci ba.\n\nDon Allah ka sake gwadawa nan da ƴan mintoci.",
+        "en": "Sorry, I couldn't finish the answer in time.\n\nPlease try again in a few minutes.",
+    },
+    "satellite_failed": {             # a place-history request that timed out or failed
+        "ha": "Yi haƙuri, ban iya kammala duba hotunan tauraron ɗan adam ba.\n\nDon Allah ka sake gwadawa nan da ƴan "
+              "mintoci.",
+        "en": "Sorry, I couldn't finish checking the satellite images.\n\nPlease try again in a few minutes.",
+    },
     # Read-back confirmation and corrections
     "confirmed": {
         "ha": "Na gode. Tambayarka:\n\n«{question}»\n\n(Kasafi yana gwaji: amsoshi za su zo nan ba da jimawa ba.)",

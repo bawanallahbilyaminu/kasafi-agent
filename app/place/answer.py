@@ -700,13 +700,19 @@ async def place_answer(conn, settings, question: str, english: str, lang: str, p
     shape = place.get("shape") or {}
     timing: dict[str, float] = {}
     t0 = time.perf_counter()
+    # the one progress line of a first request, before the outline when no size question can follow (a shape
+    # given or declined, or the caller never asks); after it otherwise, so "I couldn't draw…" isn't preceded by it
+    fresh = notify is not None and first_request(conn, lat, lon, today)
+    may_ask = ask_size and not shape.get("geometry") and not shape.get("declined")
+    if fresh and not may_ask:
+        await notify(t["progress"].format(n=today.year - H.GOOD_FROM + 1))
     if shape.get("geometry"):
         outline = Outline.from_shape(shape)
     else:
         outline = await plot_outline(conn, settings, lat, lon, today=today)
-        if ask_size and not outline.is_plot and not shape.get("declined"):
+        if may_ask and not outline.is_plot:
             return PlaceAnswer(t["ask_size"], False, needs_size=True, outline=outline)
-    if notify is not None and first_request(conn, lat, lon, today):
+    if fresh and may_ask:
         await notify(t["progress"].format(n=today.year - H.GOOD_FROM + 1))
     timing["outline"] = time.perf_counter() - t0
     t1 = time.perf_counter()

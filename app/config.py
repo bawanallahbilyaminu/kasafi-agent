@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     eval_daily_usd: float = 5.0
     # How long a read-back question waits for Eh / A'a / a correction
     kasafi_pending_ttl_minutes: int = 15
+    kasafi_answer_timeout_s: float = 120.0      # every long job ends in an answer or an apology within this
 
     # Our own test numbers: no per-number daily limits and no global spend cap. They still need
     # consent, and their usage still counts toward the daily spend total.
