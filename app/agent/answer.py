@@ -1688,7 +1688,8 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
                 settings = settings.model_copy(update={"kasafi_open_stage_timeout_s":
                                                        max(settings.kasafi_open_stage_timeout_s, 40.0)})
                 log.info("broad question: reading up to %d documents: %s", plan.breadth, ", ".join(plan.doc_ids))
-                if notify and len(plan.doc_ids) > SIMPLE_DOCS:
+                # one progress line: a topic sweep names its own sources, so this line is for the document path
+                if notify and len(plan.doc_ids) > SIMPLE_DOCS and not topic_route(question, plan):
                     await notify(READING.get(lang, READING["en"]).format(n=len(plan.doc_ids)))
         drop_unnamed_splits(plan, question)                  # no kind of spending named: the total
         # health facilities from the registry: a count of a kind, or one facility by name (no money asked about)
