@@ -272,6 +272,7 @@ def main() -> None:
     ap.add_argument("--generate", action="store_true")
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--out", default=str(HERE / "report.md"))
+    ap.add_argument("--only", nargs="+", help="case ids or id prefixes to run (p4_narrative-03, p1_revenue)")
     args = ap.parse_args()
     if args.generate:
         seed = args.seed if args.seed is not None else random.randrange(10_000)
@@ -281,7 +282,10 @@ def main() -> None:
                          encoding="utf-8")
         print(f"{len(cases)} cases (seed {seed}) -> {CASES}")
         return
-    asyncio.run(run(json.loads(CASES.read_text(encoding="utf-8"))["cases"], Path(args.out)))
+    cases = json.loads(CASES.read_text(encoding="utf-8"))["cases"]
+    if args.only:
+        cases = [c for c in cases if any(c["id"] == o or c["id"].startswith(o) for o in args.only)]
+    asyncio.run(run(cases, Path(args.out)))
 
 
 if __name__ == "__main__":

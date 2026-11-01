@@ -72,7 +72,8 @@ _PERIOD = re.compile(
     r"(?P<tail>\s+(?:(?:19|20)\d\d\s+)?(?:report|BIR|budget\s+implementation|implementation\s+report|rahoto))?")
 
 
-_REPORT_NAME = re.compile(r"(?i)\b(?:report|BIR|bulletin|rahoto\w*)\s+Q[1-4](?:\s*[-–]\s*Q?[1-4])?(?:\s+(?:19|20)\d\d)?")
+_REPORT_NAME = re.compile(r"(?i)\b(?:report|BIR|bulletin|rahoto\w*)\s+(?:(?:19|20)\d\d\s+)?Q[1-4](?:\s*[-–]\s*Q?[1-4])?"
+                          r"(?:\s+(?:19|20)\d\d)?")
 
 
 def periods(text: str) -> set[tuple[int, int]]:
@@ -206,7 +207,7 @@ def claims_from(text: str) -> list[Claim]:
             segment = clean[last:m.start()]
             window = clean[last:nxt]
             terms = _terms(segment) or _terms(clean)
-            years = set(YEAR.findall(window)) or set(YEAR.findall(clean))
+            years = set(YEAR.findall(window)) or (set(YEAR.findall(clean)) if len(figs) == 1 else set())
             per = periods(window) or periods(clean)
             out.append(Claim(s, m.group(0).strip(), _value(m.group(1), m.group(2)), bool(m.group(2)), terms, years,
                              _kind(clean), per, segment, _is_percent(clean, m), window))
@@ -487,7 +488,7 @@ def _cells(span: str, claim: Claim) -> list[str]:
     for m in _matches(span, claim):
         before = span[:m.start()]
         figures = [x.end() for x in NUMBER.finditer(before) if _is_money(x)]
-        cut = max(before.rfind("|"), max(figures, default=-1))
+        cut = max(before.rfind("|"), before.rfind("]"), max(figures, default=-1))
         out.append(before[cut + 1:] if cut >= 0 else before)
     return out
 
