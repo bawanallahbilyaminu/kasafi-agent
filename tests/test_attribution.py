@@ -186,7 +186,32 @@ def test_hausa_aliases_bind_per_entity_not_through_any_plan_name() -> None:
                   ["Ministry of Health", "052100100100"]).state == "attribution checked"
 
 
+BIR_NARRATIVE = [Evidence(1, "bir-2026-q2", "Budget Implementation Report Q2 2026", 2026, 51, "text",
+                          "3 Primary Healthcare Budget Performance\nThe Primary Healthcare (PHC) subsector was allocated a total of "
+                          "₦7,210,210,444.94 in the 2026 Approved Revised Budget.\nAs at the end of Q2 2026, the total actual expenditure "
+                          "under the Primary Healthcare sub-sector amounted to ₦1,221,243,045.30 49 representing 16.9% of the approved "
+                          "revised budget allocation for the sector.\nThis low performance can be attributed to low related capital "
+                          "receipts draw down and the procurement process."),
+                 Evidence(3, "bir-2026-q2", "Budget Implementation Report Q2 2026", 2026, 52, "text",
+                          "[Table: Primary Healthcare Expenditure by Economic Classification]\nTotal | 2026 Approved Revised Budget "
+                          "7,210,210,444.94 | Performance Year to Date (Q1-Q2) 1,221,243,045.30 | Q2 Performance 370,041,765.82")]
+
+
+@pytest.mark.parametrize("text", [
+    "The Budget Implementation Report Q2 2026 says the Primary Healthcare subsector was allocated ₦7,210,210,444.94 in the 2026 "
+    "Approved Revised Budget [1] and spent ₦1,221,243,045.30 year-to-date (Q1–Q2 2026), which is 16.9% of the approved revised budget [1][3].",
+    "The Primary Healthcare subsector was allocated ₦7,210,210,444.94 in the 2026 Approved Revised Budget [1]. As at end of Q2 2026, "
+    "total actual expenditure (Year to Date Q1-Q2) was ₦1,221,243,045.30, which is 16.9% of the approved revised budget [1].",
+    "As at the end of Q2 2026 the subsector had spent ₦1,221,243,045.30 [1].",
+])
+def test_a_reports_narrative_is_never_another_entitys_row_and_as_at_end_of_q2_is_cumulative(text) -> None:
+    """Pattern p4_narrative-03 (1 Nov): two compositions of the BIR Q2 narrative were refused."""
+    att = A.bind(text, BIR_NARRATIVE)
+    assert att.ok, att.problems
+
+
 def test_periods_parse_in_both_languages() -> None:
+    assert A.periods("As at end of Q2 2026") == {(1, 2)} and A.periods("at the end of Q3") == {(1, 3)}
     assert A.periods("spent in Q1 2026") == {(1, 1)} and A.periods("Q1-Q3 2026") == {(1, 3)}
     assert A.periods("by Q3 2025") == {(1, 3)} and A.periods("in the first half of 2026") == {(1, 2)}
     assert A.periods("zuwa kwata ta uku") == {(1, 3)} and A.periods("a kwata ta farko") == {(1, 1)}

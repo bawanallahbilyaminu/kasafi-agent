@@ -63,7 +63,7 @@ HAUSA = {"lafiya": "health", "ilimi": "education", "ilimin": "education", "firam
 _ORD = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4,
         "farko": 1, "biyu": 2, "uku": 3, "huɗu": 4, "hudu": 4}
 _PERIOD = re.compile(
-    r"(?i)(?P<upto>\b(?:by|to|through|as\s+at|as\s+of|up\s+to|until|zuwa)\s+(?:the\s+(?:end\s+of\s+(?:the\s+)?)?)?)?"
+    r"(?i)(?P<upto>\b(?:by|to|through|as\s+at|as\s+of|up\s+to|until|zuwa|at)\s+(?:the\s+)?(?:end\s+(?:of\s+)?(?:the\s+)?)?)?"
     r"(?:\bQ(?P<a>[1-4])(?:\s*(?:-|–|to|zuwa)\s*Q?(?P<b>[1-4]))?\b"
     r"|\b(?P<ord>first|1st|second|2nd|third|3rd|fourth|4th)\s+quarter\b"
     r"|\bkwata\s+ta\s+(?P<hord>farko|biyu|uku|huɗu|hudu)\b"
@@ -72,11 +72,15 @@ _PERIOD = re.compile(
     r"(?P<tail>\s+(?:(?:19|20)\d\d\s+)?(?:report|BIR|budget\s+implementation|implementation\s+report|rahoto))?")
 
 
+_REPORT_NAME = re.compile(r"(?i)\b(?:report|BIR|bulletin|rahoto\w*)\s+Q[1-4](?:\s*[-–]\s*Q?[1-4])?(?:\s+(?:19|20)\d\d)?")
+
+
 def periods(text: str) -> set[tuple[int, int]]:
     """The quarter ranges a text states, as (first, last): 'Q1' (1, 1), 'Q1-Q3' and 'by Q3' (1, 3), 'first half'
     (1, 2), 'nine months' (1, 3), Hausa 'kwata ta uku' (3, 3) and 'zuwa kwata ta uku' (1, 3). A report's name
     ('the Q3 2025 report') is not a period of a figure."""
     out = set()
+    text = _REPORT_NAME.sub(" ", text or "")
     for m in _PERIOD.finditer(text or ""):
         if m.group("tail"):
             continue
@@ -541,9 +545,17 @@ def _names_in(text: str, name: str) -> bool:
 
 
 def _tabular(span: str) -> bool:
-    """A table row (cells, or two money figures), where another entity's words beside a figure contradict; a
-    running-text sentence naming the entity elsewhere does not."""
-    return "|" in span or len([m for m in NUMBER.finditer(span) if _is_money(m)]) >= 2
+    """A table row (cells, two money figures, or a short label before one figure: 'Ministry of Basic Education
+    allocation: 100,000,000.00'), where another entity's words beside a figure contradict; a running-text
+    sentence ('The Primary Healthcare subsector was allocated a total of ₦7,210,210,444.94 in the 2026 …') naming
+    the entity does not: its next sentence holds the spending figure without repeating the name."""
+    if "|" in span or len([m for m in NUMBER.finditer(span) if _is_money(m)]) >= 2:
+        return True
+    return bool(_is_money_span(span)) and len(_label(span).split()) <= 8
+
+
+def _is_money_span(span: str) -> bool:
+    return any(_is_money(m) for m in NUMBER.finditer(span))
 
 
 def _entity(c: Claim, spans, groups) -> tuple[str, list]:
@@ -567,17 +579,17 @@ def _entity(c: Claim, spans, groups) -> tuple[str, list]:
     if c.terms:
         # a contradiction: the claim's words name another row (all of them in it) that holds a different figure
         elsewhere = [x[0] for x in spans if c.terms <= _terms(x[0]) and not _holds(x[0], c) and NUMBER.search(x[0])
-                     and (x[3] == "budget" or _tabular(x[0]))]
+                     and _tabular(x[0])]
         if elsewhere and not any(c.terms & _terms(x[0]) == c.terms for x in holding):
             return "contradiction", holding
         if mine:
             named = [x[0] for x in spans if any(_names_in(x[0], n) for g in mine for n in g) and not _holds(x[0], c)
-                     and (x[3] == "budget" or _tabular(x[0]))]
+                     and _tabular(x[0])]
             if named:
                 return "contradiction", holding
     elif mine:
         named = [x[0] for x in spans if any(_names_in(x[0], n) for g in mine for n in g) and not _holds(x[0], c)
-                 and (x[3] == "budget" or _tabular(x[0]))]
+                 and _tabular(x[0])]
         if named:
             return "contradiction", holding
     return "unknown", holding
@@ -674,7 +686,9 @@ def bind(answer_text: str, evidence, entity_names=None) -> Attribution:
             continue
         # the period of the figure's column: Q1 and Q1–Q3 are different periods
         pers, settled_period = _periods_of(s, h, c)
-        if c.periods and pers and settled_period and not c.periods & pers:
+        cell_kinds = [_kind(x) for x in _cells(s, c)]
+        if c.periods and pers and settled_period and not c.periods & pers and "alloc" not in cell_kinds \
+                and c.kind != "alloc":
             def show(p):
                 return f"Q{p[0]}" if p[0] == p[1] else f"Q{p[0]}-Q{p[1]}"
             b.problem = "period"
