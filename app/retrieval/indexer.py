@@ -107,11 +107,12 @@ def prepare_pdf(doc: dict, path: Path, data_dir: Path) -> tuple[Path, dict]:
         try:
             prev = json.loads(stamp.read_text(encoding="utf-8"))
             if prev.get("original_sha256") == original_sha and prev.get("pdf_sha256") == sha256_file(pdf):
-                return pdf, {k: prev[k] for k in ("original_format", "original_sha256", "converter")}
+                return pdf, {k: prev.get(k) for k in ("original_format", "original_sha256", "converter", "stripped_parts")}
         except (ValueError, KeyError):
             pass
-    conv = convert_to_pdf_sync(path, pdf)
-    provenance = {"original_format": ft.kind, "original_sha256": original_sha, "converter": conv.converter}
+    conv = convert_to_pdf_sync(path, pdf, strip=ft.strip, kind=ft.kind)
+    provenance = {"original_format": ft.kind, "original_sha256": original_sha, "converter": conv.converter,
+                  "stripped_parts": [{"part": p, "why": w} for p, w in ft.strip] or None}
     stamp.write_text(json.dumps({**provenance, "pdf_sha256": conv.sha256, "source": path.name}, indent=1),
                      encoding="utf-8")
     log.info("%s: converted %s (%s) to PDF with %s in %.1fs", doc["id"], path.name, ft.kind, conv.converter, conv.seconds)
@@ -565,12 +566,14 @@ def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bo
         conn.execute("DELETE FROM documents WHERE id = %s", (doc["id"],))   # cascades to pages/chunks
         conn.execute(
             """INSERT INTO documents (id, title, category, year, publisher, source_url, acquisition, sha256, page_count,
-                                      final_url, fetched_at, series, edition, original_format, original_sha256, converter)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                      final_url, fetched_at, series, edition, original_format, original_sha256, converter,
+                                      stripped_parts)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (doc["id"], doc["title"], doc.get("category"), doc.get("year"), doc.get("publisher"),
              doc.get("source_url"), doc.get("acquisition"), sha, len(pages), doc.get("final_url"),
              doc.get("fetched_at"), doc.get("series"), doc.get("edition"), doc.get("original_format"),
-             doc.get("original_sha256"), doc.get("converter")),
+             doc.get("original_sha256"), doc.get("converter"),
+             json.dumps(doc["stripped_parts"]) if doc.get("stripped_parts") else None),
         )
         n_chunks = 0
         with conn.cursor() as cur:

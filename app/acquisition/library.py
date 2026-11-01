@@ -167,12 +167,13 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
         if ft.office:                                  # DOCX, DOC, ODT, RTF: to PDF in the converter's sandbox
             t0 = time.perf_counter()
             try:
-                conv = await convert_to_pdf(dl.path, unzipped)
+                conv = await convert_to_pdf(dl.path, unzipped, strip=ft.strip, kind=ft.kind)
             except ConversionError as e:
                 return Acquired("failed", url=url, detail=f"{ft.kind}: {e}", timings=t)
             t["convert"] = time.perf_counter() - t0
             pdf, sha = conv.pdf, conv.sha256
-            provenance = {"original_format": ft.kind, "original_sha256": dl.sha256, "converter": conv.converter}
+            provenance = {"original_format": ft.kind, "original_sha256": dl.sha256, "converter": conv.converter,
+                          "stripped_parts": [{"part": p, "why": w} for p, w in ft.strip] or None}
             log.info("converted a %s to PDF in %.1fs with %s", ft.kind, conv.seconds, conv.converter)
         elif ft.kind == "zip":
             pdf = await unzip_pdf_sandboxed(dl.path, unzipped, MAX_BYTES)

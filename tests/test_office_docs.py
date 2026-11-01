@@ -266,6 +266,58 @@ async def _again(conn, url, s, responses):
         return await library.fetch_and_index(conn, url, "Sokoto water supply plan 2026", settings=s, client=None, http=http)
 
 
+def test_a_chart_workbook_is_inert_stripped_before_conversion_and_recorded(tmp_path: Path, conn, converter) -> None:
+    """The first real Word document (1 Nov): 'embedded object part (word/embeddings/Microsoft_Excel_Worksheet.xlsx)'
+    refused an ordinary chart's data workbook. Inert data is stripped and recorded; the chart renders from its
+    cached values."""
+    import zipfile
+
+    from app.acquisition.convert import strip_parts
+    from app.retrieval.indexer import index_manifest
+    from tests.office_fixtures import docx_with_chart_bytes, xlsx_bytes
+    data = docx_with_chart_bytes(PARAS + ["Enrolment rose from 1,200 in 2023 to 1,350 in 2024."], xlsx_bytes())
+    (tmp_path / "chart.docx").write_bytes(data)
+    ft = sniff(tmp_path / "chart.docx")
+    assert not ft.rejected and ft.strip and ft.strip[0][0] == "word/embeddings/Microsoft_Excel_Worksheet.xlsx", ft
+    stripped = strip_parts(tmp_path / "chart.docx", list(ft.strip), tmp_path / "stripped.docx")
+    with zipfile.ZipFile(stripped) as z:
+        names = z.namelist()
+        assert "word/embeddings/Microsoft_Excel_Worksheet.xlsx" not in names and "word/charts/chart1.xml" in names
+        assert "externalData" not in z.read("word/charts/chart1.xml").decode()
+        assert "embeddings" not in z.read("word/charts/_rels/chart1.xml.rels").decode()
+    assert (tmp_path / "chart.docx").read_bytes() == data                              # the original untouched
+    doc_id = "test-office-chart"
+    try:
+        res = index_manifest(conn, _manifest(tmp_path, doc_id, "chart.docx"), only=[doc_id])
+        assert res[0].status == "indexed", res[0]
+        row = conn.execute("SELECT original_format, stripped_parts FROM documents WHERE id = %s", (doc_id,)).fetchone()
+        assert row[0] == "docx" and row[1] and row[1][0]["part"].endswith("Microsoft_Excel_Worksheet.xlsx") and "inert" in row[1][0]["why"]
+        text = "\n".join(r[0] for r in conn.execute("SELECT text FROM pages WHERE doc_id = %s ORDER BY page", (doc_id,)).fetchall())
+        assert "1,350" in text                                                             # the chart's page indexed
+    finally:
+        _cleanup(conn, doc_id)
+
+
+@pytest.mark.parametrize("part,macro,nested,ole,reason", [
+    ("Microsoft_Excel_Worksheet.xlsm", True, False, False, "macro"),
+    ("oleObject1.bin", False, False, True, "OLE package"),
+    ("Microsoft_Excel_Worksheet.xlsx", False, True, False, "nested archive"),
+], ids=["embedded-xlsm", "embedded-ole-package", "embedded-nested-archive"])
+def test_active_or_risky_embeddings_are_rejected(tmp_path: Path, part, macro, nested, ole, reason) -> None:
+    from tests.office_fixtures import docx_with_chart_bytes, ole_package_bytes, xlsx_bytes
+    embedded = ole_package_bytes() if ole else xlsx_bytes(macro=macro, nested=nested)
+    (tmp_path / "x.docx").write_bytes(docx_with_chart_bytes(PARAS, embedded, part))
+    ft = sniff(tmp_path / "x.docx")
+    assert ft.rejected and reason in ft.reason, ft
+
+
+def test_an_executable_embedding_is_rejected(tmp_path: Path) -> None:
+    from tests.office_fixtures import docx_with_chart_bytes
+    (tmp_path / "x.docx").write_bytes(docx_with_chart_bytes(PARAS, b"MZ" + b"\x00" * 100, "run.exe"))
+    ft = sniff(tmp_path / "x.docx")
+    assert ft.rejected and "executable" in ft.reason
+
+
 def test_a_macro_enabled_docx_fetched_on_demand_is_refused_with_the_reason(tmp_path: Path, conn, converter) -> None:
     from app.acquisition import library
     from tests.helpers import make_settings

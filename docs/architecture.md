@@ -61,10 +61,18 @@ library through the same path as PDFs:
   `%PDF-`; a zip is a DOCX (`word/document.xml`), an ODT (`mimetype` + `content.xml`) or a zip holding a PDF (as
   NBS ships reports); an OLE file with a `WordDocument` stream is a legacy DOC; `{\rtf` is RTF. Anything else is
   rejected as before. A file named `.pdf` holding Word content, or the reverse, is handled by what it is.
-- **Unsafe files are rejected with a reason before anything is opened:** macro parts (DOCX `vbaProject.bin`, OLE
-  `Macros`/`VBA` storages, ODT `Basic/`), external targets (a relationship with `TargetMode="External"` other than
-  a plain hyperlink, an ODT `xlink:href` to a URL), embedded objects (OLE object parts, ODT `Object` parts, RTF
-  `\objdata`), and zip bombs (declared size over 300 MB, more than 3,000 members, or a ratio over 200:1).
+- **Only active or risky content is rejected, with a reason, before anything is opened:** macros anywhere
+  (DOCX `vbaProject.bin`, `.docm`/`.xlsm`/`.pptm` embeddings, OLE `Macros`/`VBA` storages, ODT `Basic/`), ActiveX
+  parts, OLE packages and native objects (`Package`/`Ole10Native` streams: a file dropped into the document),
+  executables (`.exe`, `.js`, `.vbs`, `.ps1`, `.bat` …) inside, nested archives or objects beyond one level,
+  external targets (a relationship with `TargetMode="External"` other than a plain hyperlink, an ODT `xlink:href`
+  to a URL), RTF `\objdata`, and zip bombs (declared size over 300 MB, more than 3,000 members, or a ratio over
+  200:1). **Inert embedded data is allowed:** a chart's data workbook (`.xlsx`, `.xls`, `.csv`, `.ods`), images,
+  ODF chart objects. Each embedded workbook is checked to be macro-free, then stripped from the copy that is
+  converted, with its relationships and the chart's external-data pointer, so LibreOffice never opens it (the
+  chart renders from its cached values); the original file is untouched. What was stripped and why is recorded
+  in `documents.stripped_parts` (migration 0024). The first real Word document (the Annual School Census report,
+  32 charts with their workbooks) had been refused by the earlier rule.
 - **Conversion** (`app/acquisition/convert.py`): LibreOffice Writer headless (`libreoffice-writer-nogui` in the
   image, with DejaVu and Liberation fonts for ɓ ɗ ƙ ƴ) in a child process with the parser's limits: a stripped
   environment with no secrets, memory and CPU limits on Linux, a 120 s wall clock, its own throwaway profile and a

@@ -10,9 +10,10 @@ anything is opened, and a zip is checked for bombs (declared size, ratio, member
 
 from __future__ import annotations
 
+import io
 import re
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 MAX_UNZIPPED = 300 * 1024 * 1024      # the declared size of every member together
@@ -32,6 +33,7 @@ def _utf16(s: str) -> bytes:
 class FileType:
     kind: str                 # pdf | docx | odt | doc | rtf | zip | unknown
     reason: str = ""          # why it is rejected ('' when it isn't)
+    strip: tuple = ()         # (part, why) inert embedded parts to remove before conversion (chart workbooks)
 
     @property
     def office(self) -> bool:
@@ -72,7 +74,8 @@ def _sniff_zip(path: Path) -> FileType:
         if any(n.startswith("word/vbaproject") or n.endswith("vbaproject.bin") for n in lower):
             return FileType("docx", "macro-enabled Word file (vbaProject)")
         if "word/document.xml" in lower:
-            return FileType("docx", docx_problem(z, names))
+            problem, strip = docx_check(z, names)
+            return FileType("docx", problem, tuple(strip))
         if "content.xml" in lower:
             mimetype = ""
             if "mimetype" in lower:
@@ -99,41 +102,100 @@ def zip_bomb(infos: list[zipfile.ZipInfo], zipped: int) -> str:
 
 _EXTERNAL = re.compile(r'(?is)<Relationship\b[^>]*TargetMode="External"[^>]*>')
 _TYPE = re.compile(r'(?is)Type="[^"]*/relationships/([a-zA-Z]+)"')
-_OBJECT_PART = re.compile(r"(?i)^word/(?:embeddings|activex)/|\.bin$|\.exe$|\.dll$|\.js$|\.vbs$")
+_EXECUTABLE = re.compile(r"(?i)\.(?:exe|com|scr|msi|dll|js|jse|vbs|vbe|ps1|bat|cmd|hta|wsf|wsh|jar|pif|cpl|lnk|reg)$")
+_MACRO_EXT = re.compile(r"(?i)\.(?:docm|dotm|xlsm|xltm|xlam|pptm|potm|ppam|sldm)$")
+_INERT_EXT = re.compile(r"(?i)\.(?:xlsx|xltx|xls|csv|ods|odt|docx|pptx|odp|txt)$")
+_PACKAGE_STREAMS = (_utf16("Package"), _utf16("\x01Ole10Native"), _utf16("Ole10Native"))
+_VBA_STREAMS = (_utf16("Macros"), _utf16("VBA"), _utf16("_VBA_PROJECT"))
 
 
-def docx_problem(z: zipfile.ZipFile, names: list[str]) -> str:
-    """A DOCX part that would run code or fetch content: embedded objects or ActiveX parts, and relationships with
-    an external target other than a plain hyperlink (external images, templates, OLE links)."""
+def _embedded_problem(name: str, data: bytes) -> tuple[str, str]:
+    """(why it is rejected, why it is stripped) for one embedded part. Active or risky content is rejected: a
+    macro-enabled part, an OLE package or native object (an executable or any file dropped in), an executable, a
+    nested archive or object beyond one level, a zip bomb. Inert data (a chart's workbook, a CSV, a spreadsheet
+    without macros) is stripped before conversion: the chart renders from its cached values."""
+    low = name.lower()
+    if _EXECUTABLE.search(low):
+        return f"executable embedded part ({name})", ""
+    if _MACRO_EXT.search(low) or "vbaproject" in low:
+        return f"macro-enabled embedded part ({name})", ""
+    if data.startswith(b"PK\x03\x04"):
+        try:
+            inner = zipfile.ZipFile(io.BytesIO(data))
+        except zipfile.BadZipFile:
+            return f"broken embedded archive ({name})", ""
+        with inner:
+            infos = inner.infolist()
+            bomb = zip_bomb(infos, len(data))
+            if bomb:
+                return f"{bomb} in embedded part {name}", ""
+            for m in infos:
+                ml = m.filename.lower()
+                if "vbaproject" in ml or _MACRO_EXT.search(ml):
+                    return f"macro in embedded part ({name}: {m.filename})", ""
+                if _EXECUTABLE.search(ml):
+                    return f"executable inside embedded part ({name}: {m.filename})", ""
+                if re.search(r"(?i)/embeddings/|/activex/|\.(?:zip|7z|rar|docx|xlsx|pptx|odt|ods)$", ml):
+                    return f"nested archive or object beyond one level ({name}: {m.filename})", ""
+        return "", f"inert embedded spreadsheet or document ({name}): removed before conversion"
+    if data.startswith(_OLE):
+        if any(s in data for s in _VBA_STREAMS):
+            return f"macro-enabled embedded OLE object ({name})", ""
+        if any(s in data for s in _PACKAGE_STREAMS):
+            return f"OLE package or native object ({name})", ""
+        return "", f"inert embedded OLE object ({name}): removed before conversion"
+    if _INERT_EXT.search(low) or low.startswith("word/embeddings/"):
+        return "", f"inert embedded data ({name}): removed before conversion"
+    return "", ""
+
+
+def docx_check(z: zipfile.ZipFile, names: list[str]) -> tuple[str, list[tuple[str, str]]]:
+    """(why the DOCX is rejected, the inert embedded parts to strip with the reason). ActiveX parts and anything
+    _embedded_problem rejects fail it; relationships with an external target other than a plain hyperlink, an
+    external link, an attached template or a frame fail it; an oleObject or package relationship is fine when
+    its target is an inert part that will be stripped."""
+    strip: list[tuple[str, str]] = []
     for n in names:
-        if _OBJECT_PART.search(n):
-            return f"embedded object part ({n})"
+        low = n.lower()
+        if low.startswith("word/activex/"):
+            return f"ActiveX part ({n})", []
+        if low.startswith("word/embeddings/") or (low.startswith("word/") and low.endswith(".bin")
+                                                   and not low.startswith("word/media/")):
+            reject, why = _embedded_problem(n, z.read(n))
+            if reject:
+                return reject, []
+            if why:
+                strip.append((n, why))
     for n in names:
         if n.lower().startswith("word/") and n.lower().endswith(".rels"):
             xml = z.read(n).decode("utf-8", "replace")
             for rel in _EXTERNAL.finditer(xml):
                 kind = (_TYPE.search(rel.group(0)) or [None, ""])[1]
                 if kind.lower() != "hyperlink":
-                    return f"external link ({kind or 'relationship'}) in {n}"
-            if re.search(r'(?i)/relationships/(?:oleObject|package|externalLink|attachedTemplate|frame)"', xml):
-                return f"embedded object or external part in {n}"
-    return ""
+                    return f"external link ({kind or 'relationship'}) in {n}", []
+            if re.search(r'(?i)/relationships/(?:externalLink|attachedTemplate|frame|subDocument)"', xml):
+                return f"external part in {n}", []
+    return "", strip
+
+
+def docx_problem(z: zipfile.ZipFile, names: list[str]) -> str:
+    return docx_check(z, names)[0]
 
 
 def odt_problem(z: zipfile.ZipFile, names: list[str]) -> str:
     for n in names:
         low = n.lower()
-        if low.startswith("basic/") or low.startswith("scripts/") or "/basic/" in low:
+        if low.startswith("basic/") or low.startswith("scripts/") or "/basic/" in low or "/scripts/" in low:
             return f"macro part ({n})"
-        if low.startswith("object ") or low.startswith("object") and "/" in low:
-            return f"embedded object ({n})"
+        if re.search(r"(?i)^object[^/]*/.*\.(?:bin|exe|js|vbs|jar)$", low) or _EXECUTABLE.search(low):
+            return f"embedded object or executable ({n})"      # an ODF chart ('Object 1/content.xml') is inert XML
     for n in ("content.xml", "styles.xml"):
         if n in [x.lower() for x in names]:
             xml = z.read(names[[x.lower() for x in names].index(n)]).decode("utf-8", "replace")
             if re.search(r'(?i)xlink:href="(?:https?|ftp|file)://', xml):
                 return f"external link in {n}"
-            if re.search(r"(?i)<draw:object\b|<draw:plugin\b|<office:script\b", xml):
-                return f"embedded object or script in {n}"
+            if re.search(r"(?i)<draw:plugin\b|<office:script\b|<draw:applet\b|<draw:floating-frame\b", xml):
+                return f"plugin, applet, frame or script in {n}"
     return ""
 
 
