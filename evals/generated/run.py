@@ -133,7 +133,9 @@ async def main(forms: str, seed: int, families: list[str] | None, out: Path, cas
         q, history, lang = c["text"], None, "en"
         if form != "template":
             v = c["forms"][form]
-            if form == "followup":
+            if form == "followup" and not followup_fits(c, v):
+                form = "template"               # the paraphrase named another organisation: 'its' would mean that one
+            elif form == "followup":
                 q, history = v["question"], [{"question": v["previous"], "answer": "", "sources": []}]
             else:
                 q = v
