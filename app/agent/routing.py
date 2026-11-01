@@ -77,6 +77,18 @@ def names_a_source(text: str) -> str:
     return ""
 
 
+def all_sources(text: str) -> list[str]:
+    """Every publisher, survey or report the text names, in order ('MICS 2021 and NDHS 2024': both)."""
+    out = []
+    for m in _source_re().finditer(text or ""):
+        word = m.group(0)
+        if len(word) <= 4 and " " not in word and not word.isupper() and word.lower() not in ("mics", "ndhs", "nlfs"):
+            continue
+        if word.lower() not in [o.lower() for o in out]:
+            out.append(word)
+    return out
+
+
 def document_question(text: str) -> bool:
     """A question that goes to the planner and the document path whatever else it contains: it names a publisher,
     a survey or a report, or asks what one found, says or reports."""

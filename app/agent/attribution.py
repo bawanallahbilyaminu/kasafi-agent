@@ -159,13 +159,19 @@ def sentences(text: str) -> list[str]:
     return [p.strip(" •-") for p in parts if p and p.strip(" •-")]
 
 
+_PER = re.compile(r"(?i)\b(?:per|a\s+kowane|kowane|cikin)\s*$")
+
+
 def _figures(text: str) -> list[re.Match]:
-    """The figures of a text: not years, page numbers, quarter digits or short counts. A figure written with %
-    is kept (survey indicators); the binding skips it when no survey table is cited."""
+    """The figures of a text: not years, page numbers, quarter digits, short counts or a rate's base ('per 1,000
+    live births'). A figure written with % is kept (survey indicators); the binding skips it when no survey table
+    is cited."""
     out = []
     for m in NUMBER.finditer(text):
         num, scale = m.group(1), m.group(2)
         digits = num.replace(",", "").replace(".", "")
+        if _PER.search(text[:m.start()]):
+            continue
         if _is_percent(text, m) and len(digits) >= 1 and not YEAR.fullmatch(num):
             out.append(m)                              # '23%': a survey indicator
             continue
@@ -256,6 +262,26 @@ def geo_of(text: str) -> set[str]:
     return out
 
 
+_CONNECT = re.compile(r"(?i),|;|\(|\)|\band\b|\bbut\b|\bagainst\b|\bcompared\b|\bwhile\b|\bvs\.?\b|\bversus\b|"
+                      r"\bwhereas\b|\bda\b|\bamma\b|\bidan\s+aka\s+kwatanta\b")
+
+
+def claim_geography(c: Claim) -> set[str]:
+    """The place a figure is given for: the words just before it, back to the last connector ('In Sokoto 22.5%',
+    'and in North West 47.4%'); else the words just after it up to the next connector ('57.3% nationally'); else
+    the sentence when it names one place only. Several places and no cue: not settled, never a contradiction."""
+    before = _CONNECT.split(c.segment)[-1]
+    if geo := geo_of(before):
+        return geo
+    after = c.window[len(c.segment):]
+    after = re.sub(r"^\s*[\d.,]+%?", "", after)                 # the figure itself
+    after_part = _CONNECT.split(after)[0]
+    if len(after_part.split()) <= 12 and (geo := geo_of(after_part)):      # '22.5% of children under 5 in Sokoto had…'
+        return geo
+    in_sentence = geo_of(c.sentence)
+    return in_sentence if len(in_sentence) == 1 else set()
+
+
 def _survey_label(span: str) -> str:
     """A survey row's label: the words before its first figure ('Sokoto', 'North West', 'Total', '12-23')."""
     m = re.match(r"\s*([^\d(]*?)(?=\s*[\d(]|$)", span)
@@ -302,8 +328,8 @@ GEO_WORDS = {"national": "the national (Total) figure", "sokoto": "the Sokoto fi
 def _survey(c: Claim, holding: list) -> tuple[str, str, object]:
     """('bound' | 'unknown' | 'contradiction', the problem text, the span): a survey figure against the geography,
     indicator, year and sub-population the answer gives it."""
-    claim_geo = geo_of(c.window) or geo_of(c.sentence)
-    claim_ages = _ages(c.window) or _ages(c.sentence)
+    claim_geo = claim_geography(c)
+    claim_ages = _ages(c.segment) or _ages(c.sentence)
     rows = [(x, row_geo(_survey_label(x[0]))) for x in holding]
     pick = None
     if claim_geo:
@@ -329,9 +355,9 @@ def _survey(c: Claim, holding: list) -> tuple[str, str, object]:
     # the survey year: the year the answer gives the figure must be the survey's (or printed on the page)
     if c.years and year and str(year) not in c.years and not any(y in full for y in c.years):
         return ("contradiction", f"year: {c.number} is from the {year} survey, given for {'/'.join(sorted(c.years))}", pick)
-    # a sub-population the answer names must be the table's (its title) or the row's
+    # a sub-population the answer names must be on the page ('under-five mortality' on a mortality page)
     if claim_ages:
-        page_ages = _ages(header) | _ages(_survey_label(span))
+        page_ages = _ages(full)
         if page_ages and not claim_ages & page_ages:
             return ("contradiction", f"subpopulation: {c.number} is for {', '.join(sorted(page_ages))[:40]}, given for "
                                      f"{', '.join(sorted(claim_ages))}", pick)

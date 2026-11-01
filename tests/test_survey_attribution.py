@@ -96,3 +96,39 @@ def test_a_narrative_report_sentence_naming_the_entity_elsewhere_is_not_a_contra
 ])
 def test_table_kind_from_the_title(title, kind) -> None:
     assert A.kind_of(title) == kind
+
+
+# --- the survey eval's first run (1 Nov 2026): three more classes -------------------------------------------------
+
+MORTALITY = Evidence(1, "mics-2021", MICS_TITLE, 2021, 105, "text",
+                     "Table CS.2: Early childhood mortality rates by socioeconomic characteristics (Continued)\nNeonatal, "
+                     "post-neonatal, infant, child and under-five mortality rates for the five-year period preceding the survey, "
+                     "Nigeria MICS, 2021\nNeonatal, infant and under-five mortality rates are expressed as deaths per 1,000 live births\n"
+                     "States\nSokoto 34 70 104 109 202\nTaraba 40 23 63 34 95")
+NDHS_REG = Evidence(1, "ndhs-2024", "Nigeria Demographic and Health Survey 2024 Final Report", 2024, 73, "text",
+                    "Table 2.10 Birth registration of children under age 5\nPercentage of de jure children under age 5 whose births "
+                    "are registered with the civil authorities, according to background characteristics, Nigeria DHS 2024\n"
+                    "North West 23.5 9.2 32.7 10,889\nSokoto 14.2 4.8 19.0 1,051\nTotal 27.5 12.2 39.7 28,015")
+
+
+def test_per_thousand_is_a_unit_and_the_mortality_answer_binds() -> None:
+    att = A.bind("According to MICS 2021, the under-five mortality rate in Sokoto was 202 deaths per 1,000 live births [1].", [MORTALITY])
+    assert att.state == "attribution checked", att.problems
+    assert [b.claim.number for b in att.bindings] == ["202"]
+
+
+def test_the_geography_is_the_one_written_next_to_the_figure() -> None:
+    text = ("In Sokoto 19.0% of children under 5 had their birth registered (1,051 children), compared with 32.7% in the North "
+            "West zone (10,889) and 39.7% nationally (28,015) [1].")
+    att = A.bind(text, [NDHS_REG])
+    assert att.state != "unsupported", att.problems
+    text = "In Sokoto 22.5% of children under 5 had their birth registered, against 57.3% nationally [1][2]."
+    assert A.bind(text, [NATIONAL, STATE]).state == "attribution checked"
+    text = "Nationally the figure is 57.3% and in North West 47.4% [1]."
+    assert A.bind(text, [NATIONAL]).state == "attribution checked"
+
+
+def test_every_named_source_scopes_the_search() -> None:
+    from app.agent.routing import all_sources
+    assert all_sources("Birth registration in Sokoto: what did MICS 2021 and NDHS 2024 each find?") == ["MICS", "NDHS"]
+    assert all_sources("Who is the nearest doctor?") == []

@@ -577,15 +577,13 @@ def _latest_field(v) -> dict:
 def named_source_docs(conn: psycopg.Connection, text: str) -> list[str]:
     """The documents of the publisher, survey or report the question names (MICS, NDHS, UNFPA, the World Bank):
     their ids by title or publisher. A question naming a survey searches that survey's documents (routing.py)."""
-    from app.agent.routing import names_a_source
-    name = names_a_source(text)
-    if not name:
-        return []
+    from app.agent.routing import all_sources
     out: list[str] = []
-    for alias in SOURCE_ALIASES.get(name.lower(), [name]):
-        like = f"%{alias}%"
-        out += [r[0] for r in conn.execute("SELECT id FROM documents WHERE title ILIKE %s OR publisher ILIKE %s",
-                                           (like, like)).fetchall()]
+    for name in all_sources(text):                 # every source named ('MICS 2021 and NDHS 2024'): all of them
+        for alias in SOURCE_ALIASES.get(name.lower(), [name]):
+            like = f"%{alias}%"
+            out += [r[0] for r in conn.execute("SELECT id FROM documents WHERE title ILIKE %s OR publisher ILIKE %s",
+                                               (like, like)).fetchall()]
     return list(dict.fromkeys(out))
 
 
@@ -608,6 +606,91 @@ SOURCE_ALIASES = {
 STATE_ROW = re.compile(r"(?m)^\s*Sokoto\b(?!\s+(?:North|South))\s+[\d(]")
 
 
+_TABLE_LINE = re.compile(r"(?m)^\s*Table\s+[A-Z]*\.?[\d.]+[A-Z]?\s*[:—–-]?\s*([^\n]{3,80})")
+_TITLE_STOP = {"sokoto", "state", "nigeria", "according", "percentage", "percent", "share", "children", "women",
+               "among", "about", "which", "their", "these", "those", "other", "number", "total", "under", "aged",
+               "years", "months", "latest", "national", "what", "does", "survey", "report", "figure", "figures"}
+
+
+_KEY_ROWS = re.compile(r"(?im)^\s*(?:Sokoto(?!\s+(?:North|South))|Total|Nigeria|North West|North-West)\b[^\n]*\d[^\n]*$")
+
+
+def survey_excerpt(title: str, text: str, limit: int = EVIDENCE_CHARS) -> str:
+    """A survey page as evidence: its first `limit` characters and, past the cut, the rows the answer needs (the
+    Sokoto, Total, Nigeria and North West rows: MICS p125 prints Sokoto's family-planning row 5,000 characters
+    in, past the cut, and the model said the page had no Sokoto figure)."""
+    from app.agent.attribution import kind_of
+    head = text[:limit]
+    if len(text) <= limit or kind_of(title) != "survey":
+        return head
+    rows = [m.group(0).strip() for m in _KEY_ROWS.finditer(text[limit - 200:]) if m.group(0).strip() not in head]
+    return head + ("\n…\n" + "\n".join(dict.fromkeys(rows)) if rows else "")
+
+
+SURVEY_TITLE_WORDS = {            # a question's word to the words a survey's table title uses
+    "stunt": ["nutritional", "height-for-age", "anthropometry"], "wasted": ["nutritional"], "underweight": ["nutritional"],
+    "vaccin": ["vaccination", "immunization"], "immuni": ["vaccination", "immunization"],
+    "registered": ["registration"], "registration": ["registration"], "mortality": ["mortality"],
+    "antenatal": ["antenatal"], "family planning": ["demand", "contraception", "planning"],
+    "contracept": ["contraception", "demand"], "unmet": ["demand"], "wealth": ["wealth", "quintile"],
+    "poorest": ["wealth", "quintile"], "food": ["insecurity"], "hunger": ["insecurity"], "literate": ["literacy"],
+    "literacy": ["literacy"], "anaemi": ["anaemia"], "anemi": ["anaemia"], "delivery": ["delivery", "assistance"],
+    "skilled": ["assistance", "antenatal"], "water": ["drinking", "water"], "sanitation": ["sanitation"],
+    "school": ["attendance", "education"], "marri": ["marriage"], "fertility": ["fertility"],
+    "koriya": ["nutritional"], "rajista": ["registration"], "rigakafi": ["vaccination", "immunization"],
+    "mace-macen": ["mortality"], "haihuwa": ["registration", "fertility", "delivery"], "karatu": ["literacy"],
+}
+
+
+def survey_table_pages(conn: psycopg.Connection, scope: list[str] | None, text: str, most: int = 2) -> list[Hit]:
+    """In a statistics document, the pages whose table title shares the question's words and that print a Sokoto
+    row ('Table SR.6.1W: Literacy (women) (Continued)' for 'women's literacy in Sokoto'): keyword search over an
+    800-page survey ranks pages that merely mention women and Sokoto above the one state table. A continuation
+    page ('Table 11.1—Continued') takes its table's title from the page the table starts on; the population in
+    the title (children, women, men) breaks ties."""
+    if not scope:
+        return []
+    low = (text or "").lower()
+    words = {w[:5] for w in re.findall(r"[a-z]{5,}", low) if w not in _TITLE_STOP}   # stems: literate ~ literacy
+    for cue, titles in SURVEY_TITLE_WORDS.items():          # 'stunted' is in the 'Nutritional status' table
+        if cue in low:
+            words |= {t[:5] for t in titles}
+    if not words:
+        return []
+    pops = {p for p in ("child", "women", "men", "yara", "mata", "maza") if re.search(rf"\b{p}", low)}
+    docs = [r[0] for r in conn.execute("SELECT id FROM documents WHERE id = ANY(%s) AND category = 'statistics'",
+                                       (scope,)).fetchall()]
+    if not docs:
+        return []
+    pages = conn.execute("SELECT doc_id, page, text FROM pages WHERE doc_id = ANY(%s) AND text ~ '(?n)^\\s*Table\\s' "
+                         "ORDER BY doc_id, page", (docs,)).fetchall()
+    titles_of: dict[tuple[str, str], str] = {}               # (doc, table id) -> the title where the table starts
+    for doc_id, page, page_text in pages:
+        for m in re.finditer(r"(?m)^\s*(Table\s+[A-Z]*\.?[\d.]+[A-Z]?)\s*[:—–-]?\s*([^\n]{3,80})", page_text or ""):
+            key, title = (doc_id, m.group(1).strip()), m.group(2)
+            if key not in titles_of and not re.match(r"(?i)\s*\(?continued", title):
+                titles_of[key] = title
+    scored = []
+    for doc_id, page, page_text in pages:
+        if not STATE_ROW.search(page_text or ""):
+            continue
+        ids = {m.group(1).strip() for m in re.finditer(r"(?m)^\s*(Table\s+[A-Z]*\.?[\d.]+[A-Z]?)", page_text or "")}
+        title = " ".join(titles_of.get((doc_id, i), "") for i in ids).lower()
+        shared = {w[:5] for w in re.findall(r"[a-z]{5,}", title) if w[:5] in words}
+        if shared:
+            pop = 0.5 if pops and any(p in title for p in pops) else 0.0
+            scored.append((len(shared) + pop, -page, doc_id, page))
+    scored.sort(reverse=True)
+    out = []
+    for n, _, doc_id, page in scored[:most]:
+        row = conn.execute("SELECT idx, text FROM chunks WHERE doc_id = %s AND page = %s ORDER BY idx LIMIT 1",
+                           (doc_id, page)).fetchone()
+        title = conn.execute("SELECT title, year FROM documents WHERE id = %s", (doc_id,)).fetchone()
+        if row and title:
+            out.append(Hit(doc_id, title[0], title[1], page, row[1], float(n), row[0]))
+    return out
+
+
 def state_row_pages(conn: psycopg.Connection, evidence: list[Evidence], most: int = 3) -> list[Evidence]:
     """A survey's national table prints its state rows on the continuation pages ('Table PR.1.1 … (Continued)'):
     for a statistics page with no Sokoto row, the next pages of the same table that have one."""
@@ -619,18 +702,22 @@ def state_row_pages(conn: psycopg.Connection, evidence: list[Evidence], most: in
         cat = conn.execute("SELECT category FROM documents WHERE id = %s", (e.doc_id,)).fetchone()
         if not cat or cat[0] != "statistics":
             continue
-        title = next((m.group(0) for m in re.finditer(r"(?m)^\s*Table\s+[A-Z]*\.?\d+", e.text or "")), "")
-        key = title.strip()                          # the table family ('Table TC.1': its by-state table is TC.1.2)
-        if not key:
+        full = next((m.group(0).strip() for m in re.finditer(r"(?m)^\s*Table\s+[A-Z]*\.?\d+(?:\.\d+)*", e.text or "")), "")
+        if not full:
             continue
-        for page, text in conn.execute("SELECT page, text FROM pages WHERE doc_id = %s AND page > %s AND page <= %s "
-                                       "ORDER BY page", (e.doc_id, e.page, e.page + 4)).fetchall():
-            if key not in (text or "") or (e.doc_id, page) in seen:
-                continue
-            if STATE_ROW.search(text or ""):
-                extra.append(Evidence(0, e.doc_id, e.title, e.year, page, "text", text[:EVIDENCE_CHARS]))
-                seen.add((e.doc_id, page))
-                break
+        family = re.match(r"Table\s+[A-Z]*\.?\d+", full).group(0)   # 'Table TC.1': its by-state table is TC.1.2
+        rows = conn.execute("SELECT page, text FROM pages WHERE doc_id = %s AND page > %s AND page <= %s ORDER BY page",
+                            (e.doc_id, e.page, e.page + 20)).fetchall()
+        # the same table's continuation (NDHS Table 11.1 runs 19 pages to its Sokoto row), else the family's
+        # by-state table within a few pages (MICS TC.1.1 national, TC.1.2 by state)
+        found = next(((p, t) for p, t in rows if re.search(rf"{re.escape(full)}(?![.\d])", t or "") and
+                      STATE_ROW.search(t or "") and (e.doc_id, p) not in seen), None) or \
+            next(((p, t) for p, t in rows if p <= e.page + 6 and family in (t or "") and STATE_ROW.search(t or "")
+                  and (e.doc_id, p) not in seen), None)
+        if found:
+            page, text = found
+            extra.append(Evidence(0, e.doc_id, e.title, e.year, page, "text", survey_excerpt(e.title, text)))
+            seen.add((e.doc_id, page))
     return extra
 
 
@@ -648,6 +735,8 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
     # them under tables of contents and long project lists.
     key_hits = [search(conn, q, k=3, doc_ids=scope, key_rows=True) for q in plan.search_queries]
     per_query = [search(conn, q, k=6, doc_ids=scope) for q in plan.search_queries]
+    if not money and (table_hits := survey_table_pages(conn, scope, asked)):
+        key_hits = [table_hits] + key_hits              # a survey's state table named by its title leads
     if narrative_asked(plan):
         # what a report corrected, changed, explained or noted is in its narrative, not its tables: the running
         # text leads (the tables still follow). The planner's key terms search the prose too: its long queries
@@ -686,7 +775,9 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
             by_page.setdefault((h.doc_id, h.page), []).append(h)
     ranked = [hs[0] for hs in by_page.values()]
     texts = {}
-    whole = narrative_asked(plan)     # a narrative section runs across a page's chunks: the whole page is read
+    # a narrative section runs across a page's chunks: the whole page is read; so is a survey's table page (its
+    # Sokoto row is a chunk the keyword search never matched: MICS p125's family-planning row)
+    whole = narrative_asked(plan) or (bool(plan.statistics) and not money)
     for (doc_id, page), hs in by_page.items():
         hit_idx = [h.idx for h in hs]
         wanted = page_chunks_wanted(hit_idx, whole)
@@ -701,7 +792,7 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
         "SELECT doc_id, page, source FROM pages WHERE (doc_id, page) IN (SELECT unnest(%s::text[]), unnest(%s::int[]))",
         ([h.doc_id for h in ranked], [h.page for h in ranked])).fetchall()) if ranked else {}
     evidence = [Evidence(i, h.doc_id, h.title, h.year, h.page, sources.get((h.doc_id, h.page), "text"),
-                         texts[(h.doc_id, h.page)][:EVIDENCE_CHARS]) for i, h in enumerate(ranked, start=1)]
+                         survey_excerpt(h.title, texts[(h.doc_id, h.page)])) for i, h in enumerate(ranked, start=1)]
     extra = state_row_pages(conn, evidence) if not money else []        # the Sokoto rows of a national table
     extra += line_evidence(conn, plan, evidence) if money or not plan.statistics else []
     for i, e in enumerate(extra, start=len(evidence) + 1):
@@ -1146,6 +1237,8 @@ async def answer_question(question: str, lang: str, conn: psycopg.Connection, **
         return Answer(TIMED_OUT.get(lang, TIMED_OUT["en"]), False, True, plan=plan)
     plan = a.plan
     a = keep_better(a, plan.held if plan is not None else None)
+    if (covered := covered_years_line(conn, question, plan, lang, a.text)):
+        a.text = f"{a.text.rstrip()}\n\n{covered}"
     a.text = plain_level_words(a.text, lang)      # a row's level label echoed by any path (p8): plain words, the
     if not a.found and not a.clarify and plan is not None and (gap := level_gap(plan.need, lang)):   # working keeps it
         a.text = f"{a.text}\n\n{gap}"
@@ -3210,6 +3303,24 @@ def covered_years(conn, missing: str, lang: str) -> str:
     except Exception:              # noqa: BLE001 - no documents table (tests)
         return ""
     if not years or not asked or any(y in years for y in asked):
+        return ""
+    return COVERED_NOTE.get(lang, COVERED_NOTE["en"]).format(first=years[0], last=years[-1])
+
+
+def covered_years_line(conn, question: str, plan, lang: str, text: str) -> str:
+    """A money question for a year beyond the budgets held (2028 asked, 2024–2026 held), answered on any path:
+    the covered years, unless the answer already says what the newest budget is."""
+    if conn is None or plan is None or not MONEY_WORDS.search(f"{question} {plan.english_question}"):
+        return ""
+    if re.search(r"(?i)newest|latest|mafi sabo|\b20\d\d–20\d\d\b", text or ""):
+        return ""
+    asked = [int(y) for y in question_years(question, plan.english_question)]
+    try:
+        years = sorted({int(r[0]) for r in conn.execute(
+            "SELECT year FROM documents WHERE category = 'budget' AND year IS NOT NULL").fetchall()})
+    except Exception:              # noqa: BLE001
+        return ""
+    if not years or not asked or any(y <= years[-1] for y in asked):
         return ""
     return COVERED_NOTE.get(lang, COVERED_NOTE["en"]).format(first=years[0], last=years[-1])
 
