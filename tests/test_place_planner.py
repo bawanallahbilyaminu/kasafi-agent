@@ -182,6 +182,18 @@ def test_the_scope_comes_from_the_words_and_the_location(q, want) -> None:
     assert P.area_route(q, "", PIN) == want
 
 
+def test_the_planners_english_rewrite_never_widens_the_scope() -> None:
+    """The full-pipeline place eval (1 Nov): the planner rewrote 'my LGA' as 'Kware LGA, Sokoto State' and 'my
+    ward' as 'my ward in my local government area', which sent the answers statewide or to the LGA."""
+    q = "How has farming evolved in my LGA over the years"
+    assert P.area_route(q, "How has farmland greenness changed in Kware LGA, Sokoto State over the years", PIN) == ("lga", "NG034021")
+    q = "How has farming evolved in my ward over the years"
+    assert P.area_route(q, "How has farmland greenness changed in my ward in my local government area, Sokoto State", PIN) == ("ward", "62102")
+    q = "Yaya noma ya canza a unguwata tun shekaru?"
+    assert P.area_route(q, "How has farming changed in my ward in Wamakko LGA, Sokoto State over the years", PIN) == ("ward", "62102")
+    assert P.area_route("How has farming evolved across the state", "How has farming evolved across Sokoto State", PIN) == ("state", "NG034")
+
+
 def test_my_ward_with_only_an_lga_on_file_takes_the_lga_and_with_nothing_asks_for_the_pin() -> None:
     assert P.area_route("How has farming evolved in my ward over the years", "", {"lga_pcode": "NG034021"}) == ("lga", "NG034021")
     assert P.area_route("How has farming evolved in my ward over the years") == ("ward", "")

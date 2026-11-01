@@ -642,7 +642,7 @@ SURVEY_TITLE_WORDS = {            # a question's word to the words a survey's ta
 }
 
 
-def survey_table_pages(conn: psycopg.Connection, scope: list[str] | None, text: str, most: int = 2) -> list[Hit]:
+def survey_table_pages(conn: psycopg.Connection, scope: list[str] | None, text: str, most: int = 4) -> list[Hit]:
     """In a statistics document, the pages whose table title shares the question's words and that print a Sokoto
     row ('Table SR.6.1W: Literacy (women) (Continued)' for 'women's literacy in Sokoto'): keyword search over an
     800-page survey ranks pages that merely mention women and Sokoto above the one state table. A continuation
@@ -691,7 +691,7 @@ def survey_table_pages(conn: psycopg.Connection, scope: list[str] | None, text: 
     return out
 
 
-def state_row_pages(conn: psycopg.Connection, evidence: list[Evidence], most: int = 3) -> list[Evidence]:
+def state_row_pages(conn: psycopg.Connection, evidence: list[Evidence], most: int = 5) -> list[Evidence]:
     """A survey's national table prints its state rows on the continuation pages ('Table PR.1.1 … (Continued)'):
     for a statistics page with no Sokoto row, the next pages of the same table that have one."""
     extra: list[Evidence] = []

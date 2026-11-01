@@ -331,16 +331,19 @@ def area_route(question: str, english: str = "", place: dict | None = None) -> t
         return None
     measure = measure_word(text)              # a satellite measure must be named: "most IDPs by LGA" is not ours
     place = place or {}
-    if measure is not None and STATE_WORDS.search(text) and not lgas_in(text):
+    # the scope comes from the user's own words: the planner's English rewrite spells the place on file out
+    # ("in Kware LGA, Sokoto State"), which must never turn "my ward" into the LGA or the state
+    own = question if (MY_WARD.search(question) or MY_LGA.search(question) or STATE_WORDS.search(question)) else text
+    if measure is not None and STATE_WORDS.search(own) and not lgas_in(own):
         return ("state", STATE)                                   # 'the state', 'faɗin jihar Sokoto': only these
-    if measure is not None and not STATE_WORDS.search(text):
-        if MY_LGA.search(text) and place.get("lga_pcode"):
-            return ("lga", str(place["lga_pcode"]))
-        if MY_WARD.search(text) and place.get("wardcode"):
+    if measure is not None and not STATE_WORDS.search(own):
+        if MY_WARD.search(own) and place.get("wardcode"):        # 'my ward' is the narrower scope: it wins
             return ("ward", str(place["wardcode"]))
-        if MY_WARD.search(text) and place.get("lga_pcode"):   # no ward known: the LGA, said as such in the answer
+        if MY_LGA.search(own) and place.get("lga_pcode"):
             return ("lga", str(place["lga_pcode"]))
-        if (MY_WARD.search(text) or MY_LGA.search(text)) and not lgas_in(text):
+        if MY_WARD.search(own) and place.get("lga_pcode"):     # no ward known: the LGA, said as such in the answer
+            return ("lga", str(place["lga_pcode"]))
+        if (MY_WARD.search(own) or MY_LGA.search(own)) and not lgas_in(own):
             return ("ward", "")                               # nothing on file: the answer asks for the pin
     lgas = lgas_in(text)
     if not (AREA_WORDS.search(text) or lgas):

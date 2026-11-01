@@ -60,6 +60,8 @@ async def run_full(case: dict, conn) -> tuple[str, str, str, str]:
     from app.agent.answer import _answer_question
     a = await _answer_question(case["question"], case["lang"], conn, today=date.today(), place=case.get("place"))
     spec = (a.maps or [{}])[0]
+    if spec.get("highlight"):                 # a ward answer: its map is the LGA's with the ward outlined
+        return a.text, a.working, "ward", spec["highlight"]
     return a.text, a.working, spec.get("level", ""), spec.get("unit", "")
 
 
