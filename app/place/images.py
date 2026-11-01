@@ -63,6 +63,8 @@ T = {
         "map_sub": "Sentinel-2 true colour, {day} (10 m), about {km} km across",
         "leg_outline": "Approximate plot outline (from the image; not a boundary)",
         "leg_circle": "Circle of about 1 ha around your pin (no outline could be drawn)",
+        "leg_given": "Circle of {ha} ha around your pin (the size you gave)",
+        "leg_corners": "Plot from your {n} corner pins (approximate; not a boundary)",
         "leg_water": "How often water was seen, 1984–2020 (JRC): light = rarely, dark = most months",
         "leg_nearest": "Nearest water body, {km} km",
         "leg_pin": "Your pin",
@@ -71,6 +73,7 @@ T = {
         "map_caption": "The plot outline ({how}) on the Sentinel-2 image of {day}; blue shading shows how often "
                        "water was seen there in 1984–2020.",
         "how_sam": "approximate, about {ha} ha", "how_circle": "a circle of about 1 ha",
+        "how_given": "the circle of {ha} ha you gave", "how_corners": "from your {n} corner pins, about {ha} ha",
     },
     "ha": {
         "chart_title": "Koriyar damina a ƙololuwa, Ƙaramar Hukumar {lga}",
@@ -89,6 +92,8 @@ T = {
         "map_sub": "Sentinel-2, launin gaske, {day} (mita 10), kusan kilomita {km} faɗi",
         "leg_outline": "Iyakar gona ta kiyasi (daga hoton; ba iyakar mallaka ba)",
         "leg_circle": "Da'ira ta kusan hekta 1 kewaye da wurinka (ba a iya zana iyaka ba)",
+        "leg_given": "Da'irar hekta {ha} kewaye da wurinka (girman da ka bayar)",
+        "leg_corners": "Gona daga wuraren kusurwoyi {n} da ka aiko (kiyasi; ba iyakar mallaka ba)",
         "leg_water": "Yawan ganin ruwa, 1984–2020 (JRC): mai haske = da wuya, mai duhu = mafi yawan watanni",
         "leg_nearest": "Tafkin ruwa mafi kusa, kilomita {km}",
         "leg_pin": "Wurinka",
@@ -97,6 +102,7 @@ T = {
         "map_caption": "Iyakar gona ({how}) a hoton Sentinel-2 na {day}; shuɗin inuwa yana nuna yawan ganin ruwa a "
                        "can a 1984–2020.",
         "how_sam": "kiyasi, kusan hekta {ha}", "how_circle": "da'ira ta kusan hekta 1",
+        "how_given": "da'irar hekta {ha} da ka bayar", "how_corners": "daga wuraren kusurwoyi {n} da ka aiko, kusan hekta {ha}",
     },
 }
 
@@ -210,7 +216,7 @@ def place_map(chip: Chip, outline: Outline | None, h: H.History, lang: str, lga:
             style["linestyle"] = (0, (4, 2))
         ax.add_patch(MplPolygon(ring, closed=True, **style))
         handles.append(Line2D([], [], color=OUTLINE, linewidth=3.0, linestyle="-" if outline.is_plot else "--",
-                              label=t["leg_outline"] if outline.is_plot else t["leg_circle"]))
+                              label=_shape_words(t, outline, "leg")))
     if occ is not None and (occ > 0).any():
         handles.append(Patch(facecolor="#9ecae1", edgecolor="#2171b5", label=t["leg_water"]))
     if h.nearest_water and h.nearest_water.get("outline"):
@@ -234,8 +240,19 @@ def place_map(chip: Chip, outline: Outline | None, h: H.History, lang: str, lga:
     km = side * 111.32 * math.cos(math.radians(lat))
     jpeg = _finish(fig, ax, t["map_title"].format(lga=lga or "–"),
                    t["map_sub"].format(day=_day(chip.day, lang), km=f"{km:.0f}" if km >= 1.5 else "1"), t["map_foot"])
-    how = t["how_sam"].format(ha=f"{outline.area_ha:.1f}") if outline is not None and outline.is_plot else t["how_circle"]
-    return MapImage(jpeg, t["map_caption"].format(how=how, day=_day(chip.day, lang)))
+    return MapImage(jpeg, t["map_caption"].format(how=_shape_words(t, outline, "how"), day=_day(chip.day, lang)))
+
+
+def _shape_words(t: dict, outline: Outline | None, kind: str) -> str:
+    """The legend ('leg') or caption ('how') words for the shape used: the satellite outline, the 1 ha circle, the
+    circle of a size the user gave, or the user's corner pins."""
+    if outline is None or outline.method == "circle":
+        return t[f"{kind}_circle"]
+    if outline.method == "given_circle":
+        return t[f"{kind}_given"].format(ha=f"{outline.area_ha:g}")
+    if outline.method == "corners":
+        return t[f"{kind}_corners"].format(n=outline.corners or "", ha=f"{outline.area_ha:.1f}")
+    return t[f"{kind}_outline"] if kind == "leg" else t["how_sam"].format(ha=f"{outline.area_ha:.1f}")
 
 
 # --- the ward choropleth (planner answers) ---------------------------------------------------------------------------
@@ -349,10 +366,13 @@ def area_map(conn, s: dict, lang: str, today: date | None = None) -> MapImage | 
 def draw_place(conn, s: dict, lang: str, today: date | None = None) -> MapImage | None:
     """{"kind": "place_chart" | "place_map", "lat", "lon", "lga"}: from the caches the answer just filled (the
     history, the outline), plus the chip and the JRC window for the map (two small requests)."""
-    from app.place.outline import _load, fallback
+    from app.place.outline import Outline, _load, fallback
     today = today or date.today()
     lat, lon, lga = float(s["lat"]), float(s["lon"]), str(s.get("lga") or "")
-    outline = (_load(conn, H.cell_id(lat, lon)) if conn is not None else None) or fallback(lon, lat, "no_segment")
+    if (shape := s.get("shape")) and shape.get("geometry"):          # the shape the user gave (memory only)
+        outline = Outline.from_shape(shape)
+    else:
+        outline = (_load(conn, H.cell_id(lat, lon)) if conn is not None else None) or fallback(lon, lat, "no_segment")
     h = H.point_history(conn, lat, lon, today=today, polygon=outline.geometry if outline.is_plot else None,
                         water=bool(s.get("water")))
     if s["kind"] == "place_chart":

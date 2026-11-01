@@ -116,6 +116,7 @@ FacilityFn = Callable[..., Awaitable[list]]       # app.geo.facilities.search_re
 EmergencyFn = Callable[..., Awaitable[list]]      # app.geo.facilities.emergency_lookup
 ClassifyFn = Callable[..., Awaitable[Any]]        # app.guardrails.emergency.classify
 EMERGENCY_WAIT = "__emergency__:"                 # a location request sent by the fast path
+SIZE_WAIT = "__size__:"                           # a place-history question waiting for the farm's size or corners
 
 
 ROAD_WAIT_S = 8.0                                 # how long the emergency follow-up waits for ORS road distances
@@ -212,11 +213,24 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
 
     # 5. Consented: limits (skipped for our own test numbers), then work
     lang = user.lang or "ha"
+    resume = ""                                  # a place-history question that waited for this pin or shape
+    outs: list[Out] = []
+    # the farm's size or its corner pins, asked for when no outline could be drawn (app/place/shape.py); or
+    # "these are the corners" with recent pins. Shapes and pins stay in memory only.
+    waiting = location_memory.peek_question(key) or ""
+    sizing = waiting.startswith(SIZE_WAIT)
+    if sizing or (text and shape_words(text) and location_memory.recent_pins(key)):
+        shaped = await _plot_shape(msg, text, key, lang, waiting[len(SIZE_WAIT):] if sizing else "")
+        if shaped is not None:
+            outs, resume = shaped
+            if not resume:
+                return outs
     # a location pin, or "share my location": handled here (PostGIS, no model); the point stays in memory only
-    resume = ""                                  # a place-history question that waited for this pin
-    if kind == "location" or (text and SHARE.search(text)):
+    if not resume and (kind == "location" or (text and SHARE.search(text))):
         outs = await _location(msg, key, lang, store, settings, locate_fn)
-        if pin_of(msg) and (spot := location_memory.recall(key)) and (q := location_memory.waiting_question(key)):
+        if (pin := pin_of(msg)) is not None:
+            location_memory.add_pin(key, *pin)                                            # a corner candidate
+        if pin and (spot := location_memory.recall(key)) and (q := location_memory.waiting_question(key)):
             outs += await _after_location(q, key, lang, settings, facility_fn, spot)    # the question that asked
             if place_route(q) and not is_facility_query(q):
                 resume = q
@@ -281,6 +295,9 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             spot, last = location_memory.recall(key), store.get_last_lga(key)
             place = ({"lat": spot.lat, "lon": spot.lon, "lga_pcode": spot.lga_pcode, "lga": spot.lga} if spot else
                      {"lga_pcode": last} if last else None)
+            if spot and spot.how == "pin":          # a farm pin: the shape the user gave, or ask when none can be drawn
+                place["shape"] = location_memory.shape(key)
+                place["ask_size"] = True
             try:
                 result = await answer(question, lang, settings=settings, notify=send_now,
                                       history=store.recent_turns(key), **({"place": place} if place else {}))
@@ -302,6 +319,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         if getattr(result, "needs_pin", False):             # a place-history question: the pin first, then the answer
             location_memory.wait_for_location(key, question)
             return [Out(text_out, lang=lang, location_request=True)]
+        if getattr(result, "needs_size", False):            # no outline: the farm's size or corner pins, then the answer
+            location_memory.wait_for_location(key, SIZE_WAIT + question)
+            location_memory.clear_pins(key)                 # only pins sent from now on are corners
+            return [Out(text_out, lang=lang)]
         crops = (plan_crops(result, settings.kasafi_max_images)
                  if result is not None and settings.kasafi_evidence_images and store.images_on(key) else None)
         outs = [Out(text_out, CALC_BUTTONS.get(lang, CALC_BUTTONS["en"]) if offer else None, crops or None, lang)]
@@ -466,6 +487,68 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     if button == "consent_ok":
         return [Out(t("consent_thanks", lang))]
     return [Out(t("other", lang))]
+
+
+def shape_words(text: str) -> bool:
+    from app.place.shape import CORNER_WORDS, DONE_WORDS
+    return bool(CORNER_WORDS.search(text) or DONE_WORDS.match(text))
+
+
+async def _plot_shape(msg: dict[str, Any], text: str, key: str, lang: str, question: str
+                      ) -> tuple[list[Out], str] | None:
+    """The plot shape a farmer gives (app/place/shape.py): a corner pin (counted), 'done' (the pins joined into
+    the plot, the point moved to its centre), a size ('3 acres'), or 'skip' (the 1 ha circle). Returns the
+    replies and the waiting question to answer now (''
+    when nothing is to be answered yet); None when the message is something else (the wait is dropped and the
+    size counts as declined, so the next place question answers with the 1 ha circle instead of asking again)."""
+    from app.place import shape as S
+    from app.place.answer import W as PW
+    w = PW["ha" if lang == "ha" else "en"]
+    if (pin := pin_of(msg)) is not None:
+        n = location_memory.add_pin(key, *pin)
+        return [Out(w["corner_got"].format(n=n), lang=lang)], ""
+    if not text:
+        return None
+    if S.DONE_WORDS.match(text) or S.CORNER_WORDS.search(text):
+        pins = location_memory.recent_pins(key)
+        if len(pins) < S.MIN_CORNERS:
+            return [Out(w["corner_few"].format(n=len(pins)), lang=lang)], ""
+        shape = S.shape_from_corners(pins[-S.MAX_CORNERS:])
+        if shape is None:
+            _, _, why = S.corners_polygon(pins[-S.MAX_CORNERS:])
+            location_memory.clear_pins(key)
+            return [Out(w["corner_bad"].format(n=len(pins), why=w["corner_why"].get(why, why)), lang=lang)], ""
+        location_memory.remember_shape(key, shape)
+        location_memory.clear_pins(key)
+        if question:
+            location_memory.waiting_question(key)
+        clat, clon = S.centroid(shape["geometry"])                      # the plot's centre is now the point
+        spot = location_memory.recall(key)
+        location_memory.remember(key, Spot(clat, clon, spot.lga_pcode if spot else "", spot.lga if spot else "",
+                                           spot.ward if spot else "", how="pin"))
+        return [Out(w["shape_set"].format(ha=f"{shape['area_ha']:.1f}", n=shape["corners"],
+                                          next="" if question else w["shape_next"]).strip(), lang=lang)], question
+    if not question:
+        return None
+    if S.SKIP_WORDS.match(text):
+        location_memory.remember_shape(key, {"declined": True})
+        location_memory.waiting_question(key)
+        return [], question
+    ha = S.parse_area_ha(text, asked=True)
+    if ha is not None:
+        spot = location_memory.recall(key)
+        if spot is None:                                                 # the point expired: ask for it again
+            location_memory.waiting_question(key)
+            location_memory.wait_for_location(key, question)
+            return [Out(t("location_request", lang), lang=lang, location_request=True)], ""
+        location_memory.remember_shape(key, S.shape_from_size(spot.lat, spot.lon, ha))
+        location_memory.waiting_question(key)
+        return [Out(w["size_set"].format(ha=f"{ha:g}", next="").strip(), lang=lang)], question
+    if re.search(r"\d", text) and len(text) < 40:                        # a size we couldn't read: say how
+        return [Out(w["size_bad"], lang=lang)], ""
+    location_memory.waiting_question(key)                                # something else: the size is declined
+    location_memory.remember_shape(key, {"declined": True})
+    return None
 
 
 async def _location(msg: dict[str, Any], key: str, lang: str, store: UserStore, settings: Settings,

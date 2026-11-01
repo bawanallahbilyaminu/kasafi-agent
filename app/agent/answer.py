@@ -441,6 +441,7 @@ class Answer:
     maps: list[dict] = field(default_factory=list)      # maps to send after the text (app/maps/render.py)
     quotes: str = ""                                    # verbatim quotes, sent on "quotes" / "nuna rubutun"
     needs_pin: bool = False                             # a place-history question with no point known: ask for the pin
+    needs_size: bool = False                            # no outline could be drawn: ask the farm's size or its corners
 
 
 def load_catalog(conn: psycopg.Connection) -> list[dict]:
@@ -1073,10 +1074,10 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         if conn is not None and place_route(question, plan.english_question):
             t0 = time.perf_counter()
             pa = await place_answer(conn, settings, question, plan.english_question, lang, place, today,
-                                    notify=notify)
+                                    notify=notify, ask_size=bool(place and place.get("ask_size")))
             t["place"] = time.perf_counter() - t0
             return Answer(pa.text, pa.found, True, plan=plan, timings=t, exact=pa.text, working=pa.working,
-                          partial=pa.partial, maps=pa.specs, needs_pin=pa.needs_pin)
+                          partial=pa.partial, maps=pa.specs, needs_pin=pa.needs_pin, needs_size=pa.needs_size)
         # NCDC outbreak figures and official outlooks (NIHSA, NiMet): answered in code from the crawled tables; an
         # outlook in the library goes on to the document path
         if conn is not None and (kind := official.route(f"{question} {plan.english_question}",

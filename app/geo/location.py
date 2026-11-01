@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 TTL_S = 30 * 60
+CORNER_TTL_S = 10 * 60       # corner pins of one plot arrive within ten minutes
 MAX_KEPT = 10_000            # a bound on memory; the oldest entries go first
 
 
@@ -38,12 +39,49 @@ class Spot:
 class LocationMemory:
     """User key -> (Spot, when), forgotten after TTL_S. Nothing here is ever persisted."""
 
-    def __init__(self, ttl_s: float = TTL_S) -> None:
+    def __init__(self, ttl_s: float = TTL_S, corner_ttl_s: float = CORNER_TTL_S) -> None:
         self.ttl_s = ttl_s
+        self.corner_ttl_s = corner_ttl_s
         self._spots: dict[str, tuple[Spot, float]] = {}
         self._needs: dict[str, tuple[str, float]] = {}       # a question waiting for a location
         self._searches: dict[str, tuple[Any, float]] = {}    # the last facility search, for "next" / "route?"
+        self._shapes: dict[str, tuple[dict, float]] = {}     # the plot shape a farmer gave (app/place/shape.py)
+        self._pins: dict[str, list[tuple[float, float, float]]] = {}   # recent pins (lat, lon, when): corner candidates
         self._lock = threading.Lock()
+
+    def remember_shape(self, key: str, shape: dict) -> None:
+        """A plot shape the user gave (a circle of a size, or corner pins), or {"declined": True}."""
+        with self._lock:
+            self._shapes[key] = (shape, time.monotonic())
+
+    def shape(self, key: str) -> dict | None:
+        with self._lock:
+            hit = self._shapes.get(key)
+            if hit and time.monotonic() - hit[1] < self.ttl_s:
+                return hit[0]
+            self._shapes.pop(key, None)
+            return None
+
+    def add_pin(self, key: str, lat: float, lon: float) -> int:
+        """Keeps a pin as a corner candidate; returns how many recent ones there are."""
+        now = time.monotonic()
+        with self._lock:
+            pins = [p for p in self._pins.get(key, []) if now - p[2] < self.corner_ttl_s]
+            if not any(abs(p[0] - lat) < 1e-6 and abs(p[1] - lon) < 1e-6 for p in pins):
+                pins.append((lat, lon, now))
+            self._pins[key] = pins[-8:]
+            return len(self._pins[key])
+
+    def recent_pins(self, key: str) -> list[tuple[float, float]]:
+        now = time.monotonic()
+        with self._lock:
+            pins = [p for p in self._pins.get(key, []) if now - p[2] < self.corner_ttl_s]
+            self._pins[key] = pins
+            return [(p[0], p[1]) for p in pins]
+
+    def clear_pins(self, key: str) -> None:
+        with self._lock:
+            self._pins.pop(key, None)
 
     def remember_search(self, key: str, search: Any) -> None:
         with self._lock:
@@ -98,6 +136,8 @@ class LocationMemory:
             self._spots.pop(key, None)
             self._needs.pop(key, None)
             self._searches.pop(key, None)
+            self._shapes.pop(key, None)
+            self._pins.pop(key, None)
 
 
 memory = LocationMemory()

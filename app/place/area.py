@@ -147,15 +147,16 @@ def window(collection: str, item_id: str, assets: list[str], grid: Grid, resampl
     own = client is None
     client = client or httpx.Client(timeout=TIMEOUT * 5)
     try:
-        for attempt in range(3):
+        for attempt in range(4):
             try:
                 r = client.get(url, params=params, headers=stac._headers())
-                break
+                if r.status_code < 500:            # a 504 from the data API is transient: try again
+                    break
             except httpx.HTTPError as e:
-                if attempt == 2:
+                if attempt == 3:
                     log.warning("area: window of %s failed: %s", item_id, type(e).__name__)
                     return None
-                time.sleep(2 * (attempt + 1))
+            time.sleep(3 * (attempt + 1))
         if r.status_code != 200:
             log.info("area: window of %s: HTTP %s", item_id, r.status_code)
             return None

@@ -91,6 +91,7 @@ class PlaceAnswer:
     partial: bool = False
     specs: list[dict] = field(default_factory=list)      # the chart and the map (app/place/images.py)
     needs_pin: bool = False                               # no point known: ask for the pin
+    needs_size: bool = False                              # no outline could be drawn: ask the farm's size or corners
     history: H.History | None = None
     outline: Outline | None = None
     timing: dict[str, float] = field(default_factory=dict)
@@ -149,6 +150,23 @@ W = {
                        "not a boundary.",
         "outline_circle": "No plot outline could be drawn from the satellite image, so the figures are for a "
                           "circle of about 1 ha around your pin.",
+        "outline_given": "Plot shape: the circle of {ha} ha you gave, around your pin (no outline could be drawn "
+                         "from the satellite image).",
+        "outline_corners": "Plot shape: about {ha} ha, from your {n} corner pins: approximate, not a boundary.",
+        "ask_size": "I couldn't draw this farm's outline from the satellite image. How big is the farm, in acres or "
+                    "hectares (for example «3 acres» or «2 ha»)? Or send the pins of its 3 to 6 corners, then say "
+                    "*done*. If you don't know, say *skip* and I'll use a circle of about 1 ha around your pin.",
+        "corner_got": "📍 Corner pin {n} received. Send the others (3 to 6 in all), then say *done*.",
+        "corner_few": "I have {n} corner pin(s); a plot needs at least 3. Send the others, or give the farm's size "
+                      "in acres or hectares.",
+        "corner_bad": "Those {n} pins don't make a sensible plot ({why}). Send the corners again in order, or give "
+                      "the farm's size in acres or hectares.",
+        "corner_why": {"too_small": "under 0.1 ha", "too_big": "over 50 ha", "too_thin": "a thin strip",
+                       "not_a_shape": "the lines cross", "too_many": "more than 6 pins", "too_few": "fewer than 3 pins"},
+        "shape_set": "Got it: a plot of about {ha} ha from your {n} corner pins. {next}",
+        "size_set": "Got it: a circle of {ha} ha around your pin. {next}",
+        "shape_next": "Ask me about it, for example «How green was my farm in 2024?».",
+        "size_bad": "I didn't catch a size. Say it like «3 acres» or «2 ha», send the corner pins, or say *skip*.",
         "resolution": "Sentinel-2: greenness (NDVI) and water (NDWI) at 10 m, bare soil (BSI) and the cloud mask "
                       "at 20 m; water record (JRC) at 30 m; rain from Open-Meteo's ~9 km grid.",
         "years": "Years {first}–{last}; clear rainy-season images per year: {counts}.",
@@ -249,6 +267,26 @@ W = {
                        "kiyasi ce, ba iyakar mallaka ba.",
         "outline_circle": "Ba a iya zana iyakar gona daga hoton tauraron ɗan adam ba, saboda haka alƙaluman na "
                           "da'ira ce ta kusan hekta 1 kewaye da wurinka.",
+        "outline_given": "Siffar gona: da'irar hekta {ha} da ka bayar, kewaye da wurinka (ba a iya zana iyaka daga "
+                         "hoton tauraron ɗan adam ba).",
+        "outline_corners": "Siffar gona: kusan hekta {ha}, daga wuraren kusurwoyi {n} da ka aiko: kiyasi ce, ba "
+                           "iyakar mallaka ba.",
+        "ask_size": "Ban iya zana iyakar wannan gona daga hoton tauraron ɗan adam ba. Girman gonar nawa ne, a "
+                    "kadada (acre) ko hekta (misali «kadada 3» ko «hekta 2»)? Ko ka aiko da wuraren kusurwoyinta 3 "
+                    "zuwa 6, sannan ka ce *an gama*. Idan ba ka sani ba, ka ce *tsallake*, zan yi amfani da da'ira ta "
+                    "kusan hekta 1 kewaye da wurinka.",
+        "corner_got": "📍 An karɓi wurin kusurwa na {n}. Aiko da sauran (3 zuwa 6 gaba ɗaya), sannan ka ce *an gama*.",
+        "corner_few": "Ina da wurin kusurwa {n}; gona tana buƙatar aƙalla 3. Aiko da sauran, ko ka faɗi girman gonar a "
+                      "kadada ko hekta.",
+        "corner_bad": "Waɗannan wurare {n} ba su yi siffar gona mai ma'ana ba ({why}). Aiko da kusurwoyin a jere, ko ka "
+                      "faɗi girman gonar a kadada ko hekta.",
+        "corner_why": {"too_small": "ƙasa da hekta 0.1", "too_big": "sama da hekta 50", "too_thin": "siriri ce",
+                       "not_a_shape": "layukan sun ketare juna", "too_many": "fiye da wurare 6", "too_few": "ƙasa da wurare 3"},
+        "shape_set": "An gama: gona ta kusan hekta {ha} daga wuraren kusurwoyi {n} da ka aiko. {next}",
+        "size_set": "An gama: da'irar hekta {ha} kewaye da wurinka. {next}",
+        "shape_next": "Tambaye ni game da ita, misali «Yaya koriyar gonata a 2024?».",
+        "size_bad": "Ban gane girman ba. Faɗi shi kamar «kadada 3» ko «hekta 2», aiko da wuraren kusurwoyi, ko ka ce "
+                    "*tsallake*.",
         "resolution": "Sentinel-2: koriya (NDVI) da ruwa (NDWI) a mita 10, ƙasa mara ciyayi (BSI) da matakin "
                       "gajimare a mita 20; bayanan ruwa (JRC) a mita 30; ruwan sama daga ragar Open-Meteo ta kusan "
                       "kilomita 9.",
@@ -542,10 +580,16 @@ def details(h: H.History, lang: str) -> str:
 
 
 def outline_line(o: Outline | None, lang: str) -> str:
+    """Which shape the figures are for: the satellite outline, the circle of the size given, the corner pins, or
+    the 1 ha circle."""
     t = _t(lang)
-    if o is not None and o.is_plot:
-        return t["outline_sam"].format(ha=f"{o.area_ha:.1f}")
-    return t["outline_circle"]
+    if o is None or o.method == "circle":
+        return t["outline_circle"]
+    if o.method == "given_circle":
+        return t["outline_given"].format(ha=f"{o.area_ha:g}")
+    if o.method == "corners":
+        return t["outline_corners"].format(ha=f"{o.area_ha:.1f}", n=o.corners or "")
+    return t["outline_sam"].format(ha=f"{o.area_ha:.1f}")
 
 
 def facts_line(h: H.History, lang: str) -> str:
@@ -617,17 +661,26 @@ def first_request(conn, lat: float, lon: float, today: date) -> bool:
 
 
 async def place_answer(conn, settings, question: str, english: str, lang: str, place: dict | None,
-                       today: date, notify=None) -> PlaceAnswer:
+                       today: date, notify=None, ask_size: bool = False) -> PlaceAnswer:
+    """`place` may carry a `shape` the user gave (app/place/shape.py: a circle of a size, or corner pins, or
+    {"declined": True}); it is used instead of the satellite outline. With `ask_size`, a pin whose outline SAM 3.1
+    can't draw gets the size question (needs_size) before the satellite history is read."""
     t = _t(lang)
     if not place or place.get("lat") is None or place.get("lon") is None:
         return PlaceAnswer(t["need_pin"], False, needs_pin=True)
     lat, lon = float(place["lat"]), float(place["lon"])
     lga, pcode = str(place.get("lga") or ""), str(place.get("lga_pcode") or "")
+    shape = place.get("shape") or {}
     timing: dict[str, float] = {}
     t0 = time.perf_counter()
+    if shape.get("geometry"):
+        outline = Outline.from_shape(shape)
+    else:
+        outline = await plot_outline(conn, settings, lat, lon, today=today)
+        if ask_size and not outline.is_plot and not shape.get("declined"):
+            return PlaceAnswer(t["ask_size"], False, needs_size=True, outline=outline)
     if notify is not None and first_request(conn, lat, lon, today):
         await notify(t["progress"].format(n=today.year - H.GOOD_FROM + 1))
-    outline = await plot_outline(conn, settings, lat, lon, today=today)
     timing["outline"] = time.perf_counter() - t0
     t1 = time.perf_counter()
     h = await asyncio.to_thread(H.point_history, conn, lat, lon, today=today,
@@ -647,8 +700,9 @@ async def place_answer(conn, settings, question: str, english: str, lang: str, p
     text = "\n\n".join(x for x in [t["head"].format(lga=lga or "–"), summary(h, lang, today),
                                    outline_line(outline, lang) + "\n" + facts_line(h, lang), context,
                                    t["referral"], t["sources"]] if x)
-    specs = [{"kind": "place_chart", "lat": lat, "lon": lon, "lga": lga},
-             {"kind": "place_map", "lat": lat, "lon": lon, "lga": lga}]
+    given = {"shape": shape} if shape.get("geometry") else {}      # the user's shape, in memory only, for the map
+    specs = [{"kind": "place_chart", "lat": lat, "lon": lon, "lga": lga, **given},
+             {"kind": "place_map", "lat": lat, "lon": lon, "lga": lga, **given}]
     timing["total"] = time.perf_counter() - t0
     log.info("place answer: %s LGA, %s, %d usable years, outline %s, %.1fs", lga or "?", h.kind or "vegetated",
              len(h.usable_years()), outline.method, timing["total"])

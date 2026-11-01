@@ -65,15 +65,22 @@ class Chip:
 @dataclass
 class Outline:
     geometry: dict                   # GeoJSON polygon, WGS84
-    method: str                      # sam | circle
+    method: str                      # sam | circle | given_circle (a size the user gave) | corners (the user's pins)
     area_ha: float
     scene: str = ""
     note: str = ""                   # why the circle: no_segment | too_small | too_big | no_pin | no_chip | sam_failed
     from_cache: bool = False
+    corners: int = 0                 # how many corner pins made it (method 'corners')
 
     @property
     def is_plot(self) -> bool:
-        return self.method == "sam"
+        """A shape of the plot itself (not the 1 ha fallback circle): the history is read inside it."""
+        return self.method != "circle"
+
+    @classmethod
+    def from_shape(cls, shape: dict) -> "Outline":
+        """The shape a user gave (app/place/shape.py), kept in memory only."""
+        return cls(shape["geometry"], shape["method"], float(shape["area_ha"]), corners=int(shape.get("corners") or 0))
 
 
 def _encode(rgb: np.ndarray, scale: int, fmt: str) -> bytes:
