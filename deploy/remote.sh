@@ -99,7 +99,7 @@ deploy)
   # the pre-deploy backup: a PostgreSQL dump and a consistent sqlite copy of the user store (consent, language,
   # turns, usage, subscriptions), both into the backups folder (external review, finding 19)
   if dc exec -T backup sh -c 'export PGPASSWORD="$POSTGRES_PASSWORD"; f=/backups/kasafi-$(date -u +%Y%m%dT%H%M%SZ)-predeploy.dump; pg_dump -Fc -f "$f.part" && mv "$f.part" "$f" && echo "$f"' 2>/dev/null \
-     && dc exec -T api python -c 'import os; from app.users import get_store; print(get_store().backup_to(os.environ.get("KASAFI_BACKUP_DIR", "/data/backups")))' 2>/dev/null; then
+     && dc exec -T api python -c 'import os, sqlite3, time; d=os.environ.get("KASAFI_BACKUP_DIR", "/data/backups"); os.makedirs(d, exist_ok=True); p=os.path.join(d, "kasafi-db-" + time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()) + "-predeploy.sqlite"); src=sqlite3.connect(os.environ.get("KASAFI_STATE_DB", "/data/kasafi.db")); dst=sqlite3.connect(p); src.backup(dst); dst.close(); print(p)' 2>/dev/null; then
     say "pre-deploy backup taken (postgres dump in deploy/backups, sqlite copy in the data volume)"
   else
     say "pre-deploy backup FAILED; refusing to deploy"
