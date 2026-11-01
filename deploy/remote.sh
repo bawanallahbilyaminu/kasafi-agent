@@ -43,6 +43,7 @@ short() { git rev-parse --short "$1"; }
 
 wait_healthy() {  # $1 = commit the container must report
   local want=$1 deadline=$((SECONDS + HEALTH_TIMEOUT)) got=""
+  say "waiting for the health check (up to ${HEALTH_TIMEOUT}s)"
   while [ $SECONDS -lt $deadline ]; do
     if curl -fsS --max-time 3 "http://127.0.0.1:$PORT/health" 2>/dev/null | grep -q '"ok"'; then
       got=$(curl -fsS --max-time 3 "http://127.0.0.1:$PORT/version" 2>/dev/null | sed -n 's/.*"commit":"\([0-9a-f]*\)".*/\1/p')
@@ -175,6 +176,23 @@ migration)
   exit 0
   ;;
 
+space)
+  # free bytes where uploads land (deploy/) and where the data volume lives (docker's root), the smaller one
+  root=$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker)
+  a=$(df -B1 --output=avail "$APP/deploy" | tail -1 | tr -d ' ')
+  b=$(df -B1 --output=avail "$root" | tail -1 | tr -d ' ')
+  echo "FREE=$(( a < b ? a : b ))"
+  exit 0
+  ;;
+
+pdf-sums)
+  # read-only: sha256 of every file in /data/pdfs, for deploy.sh --sync-pdfs to upload only new or changed files
+  dc exec -T api sh -c 'cd /data/pdfs 2>/dev/null && find . -maxdepth 1 -type f ! -name ".*" -exec sha256sum {} + | sed "s,  \./,  ,"' \
+    | sed 's/^/SUM /' || true
+  echo "RESULT=ok COMMIT=$(git rev-parse HEAD)"
+  exit 0
+  ;;
+
 sync-index)
   # deploy.sh first uploads a gzipped data-only pg_dump of documents/pages/chunks (public
   # documents only, no user data) to index.incoming.sql.gz. It replaces the server's copy
@@ -191,6 +209,7 @@ sync-index)
     rm -f "$INCOMING"
     counts=$(dc exec -T db psql -At -U kasafi -d kasafi -c       "SELECT (SELECT count(*) FROM documents)||' documents, '||(SELECT count(*) FROM pages)||' pages, '||(SELECT count(*) FROM chunks)||' chunks, '||(SELECT count(*) FROM budget_lines)||' budget lines, '||(SELECT count(*) FROM budget_rows)||' budget rows'")
     say "index loaded: $counts"
+    echo "SUMMARY=$counts"
     log "sync-index ok: $counts"
     echo "RESULT=ok COMMIT=$(git rev-parse HEAD)"
     exit 0
@@ -212,6 +231,7 @@ sync-geo)
     rm -f "$INCOMING"
     n=$(dc exec -T db psql -At -U kasafi -d kasafi -c "SELECT (SELECT count(*) FROM lga)||' LGAs, '||(SELECT count(*) FROM ward)||' wards, '||(SELECT count(*) FROM facility)||' facilities, '||(SELECT count(*) FROM place)||' places, '||(SELECT count(*) FROM basemap)||' base map lines, '||(SELECT count(*) FROM facility_capability)||' EmONC links'")
     say "geo imported: $n"
+    echo "SUMMARY=$n"
     log "sync-geo ok: $n"
     echo "RESULT=ok COMMIT=$(git rev-parse HEAD)"
     exit 0
@@ -238,6 +258,7 @@ sync-place)
     counts=$(dc exec -T db psql -At -U kasafi -d kasafi -c "SELECT (SELECT count(*) FROM ward_history)||' ward_history rows, '||(SELECT count(*) FROM sat_cache)||' cached cell-years'")
     files=$(dc exec -T api sh -c 'ls /data/place/floodmaps/*.gpkg | wc -l; ls -la /data/geo/water_bodies.geojson | cut -c1-60' | tr '\n' ' ')
     say "place data loaded: $counts; files: $files"
+    echo "SUMMARY=$counts"
     log "sync-place ok: $counts"
     echo "RESULT=ok COMMIT=$(git rev-parse HEAD)"
     exit 0
@@ -281,6 +302,7 @@ sync-advisories)
     rm -f "$INCOMING"
     n=$(dc exec -T db psql -At -U kasafi -d kasafi -c "SELECT (SELECT count(*) FROM pages WHERE doc_id IN ('nihsa-afo-2026','nimet-scp-2026','nimet-scp-update-2026'))||' pages, '||(SELECT count(*) FROM pages WHERE source = 'none' AND doc_id IN ('nihsa-afo-2026','nimet-scp-2026','nimet-scp-update-2026'))||' without text, '||(SELECT count(*) FROM advisories WHERE doc_id IS NOT NULL)||' outlook rows'")
     say "advisory documents: $n"
+    echo "SUMMARY=$n"
     log "sync-advisories ok: $n"
     echo "RESULT=ok COMMIT=$(git rev-parse HEAD)"
     exit 0
@@ -299,6 +321,7 @@ sync-pdfs)
     rm -f "$INCOMING"
     n=$(dc exec -T api sh -c 'ls /data/pdfs | wc -l' | tr -d '[:space:]')
     say "PDFs in /data/pdfs: $n"
+    echo "SUMMARY=$n files on the server"
     log "sync-pdfs ok: $n files"
     echo "RESULT=ok COMMIT=$(git rev-parse HEAD)"
     exit 0

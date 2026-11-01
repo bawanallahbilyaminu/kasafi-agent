@@ -100,6 +100,35 @@ Test it with `ssh vps true`. To avoid typing the key passphrase on every deploy,
 | `deploy/deploy.sh` | `.\deploy\deploy.ps1` | Deploy the pushed `main` |
 | `deploy/deploy.sh --rollback` | `.\deploy\deploy.ps1 --rollback` | Go back one release |
 | `deploy/deploy.sh --sync-env` | `.\deploy\deploy.ps1 --sync-env` | Update the server's `deploy/.env` from your local `.env` |
+| `deploy/deploy.sh --sync-index` | `.\deploy\deploy.ps1 --sync-index` | Copy the document index from the dev database |
+| `deploy/deploy.sh --sync-pdfs` | `.\deploy\deploy.ps1 --sync-pdfs` | Send the source PDFs that are new or changed |
+| `deploy/deploy.sh --help` | `.\deploy\deploy.ps1 --help` | Every mode (geo, corrections, advisories, place, hints) |
+
+`deploy.ps1` runs `deploy.sh` with Git's own `bin\bash.exe` **in the same PowerShell window** and returns its exit
+code. Don't double-click `deploy.sh` or start it with `git-bash.exe`: that opens a separate window that closes when
+it ends, so a failure goes unseen.
+
+### What you see
+
+Every mode prints numbered steps (`[2/5] dumping ...`), then ends with one line in colour and a matching exit code:
+
+```
+✓ sync-index ok: 46 documents, 6,117 pages, 25,613 chunks, 30,654 budget lines, 153,279 budget rows (1m 42s)
+✗ FAILED at step 4: the server step failed; see the server output above; the server kept the previous index
+```
+
+- **Preflight first**, before anything slow, with the fix in the message: ssh to the server works (no passphrase
+  prompt: use the ssh-agent), the dev database is running (modes that dump it), dev's and the server's migrations
+  match and dev is at the code's head (`--sync-index`, `--sync-place`), and the server has disk for the upload.
+- **Progress bars** for packing and every upload (MB done/total, speed, time left), a running byte count for
+  `pg_dump`, and a spinner with the elapsed time for server steps (backup, build, migrations, load, health),
+  labelled with the server's latest step. Through a pipe or into a log, the bars become a line every 10%.
+- **`--sync-pdfs` is incremental:** it reads the server's sha256 sums, hashes the local files, and sends only
+  new or changed ones (`3 new, 0 changed, 44 unchanged`). Files only on the server are kept; nothing is deleted.
+- **A log per run** in `deploy/logs/<time>-<mode>.log` (not in git) holds the full output, including the
+  server's lines and the test output.
+
+The helper is `scripts/deploykit.py` (Python standard library only; nothing to install).
 
 ### What a deploy does
 
