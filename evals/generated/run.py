@@ -89,10 +89,11 @@ def wrong(case: dict, a, lang: str) -> str:
 # Hausa "bai karu ba") or names the real direction, the opposite of the premise's; a "because" is no sign either way
 DENIES = re.compile(r"(?i)\b(?:did not|didn't|does not|not (?:an? )?(?:go|rise|fall|increase|decrease|drop)|"
                     r"no (?:rise|fall|increase|decrease|drop)|actually|in fact|instead|rather|"
-                    r"bai (?:karu|ƙaru|ragu)|ba (?:ta|ya) (?:karu|ƙaru|ragu))\b")
-DIRECTION = {"rise": re.compile(r"(?i)\b(?:rose|increased|went up|grew|an increase|a rise|ya karu|ya ƙaru)\b"),
+                    r"bai (?:karu|ƙaru|ragu|sauka|tashi|faɗi|fadi) ba|ba (?:ta|ya|su) (?:karu|ƙaru|ragu|sauka|tashi) ba)\b")
+DIRECTION = {"rise": re.compile(r"(?i)\b(?:rose|increased|went up|grew|an increase|a rise|ya karu|ya ƙaru|ya tashi|"
+                                r"karuwa|ƙaruwa)\b"),
              "fall": re.compile(r"(?i)\b(?:fell|decreased|dropped|went down|declined|a decrease|a drop|a fall|"
-                                r"ya ragu)\b")}
+                                r"ya ragu|ya sauka|ya faɗi|raguwa)\b")}
 
 
 def corrects(text: str, premise: str) -> bool:
