@@ -40,7 +40,12 @@ won't keep it. Only your LGA is remembered for follow-ups."*
   emergency, Kasafi first replies with straight-line distances and sends the road distance in a second message. The map Kasafi sends you marks your location only as a circle about 1 km across.
 - The **exact location** is kept only in our server's working memory for **up to 30 minutes**, for follow-up
   questions such as "the next one?", and is then forgotten. It is **never written to our database, logs or answer
-  traces**. If you type coordinates into a question, they are removed before the question is logged.
+  traces**.
+- If you **type or say an exact location** in a message (coordinates such as 13.0589, 5.1673, degrees and minutes,
+  or a plus code such as 7FG9+X2), Kasafi removes it before the message is saved in the conversation history, the
+  answer trace, a failure record or the logs, and before the question or the history is sent to an AI service. The
+  saved text says "[location removed]". Place names (an LGA, ward or town) are kept, as they are not exact
+  locations. Text saved before 1 November 2026 had locations removed the next time the service started; backup copies of the conversation store are kept 7 days, so copies made before that age out within a week.
 - Only your **LGA** is stored with your coded ID, for **90 days**, so "here" means your LGA in later questions. Send
   GOGE BAYANAI NA or DELETE MY DATA to delete it, along with any location still in memory.
 - **Place history (experimental).** When you ask what the satellite images show for a farm or a spot, Kasafi reads
@@ -102,7 +107,10 @@ protection terms and the NDPA's rules on transfers.
 - **Daily usage counts:** 30 days. **Consent and language settings:** until you ask us to delete them.
 - **Location:** the exact location for up to 30 minutes, in memory only; your LGA for 90 days.
 - **Alert sign-ups, with your encrypted number:** until you send STOP / DAINA or DELETE MY DATA, or 90 days after
-  your last message. The record of alerts sent (by hazard and LGA, with no ID or number) is kept 90 days.
+  your last message. The record of alerts sent (by hazard and LGA, with no number) is kept 90 days. When a send fails
+  for some subscribers, that record also lists their **coded IDs** (not numbers) so the next round can retry only
+  them; a coded ID is removed from these lists when you send STOP / DAINA or DELETE MY DATA, and the record is
+  deleted after 90 days.
 - **Review queue:** when Kasafi can't answer a question, or can't find a document it needs, we keep the English
   wording of the question, what was missing and which trusted sites were searched for **90 days**, so our team can add
   the missing document. This record has **no phone number or ID linked to you**, so it can't be traced back to you

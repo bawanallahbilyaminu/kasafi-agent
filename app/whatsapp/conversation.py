@@ -34,6 +34,7 @@ from app.geo.facility_info import NAMED, ROUTE_TO, as_facility, card, counted, i
 from app.geo.location import SHARE, Spot, locate_point, pin_of, place_from_text
 from app.place.answer import place_route
 from app.place.planner import area_route
+from app.privacy import strip_location
 from app.maps.render import render_specs
 from app.geo.location import memory as location_memory
 from app.guardrails import scope
@@ -310,7 +311,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             try:
                 # every long job ends in an answer or an apology within the limit, never silence
                 result = await asyncio.wait_for(
-                    answer(question, lang, settings=settings, notify=send_now, history=store.recent_turns(key),
+                    # an exact location typed or spoken into the question never reaches a model (app/privacy.py);
+                    # the history is read back from the store, where it was removed before writing
+                    answer(strip_location(question), lang, settings=settings, notify=send_now,
+                           history=store.recent_turns(key),
                            **({"place": place} if place else {})), timeout=settings.kasafi_answer_timeout_s)
             finally:
                 slow.cancel()

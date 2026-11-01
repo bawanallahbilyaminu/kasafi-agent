@@ -30,7 +30,8 @@ _LONG_DIGITS = re.compile(r"(?<!\d)(?<!\d[,.])\d{10,}(?!\d|[,.]\d)")
 def redact(text: str) -> str:
     """The wording with emails, phone numbers, long digit strings (account, NIN) and coordinates a user typed
     ('13.0622, 5.2339') taken out: a location is never kept, only its LGA."""
-    text = _COORDS.sub("[location removed]", text or "")
+    from app.privacy import strip_location
+    text = strip_location(_COORDS.sub("[location removed]", text or ""))
     text = _EMAIL.sub("[email removed]", text)
     text = _PHONE.sub("[number removed]", text)
     return _LONG_DIGITS.sub("[number removed]", text)
@@ -88,8 +89,9 @@ def _scrub(v):
 
 
 def scrub_reply(text: str) -> str:
-    """The reply keeps its long figures and 12-digit budget codes; emails and phone numbers go."""
-    return _PHONE.sub("[number removed]", _EMAIL.sub("[email removed]", text or ""))
+    """The reply keeps its long figures and 12-digit budget codes; emails, phone numbers and exact locations go."""
+    from app.privacy import strip_location
+    return strip_location(_PHONE.sub("[number removed]", _EMAIL.sub("[email removed]", text or "")))
 
 
 def record(a) -> dict:

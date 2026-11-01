@@ -26,6 +26,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from app.config import Settings, get_settings
+from app.privacy import strip_location
 
 log = logging.getLogger(__name__)
 LAGOS = timezone(timedelta(hours=1))  # Nigeria has no DST; "per day" means a Lagos calendar day
@@ -173,6 +174,7 @@ class UserStore:
         log_cols = {row[1] for row in self._db.execute("PRAGMA table_info(alert_log)")}
         if "failed" not in log_cols:             # the recipients a failed or partial send still owes (finding 02)
             self._db.execute("ALTER TABLE alert_log ADD COLUMN failed TEXT")
+        self._scrub_locations()
 
     def backup_to(self, folder: str, keep_days: int = 7, now: datetime | None = None) -> Path:
         """A consistent copy of the whole store (sqlite3's online backup, not a file copy of a live WAL database)
@@ -203,7 +205,25 @@ class UserStore:
                 continue
         return dst_path
 
+    def _scrub_locations(self) -> None:
+        """Text stored before the redactor (follow-up review, finding 3): exact locations removed on open. Turns
+        last at most TURN_RETENTION_DAYS; backups rotate (deploy/remote.sh), so older copies age out."""
+        for table, key, cols in (("turns", "rowid", ("question", "answer", "working", "quotes")),
+                                 ("users", "user_key", ("pending_question", "pending_english", "pending_options",
+                                                        "pending_clarify", "pending_calc"))):
+            have = {row[1] for row in self._db.execute(f"PRAGMA table_info({table})")}
+            cols = tuple(c for c in cols if c in have)
+            for row in self._db.execute(f"SELECT {key}, {', '.join(cols)} FROM {table}").fetchall():
+                clean = tuple(strip_location(v) for v in row[1:])
+                if clean != tuple(row[1:]):
+                    self._db.execute(f"UPDATE {table} SET {', '.join(c + '=?' for c in cols)} WHERE {key}=?",
+                                     (*clean, row[0]))          # autocommit (isolation_level=None)
+
     def _exec(self, sql: str, args: tuple = ()) -> sqlite3.Cursor:
+        """Every write goes through here or add_turn: typed or spoken exact locations are removed from every text
+        stored (app/privacy.py; follow-up review, finding 3)."""
+        if not sql.lstrip().upper().startswith("SELECT"):
+            args = tuple(strip_location(a) for a in args)
         with self._lock:
             return self._db.execute(sql, args)
 
@@ -308,6 +328,15 @@ class UserStore:
             self._db.execute("DELETE FROM usage WHERE user_key=?", (key,))
             self._db.execute("DELETE FROM turns WHERE user_key=?", (key,))
             self._db.execute("DELETE FROM alert_subs WHERE user_key=?", (key,))
+            self._drop_from_failed(key)
+
+    def _drop_from_failed(self, key: str) -> None:
+        """A user's coded key out of every alert_log 'failed' list (the recipients a failed send still owes): on
+        STOP / DAINA and DELETE MY DATA, so nothing is retried to them and no coded ID of theirs stays."""
+        for rowid, failed in self._db.execute("SELECT rowid, failed FROM alert_log WHERE failed LIKE ?",
+                                              (f"%{key}%",)).fetchall():
+            keys = [k for k in json.loads(failed or "[]") if k != key]
+            self._db.execute("UPDATE alert_log SET failed=? WHERE rowid=?", (json.dumps(keys), rowid))
 
     # hazard alerts (app/alerts): the subscription is the user key, LGAs, hazards, language and created_at only
     def set_pending_alert(self, key: str, pending: dict | None) -> None:
@@ -369,7 +398,10 @@ class UserStore:
 
     def unsubscribe(self, key: str) -> bool:
         """STOP / DAINA: the subscription is deleted (not flagged). True when there was one."""
-        return self._exec("DELETE FROM alert_subs WHERE user_key=?", (key,)).rowcount > 0
+        gone = self._exec("DELETE FROM alert_subs WHERE user_key=?", (key,)).rowcount > 0
+        with self._lock:
+            self._drop_from_failed(key)
+        return gone
 
     def subscribers(self, lga_pcode: str, hazard: str) -> list[tuple[str, str]]:
         """(user key, language) of everyone signed up for this hazard in this LGA."""
@@ -454,6 +486,8 @@ class UserStore:
     def add_turn(self, key: str, lang: str, question: str, answer: str, sources: list[dict] | None = None,
                  working: str = "", quotes: str = "") -> None:
         now = datetime.now(timezone.utc)
+        question, answer = strip_location(question), strip_location(answer)
+        working, quotes = strip_location(working or ""), strip_location(quotes or "")
         with self._lock:
             self._db.execute("INSERT INTO turns (user_key, at, lang, question, answer, sources, working, quotes) "
                              "VALUES (?,?,?,?,?,?,?,?)",
