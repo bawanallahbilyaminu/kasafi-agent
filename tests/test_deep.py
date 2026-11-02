@@ -239,12 +239,38 @@ def test_claims_are_ranked_by_informativeness_and_capped_per_dimension() -> None
               C("staffing", "Medical officers required", "46", "target", "staff_need"),
               C("staffing", "Nurses/midwives required (copy)", "244", "target", "staff_need")]
     got = D.select_claims(claims, dims)
-    assert [c.value for c in got][:2] == ["3,125", "244"]                  # targets and gaps before totals
+    assert [c.value for c in got][:2] == ["244", "78"]                     # required and available, same cadre
+    assert [c.value for c in got].index("3,125") < [c.value for c in got].index("787")   # targets before totals
     assert "18" not in [c.value for c in got]                              # trivia never fills a full dimension
     assert len(got) <= D.PER_DIMENSION and sum(c.measure == "staff_need" for c in got) == D.PER_MEASURE
     assert [c.value for c in got].count("244") == 1                        # the same figure once
     cov = D.coverage(got, dims)
     assert cov == [("staffing", ["available", "required"], [])]
+
+
+def test_staffing_pairs_required_and_available_for_the_same_cadre() -> None:
+    """The server run of 3 Nov set 3,125 JCHEWs and 46 medical officers required against 3,395 frontline staff and
+    1,927 CHOs: no cadre on both sides. The nurse/midwife pair is the comparison."""
+    dims = [D.Dimension("staffing", [], measures=[D.Measure("staff_have", "available"),
+                                                  D.Measure("staff_need", "required")])]
+    claims = [C("staffing", "3,125 JCHEWs are required under the MSP", "3,125", "target", "staff_need"),
+              C("staffing", "At least 46 medical officers are required", "46", "target", "staff_need"),
+              C("staffing", "At least 244 Nurses/midwives are required", "244", "target", "staff_need"),
+              C("staffing", "Frontline staff available total 3,395 personnel", "3,395", "aggregate", "staff_have"),
+              C("staffing", "1,927 Community Health Officers among frontline staff", "1,927", "aggregate",
+                "staff_have"),
+              C("staffing", "78 Nurse/Midwives among frontline clinical staff", "78", "aggregate", "staff_have")]
+    got = [c.value for c in D.select_claims(claims, dims)]
+    assert "244" in got and "78" in got
+
+
+@pytest.mark.parametrize("statement, unit", [("The Blueprint 2023-2026 has 262 interventions", "interventions"),
+                                             ("The Blueprint has 18 objectives", ""),
+                                             ("The plan has one goal", "goal"),
+                                             ("It sets 27 priority initiatives", "")])
+def test_how_a_plan_is_organised_is_not_a_finding(statement, unit) -> None:
+    assert D.junk(C("plans", statement, "18", "target", unit=unit))
+    assert not D.junk(C("plans", "92 PHCs to be equipped and staffed by 2025", "92", "target", "plan_targets"))
 
 
 def test_a_figure_without_its_own_year_carries_its_documents_date_and_no_year_is_invented() -> None:

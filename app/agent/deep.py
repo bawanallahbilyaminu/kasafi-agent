@@ -684,12 +684,41 @@ def junk(c: Claim, question: str = "") -> bool:
         return True
     if c.kind == "context" or (GENERIC.search(f"{c.statement} {c.entity}") and not ASKED_BACKGROUND.search(question)):
         return True
+    if STRUCTURE.match(c.unit.strip()) or STRUCTURE_SAID.search(c.statement):
+        return True
     return bool(re.search(r"(?i)\b(?:global|world|worldwide|africa)\b", c.entity))
 
 
-def informativeness(c: Claim, measures: set[str]) -> float:
+# how a plan is organised is not a finding: 'the blueprint has 262 interventions, 18 objectives and one goal'
+_PARTS = (r"(?:strategic\s+|priority\s+|key\s+)?(?:goals?|objectives?|interventions?|initiatives?|pillars?|"
+          r"strateg(?:y|ies)|outcomes?|outputs?|activities|thematic\s+areas?|result\s+areas?|programmes?)")
+STRUCTURE = re.compile(rf"(?i)^{_PARTS}$")
+STRUCTURE_SAID = re.compile(rf"(?i)\b(?:has|have|sets?|contains?|comprises?|lists?|with|of)\s+(?:\d+|one|two|three|"
+                            rf"four|five|six|seven|eight|nine|ten)\s+{_PARTS}\b")
+# a cadre named in a staffing claim: required and available figures pair only for the same cadre
+CADRE = (("nurse", r"nurses?|midwi\w*"), ("jchew", r"jchews?|junior\s+community\s+health"), ("chew", r"(?<!j)chews?"),
+         ("doctor", r"medical\s+officers?|doctors?|physicians?"), ("cho", r"\bchos?\b|community\s+health\s+officers?"),
+         ("pharmacy", r"pharmac\w*"), ("lab", r"laborator\w*|lab\s+(?:scientists?|technicians?)"),
+         ("teacher", r"teachers?"))
+
+
+def cadre_of(c: Claim) -> str:
+    return next((k for k, rx in CADRE if re.search(rf"(?i)\b(?:{rx})", f"{c.statement} {c.unit}")), "")
+
+
+def paired(claims: list[Claim]) -> set[int]:
+    """Claims of a '_have' measure and its '_need' measure for the same cadre: the comparison a reader needs."""
+    sides: dict[tuple[str, str], dict[str, list[Claim]]] = {}
+    for c in claims:
+        if (m := re.match(r"(.+)_(have|need)$", c.measure)) and (k := cadre_of(c)):
+            sides.setdefault((m.group(1), k), {}).setdefault(m.group(2), []).append(c)
+    return {id(c) for both in sides.values() if len(both) == 2 for cs in both.values() for c in cs}
+
+
+def informativeness(c: Claim, measures: set[str], pairs: set[int] = frozenset()) -> float:
     s = KIND_WEIGHT.get(c.kind, 2.0)
     s += 2.0 if c.measure in measures else 0.0
+    s += 2.5 if id(c) in pairs else 0.0
     s += 1.0 if re.search(r"%|₦|\bN\d|NGN|naira", f"{c.value} {c.unit}", re.I) or "," in c.value else 0.0
     s += 0.5 if STATEWIDE.search(f"{c.statement} {c.entity}") else 0.0
     s += 0.5 if c.year.strip() else 0.0
@@ -709,7 +738,9 @@ def select_claims(claims: list[Claim], dims: list[Dimension], question: str = ""
     kept = [c for c in claims if not junk(c, question)]
     out: list[Claim] = []
     for d in dims:
-        mine = sorted((c for c in kept if c.dimension == d.name), key=lambda c: -informativeness(c, measures))
+        mine = [c for c in kept if c.dimension == d.name]
+        pairs = paired(mine)
+        mine.sort(key=lambda c: -informativeness(c, measures, pairs))
         seen, per_m, chosen = set(), {}, []
         # the money series over the years is read whole from the rows: a few more of its figures are kept
         for c in mine:
