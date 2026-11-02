@@ -256,6 +256,31 @@ def other_lga(name: str, here: str, lgas: set[str]) -> str:
                  if _norm(x) != _norm(here) and len(x) > 2 and named(x)), "")
 
 
+# administrative items: not programmes that serve a community (3 Nov demo polish: 'PURCHASE OF AEROPLANE' had led
+# the statewide lines that 'may also cover Wamakko')
+ADMIN_ITEM = re.compile(r"(?i)\b(?:aeroplane|aircraft|airplane|helicopter|jet|vehicles?|motor\s*cycles?|cars?|"
+                        r"buses|bus|trucks?|furniture|office\s+(?:block|building|complex|equipment|accommodation)|"
+                        r"offices?|residence\w*|villa\w*|lodge|government\s+house|secretariat|headquarters?|"
+                        r"guest\s*houses?|VIP|protocol|computers?|generators?|official|mosque|fence|perimeter)\b")
+ADMIN_MDA = re.compile(r"(?i)government\s+house|governor|deputy\s+governor|SSG|secretary\s+to\s+the\s+state|"
+                       r"cabinet|head\s+of\s+service|protocol|house\s+of\s+assembly")
+# a place in Sokoto city named in a line the budget files under another LGA (Wamakko holds part of the city)
+CITY = re.compile(r"(?i)\b(?:government\s+house|sokoto\s+township|township|metropolis|sokoto\s+city|state\s+"
+                  r"secretariat|presidential\s+lodge|(?:in|at)\s+sokoto)\b(?!\s+(?:north|south|state))")
+
+
+def in_city(name: str, lga: str) -> bool:
+    """The line's name places it in Sokoto city, and doesn't name the LGA it is filed under."""
+    return bool(CITY.search(name or "")) and not re.search(rf"(?i)\b{re.escape(lga)}\b", name or "")
+
+
+def community_line(name: str, function_name: str, mda_name: str) -> bool:
+    """A statewide line that plausibly serves communities across LGAs: a sector programme, not an administrative
+    item or an office of government."""
+    return sector_of(function_name, mda_name, name) is not None and not ADMIN_ITEM.search(name or "") \
+        and not ADMIN_MDA.search(mda_name or "")
+
+
 def lga_projects(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
     res = AnalysisResult("lga_projects", False)
     picked = budget_doc(conn, spec.get("year"), need_projects=True)
@@ -312,7 +337,12 @@ def lga_projects(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
         g = groups.setdefault(s.key if s else "other", [0, Decimal(0), pg])
         g[0], g[1] = g[0] + 1, g[1] + (a_cur or 0)
     res.groups = sorted(((k, v[0], v[1], v[2]) for k, v in groups.items()), key=lambda x: -x[2])
-    for name, a_cur, a_rev, a_spent, pg, mda, mda_code, fn in lines[:TOP]:
+    # the largest community-facing lines lead; lines whose names place them in Sokoto city (Government House, the
+    # township) are counted but not listed, and said in one line (3 Nov demo polish)
+    city = [x for x in lines if in_city(x[0], loc[1])]
+    res.count("city_n", len(city), doc, city[0][4] if city else None)
+    shown = [x for x in lines if not in_city(x[0], loc[1]) and not ADMIN_ITEM.search(x[0])]
+    for name, a_cur, a_rev, a_spent, pg, mda, mda_code, fn in shown[:TOP]:
         res.rows.append(Row(name, a_cur, doc, pg, {"mda": mda, "budget_prev": a_rev or 0, "spent": a_spent or 0,
                                                     "other_lga": other_lga(name, loc[1], lgas),
                                                     "ward": bool(ward) and ward.lower() in name.lower()}))
@@ -338,9 +368,12 @@ def lga_projects(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
                     "classification = 'administrative' AND spend_kind = 'capital' AND code = ANY(%s) "
                     "ORDER BY COALESCE(revised, original) DESC LIMIT %s", (rdoc, agencies, TOP)):
                 res.agencies.append(Row(name, a_budget or Decimal(0), rdoc, pg, {"spent": a_got or Decimal(0)}))
-    # statewide lines in the sector (or all), which may cover the LGA: their total and the largest three by name
-    sw = conn.execute(f"SELECT name, {cur}, page FROM projects p WHERE doc_id = %s AND location_code = %s "
-                      f"AND COALESCE({cur}, 0) > 0{extra} ORDER BY {cur} DESC, seq", [doc, STATEWIDE] + a).fetchall()
+    # statewide programmes that may serve the LGA: sector lines (schools, PHCs, water, roads, farm inputs) only,
+    # never administrative items (aircraft, vehicles, offices, residences, Government House); the asked sector only
+    sw = [(name, amt, pg) for name, amt, pg, fn, mda in conn.execute(
+          f"SELECT name, {cur}, page, function_name, mda_name FROM projects p WHERE doc_id = %s AND location_code = %s "
+          f"AND COALESCE({cur}, 0) > 0{extra} ORDER BY {cur} DESC, seq", [doc, STATEWIDE] + a).fetchall()
+          if community_line(name, fn or "", mda or "")]
     res.count("statewide_n", len(sw), doc, sw[0][2] if sw else None)
     res.money("statewide_cur", sum((r[1] for r in sw), Decimal(0)), doc, sw[0][2] if sw else None)
     res.statewide = [Row(name, amt, doc, pg) for name, amt, pg in sw[:3]]

@@ -69,7 +69,7 @@ def test_lga_projects_are_only_lines_located_in_that_lga(conn) -> None:
     n, total = conn.execute("SELECT count(*), sum(approved_2026) FROM projects WHERE doc_id = 'budget-2026-approved' "
                             "AND location_code = '33331800' AND approved_2026 > 0").fetchone()
     assert r.facts["n"].value == n and r.facts["cur"].value == total
-    assert r.facts["statewide_n"].value > 500                                  # not split by LGA, so not counted
+    assert r.facts["statewide_n"].value > 300           # community programmes not split by LGA (no admin items)
     binji = [x for x in r.rows if "Binji" in x.name]
     assert binji and binji[0].detail["other_lga"] == "Binji"                   # filed under Tambuwal by the budget
     a = ans.analysis_answer(conn, Plan("q", [], [], analysis={"tool": "lga_projects"}), r, "en", {}, None)
@@ -132,7 +132,7 @@ def test_planned_analysis_answers_without_a_compose_call(monkeypatch) -> None:
     a = asyncio.run(ans.answer_question("Wadanne ayyuka ne za a yi a Tambuwal?", "en", conn=None,
                                         settings=make_settings(), client_factory=lambda s: fake))
     assert len(fake.calls) == 1                                                 # the planner only
-    assert a.text.startswith("The 2026 budget has 2 capital projects located in Tambuwal, with ₦3.00 billion allocated.")
+    assert a.text.startswith("The 2026 budget has 2 capital projects located in Tambuwal, worth ₦3.00 billion.")
     assert "not the local government's own allocation" in a.text and "• Completion of Premier Hospital" in a.text
     assert "📄 *Sources:* Budget, p. 61, 67" in a.text
 

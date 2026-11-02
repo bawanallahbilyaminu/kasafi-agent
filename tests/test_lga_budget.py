@@ -98,6 +98,44 @@ def test_the_spending_follow_up_leads_with_spending_and_repeats_nothing() -> Non
     assert lead.startswith("Spending isn't reported project by project.") and note == ""
 
 
+@pytest.mark.parametrize("name, fn, mda, ok", [
+    ("PURCHASE OF AEROPLANE", "EXECUTIVE AND LEGISLATIVE ORGANS", "Government House", False),
+    ("Purchase of Toyota Hilux vehicles for monitoring", "AGRICULTURE", "Ministry of Agriculture", False),
+    ("Construction of office block at the Ministry headquarters", "HEALTH", "Ministry of Health", False),
+    ("Construction of Classrooms, Offices, Laboratories and Toilets (AGILE Project)", "SECONDARY EDUCATION",
+     "Ministry of Basic and Secondary Education", False),
+    ("Procurement of 250 units of Furgeson Tractors for distribution to farmers", "AGRICULTURE",
+     "Ministry of Agriculture", True),
+    ("Rehabilitation of Sokoto Township Water Works", "WATER SUPPLY", "Ministry of Water Resources", True),
+    ("Renovation of 60 primary health care centres across the state", "PUBLIC HEALTH SERVICES",
+     "Primary Health Care Development Agency", True),
+])
+def test_statewide_lines_that_may_cover_an_lga_are_community_programmes(name, fn, mda, ok) -> None:
+    from app.agent.analysis import community_line
+    assert community_line(name, fn, mda) is ok
+
+
+@pytest.mark.parametrize("name, ok", [("Construction of ultra modern Villa at Government House Sokoto", True),
+                                      ("Renovation of Presidential Lodge and VIP villas in Sokoto", True),
+                                      ("Construction for the Completion of College of Medical Sciences Sokoto at "
+                                       "SOSUTH Kasarawa Wamakko LGA", False),
+                                      ("Demarcation of Livestock Service Centre in Wamakko Local Government", False)])
+def test_lines_filed_under_an_lga_that_name_a_place_in_sokoto_city(name, ok) -> None:
+    from app.agent.analysis import in_city
+    assert in_city(name, "Wamakko") is ok
+
+
+def test_the_first_sentence_is_short_with_the_leading_sector_and_the_city_lines_are_said() -> None:
+    r = _res()
+    r.focus = ""
+    r.groups = [("health", 87, Decimal("56320000000"), 67), ("education", 55, Decimal("12660000000"), 74)]
+    r.facts["city_n"] = Fact(3, "count", "budget-2026-approved", 51)
+    lead, note = A.lga_text(r, A.ANALYSIS_WORDS["en"], _v(r), "en")
+    assert A.readable_amounts(lead, "en") == ("The 2026 budget has 4 capital projects located in Wamakko, worth "
+                                              "₦418.00 million, mostly health (₦56.32 billion).")
+    assert "3 lines filed under Wamakko in the budget name a place in Sokoto city" in note
+
+
 # --- on the dev library -----------------------------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")

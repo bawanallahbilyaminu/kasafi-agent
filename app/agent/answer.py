@@ -3689,11 +3689,13 @@ ANALYSIS_WORDS = {
             "all": "Spending is January–September {prev}, as printed in the {year} budget.",
         },
         "lga_filed": " (the budget files it under {subject})",
-        "lga": "The {year} budget has {n} capital projects located in {subject}, with {cur} allocated{by_sector}.",
+        "lga": "The {year} budget has {n} capital projects located in {subject}, worth {cur}{by_sector}.",
         "lga_sector": "The {year} budget has {n} {sector} projects located in {subject}, with {cur} allocated.",
         "lga_sector_none": "None of the {year} budget's {sector} projects is located in {subject}. In all sectors, "
                            "{n_all} projects are located there ({cur_all}).",
-        "lga_by_sector": ": {parts}",
+        "lga_by_sector": ", mostly {sector} ({amount})",
+        "lga_city": "{city_n} lines filed under {subject} in the budget name a place in Sokoto city; they are "
+                    "counted above but not listed.",
         "lga_prev": " {n_prev} of these lines were also in the {prev} budget ({prev_amt}), and {spent} was spent on "
                     "them by September {prev}.",
         "lga_prev_none": " {n_prev} of these lines were also in the {prev} budget ({prev_amt}); nothing was spent on "
@@ -3778,11 +3780,13 @@ ANALYSIS_WORDS = {
             "all": "Kuɗin da aka kashe na Janairu–Satumba {prev} ne, kamar yadda kasafin {year} ya buga.",
         },
         "lga_filed": " (kasafin ya sanya shi a ƙarƙashin {subject})",
-        "lga": "Kasafin {year} yana da manyan ayyuka {n} da ke {subject}, an ware musu {cur}{by_sector}.",
+        "lga": "Kasafin {year} yana da manyan ayyuka {n} da ke {subject}, na {cur}{by_sector}.",
         "lga_sector": "Kasafin {year} yana da ayyukan {sector} {n} da ke {subject}, an ware musu {cur}.",
         "lga_sector_none": "Babu wani aikin {sector} a kasafin {year} da aka sanya a {subject}. A dukkan sassa, "
                            "ayyuka {n_all} ne a can ({cur_all}).",
-        "lga_by_sector": ": {parts}",
+        "lga_by_sector": ", galibi na {sector} ({amount})",
+        "lga_city": "Layuka {city_n} da kasafin ya sanya a {subject} sun ambaci wani wuri a birnin Sokoto; an "
+                    "ƙidaya su a sama amma ba a lissafa su ba.",
         "lga_prev": " Ayyuka {n_prev} daga cikinsu suna cikin kasafin {prev} ({prev_amt}), kuma an kashe musu {spent} "
                     "zuwa Satumba {prev}.",
         "lga_prev_none": " Ayyuka {n_prev} daga cikinsu suna cikin kasafin {prev} ({prev_amt}); ba a kashe musu komai "
@@ -3953,9 +3957,10 @@ def lga_text(res: AnalysisResult, w: dict, v: dict, lang: str, spent_focus: bool
     elif n and sector:
         lead = w["lga_sector"].format(**v)
     elif n:
-        parts = "; ".join(f"{sector_label(k, lang, w)} {_money(amt)} ({c})" for k, c, amt, _ in res.groups[:5])
-        lead = w["lga"].format(**{**v, "by_sector": w["lga_by_sector"].format(parts=parts) if len(res.groups) > 1
-                                  else ""})
+        top = res.groups[0] if res.groups else None           # the first sentence short: the leading sector only
+        mostly = w["lga_by_sector"].format(sector=sector_label(top[0], lang, w), amount=_money(top[2])) \
+            if top and top[0] != "other" and len(res.groups) > 1 else ""
+        lead = w["lga"].format(**{**v, "by_sector": mostly})
     elif sector and "n_all" in v:
         lead = w["lga_sector_none"].format(**v)
     else:
@@ -3976,6 +3981,8 @@ def lga_text(res: AnalysisResult, w: dict, v: dict, lang: str, spent_focus: bool
         paras.append(w["lga_statewide"].format(names=names, **{**v, "sector": f"{sector} " if sector else ""}))
     if n:
         paras.append(w["lga_note"].format(**v))
+    if n and f.get("city_n") and f["city_n"].value:
+        paras.append(w["lga_city"].format(**v))
     return lead, "\n\n".join(paras)
 
 
