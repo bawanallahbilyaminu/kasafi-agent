@@ -92,6 +92,25 @@ BUDGET_PERSONNEL = """2 EXPENDITURES 170,152,000.87 385,590,999.00 213,835,340.5
 22020202 TELEPHONE CHARGES 44,451,500.00 3,000,000.00 0.00 4,000,000.00"""
 
 
+CODES_PAGE = """SOKOTO STATE GOVERNMENT
+2019 REPORT OF THE ACCOUNTANT GENERAL
+32600100100 MINISTRY OF JUSTICE
+12020417 Contractor Registeration Fees - 30,000,000.00 30,000,000.00
+11101000100 Bureau for Public Procurement and Price Intelligence
+12020417 Contractor Registration Fees - - -
+11101000100 OFFICE OF THE AUDITOR GENERAL
+12020417 Contractor Registration Fees - - -
+64740400001 Construction of Offices in Sokoto Metropolis 65,000,000.00
+64740400002 Provision of Boreholes in Gada 20,000,000.00
+64740400003 Rehabilitation of Clinics in Isa 10,000,000.00"""
+
+
+def test_budget_and_account_codes_are_not_personal_ids() -> None:
+    """3 Nov: the 2021 proposed budget's 11-digit project codes and the 2019 accounts' agency codes were withheld
+    as 'names with NIN, BVN or account numbers'. An ID list needs a name column and an ID column."""
+    assert personal_reason(CODES_PAGE) == ""
+
+
 def test_a_budgets_personnel_table_is_not_a_pay_list() -> None:
     """3 Nov: the 2023 approved budget's 'SALARY' / 'PERSONNEL COST' lines were taken for a pay list."""
     assert personal_reason(BUDGET_PERSONNEL) == ""

@@ -39,7 +39,10 @@ def personal_reason(text: str) -> str:
     names = [m.group(0) for m in NAME_ROW.finditer(t) if not AGENCY_WORDS.search(m.group(0))]
     if len(PHONE.findall(t)) >= 3 and len(names) >= 3:
         return "names with phone numbers"
-    if len(LONG_ID.findall(t)) >= 5 and len(names) >= 5 and ID_HEADER.search(t):
+    # an ID list has a name column and an ID column; a budget's or accounts' 11-digit codes are neither (3 Nov:
+    # the 2021 proposed budget's project codes and the 2019 accounts' agency codes were withheld)
+    if len(LONG_ID.findall(t)) >= 5 and len(names) >= 5 and NAME_HEADER.search(t) and \
+            re.search(r"(?i)\b(?:NIN|BVN|account\s*(?:no|number)|acct\.?\s*no|NUBAN)\b", t):
         return "names with NIN, BVN or account numbers"
     # a pay list has a name column; a budget's 'SALARY' and 'PERSONNEL COST' lines have none (3 Nov: the 2023
     # approved budget's personnel tables were flagged)
