@@ -141,6 +141,7 @@ class LineResult:
     not_summed: bool = False    # a sum over different tables of one document, refused
     clarify: list[dict] = field(default_factory=list)
     clarify_question: str = ""
+    clarify_reason: str = ""             # why it was ambiguous (kept in the trace)
     uncertain: list[str] = field(default_factory=list)   # lines only one of the two readings chose: not counted
     nearest: list[Selection] = field(default_factory=list)   # nothing answers: the closest lines printed (shown as such)
     disputed: bool = False      # the readings disagreed on which rows a total takes: no arithmetic was done
@@ -360,9 +361,11 @@ def verify(d: dict, lines: list[Line]) -> tuple[LineResult, list[str]]:
     if not res.selections and isinstance(c, dict) and str(c.get("question") or "").strip():
         opts = [{"title": str(o.get("title") or "")[:20].strip(), "question": str(o.get("question") or "")[:500].strip()}
                 for o in c.get("options") or [] if isinstance(o, dict)]
-        opts = [o for o in opts if o["title"] and o["question"]][:3]
+        from app.agent.clarify import dedupe
+        opts = dedupe([o for o in opts if o["title"] and o["question"]])[:3]
         if len(opts) >= 2:
             res.clarify, res.clarify_question = opts, str(c["question"])[:900]
+            res.clarify_reason = "the reader asked: " + "; ".join(o["title"] for o in opts)
     return res, problems
 
 
@@ -608,13 +611,23 @@ def reconcile(r1: LineResult, d1: dict, r2: LineResult, lines: list[Line], extra
                               selections=[tops[0][0], tops[1][0]] + [s for s in r1.selections if s.part == "bottom"],
                               shares=[(tops[0][0], r1.share_pct), (tops[1][0], r2.share_pct)])
     if not common:                       # two different readings: ask, don't pick one
-        opts = []
+        from app.agent.clarify import dedupe
+        opts, keys = [], []
         for r in (r1, r2):
             names = list(dict.fromkeys(short_name(s.line) for s in r.selections))
             opts.append({"title": names[0][:20], "question": f"{question} ({'; '.join(names[:3])[:300]})"})
+            keys.append("|".join(sorted({s.line.code for s in r.selections if s.line.code})))
+        why = (f"the two readings chose different lines: {opts[0]['question'].rsplit('(', 1)[-1].rstrip(')')} | "
+               f"{opts[1]['question'].rsplit('(', 1)[-1].rstrip(')')}")
+        kept = dedupe(opts, keys)
+        if len(kept) < 2:                # the same thing in two forms ('Education' / 'EDUCATION'): no question
+            log.info("two readings name one thing (%s): answered from the first", why[:200])
+            return r1
         if opts[0]["title"] == opts[1]["title"]:
             opts[1]["title"] = (opts[1]["title"][:17] + " 2")[:20]
-        return LineResult(clarify=opts, clarify_question=CLARIFY_READINGS.get(lang, CLARIFY_READINGS["en"]))
+        log.info("clarify: %s", why[:300])
+        return LineResult(clarify=opts, clarify_question=CLARIFY_READINGS.get(lang, CLARIFY_READINGS["en"]),
+                          clarify_reason=why[:400])
     index = {x.id: i for i, x in enumerate(lines, 1)}
     kept = {**d1, "selected": [{"line": f"L{index[s.line.id]}", "column": s.cell.column, "part": s.part}
                                for s in r1.selections if _sig(s) in common]}

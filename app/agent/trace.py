@@ -123,6 +123,10 @@ def record(a) -> dict:
         r = a.analysis
         t["analysis"] = {"tool": r.tool, "subject": r.subject, "focus": r.focus, "year": r.year,
                          "facts": {k: str(v.value) for k, v in r.facts.items()}, "rows": len(r.rows)}
+    if getattr(a, "clarify", None):            # the options offered and why the question was ambiguous
+        t["clarify"] = {"options": [o.get("title") for o in a.clarify],
+                        "why": [p for p in (getattr(a, "attribution", []) or []) if str(p).startswith("clarify")][:2]
+                        or (["the planner's own reading"] if a.plan is not None and a.plan.clarify else [])}
     if a.plan is not None and getattr(a.plan, "_library", None):    # what the library-wide search found (* = strong)
         t["library"] = [f"{h.hit.doc_id} p{h.hit.page}{'*' if h.strong else ''}" for h in a.plan._library[:8]]
     if getattr(a, "working", ""):

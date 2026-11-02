@@ -78,6 +78,9 @@ PRINTED_AS = (
     (re.compile(r"(?i)\bstunt\w*"), "height-for-age or height"),
     (re.compile(r"(?i)\bwast(?:ed|ing)\b"), "weight-for-height or weight"),
     (re.compile(r"(?i)\bunderweight\b"), "weight-for-age or weight"),
+    # a sector strategy prints its ceiling as 'the total indicative budget ... as provided by the Ministry of
+    # Budget' (Education MTSS 2025-2027 p10): 'ceiling' alone ranked its expenditure annexes first (2 Nov 2026)
+    (re.compile(r"(?i)\b(?:budget\s+)?(?:ceilings?|envelopes?)\b"), "indicative budget or envelope or ceiling"),
 )
 
 

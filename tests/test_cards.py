@@ -181,8 +181,8 @@ def test_doesnt_print_is_only_said_after_the_whole_document_was_searched(conn) -
     read_p2 = [Evidence(1, DOC, "Report 2", 2025, 2, "text", FIXTURE_PAGES[2])]
     text = "The report does not publish hand pump functionality by ward. It lists the field teams."
     out, changed = checked_absence(conn, p, read_p2, read_p2, text, "en")
-    assert changed and "didn't find this in the pages I read" in out and "page 3" in out
-    assert "does not publish" not in out and "It lists the field teams." in out
+    assert changed and out.endswith("I didn't find this in the pages I read.") and "page 3" not in out
+    assert "does not publish" not in out and out.startswith("It lists the field teams.")
     read_all = [Evidence(i, DOC, "Report 2", 2025, pg, "text", t) for i, (pg, t) in enumerate(FIXTURE_PAGES.items(), 1)]
     same, changed = checked_absence(conn, p, read_all, read_all, text, "en")
     assert not changed and same == text

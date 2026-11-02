@@ -655,7 +655,8 @@ def _clarify_field(v) -> dict:
         return {}
     opts = [{"title": str(o.get("title") or "")[:20].strip(), "question": str(o.get("question") or "")[:500].strip()}
             for o in v.get("options") or [] if isinstance(o, dict)]
-    opts = [o for o in opts if o["title"] and o["question"]][:3]
+    from app.agent.clarify import dedupe
+    opts = dedupe([o for o in opts if o["title"] and o["question"]])[:3]       # never two options of one name
     return {"question": str(v["question"])[:900], "options": opts} if len(opts) >= 2 else {}
 
 
@@ -983,13 +984,15 @@ def widen_for_breadth(conn: psycopg.Connection, plan: "Plan", question: str, n: 
     return list(dict.fromkeys(docs))[:n]
 
 
-ABSENT = re.compile(r"(?i)[^.\n]*\b(?:do(?:es)?\s*n[o']?t|do(?:es)?\s+not|is\s*n[o']?t|is\s+not|are\s*n[o']?t|are\s+not|"
-                    r"was\s*n[o']?t|were\s*n[o']?t)\s+(?:\w+\s+){0,2}(?:print|publish|report|give|list|break\w*\s+down|"
-                    r"include|provide|state|show|mention)\w*[^.\n]*[.\n]?|[^.\n]*\bnot\s+(?:separately\s+)?"
-                    r"(?:published|printed|reported|given|listed)\b[^.\n]*[.\n]?")
-NOT_READ = {"en": "I didn't find this in the pages I read (the document has other pages that may cover it: {pages}).",
-            "ha": "Ban samu wannan a shafukan da na karanta ba (takardar na da wasu shafuka da za su iya bayani a kai: "
-                  "{pages})."}
+ABSENT = re.compile(r"(?i)\b(?:do(?:es)?\s*n[o'’]?t|do(?:es)?\s+not|is\s*n[o'’]?t|is\s+not|are\s*n[o'’]?t|are\s+not|"
+                    r"was\s*n[o'’]?t|were\s*n[o'’]?t)\s+(?:\w+\s+){0,2}(?:print|publish|report|give|list|break\w*\s+down|"
+                    r"include|provide|state|show|mention)\w*|\bnot\s+(?:separately\s+)?"
+                    r"(?:published|printed|reported|given|listed)\b")
+# sentences end at a full stop followed by a space and a capital (or a line end): never at a decimal point
+# ('₦706.47 million' was cut to '₦706' when the claim's sentence was taken back to the previous '.', 2 Nov 2026)
+_SENTENCE = re.compile(r"(?<=[.!?])\s+(?=[A-Z•(“\"'])|\n")
+NOT_READ = {"en": "I didn't find this in the pages I read.",
+            "ha": "Ban samu wannan a shafukan da na karanta ba."}
 
 
 def unread_pages(conn: psycopg.Connection, plan: "Plan", evidence: list, docs: list[str]) -> dict[str, list[int]]:
@@ -1028,14 +1031,27 @@ def checked_absence(conn: psycopg.Connection, plan: "Plan", evidence: list, cite
     left = unread_pages(conn, plan, evidence, docs)
     if not left:
         return text, False
-    titles = {e.doc_id: e.title for e in [*evidence, *cited]}
-    word = PAGE_WORD.get(lang, "page")
-    pages = "; ".join(f"{titles.get(d, d)}, {word} {', '.join(map(str, ps))}" for d, ps in left.items())
-    line = NOT_READ.get(lang, NOT_READ["en"]).format(pages=pages)
-    first = ABSENT.search(text)
-    out = text[:first.start()] + (" " if first.start() and not text[first.start() - 1].isspace() else "") + line + \
-        ABSENT.sub("", text[first.end():])          # any further absence claim: the one line says it
-    return re.sub(r"[ \t]{2,}", " ", out).strip(), True
+    log.info("absence claim softened; unread pages that may cover it: %s",
+             "; ".join(f"{d} {ps}" for d, ps in left.items()))
+    out = drop_absence_sentences(text)
+    # the note goes once, after the bullets (it isn't part of any one item), with no list of pages inside it
+    return f"{out}\n\n{NOT_READ.get(lang, NOT_READ['en'])}".strip(), True
+
+
+def drop_absence_sentences(text: str) -> str:
+    """The text without its sentences that say a document doesn't print something; a bullet that is only that
+    claim goes, and one that has figures keeps them (its claim's sentence alone is dropped)."""
+    out_lines = []
+    for line in (text or "").split("\n"):
+        if not ABSENT.search(line):
+            out_lines.append(line)
+            continue
+        bullet = line.lstrip().startswith("•")
+        body = line.lstrip()[1:].lstrip() if bullet else line
+        kept = [s for s in re.split(r"(?<=[.!?])\s+(?=[A-Z(“\"'])", body) if s and not ABSENT.search(s)]
+        if kept:
+            out_lines.append(("• " if bullet else "") + " ".join(kept))
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(out_lines)).strip()
 
 
 INTENT = re.compile(r"(?i)\b(?:plan(?:s|ned|ning)?\s+to|propos\w*|target\w*|aim(?:s|ed)?\s+to|intend\w*|"
@@ -1068,6 +1084,26 @@ def library_first(conn: psycopg.Connection, plan: Plan, question: str) -> list[s
         return []
     return list(dict.fromkeys(h.hit.doc_id for h in library_candidates(conn, plan, question)
                               if h.strong and h.hit.doc_id not in plan.doc_ids))[:2]
+
+
+TOTAL_Q = re.compile(r"(?i)\b(?:total|overall|ceiling|envelope|indicative\s+budget|how\s+much\s+(?:in\s+all|altogether)|"
+                     r"jimilla\w*|gaba[ɗd]aya)\b")
+SUMMARY_TITLE = re.compile(r"(?i)^\s*(?:(?:chapter|section)\s+\w+\s*[:.-]?\s*)?[\dIVX.]*\s*(?:executive\s+summary|"
+                           r"summary|overview|key\s+(?:findings|messages|highlights))\b")   # the heading itself
+
+
+def summary_sections(conn: psycopg.Connection, docs: set[str], most_pages: int = 3) -> list[tuple[str, int, int]]:
+    """(doc, first page, last page) of each document's short executive summary or overview section (section
+    cards, app/retrieval/cards.py)."""
+    if not docs:
+        return []
+    try:
+        rows = conn.execute("SELECT doc_id, page_from, page_to, title FROM section_cards WHERE doc_id = ANY(%s) "
+                            "AND page_to - page_from < %s", (list(docs), most_pages)).fetchall()
+    except Exception:              # noqa: BLE001 - before migration 0026
+        conn.rollback()
+        return []
+    return [(d, p0, p1) for d, p0, p1, title in rows if SUMMARY_TITLE.search(title or "")]
 
 
 def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
@@ -1163,6 +1199,18 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
         if (h.doc_id, h.page) in by_page or h.doc_id in plan.skip_docs or (money and not lh.strong):
             continue
         by_page[(h.doc_id, h.page)] = [h]
+    # a short executive summary is read whole when one of its pages is in: reports put their headline totals there
+    # (Education MTSS p9-10: the read p9 opened it, p10 printed 'total indicative budget ... N100,706,745,251')
+    totals_asked = bool(TOTAL_Q.search(asked))
+    for doc_id, p0, p1 in summary_sections(conn, {d for d, _ in by_page} | (set(scope or []) if totals_asked else set())):
+        if any((doc_id, p) in by_page for p in range(p0, p1 + 1)) or (totals_asked and doc_id in (scope or [])):
+            seen_hit = next((hs[0] for (d, _), hs in by_page.items() if d == doc_id), None) or \
+                Hit(doc_id, *(conn.execute("SELECT title, year FROM documents WHERE id = %s", (doc_id,)).fetchone()
+                              or ("", None)), p0, "", 0.0, 0)
+            for p in range(p0, p1 + 1):
+                if (doc_id, p) not in by_page:
+                    by_page[(doc_id, p)] = [Hit(doc_id, seen_hit.title, seen_hit.year, p, "", 0.0, 0)]
+                    planned_pages.discard((doc_id, p))
     library_pages = set(by_page) - planned_pages             # read whole: the answer can be anywhere on the page
     ranked = [hs[0] for hs in by_page.values()]
     texts = {}
@@ -2924,12 +2972,17 @@ async def structured_answer(conn, plan: Plan, lang: str, settings: Settings, t: 
     unsure = [e for e in need.entities if e.type in ("mda", "sub_agency", "sector") and not e.code and e.candidates]
     if unsure:
         e = unsure[0]
-        opts = [{"title": c[:20].strip(), "question": need.standalone_question.replace(e.name, c)
-                 if e.name in need.standalone_question else f"{need.standalone_question} ({c})"}
-                for c in e.candidates[:3]]
-        log.info("agency %r matches no printed name exactly: asking among %d", e.name, len(opts))
-        return Answer(WHICH_AGENCY.get(lang, WHICH_AGENCY["en"]).format(name=e.name, names="; ".join(e.candidates[:3])),
-                      False, True, plan=plan, timings=t, clarify=opts)
+        from app.agent.clarify import dedupe
+        opts = dedupe([{"title": c[:20].strip(), "question": need.standalone_question.replace(e.name, c)
+                        if e.name in need.standalone_question else f"{need.standalone_question} ({c})"}
+                       for c in e.candidates[:3]])
+        if len(opts) >= 2:              # one name in several forms: no question, the paths below answer
+            log.info("agency %r matches no printed name exactly: asking among %d", e.name, len(opts))
+            return Answer(WHICH_AGENCY.get(lang, WHICH_AGENCY["en"]).format(name=e.name,
+                                                                             names="; ".join(e.candidates[:3])),
+                          False, True, plan=plan, timings=t, clarify=opts,
+                          attribution=[f"clarify: {e.name!r} matches no printed name exactly; candidates "
+                                       f"{'; '.join(o['title'] for o in opts)}"])
     # 'why did it rise from 2025 to 2026?': the rise itself is two figures code can check; a false premise is
     # answered from them here, a true one goes on to the text paths for its reasons
     checking = need.operation == "explain" and bool(claimed_direction(need)) and len(need.years()) == 2
@@ -3071,7 +3124,8 @@ async def _line_path(conn, plan: Plan, question: str, lang: str, client, second,
         t["reread"] = time.perf_counter() - t1
     t["answer"] = time.perf_counter() - t0
     if res.clarify:                  # the lines show several different things: ask which one
-        return Answer(res.clarify_question, False, True, plan=plan, timings=t, clarify=res.clarify)
+        return Answer(res.clarify_question, False, True, plan=plan, timings=t, clarify=res.clarify,
+                      attribution=[f"clarify: {res.clarify_reason}"] if res.clarify_reason else [])
     if res.selections:
         return line_answer(conn, plan, res, hits, lang, t, acq)
     res.nearest = [s for s in res.nearest if not other_agency(plan, s.line)]
