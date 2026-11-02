@@ -201,7 +201,9 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
         ids = [r[0] for r in conn.execute("SELECT id FROM documents ORDER BY id").fetchall()]
         meta = await confirm_document(description, pages, ids, client, settings)
         t["confirm"] = time.perf_counter() - t0
-        if not meta.get("match") or meta.get("excluded"):
+        # an import's description is only the site's own label for the file ('CSCEP operational budget' was the
+        # 2024 capital estimates): the document is cataloged as what it is; the exclusions still apply
+        if (not meta.get("match") and acquisition != "imported") or meta.get("excluded"):
             why = "excluded content" if meta.get("excluded") else "not the wanted document"
             return Acquired("failed", url=url, detail=f"{why}: {str(meta.get('why', ''))[:200]}", timings=t)
         if edition and meta.get("edition") and meta.get("edition") != edition:
