@@ -22,7 +22,7 @@ MPI = Publisher("mpi_context", "Sokoto State MPI 2025 (mentions IDP estimates)",
 
 
 def card(p, value, ref, geo="Sokoto State", what="IDPs", page=3):
-    return tp.Card(p, p.id, f"{p.id} report", page, value, "people", what, ref, geo)
+    return tp.Card(p, p.id, p.name, page, value, "people", what, ref, geo)
 
 
 def test_publishers_state_and_lga_level_and_tier_1_first_context_apart() -> None:
@@ -207,11 +207,12 @@ def test_figures_that_are_dtm_counts_are_said_to_be_so_and_the_newest_leads() ->
     text, _ = tp.compose(registry().topics["displacement_humanitarian"], sources, [], "en")
     lines = [l for l in text.splitlines() if l.startswith("• ")]
     assert text.startswith("📊 Newest figure: *176,099 individuals*")
-    # a figure the page says is another publisher's is labelled as that publisher's, as cited in the document
+    # each source by its document's title; a figure the page says is another publisher's is that publisher's,
+    # 'citing' it (2 Nov 2026: never a publisher's name alone)
     assert [l.split(":")[0] for l in lines] == [
-        "• IOM DTM R19, as cited in UNHCR Nigeria Forcibly Displaced Populations Dashboard",
-        "• IOM Displacement Tracking Matrix",
-        "• UNHCR and NCFRMI (2026), as cited in Sokoto State Bureau of Statistics, JIPS, DRC"]
+        "• UNHCR dashboard, citing IOM DTM R19",
+        "• IOM DTM API (Baseline)",
+        "• Durable Solutions, citing UNHCR and NCFRMI (2026)"]
     assert ("the statewide figures of Sokoto State Bureau of Statistics, JIPS, DRC (over 181,500, via UNHCR Nigeria "
             "Forcibly Displaced Populations Dashboard) / UNHCR Nigeria Forcibly Displaced Populations Dashboard "
             "(176,099, R19) are IOM Displacement Tracking Matrix counts, not separate counts") in text
@@ -254,7 +255,7 @@ DS = Publisher("sokoto_sbs", "Sokoto State Bureau of Statistics (state surveys a
 
 
 def mpi(p, value, ref, measure, what, based_on="", page=13, doc=None):
-    return tp.Card(p, doc or p.id, f"{p.id} report", page, value, "", what, ref, "Sokoto State", "", based_on,
+    return tp.Card(p, doc or p.id, p.name, page, value, "", what, ref, "Sokoto State", "", based_on,
                    measure)
 
 
@@ -296,7 +297,8 @@ def test_a_quoted_figure_is_labelled_as_its_publishers_and_its_primary_source_is
     quoted = mpi(DS, "91%", "2022", "headcount", "multidimensional poverty incidence", based_on="NBS MPI 2022",
                  doc="durable-solutions-2026-sokoto", page=12)
     sources = [tp.SourceResult(DS, "durable-solutions-2026-sokoto", status="ok", cards=[quoted])]
-    assert tp.source_label(quoted, "en") == "NBS MPI 2022, as cited in Sokoto State Bureau of Statistics"
+    assert tp.source_label(quoted, "en") == ("Sokoto State Bureau of Statistics (state surveys and co-published "
+                                             "repo, citing NBS MPI 2022")
     assert tp.card_year(quoted) == 2022
     assert [p.id for p in tp.primary_sources(registry().topics["poverty_welfare"], sources)] == ["nbs_mpi"]
 
@@ -310,7 +312,8 @@ def test_a_change_is_computed_between_the_same_measure_with_a_comparability_note
                tp.SourceResult(SBS_MPI, "sbs", status="ok", cards=cards[2:])]
     text, _ = tp.compose(registry().topics["poverty_welfare"], sources, [], "en",
                          "According to NBS what is Sokoto's MPI, and according to SBS how much has it improved?")
-    assert "📈 Change in the index value, 0–1: 0.409 (NBS Nigeria Multidimensional Poverty Index, 2022) → 0.239" in text
+    assert ("📈 Change in the index value, 0–1: 0.409 (NBS Nigeria Multidimensional Poverty Index (MPI) 2022, 2022) "
+            "→ 0.239") in text
     assert "down by 0.17 (41.6% of the earlier value)" in text
     assert "📈 Change in the headcount, % of people: 90.5" in text and "down by 31.4 percentage points" in text
     assert text.count("are different surveys") == 2 and "different measures (index value, 0–1; headcount" in text
@@ -412,3 +415,23 @@ def test_a_follow_up_naming_a_source_is_a_source_hint() -> None:
     assert names_source("poverty_welfare", "There's an NBS MPI report from 2022")
     assert names_source("poverty_welfare", "Check the 2022 survey report")
     assert not names_source("poverty_welfare", "thanks, and in Hausa?")
+
+
+def test_the_newest_figure_is_the_newest_data_sources_agree_in_one_line_and_no_false_couldnt_get() -> None:
+    """The 00:19 nomadic-schools answer: the MTSS 2025-2027 quotes the 2022/23 census's 81 schools; the ASC 2023/24
+    prints 81 too; the NDHS was read and holds no school counts (2 Nov 2026)."""
+    asc = Publisher("asc", "Sokoto State Annual School Census", level="lga", tier=1)
+    mtss = Publisher("mtss", "Education Sector MTSS", level="state", tier=1)
+    ndhs = Publisher("ndhs", "NDHS 2024", level="state", tier=2)
+    own = tp.Card(asc, "asc-2324", "Sokoto State Annual School Census 23-24 Report", 22, "81", "schools",
+                  "nomadic schools", "2023/2024", "Sokoto State", "2023/2024")
+    quoted = tp.Card(mtss, "mtss", "Education Sector 2025-2027 Medium-Term Sector Strategy (MTSS)", 23, "81",
+                     "schools", "nomadic schools", "2022/2023", "Sokoto State", "2025-2027", based_on="ASC 2022/23")
+    sources = [tp.SourceResult(mtss, "mtss", status="ok", cards=[quoted]),
+               tp.SourceResult(asc, "asc-2324", status="ok", cards=[own]),
+               tp.SourceResult(ndhs, "ndhs", status="no_figure")]
+    text, _ = tp.compose(registry().topics["education"], sources, [], "en")
+    assert "(Sokoto State Annual School Census 23-24 Report, 2023/2024)" in text.splitlines()[0]
+    assert "Education Sector 2025-2027 Medium-Term Sector Strategy (MTSS), citing ASC 2022/23" in text
+    assert "✅ The sources agree: 81" in text and "Why they differ" not in text
+    assert "Couldn't get" not in text

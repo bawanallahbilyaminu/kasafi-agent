@@ -508,7 +508,8 @@ CARD_SYSTEM = (
     "Where the page prints a rate for what is asked (e.g. the unemployment rate, the % of children stunted), "
     "give that headline rate first, then counts. Only figures printed on these pages; never compute, round or "
     "combine. A dash (-), '…', 'n/a' or a blank cell means the figure is not available: never give it as 0, none "
-    "or 'no'; skip that cell. {extra}"
+    "or 'no'; skip that cell. A share printed with its counts (24 of 289 teachers, 8.3%): value is the share and "
+    "what says the counts ('female teachers: 24 of 289'). {extra}"
     "based_on: whose figure the page itself says it is when that is another publisher's report or count, with its "
     "year or round (e.g. a 'Source: IOM DTM R19' line, 'according to the 2022 Nigeria MPI' -> 'NBS MPI 2022'), "
     "else ''. "
@@ -806,8 +807,9 @@ W = {
                                                                 "national": "national only"},
            "in_library": "In Kasafi's library now: {titles}.", "found_web": "Also found on partner websites "
            "(not read yet): {titles}.",
-           "cited": "{origin}, as cited in {pub}",
-           "baseline": "an earlier survey's {year} figure",
+           "cited": "{doc}, citing {origin}",
+           "baseline": "an earlier {year} figure",
+           "agree": "✅ The sources agree: {value} ({names}).",
            "change": "📈 Change in the {what}: {a} ({pa}) → {b} ({pb}): {direction} by {diff} (Kasafi's calculation).",
            "fell": "down", "rose": "up", "unchanged": "no change", "points": "percentage points",
            "relative": "{pct}% of the earlier value",
@@ -840,8 +842,9 @@ W = {
                                                                 "national": "ta ƙasa kaɗai"},
            "in_library": "A ɗakin karatun Kasafi yanzu: {titles}.", "found_web": "An kuma samu a shafukan abokan "
            "hulɗa (ba a karanta ba tukuna): {titles}.",
-           "cited": "{origin}, kamar yadda {pub} ya ruwaito",
-           "baseline": "adadin {year} na wani binciken da ya gabata",
+           "cited": "{doc}, yana ambaton {origin}",
+           "baseline": "adadin {year} na baya",
+           "agree": "✅ Majiyoyin sun yi daidai: {value} ({names}).",
            "change": "📈 Canjin {what}: {a} ({pa}) → {b} ({pb}): {direction} da {diff} (lissafin Kasafi).",
            "fell": "ya ragu", "rose": "ya ƙaru", "unchanged": "bai canza ba", "points": "maki na kaso",
            "relative": "{pct}% na adadin farko",
@@ -897,15 +900,26 @@ def attribute_quotes(cards: list[Card]) -> list[Card]:
     return relabelled
 
 
+def doc_label(c: Card) -> str:
+    """A source by its document: the title as printed (at most 70 characters), with its year when the title has
+    none ('Education Sector 2025-2027 Medium-Term Sector Strategy (MTSS)')."""
+    title = (c.title or "").strip()[:70].rstrip(" ,;:-")
+    has_year = _YEAR.search(title) or re.search(r"\b\d{2}\s*[-/–]\s*\d{2}\b", title)       # 'Census 23-24 Report'
+    if not has_year and (years := _YEAR.findall(c.edition or "")):
+        title += f" {max(years)}"
+    return title or short_pub(c.publisher)
+
+
 def source_label(c: Card, lang: str) -> str:
-    """Who the figure is from: its publisher, or the original publisher 'as cited in' the document that quotes it
-    (never the quoting document's own figure)."""
+    """Which document the figure is from, by its title and year; a figure it quotes from another report is that
+    report's, 'citing' it ('Education Sector MTSS 2025-2027, citing the ASC 2022/23'), never the quoting
+    document's own, and never a publisher's name alone (2 Nov 2026)."""
     w = W.get(lang, W["en"])
     if cited_from_other(c):
-        return w["cited"].format(origin=c.based_on, pub=short_pub(c.publisher))
+        return w["cited"].format(origin=c.based_on, doc=doc_label(c))
     if quoted_baseline(c):        # a 2022 baseline printed in a 2025 report is an earlier survey's, even unlabelled
-        return w["cited"].format(origin=w["baseline"].format(year=card_year(c)), pub=short_pub(c.publisher))
-    return short_pub(c.publisher)
+        return w["cited"].format(origin=w["baseline"].format(year=card_year(c)), doc=doc_label(c))
+    return doc_label(c)
 
 
 def quoted_baseline(c: Card) -> bool:
@@ -1014,9 +1028,15 @@ def _sort_key(c: Card) -> tuple:
     return (max(years) if years else 0, max(months) if months else 0)
 
 
+def _data_key(c: Card) -> tuple:
+    """Newest by the year the figure refers to (its data: the ASC 2023/24 over the MTSS 2025-2027 quoting the
+    2022/23 census), its own figure before a quote, then the date's month."""
+    return (card_year(c), not (cited_from_other(c) or quoted_earlier(c)), _sort_key(c)[1])
+
+
 def _reply_order(cards: list[Card]) -> list[Card]:
     """The newest figure first; then the others newest first, with surveys of part of the state (a town) last."""
-    by_date = sorted(cards, key=_sort_key, reverse=True)
+    by_date = sorted(cards, key=_data_key, reverse=True)
     if not by_date:
         return []
     return [by_date[0]] + sorted(by_date[1:], key=lambda c: c.publisher.level.startswith("town"))
@@ -1026,9 +1046,12 @@ def why_differ(cards: list[Card], lang: str) -> str:
     """One line when the main figures disagree: an identical count under two dates, then dates, areas and
     definitions, from the cards themselves (never a guess about method)."""
     w = W.get(lang, W["en"])
-    main = sorted((c for c in cards if c.number is not None), key=_sort_key)       # oldest first
+    main = sorted((c for c in cards if c.number is not None), key=_data_key)       # oldest first, by data year
     if len({c.number for c in main}) < 2 and len(main) < 2:
         return ""
+    if len(main) >= 2 and len({c.number for c in main}) == 1:     # the same value: they agree, nothing to explain
+        return w["agree"].format(value=main[-1].value, names="; ".join(dict.fromkeys(source_label(c, lang)
+                                                                                        for c in main)))
     reasons = []
     # figures the pages themselves say are another publisher's count ("Source: ... IOM DTM R19"): one count,
     # repeated, not separate counts
@@ -1096,7 +1119,9 @@ def compose(topic: Topic, sources: list[SourceResult], related: list[SourceResul
     # report): shown once, from the source
     attribute_quotes([c for s in sources for c in s.cards])
     own = [c for s in sources for c in s.cards if not cited_from_other(c)]
-    missing = [short_pub(s.publisher) for s in sources if not s.cards]     # before: a quote dropped is no miss
+    # a source whose document couldn't be got (not found, failed, timed out); one read that holds no such figure
+    # (the NDHS has no school counts) isn't 'missing' (2 Nov 2026)
+    missing = [short_pub(s.publisher) for s in sources if not s.cards and s.status not in ("ok", "no_figure")]
     for s in sources:
         s.cards = [c for c in s.cards if not (cited_from_other(c) and any(
             o.publisher.id != c.publisher.id and o.number == c.number and card_year(o) == card_year(c)
@@ -1122,9 +1147,9 @@ def compose(topic: Topic, sources: list[SourceResult], related: list[SourceResul
     out = [w["newest"].format(value=top.value, unit=unit(top), what=what(top), geo=geo(top),
                               pub=source_label(top, lang), date=_when(top)), "", w["head"]]
     def line(c: Card) -> str:
-        cite = f"{c.title}, {w['page']} {c.page}" if c.page else c.title
-        return w["line"].format(pub=source_label(c, lang), value=c.value, unit=unit(c), what=what(c), geo=geo(c),
-                                date=_when(c), cite=cite)
+        text = w["line"].format(pub=source_label(c, lang), value=c.value, unit=unit(c), what=what(c), geo=geo(c),
+                                date=_when(c), cite=f"{w['page']} {c.page}" if c.page else "")
+        return text.replace(" ()", "")            # an API figure has no page: the label already names it
     for first in cards:                  # each source's lines together, in the order of their main figure
         out += [line(c) for s in sources if s.cards and s.cards[0] is first for c in s.cards]
     shown = cards + extra
