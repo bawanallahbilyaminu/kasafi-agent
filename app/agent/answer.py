@@ -4057,7 +4057,7 @@ def analysis_answer(conn, plan: Plan, res: AnalysisResult, lang: str, t: dict, a
             extra += w["lga_ward"]
         if r.detail.get("other_lga"):          # its name says another LGA: include it, and say where it's filed
             extra += w["lga_filed"].format(subject=subject)
-        bullets.append(f"• {r.name[:110]}{where}: {_money(r.amount)}{extra}")
+        bullets.append(f"• {line_name(r.name, 110)}{where}: {_money(r.amount)}{extra}")
     if res.tool == "lga_projects" and plan.analysis.get("focus") == "spent" and res.agencies:
         # the follow-up on spending: the agencies' capital spent so far, the figure the report prints
         rows_head = w["lga_agencies"].format(report=f"{res.report} report")
