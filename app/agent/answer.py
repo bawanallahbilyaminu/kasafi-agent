@@ -3700,13 +3700,16 @@ ANALYSIS_WORDS = {
                     "them by September {prev}.",
         "lga_prev_none": " {n_prev} of these lines were also in the {prev} budget ({prev_amt}); nothing was spent on "
                          "them by September {prev}.",
-        "lga_agencies": "Capital spent so far, by agency ({report}):",
-        "lga_agency": "• {name}: {spent} of {budget} ({rate}%)", "lga_agency_none": "• {name}: nothing spent of {budget}",
+        "lga_agencies": "Capital spent so far by these agencies ({report}; statewide, all of each ministry's "
+                        "projects, not only those in {subject}):",
+        "lga_agency": "• {name}: {spent} of {budget} ({rate}%)",
+        "lga_agency_none": "• {name}: nothing spent of {budget}",
         "lga_progress": "Spending in {year}: by the end of {month}, the {rep_agencies} ministries and agencies that run "
                         "these projects had spent {rep_spent} of their {rep_budget} capital budgets ({rep_rate}%, "
-                        "{report} implementation report). The report gives spending by agency, not by project or LGA.",
+                        "{report} implementation report; statewide, all of the ministries' projects, not only those "
+                        "in {subject}). The report gives spending by agency, not by project or LGA.",
         "lga_spent": "Spending isn't reported project by project. For the {n} {sector}projects located in {subject} "
-                     "({cur} in the {year} budget):",
+                     "in the {year} budget ({cur}):",
         "lga_statewide": "{statewide_n} statewide {sector}lines ({statewide_cur}) aren't split by LGA and may also "
                          "cover {subject}; the largest: {names}.",
         "lga_note": "This is state money for projects in {subject}, not the local government's own allocation.",
@@ -3791,12 +3794,14 @@ ANALYSIS_WORDS = {
                     "zuwa Satumba {prev}.",
         "lga_prev_none": " Ayyuka {n_prev} daga cikinsu suna cikin kasafin {prev} ({prev_amt}); ba a kashe musu komai "
                          "ba zuwa Satumba {prev}.",
-        "lga_agencies": "Kuɗin manyan ayyuka da aka kashe zuwa yanzu, bisa hukuma ({report}):",
+        "lga_agencies": "Kuɗin manyan ayyuka da waɗannan hukumomi suka kashe zuwa yanzu ({report}; na duk jihar, "
+                        "dukkan ayyukan kowace ma'aikata, ba na {subject} kaɗai ba):",
         "lga_agency": "• {name}: {spent} daga cikin {budget} ({rate}%)",
         "lga_agency_none": "• {name}: ba a kashe komai ba daga cikin {budget}",
         "lga_progress": "Kuɗin da aka kashe a {year}: zuwa ƙarshen {month}, ma'aikatu da hukumomi {rep_agencies} da ke "
                         "gudanar da waɗannan ayyuka sun kashe {rep_spent} daga cikin kasafin manyan ayyukansu na "
-                        "{rep_budget} ({rep_rate}%, rahoton aiwatarwa na {report}). Rahoton yana ba da kuɗin da aka "
+                        "{rep_budget} ({rep_rate}%, rahoton aiwatarwa na {report}; na duk jihar, ba na {subject} "
+                        "kaɗai ba). Rahoton yana ba da kuɗin da aka "
                         "kashe bisa hukuma, ba bisa aiki ko ƙaramar hukuma ba.",
         "lga_spent": "Ba a bayar da kuɗin da aka kashe aiki-aiki ba. Ga ayyukan {sector}{n} da ke {subject} "
                      "({cur} a kasafin {year}):",
@@ -3891,11 +3896,34 @@ def sources_line(cited: list[Evidence], lang: str) -> str:
 
 
 PLACE_BUDGET = re.compile(r"(?i)\b(?:budget\w*|allocat\w*|projects?|capital|spend\w*|spent|kasafi\w*|ayyuka|"
-                          r"ware|an\s+ware)\b")
+                          r"ware|an\s+ware|kashe)\b")
 SPENT_Q = re.compile(r"(?i)\b(?:spent|spending|released|actually|implemented|executed|kashe|an\s+kashe|aiwatar\w*)\b")
 BACK_TO = re.compile(r"(?i)\b(?:that|those|these|them|it|this|su|shi|wannan|waɗannan|wadannan)\b")
-_LGA_WORKING = re.compile(r"capital project list \(([\w-]+)\); only lines whose location is \d+ ([A-Z][A-Z' -]+?)"
-                          r"(?:, ([a-z ]+?) by function and agency|, matching [^.]*)?\.")
+_LGA_WORKING = re.compile(r"capital project list \(([\w-]+)\); only lines whose location is \d+ "
+                          r"(?P<lga>[A-Z][A-Z' -]+?)(?:, ([a-z ]+?) by function and agency|, matching [^.]*)?\.")
+_YEARS_WORKING = re.compile(r"Projects located in (?P<lga>[A-Z][\w' -]+?) in each year's own budget")
+
+
+_NUM = {"two": 2, "three": 3, "four": 4, "five": 5, "biyu": 2, "uku": 3, "hudu": 4, "huɗu": 4, "biyar": 5}
+SPAN = re.compile(r"(?i)\b(?:(?:past|last|previous)\s+(\d|two|three|four|five)\s+years|since\s+(20[1-3]\d)|"
+                  r"from\s+(20[1-3]\d)\s+(?:to|until|-)\s+(20[1-3]\d)|each\s+year|every\s+year|year\s+by\s+year|"
+                  r"over\s+the\s+(?:past\s+)?years|(?:a\s+)?cikin\s+shekaru\s+(\d|biyu|uku|hudu|huɗu|biyar)|"
+                  r"kowace\s+shekara|tun\s+(?:daga\s+)?(20[1-3]\d))\b")
+
+
+def span_years(question: str, latest: int) -> list[int]:
+    """The years a time-span question covers, up to the latest budget year: 'past 3 years' -> latest-2..latest."""
+    m = SPAN.search(question or "")
+    if not m:
+        return []
+    n_word, since, a, b, n_ha, tun = m.groups()
+    if a and b:
+        return list(range(int(a), int(b) + 1))
+    if since or tun:
+        return list(range(int(since or tun), latest + 1))
+    n = n_word or n_ha
+    k = int(n) if n and n.isdigit() else _NUM.get((n or "").lower(), 3)
+    return list(range(latest - k + 1, latest + 1))
 
 
 def lga_route(question: str, plan: Plan, place: dict | None, history: list[dict] | None) -> dict | None:
@@ -3904,6 +3932,11 @@ def lga_route(question: str, plan: Plan, place: dict | None, history: list[dict]
     sector, focus on spending). None otherwise: the planner's choice stands."""
     from app.geo.location import HERE
     years = [int(y) for y in re.findall(r"\b(20[2-3]\d)\b", question)]
+    # a time span over the user's place ('over the past 3 years, how much has been spent in my area?'): year by
+    # year, recomputed for this question (never the previous reply's figures)
+    if place and place.get("lga") and HERE.search(question) and PLACE_BUDGET.search(question) \
+            and not names_place(question) and (span := span_years(question, lagos_today().year)):
+        return {"tool": "lga_years", "lga": place["lga"], "years": span, "question": question}
     if place and place.get("lga") and HERE.search(question) and PLACE_BUDGET.search(question) \
             and not names_place(question):
         spec = {"tool": "lga_projects", "lga": place["lga"], "ward": place.get("ward") or "",
@@ -3915,6 +3948,11 @@ def lga_route(question: str, plan: Plan, place: dict | None, history: list[dict]
             spec["focus"] = "spent"
         return spec
     last = (history or [])[-1:] or []
+    if last and (span := span_years(question, lagos_today().year)) and len(question.split()) <= 16 and \
+            (m := _LGA_WORKING.search(last[0].get("working") or "") or _YEARS_WORKING.search(
+                last[0].get("working") or "")):
+        # 'and over the past 3 years?' after a place answer: the same place, recomputed for the span
+        return {"tool": "lga_years", "lga": m.group("lga").strip().title(), "years": span, "question": question}
     if last and SPENT_Q.search(question) and BACK_TO.search(question) and len(question.split()) <= 16 and \
             (m := _LGA_WORKING.search(last[0].get("working") or "")):
         doc, lga, sector = m.groups()
@@ -3925,6 +3963,96 @@ def lga_route(question: str, plan: Plan, place: dict | None, history: list[dict]
             spec["year"] = int(y.group(1))
         return spec
     return None
+
+
+YEARS_WORDS = {
+    "en": {
+        "lead": "Projects located in {subject}, year by year ({y0}–{y1}), from each year's own budget:",
+        "own": "{y}: {n} projects located in {subject} in the {y} budget, {approved} approved.",
+        "next": "{y}: the {y} budget's project list isn't in the library; the {y1n} budget lists {n} lines located "
+                "in {subject} with a {y} revised budget of {approved}.",
+        "none": "{y}: no project list for this year is in the library.",
+        "spent_actual": " Spent: {spent} over the full year {y} on {spent_n} of these lines (project-level, printed "
+                        "in the {sy} budget).",
+        "spent_jan_sep": " Spent: {spent} in January–September {y} on the {spent_n} lines the {sy} budget carries "
+                         "(project-level, printed in the {sy} budget).",
+        "spent_none": " No project-level spending is printed for {y}.",
+        "agency": " Agency level: the {k} ministries and agencies that run them spent {got} of {budget} capital by "
+                  "the end of {month} {y} ({report}; statewide, all of the ministries' projects, not only those in "
+                  "{subject}).",
+        "total": "Project-level spending printed for {subject} over {y0}–{y1}: {total} ({periods}). {agency_years}",
+        "total_none": "No project-level spending for {subject} is printed for {y0}–{y1}. {agency_years}",
+        "agency_years": "For {years}, spending is printed only by agency.",
+        "period": {"actual": "full year {y}", "jan_sep": "January–September {y}"},
+        "note": "This is state money for projects located in {subject}, not the local government's own allocation.",
+    },
+    "ha": {
+        "lead": "Ayyukan da ke {subject}, shekara-shekara ({y0}–{y1}), daga kasafin kowace shekara:",
+        "own": "{y}: ayyuka {n} da ke {subject} a kasafin {y}, an amince da {approved}.",
+        "next": "{y}: jerin ayyukan kasafin {y} ba ya ɗakin karatu; kasafin {y1n} ya lissafa layuka {n} da ke "
+                "{subject} da kasafin {y} da aka sabunta na {approved}.",
+        "none": "{y}: babu jerin ayyukan wannan shekarar a ɗakin karatu.",
+        "spent_actual": " An kashe: {spent} a duk shekarar {y} kan {spent_n} daga cikin layukan (bisa aiki, kasafin "
+                        "{sy} ya buga).",
+        "spent_jan_sep": " An kashe: {spent} a Janairu–Satumba {y} kan layuka {spent_n} da kasafin {sy} ya ɗauka "
+                         "(bisa aiki, kasafin {sy} ya buga).",
+        "spent_none": " Ba a buga kuɗin da aka kashe bisa aiki na {y} ba.",
+        "agency": " Bisa hukuma: ma'aikatu da hukumomi {k} da ke gudanar da su sun kashe {got} daga cikin {budget} "
+                  "na manyan ayyuka zuwa ƙarshen {month} {y} ({report}; na duk jihar, dukkan ayyukan ma'aikatun, ba "
+                  "na {subject} kaɗai ba).",
+        "total": "Kuɗin da aka kashe bisa aiki a {subject} a {y0}–{y1}: {total} ({periods}). {agency_years}",
+        "total_none": "Ba a buga kuɗin da aka kashe bisa aiki a {subject} a {y0}–{y1} ba. {agency_years}",
+        "agency_years": "Na {years}, an buga kuɗin da aka kashe bisa hukuma kaɗai.",
+        "period": {"actual": "duk shekarar {y}", "jan_sep": "Janairu–Satumba {y}"},
+        "note": "Wannan kuɗin jiha ne na ayyukan da ke {subject}, ba kason ƙaramar hukumar ba.",
+    },
+}
+
+
+def lga_years_answer(conn, plan: Plan, res: AnalysisResult, lang: str, t: dict, acq) -> Answer:
+    """Year by year for a place: each year's projects from its own budget, the project-level spending the budgets
+    print with its period, agency-level spending labelled statewide, and the total over the span (3 Nov)."""
+    w = YEARS_WORDS.get(lang, YEARS_WORDS["en"])
+    ends = QUARTER_END[lang if lang in QUARTER_END else "en"]
+    subject, y0, y1 = res.subject, res.rows[0].name, res.rows[-1].name
+    lines, agency_only, cited = [], [], {}
+    for r in res.rows:
+        d, y = r.detail, int(r.name)
+        if d.get("source") == "own":
+            s = w["own"].format(y=y, n=f"{d['n']:,}", subject=subject, approved=_money(d["approved"]))
+        elif d.get("source") == "next":
+            s = w["next"].format(y=y, y1n=y + 1, n=f"{d['n']:,}", subject=subject, approved=_money(d["approved"]))
+        else:
+            s = w["none"].format(y=y)
+        if d.get("spent_kind"):
+            sy = re.search(r"budget-(\d{4})", d["spent_doc"]).group(1)
+            s += w[f"spent_{d['spent_kind']}"].format(spent=_money(d["spent"]), y=y, spent_n=f"{d['spent_n']:,}",
+                                                       sy=sy)
+        else:
+            s += w["spent_none"].format(y=y)
+        if d.get("spent_kind") != "actual" and d.get("rep_doc"):
+            s += w["agency"].format(k=d["rep_agencies"], got=_money(d["rep_spent"]), budget=_money(d["rep_budget"]),
+                                    month=ends[d["rep_quarter"]], y=y, subject=subject,
+                                    report=res.titles.get(d["rep_doc"], d["rep_doc"]))
+            if not d.get("spent_kind"):
+                agency_only.append(str(y))
+        lines.append("• " + s)
+        for key_doc, key_page in (("doc", "page"), ("spent_doc", "spent_page"), ("rep_doc", "rep_page")):
+            if d.get(key_doc) and d.get(key_page):
+                cited[(d[key_doc], d[key_page])] = None
+    total = res.facts["span_spent"].value
+    periods = ", ".join(w["period"][k].format(y=y) for y, k in (p.split(":") for p in res.focus.split(", ") if p))
+    agency_years = w["agency_years"].format(years=", ".join(agency_only)) if agency_only else ""
+    closing = (w["total"] if total else w["total_none"]).format(subject=subject, y0=y0, y1=y1, total=_money(total),
+                                                                 periods=periods, agency_years=agency_years).strip()
+    body = "\n\n".join([w["lead"].format(subject=subject, y0=y0, y1=y1), "\n".join(lines), closing,
+                        w["note"].format(subject=subject)])
+    evidence = [Evidence(i, d, res.titles.get(d, d), None, p, "text", "") for i, (d, p) in enumerate(cited, start=1)]
+    text = readable_amounts(body, lang) + "\n\n" + sources_line(evidence, lang) + "\n" + \
+        ANALYSIS_WORDS.get(lang, ANALYSIS_WORDS["en"])["offer"]
+    working = ANALYSIS_WORDS.get(lang, ANALYSIS_WORDS["en"])["head"] + "\n" + "\n".join(f"• {x}" for x in res.working)
+    return Answer(text, True, True, evidence, plan, t, exact=body, acquired=acq,
+                  sources=cited_sources(conn, evidence) if conn is not None else [], analysis=res, working=working)
 
 
 def line_name(name: str, most: int = 70) -> str:
@@ -3993,6 +4121,8 @@ def analysis_answer(conn, plan: Plan, res: AnalysisResult, lang: str, t: dict, a
     if res.clarify:
         opts = [{"title": o["title"], "question": f"{plan.english_question} ({o['title']})"} for o in res.clarify]
         return Answer(w["clarify"], False, True, plan=plan, timings=t, clarify=opts, analysis=res)
+    if res.tool == "lga_years":
+        return lga_years_answer(conn, plan, res, lang, t, acq) if res.found else None
     if not res.found and res.reason not in ("none_tagged",):
         return None
     f = {k: (_money(v.value) if v.kind == "money" else f"{v.value:,}" if v.kind == "count" else f"{v.value}")
@@ -4067,7 +4197,7 @@ def analysis_answer(conn, plan: Plan, res: AnalysisResult, lang: str, t: dict, a
         bullets.append(f"• {line_name(r.name, 110)}{where}: {_money(r.amount)}{extra}")
     if res.tool == "lga_projects" and plan.analysis.get("focus") == "spent" and res.agencies:
         # the follow-up on spending: the agencies' capital spent so far, the figure the report prints
-        rows_head = w["lga_agencies"].format(report=f"{res.report} report")
+        rows_head = w["lga_agencies"].format(report=f"{res.report} report", subject=subject)
         bullets = [w["lga_agency" if a.detail["spent"] else "lga_agency_none"].format(
                        name=a.name, spent=_money(a.detail["spent"]), budget=_money(a.amount),
                        rate=f"{a.detail['spent'] / a.amount * 100:.1f}" if a.amount else "-")

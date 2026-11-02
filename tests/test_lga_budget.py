@@ -136,6 +136,40 @@ def test_the_first_sentence_is_short_with_the_leading_sector_and_the_city_lines_
     assert "3 lines filed under Wamakko in the budget name a place in Sokoto city" in note
 
 
+@pytest.mark.parametrize("q, years", [("Over the past 3 years how much have been spent by government in my area?",
+                                       [2024, 2025, 2026]),
+                                      ("How much was spent here since 2023?", [2023, 2024, 2025, 2026]),
+                                      ("budget in my LGA from 2024 to 2025", [2024, 2025]),
+                                      ("how much was spent in my area each year", [2024, 2025, 2026]),
+                                      ("Nawa aka kashe a nan a cikin shekaru biyu?", [2025, 2026]),
+                                      ("What is the government budgeting for my area in 2026?", [])])
+def test_the_years_a_time_span_question_covers(q, years) -> None:
+    assert A.span_years(q, 2026) == years
+
+
+def test_a_time_span_over_my_area_is_answered_year_by_year_and_recomputed_in_a_follow_up(monkeypatch) -> None:
+    monkeypatch.setattr(A, "lagos_today", lambda: __import__("datetime").date(2026, 11, 3))
+    q = "Over the past 3 years how much have been spent by government in my area?"
+    working = ("• Source: the 2026 budget's capital project list (budget-2026-approved); only lines whose location "
+               "is 33312100 WAMAKKO.")
+    spec = A.lga_route(q, P(), WAMAKKO, [{"working": working}])
+    assert spec == {"tool": "lga_years", "lga": "Wamakko", "years": [2024, 2025, 2026], "question": q}
+    # a follow-up naming a new span keeps the place and recomputes; it never reuses the last reply
+    assert A.lga_route("And over the past 2 years?", P(), None, [{"working": working}])["years"] == [2025, 2026]
+    years_working = "• Projects located in Wamakko in each year's own budget (location code), 2024-2026"
+    spec = A.lga_route("and since 2025?", P(), None, [{"working": years_working}])
+    assert spec["tool"] == "lga_years" and spec["lga"] == "Wamakko" and spec["years"] == [2025, 2026]
+    spent = A.lga_route("How much has actually been spent in my area?", P(), WAMAKKO, [{"working": years_working}])
+    assert spent["tool"] == "lga_projects" and spent["focus"] == "spent"
+
+
+def test_agency_spending_in_a_place_answer_is_labelled_statewide() -> None:
+    for lang in ("en",):
+        w = A.ANALYSIS_WORDS[lang]
+        assert "statewide, all of" in w["lga_progress"] and "statewide, all of" in w["lga_agencies"]
+        assert "not only those in {subject}" in A.YEARS_WORDS[lang]["agency"]
+
+
 # --- on the dev library -----------------------------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
@@ -168,3 +202,18 @@ def test_all_sectors_for_my_area_with_progress_from_the_latest_report(conn) -> N
     assert r.focus == "" and r.facts["n"].value > 100
     assert [g[0] for g in r.groups][:2] == ["health", "education"]
     assert r.report.startswith("Q") and r.facts["rep_spent"].value > 0 and r.agencies
+
+
+def test_wamakko_year_by_year_with_each_years_own_budget_and_the_spending_periods(conn) -> None:
+    """3 Nov live test: 'used 2024-2026' with no 2024 figure, and two runs with different 2025 figures. Each year
+    now comes from its own budget (or, for a year whose project list isn't in the library, the next budget's
+    revised column), with project-level spending and its period, and agency spending labelled statewide."""
+    from app.agent.analysis import lga_years
+    r = lga_years(conn, {"lga": "Wamakko", "years": [2024, 2025, 2026]})
+    by = {x.name: x.detail for x in r.rows}
+    assert by["2025"]["source"] == "own" and by["2025"]["n"] > 100 and by["2025"]["spent_kind"] in ("actual",
+                                                                                                    "jan_sep")
+    assert by["2026"]["source"] == "own" and by["2026"]["n"] > 100 and "spent_kind" not in by["2026"]
+    assert by["2026"].get("rep_doc")                      # 2026: spending by agency only, from the latest report
+    assert by["2024"]["source"] in ("own", "next") and by["2024"].get("spent_kind")
+    assert r.facts["span_spent"].value == sum(d.get("spent") or 0 for d in by.values())

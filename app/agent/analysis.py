@@ -694,8 +694,104 @@ def revenue(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
     return res
 
 
+# --- lga_years: a place over a span of years -------------------------------------------------------------------
+
+def _amount_col(name: str) -> str | None:
+    return name if name in AMOUNTS else None
+
+
+def _agency_capital(conn: psycopg.Connection, year: int, agencies: list[str]) -> tuple | None:
+    """(report doc, quarter, revised capital, spent, page) of these agencies in the year's latest report."""
+    if not agencies or not (rep := latest_report(conn, year)):
+        return None
+    budget, got, page = conn.execute(
+        "SELECT sum(COALESCE(revised, original)), sum(ytd_spent), min(page) FROM perf_items WHERE doc_id = %s AND "
+        "classification = 'administrative' AND spend_kind = 'capital' AND code = ANY(%s)", (rep[0], agencies)
+    ).fetchone()
+    return (rep[0], rep[1], budget, got or Decimal(0), page) if budget else None
+
+
+def lga_years(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
+    """'Over the past 3 years, how much has government spent in my area?': for each year, the projects located in
+    the LGA in that year's own budget (count, approved), the actual spending the budgets print for them at project
+    level with its period (a later budget's full-year actuals or January-September columns), and, where only that
+    exists, the agencies' capital spending from the year's latest report (statewide, all of their projects). One
+    row per year in `rows` (detail holds the figures), then the total project-level spending over the span."""
+    res = AnalysisResult("lga_years", False, subject=spec.get("lga") or "")
+    years = sorted(set(int(y) for y in spec.get("years") or []))
+    if not years or not spec.get("lga"):
+        res.reason = "no_projects"
+        return res
+    lists = dict(conn.execute("SELECT DISTINCT d.year, t.doc_id FROM projects t JOIN documents d ON d.id = t.doc_id "
+                              "WHERE t.doc_id LIKE 'budget-%%-approved' ORDER BY d.year").fetchall())
+    res.year, res.prev = years[-1], years[0]
+    total, periods, found = Decimal(0), [], False
+    for y in years:
+        d: dict = {"year": y}
+        own = lists.get(y)
+        agencies: list[str] = []
+        if own and (loc := lga_code(conn, own, spec["lga"])):
+            res.subject = loc[1].title()
+            col = _col(f"approved_{y}")
+            n, s, pg = conn.execute(f"SELECT count(*) FILTER (WHERE COALESCE({col}, 0) > 0), sum({col}), min(page) "
+                                    f"FROM projects WHERE doc_id = %s AND location_code = %s", (own, loc[0])).fetchone()
+            d.update(source="own", n=n, approved=s or Decimal(0), doc=own, page=pg)
+            agencies = [r[0] for r in conn.execute("SELECT DISTINCT mda_code FROM projects WHERE doc_id = %s AND "
+                                                   "location_code = %s AND mda_code IS NOT NULL", (own, loc[0]))]
+        elif (nxt := lists.get(y + 1)) and (col := _amount_col(f"revised_{y}")) and \
+                (loc := lga_code(conn, nxt, spec["lga"])):
+            # no project list of the year's own in the library: the next budget prints the year's revised budget
+            n, s, pg = conn.execute(f"SELECT count(*) FILTER (WHERE COALESCE({col}, 0) > 0), sum({col}), min(page) "
+                                    f"FROM projects WHERE doc_id = %s AND location_code = %s", (nxt, loc[0])).fetchone()
+            d.update(source="next", n=n, approved=s or Decimal(0), doc=nxt, page=pg)
+            agencies = [r[0] for r in conn.execute("SELECT DISTINCT mda_code FROM projects WHERE doc_id = %s AND "
+                                                   "location_code = %s AND mda_code IS NOT NULL", (nxt, loc[0]))]
+        # project-level spending printed by a later budget: full-year actuals first, then January-September
+        for kind in ("actual", "jan_sep"):
+            col = _amount_col(f"{kind}_{y}")
+            if not col or d.get("spent_kind"):
+                continue
+            for later_year in sorted(ly for ly in lists if ly > y):
+                later = lists[later_year]
+                if not (loc := lga_code(conn, later, spec["lga"])):
+                    continue
+                n_sp, s_sp, pg = conn.execute(
+                    f"SELECT count(*) FILTER (WHERE COALESCE({col}, 0) > 0), sum({col}), min(page) FROM projects "
+                    f"WHERE doc_id = %s AND location_code = %s", (later, loc[0])).fetchone()
+                if n_sp:
+                    d.update(spent_kind=kind, spent=s_sp, spent_n=n_sp, spent_doc=later, spent_page=pg)
+                    total += s_sp
+                    periods.append((y, kind))
+                    break
+        if (ag := _agency_capital(conn, y, agencies)):
+            d.update(rep_doc=ag[0], rep_quarter=ag[1], rep_budget=ag[2], rep_spent=ag[3], rep_page=ag[4],
+                     rep_agencies=len(agencies))
+        if d.get("source") or d.get("spent_kind") or d.get("rep_doc"):
+            found = True
+        res.rows.append(Row(str(y), d.get("approved") or Decimal(0), d.get("doc") or d.get("spent_doc") or "",
+                            d.get("page") or d.get("spent_page") or 0, d))
+    res.titles = _titles(conn, {x for r in res.rows for x in (r.detail.get("doc"), r.detail.get("spent_doc"),
+                                                              r.detail.get("rep_doc")) if x})
+    doc0 = next((r.doc_id for r in res.rows if r.doc_id), "")
+    res.money("span_spent", total, doc0, None)
+    res.count("span_periods", len(periods), doc0, None)
+    res.focus = ", ".join(f"{y}:{k}" for y, k in periods)
+    res.found = found
+    res.working = [f"Projects located in {res.subject} in each year's own budget (location code), {years[0]}-"
+                   f"{years[-1]}; project-level spending from the columns later budgets print; agency capital "
+                   f"from each year's latest implementation report (statewide)."]
+    for r in res.rows:
+        d = r.detail
+        res.working.append(f"{r.name}: {d.get('n', '-')} lines, {d.get('approved', 0):,.2f} ({d.get('source', '-')}"
+                           f", {d.get('doc', '-')}); spent {d.get('spent_kind', '-')} {d.get('spent', 0) or 0:,.2f} "
+                           f"({d.get('spent_doc', '-')}); agencies {d.get('rep_spent', 0) or 0:,.2f} of "
+                           f"{d.get('rep_budget', 0) or 0:,.2f} ({d.get('rep_doc', '-')})")
+    return res
+
+
 RUN = {"project_status": project_status, "lga_projects": lga_projects, "ranking": ranking,
-       "mda_profile": mda_profile, "function_profile": function_profile, "revenue": revenue}
+       "mda_profile": mda_profile, "function_profile": function_profile, "revenue": revenue,
+       "lga_years": lga_years}
 
 
 def run_analysis(conn: psycopg.Connection, spec: dict) -> AnalysisResult | None:
