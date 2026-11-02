@@ -346,8 +346,8 @@ def test_the_synthesis_is_told_to_compare_like_with_like_and_what_a_difference_i
 
 def test_the_agencys_money_comes_from_the_budget_and_bir_rows(conn) -> None:
     claims = D.money_claims(conn, D.phc_checklist(), "funding and spending")
-    by = {(c.measure, c.kind, c.year): c for c in claims if "revised" not in c.statement and "final budget,"
-          not in c.statement}
+    by = {(c.measure, c.kind, c.year): c for c in claims if "revised budget for" not in c.statement and
+          "final budget for" not in c.statement}
     approved = by[("money_alloc", "trend", "2025")]
     assert approved.value == "13,196,854,692.00" and approved.doc_id == "budget-2025-approved" and approved.from_rows
     assert by[("money_actual", "trend", "2024")].doc_id == "bpr-2024-q4"          # the Q4 report's full year

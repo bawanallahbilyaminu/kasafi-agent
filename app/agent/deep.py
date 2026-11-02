@@ -492,8 +492,8 @@ def money_claims(conn: psycopg.Connection, cl: Checklist, dim_name: str) -> list
             "revised budget" if what == "final" else label[what]
         if what == "actual":
             said, when = f"actual spending in the {period_of(c, year)}", str(year)
-        out.append(Claim(dim_name, f"{name}: {said}, {when} (all spending: staff, running costs and "
-                                   f"capital)", c.printed, "NGN", when, "Sokoto State", c.doc_id, c.title, c.page,
+        out.append(Claim(dim_name, f"the {name}'s {said} for {when}, all spending", c.printed, "NGN", when,
+                         "Sokoto State", c.doc_id, c.title, c.page,
                          "money_actual" if what in ("actual", "so_far") else "money_alloc",
                          "trend", c.doc_year, from_rows=True))
         s = sector.get((year, what))
@@ -876,7 +876,11 @@ SYNTH_SYSTEM = (
     "'the documents state').\n"
     "Compare like with like: required against available for the same cadre or item, an allocation against the "
     "spending of the same budget, a target against the current figure of the same indicator.\n"
-    "Rules: figures only from the list, copied exactly; cite each as [C<n>]; give each figure's WHEN as listed (a "
+    "WRITING: plain sentences in your own words. Each WHAT is a label for you to read, not text to paste: never "
+    "copy a label or its colons and brackets into the answer (write 'the PHC agency's approved budget was ₦13.20 "
+    "billion in 2025', never 'Primary Health Care Development Agency: approved budget, 2025 (...) of').\n"
+    "Rules: the numbers only from the list, each number copied exactly (the words are yours); cite each as [C<n>]; "
+    "give each figure's WHEN as listed (a "
     "year, or 'as of the 2020 report'); never write that a year is not stated and never add a year the list "
     "doesn't give; only the figures marked calculated (shares) are said, once per message, to be calculated from "
     "the budget documents (printed amounts are not); a spending figure says its period as its claim gives it (the "
@@ -902,7 +906,7 @@ def claims_block(claims: list[Claim], dims: list[Dimension] | None = None) -> st
             continue
         out.append(f"## {dim}")
         for c in mine:
-            bits = [f"[C{num[id(c)]}] {c.statement} | value {c.value} {c.unit}".rstrip()]
+            bits = [f"[C{num[id(c)]}] WHAT: {c.statement} | value {c.value} {c.unit}".rstrip()]
             if c.measure in names:
                 bits.append(f"measure: {names[c.measure]}")
             if c.kind in KIND_NAME:
