@@ -282,6 +282,7 @@ ANSWER_SYSTEM = (
     "table's figure and say the chart shows a different value.\n"
     "6k. Copy organisation names and acronyms exactly as the evidence prints them (e.g. 'NPHCDA, SOCHEMA and "
     "SOSMEA'): never correct, expand, update or respell them.\n"
+    "6l. Each answer stands alone: never refer to 'the previous answer', 'my earlier reply' or 'as I said'.\n"
     "6h. When the evidence gives two figures for similar or overlapping groups (named agencies vs all agencies of a "
     "kind, a subset vs its total, one programme vs the sector), give BOTH, each with exactly what it covers (e.g. "
     "'₦1.29 billion for the three PHC agencies combined; ₦1.94 billion for all agencies involved with PHC "
@@ -968,7 +969,10 @@ def breadth(question: str, plan: "Plan") -> int:
     # the budgets; only the other broad words (analyse, overview, all sources ...) widen a money question
     if hits and MONEY_WORDS.search(text) and all(re.match(r"compar|kwatanta", h) for h in hits):
         hits = []
-    return BROAD_DOCS if hits or len(set(measures)) >= 3 else SIMPLE_DOCS
+    # several measures widen a statistics question; a money question's approved / released / share describe one
+    # figure ('what share of the approved education capital budget was released in 2023?' read 6 documents)
+    several = len(set(measures)) >= 3 and not MONEY_WORDS.search(text)
+    return BROAD_DOCS if hits or several else SIMPLE_DOCS
 
 
 def widen_for_breadth(conn: psycopg.Connection, plan: "Plan", question: str, n: int) -> list[str]:
@@ -1378,6 +1382,49 @@ def unverified_numbers(answer: str, evidence: list[Evidence], extra: list[str] |
             continue
         out.append(m.group(0))
     return out
+
+
+BACK_REF = re.compile(r"(?i)\b(?:(?:the|my)\s+(?:previous|earlier|last)\s+(?:answer|reply|response|message)|"
+                      r"as\s+(?:I\s+)?(?:said|mentioned|noted)\s+(?:before|earlier|above)|amsar\s+da\s+ta\s+gabata)\b")
+
+
+def no_back_reference(text: str) -> str:
+    """Sentences that refer to an earlier answer dropped: each answer stands alone (2 Nov 2026)."""
+    if not BACK_REF.search(text or ""):
+        return text
+    lines = []
+    for line in text.split("\n"):
+        if BACK_REF.search(line):
+            kept = [s for s in re.split(r"(?<=[.!?])\s+(?=[A-Z•(])", line) if not BACK_REF.search(s)]
+            if not kept:
+                continue
+            line = " ".join(kept)
+        lines.append(line)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+
+def doc_pool(d: dict, by_n: dict, evidence: list[Evidence]) -> list[Evidence]:
+    """The evidence the checks see: the cited items and every other page read from the same documents (a table
+    can run over a page break, and the model may cite the page before the one printing the figure: phc-msp-2020's
+    ₦15.9 bn on p13 while p7 was cited, the MTSS Table 4 on p42 cited as p43; 2 Nov 2026)."""
+    cited = [by_n[n] for n in d.get("cited") or [] if n in by_n]
+    docs = {e.doc_id for e in cited}
+    return cited + [e for e in evidence if e.doc_id in docs and e not in cited]
+
+
+def with_figure_pages(text: str, cited: list[Evidence], pool: list[Evidence]) -> list[Evidence]:
+    """The cited pages plus each page of the same documents that prints a figure of the answer the cited pages
+    don't: the citation (and the evidence image) then points at the page with the figure."""
+    have = {_norm_number(m) for e in cited for m in _NUMBER.findall(e.text or "")}
+    want = [m for m in _NUMBER.findall(re.sub(r"\[\d+\]", " ", text or ""))
+            if len(_norm_number(m).replace(".", "")) >= 3 and _norm_number(m) not in have]
+    out = list(cited)
+    for e in pool:
+        if e in out:
+            continue
+        if any(re.search(rf"(?<![\d,.]){re.escape(m)}(?![\d,])", e.text or "") for m in want):
+            out.append(e)
+    return sorted(out, key=lambda e: e.n)
 
 
 def format_citations(cited: list[Evidence], lang: str) -> str:
@@ -2306,13 +2353,13 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
     # The working (labels with the asked years, and computed figures) is written by code: its numbers count too
     extra = budget.computed_numbers() + [render_working(budget, nmap, "en")] if budget is not None else []
     extra = extra + question_years(question, plan.english_question)
-    bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)
+    bad = unverified_numbers(answer_text(d), doc_pool(d, by_n, evidence), extra)
     if bad and _found(d) != "none":
         t["compose_retry"] = 1.0
         d = await compose(question, lang, plan, evidence, client, settings, context=context, second=second,
                           feedback=f"These figures are not in the cited evidence: {', '.join(bad)}. "
                                    "Use only figures copied exactly from the evidence, and cite them.")
-        bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)
+        bad = unverified_numbers(answer_text(d), doc_pool(d, by_n, evidence), extra)
     # a dash read as zero ('shows no enrolment (- in the table)'): composed again with the rule, then refused
     dash = ""
     if (misread := dash_misread(answer_text(d))) and _found(d) != "none":
@@ -2320,36 +2367,37 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
         d = await compose(question, lang, plan, evidence, client, settings, context=context, second=second,
                           feedback=f"You read a dash as a figure ({misread}). A dash, '…', 'n/a' or a blank cell means the "
                                    "figure is not available: say the table prints no figure for it, never zero or none.")
-        bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)
+        bad = unverified_numbers(answer_text(d), doc_pool(d, by_n, evidence), extra)
         dash = dash_misread(answer_text(d))
     # names and acronyms exactly as the cited pages print them: composed again once with the ones that aren't
-    names_bad = acronym_problems(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n]) \
+    names_bad = acronym_problems(answer_text(d), doc_pool(d, by_n, evidence)) \
         if budget is None and _found(d) != "none" else []
     if names_bad:
         t["compose_retry"] = t.get("compose_retry", 0.0) + 1.0
         d = await compose(question, lang, plan, evidence, client, settings, context=context, second=second,
                           feedback=f"These names or acronyms are not printed in the cited pages: {', '.join(names_bad)}. "
                                    "Copy organisation names and acronyms exactly as the pages print them.")
-        bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)
+        bad = unverified_numbers(answer_text(d), doc_pool(d, by_n, evidence), extra)
         dash = dash_misread(answer_text(d))
-        names_bad = acronym_problems(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n])
+        names_bad = acronym_problems(answer_text(d), doc_pool(d, by_n, evidence))
     # every figure bound to its row: the entity named next to it, the year, the unit and the kind (external review,
     # finding 01); a contradiction is composed again with the mismatch named, then refused
     # per entity: a name of another entity in a multi-entity plan never binds a figure (follow-up review, finding 1)
     names = [[x for x in (e.resolved, e.name, e.code) if x] for e in (plan.need.entities if plan.need else [])]
     # a budget query's rows and arithmetic are computed in code (differences, shares): calculation checked, no binding
-    att = (attribution.bind(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], names)
+    att = (attribution.bind(answer_text(d), doc_pool(d, by_n, evidence), names)
            if budget is None else attribution.Attribution("calculation checked"))
     if not att.ok and not bad and _found(d) != "none":
         t["compose_retry"] = t.get("compose_retry", 0.0) + 1.0
         d = await compose(question, lang, plan, evidence, client, settings, context=context, second=second,
                           feedback=f"These figures are attributed to the wrong row: {att.feedback()}. Give each figure "
                                    "exactly as its own row prints it, for the entity, year and column that row names.")
-        bad = unverified_numbers(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], extra)
-        att = attribution.bind(answer_text(d), [by_n[n] for n in d.get("cited") or [] if n in by_n], names)
+        bad = unverified_numbers(answer_text(d), doc_pool(d, by_n, evidence), extra)
+        att = attribution.bind(answer_text(d), doc_pool(d, by_n, evidence), names)
     t["answer"] = time.perf_counter() - t0
 
     cited = sorted({by_n[n].n: by_n[n] for n in d.get("cited") or [] if n in by_n}.values(), key=lambda e: e.n)
+    cited = with_figure_pages(answer_text(d), cited, doc_pool(d, by_n, evidence))
     found = _found(d)
     if budget is not None:                   # the rows and arithmetic come from code: every row is cited
         cited, found = evidence, ("full" if budget.complete else "partial")
@@ -2378,7 +2426,7 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
     q_all = f"{question} {plan.english_question}"
     shown = {**d, "summary": drop_verdicts(str(d.get("summary") or d.get("answer") or ""), q_all),
              "items": [drop_verdicts(str(i), q_all) for i in (d.get("items") or [])[:TOP_ROWS]]}
-    rendered = plain(render_answer(shown, lang))
+    rendered = no_back_reference(plain(render_answer(shown, lang)))
     if budget is None:          # 'doesn't print X' only after the whole document was searched for X
         rendered, softened = checked_absence(conn, plan, evidence, cited, rendered, lang)
         if softened:

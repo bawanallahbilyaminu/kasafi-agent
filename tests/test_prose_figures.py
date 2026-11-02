@@ -97,3 +97,28 @@ def test_one_figure_not_found_marks_it_instead_of_refusing() -> None:
     assert att.ok and att.state == "figures checked" and att.unverified == ["5.5 billion"]
     nothing = attribution.bind("₦7.7 billion went to them [1].", [ev(PARA)])
     assert nothing.state == "unsupported"                                    # no figure found at all: refused
+
+
+def test_the_checks_see_every_page_read_from_a_cited_document_and_the_citation_moves_to_the_figure() -> None:
+    from app.agent.answer import doc_pool, with_figure_pages
+    p7 = Evidence(1, "plan", "Plan", 2020, 7, "text", "The minimum service package costs are on page 13.")
+    p13 = Evidence(2, "plan", "Plan", 2020, 13, "text", "Total cost N15,900,000,000 of which N2,600,000,000 capital.")
+    other = Evidence(3, "budget", "Budget", 2024, 5, "text", "N15,900,000,000")
+    by_n = {1: p7, 2: p13, 3: other}
+    d = {"cited": [1]}
+    pool = doc_pool(d, by_n, [p7, p13, other])
+    assert pool == [p7, p13]                               # same document only
+    answer = "The package costs ₦15,900,000,000 [1]."
+    assert unverified_numbers(answer, pool) == [] and unverified_numbers(answer, [p7]) == ["15,900,000,000"]
+    assert [e.page for e in with_figure_pages(answer, [p7], pool)] == [7, 13]
+    assert [e.page for e in with_figure_pages("No figures here [1].", [p7], pool)] == [7]
+
+
+def test_an_answer_never_refers_to_the_previous_answer_and_a_money_share_stays_simple() -> None:
+    from app.agent.answer import Plan, breadth, no_back_reference
+    from app.agent.need import Need
+    t = "Unlike the previous answer, this uses the plan. The plan targets 50 PHCs.\n• 50 PHCs (p. 40)"
+    assert no_back_reference(t) == "The plan targets 50 PHCs.\n• 50 PHCs (p. 40)"
+    q = "In 2023, what share of the approved education capital budget was actually released?"
+    assert breadth(q, Plan(english_question=q, search_queries=[q], doc_ids=[],
+                           need=Need(q, measures=["approved", "actual_ytd", "performance_pct"]))) == 3
