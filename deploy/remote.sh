@@ -169,6 +169,13 @@ sync-env)
   exit 1
   ;;
 
+smoke)
+  # the live smoke test (scripts/live_smoke.py): conversations through the real webhook reply path in the running
+  # container, real model calls, nothing sent to WhatsApp; EXPECTED is the set (deploy | full)
+  dc exec -T api python scripts/live_smoke.py --set "${EXPECTED:-deploy}"
+  exit $?
+  ;;
+
 migration)
   # the database's current alembic revision, for deploy.sh --sync-index to compare with dev's
   rev=$(dc run --rm --no-deps api alembic current 2>/dev/null | grep -oE '^[0-9a-f]+' | head -1)

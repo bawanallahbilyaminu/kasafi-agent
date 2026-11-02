@@ -504,6 +504,7 @@ class Answer:
     attribution: list[str] = field(default_factory=list)   # the binding problems found, for show working and the trace
     parts: list[str] = field(default_factory=list)          # further messages after the text (a deep answer's sections)
     deep: object | None = None                              # a deep analysis (app/agent/deep.py): its brief on request
+    understanding: object | None = None                     # the understanding step's reading, for the trace
 
 
 CONVERTED: dict[str, str] = {}       # doc id -> original format, for documents converted from Word-type files
@@ -520,7 +521,10 @@ DASH_MISREAD = re.compile(r"(?i)\b(?:no|zero|none|nil|0|ba\s+(?:a|su|ta|ya)\s+(?
                           r"(?![^.\n]{0,80}?\b(?:figure|number|value|amount|adadi|alkalum\w*|lamba|publish\w*|print\w*|"
                           r"buga|available)\b)[^.\n]{0,80}?"
                           r"(?:\(\s*|['\"\s])[-–—…]+(?:\s*(?:in|on|shown|printed|a)\s+(?:the\s+)?(?:table|cell|column|tebur\w*))?"
-                          r"|\b(?:dash|'-'|\"-\")\b[^.\n]{0,60}\b(?:means|is|=)\s+(?:zero|none|no|0)\b")
+                          r"|\b(?:dash|'-'|\"-\")\b[^.\n]{0,60}\b(?:means|is|=)\s+(?:zero|none|no|0)\b"
+                          # 'a dash in the table means no figure is printed' is the rule followed, not broken (2 Nov,
+                          # trace #123: the corrected retry was refused for saying it)
+                          r"(?!\s+(?:figure|number|value|data|amount|entry|adadi|alkalum\w*|lamba)\b)")
 
 
 def dash_misread(text: str) -> str:
@@ -1867,8 +1871,21 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             t["place_area"] = time.perf_counter() - t0
             return Answer(aa.text, aa.found, True, plan=plan, timings=t, exact=aa.text, working=aa.working,
                           partial=aa.partial, maps=aa.specs, needs_pin=aa.needs_pin)
-        # place history (docs/place-history.md): what the satellite record shows for the user's pin, in code
-        if conn is not None and place_on and place_route(question, plan.english_question):
+        # the reading says place history for an area but the words named no measure ('Was my ward under water
+        # before?'): the area route with the reading's measure
+        if conn is not None and place_on and u is not None and u.capability == "place_history" and \
+                u.level in ("ward", "lga", "state") and \
+                (ar := area_route(qm := f"{question} ({u.measure or 'flooded or green'})", plan.english_question,
+                                  place)):
+            t0 = time.perf_counter()
+            aa = area_answer(conn, qm, plan.english_question, lang, ar[0], ar[1], today, place=place)
+            t["place_area"] = time.perf_counter() - t0
+            return Answer(aa.text, aa.found, True, plan=plan, timings=t, exact=aa.text, working=aa.working,
+                          partial=aa.partial, maps=aa.specs, needs_pin=aa.needs_pin)
+        # place history (docs/place-history.md): what the satellite record shows for the user's pin, in code; the
+        # reading's 'pin' decides it too when the words don't ('Was this land ever under water?')
+        if conn is not None and place_on and (place_route(question, plan.english_question) or (
+                u is not None and u.capability == "place_history" and u.level in ("pin", "none"))):
             t0 = time.perf_counter()
             pa = await place_answer(conn, settings, question, plan.english_question, lang, place, today,
                                     notify=notify, ask_size=bool(place and place.get("ask_size")))
@@ -1894,8 +1911,11 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
                 return Answer(text, True, True, plan=plan, timings=t, exact=f"{summary}\n{oa.text}",
                               partial=not oa.found, quotes=quotes)
         # weather and hazards (heat, dust, rain, rivers, fires): answered in code from the fetched layers
+        # … and when the reading says hazard but the words named no layer, with the reading's measure
         if conn is not None and settings.kasafi_shortcut_hazards and allow("hazard") and \
-                (layers := hazard_route(question, plan)):
+                (layers := hazard_route(question, plan) or (
+                    u is not None and u.capability == "hazard" and u.measure and
+                    hazard_route(f"{question} ({u.measure})", plan))):
             t0 = time.perf_counter()
             q = f"{question} {plan.english_question}"
             ha = hazard_answer(conn, q, lang, layers, hazard_where(conn, question, plan, place), today, settings,
@@ -4414,6 +4434,7 @@ async def answer_from_documents(question: str, lang: str, *, settings: Settings,
         t0 = time.perf_counter()
         a = await answer_question(question, lang, conn, settings=settings, notify=notify, history=history,
                                   place=place, **({"understanding": understanding} if understanding else {}))
+        a.understanding = understanding
         trace.save(conn, a, lang, time.perf_counter() - t0)
     tm = a.timings
     # No question text in logs: only what was searched where, and how it went.

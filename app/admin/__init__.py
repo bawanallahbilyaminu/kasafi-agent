@@ -199,13 +199,35 @@ def trace_page(tid: int, _: None = Depends(admin), settings: Settings = Depends(
             f'<b class="{e(review)}">{e(review)}</b> · '
             f'{"".join(f"<span class=chip>{e(f)}</span>" for f in t.get("flags") or [])}</p>'
             f'<div class="steps">{steps}</div>'
+            f'{_understanding_card(t)}'
             f'<div class="card"><h2>1 · Plan (Muse Spark)</h2>{plan_html}</div>{readings}{verify}'
             f'<div class="card"><h2>4 · Citations</h2><ul class="picks">{cited}</ul></div>'
             f'<div class="card"><h2>5 · Reply sent</h2><pre>{e(answer)}</pre></div>'
             f'<div class="card">{buttons}</div>'
             f'<details class="card"><summary class="small">Raw trace JSON</summary><pre>'
-            f'{e(json.dumps(t, ensure_ascii=False, indent=1))}</pre></details>')
+            f'{e(json.dumps(_understanding_first(t), ensure_ascii=False, indent=1))}</pre></details>')
     return page(f"Trace {tid}", body, "traces")
+
+
+def _understanding_first(t: dict) -> dict:
+    """The trace with the understanding step's reading first (jsonb keeps its own key order)."""
+    return {**({"understanding": t["understanding"]} if "understanding" in t else {}),
+            **{k: v for k, v in t.items() if k != "understanding"}}
+
+
+def _understanding_card(t: dict) -> str:
+    """What the conversation-understanding step read (app/agent/understand.py), above the plan; or why it didn't."""
+    u = t.get("understanding")
+    if not u:
+        why = "; ".join(t.get("fallback") or []) or "not run for this message (a command, a reply to a pending " \
+                                                    "choice, or a trace from before 2 Nov evening)"
+        return f'<div class="card"><h2>0 · Understanding</h2><div class="small mute">{e(why)}</div></div>'
+    return (f'<div class="card"><h2>0 · Understanding</h2><div class="small">'
+            f'<b>{e(u.get("kind", ""))}</b> · capability <b>{e(u.get("capability", ""))}</b> · subject '
+            f'{e(u.get("level", ""))} {e(u.get("name", ""))} · time {e(u.get("time", ""))} · '
+            f'{float(u.get("seconds") or 0):.1f}s</div><div class="small">Restatement: {e(u.get("restatement", ""))}'
+            f'</div>' + (f'<div class="small">Route: <b>{e(t["route"])}</b></div>' if t.get("route") else "")
+            + '</div>')
 
 
 @router.post("/traces/{tid}/review")

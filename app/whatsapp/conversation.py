@@ -273,10 +273,29 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             from app.agent.trace import save_event
             await asyncio.to_thread(save_event, settings, strip_location(text), lang, "understanding_fallback",
                                     "understanding", {"fallback": fallbacks}, time.perf_counter() - started_u)
-    # a correction about the facilities just listed ('But UDUTH is closer to me'): checked against that answer
-    if u is not None and u.kind == "correction" and u.capability == "facility" and settings.has_database and \
-            (outs := await _facility_correction(u, key, lang, settings, facility_fn)) is not None:
-        _remember_turn(store, key, lang, text, outs)
+    # a message about Kasafi or the conversation ('Who are you?', 'Na gode', 'help'): one Muse Spark call under the
+    # core prompt, never the document search; with no reading, the plain self-questions the same way
+    if kind == "text" and text and (u.capability == "conversation" if u is not None else ABOUT_KASAFI.match(text)):
+        if refusal := await _guarded([text], lang, guard_fn, settings):
+            return [refusal]
+        return await _conversational(text, key, lang, store, settings, u)
+    # a claim about a named facility ('But UDUTH is closer to me'), after a list or cold: checked by road from the
+    # pin, or from the LGA on file (said so), or the location asked for; never the document search
+    if kind == "text" and text and settings.has_database and (
+            (u is not None and u.capability == "facility" and
+             (u.kind == "correction" or CLOSER.search(f"{text} {u.restatement}"))) or
+            (u is None and CLOSER.search(text))):
+        t_route = time.perf_counter()
+        if (outs := await _facility_correction(u or claim_reading(text), key, lang, settings, facility_fn,
+                                               store=store)) is not None:
+            _remember_turn(store, key, lang, text, outs)
+            await _trace_route(settings, text, lang, "facility_check", u, outs, time.perf_counter() - t_route)
+            return outs
+    # no route fits and it isn't a request for information ('ok', 'hmm'): what Kasafi can help with, and a question
+    if kind == "text" and text and u is not None and u.capability == "other" and not looks_like_request(text):
+        from app.agent.conversational import help_text
+        outs = [Out(help_text(lang, _place_for(key, store)), lang=lang)]
+        await _trace_route(settings, text, lang, "help", u, outs, 0.0)
         return outs
     # "nearest hospital?" and its follow-ups ("next", "route?", "only government hospitals"): PostGIS and ORS, no model
     if text and settings.has_database and settings.kasafi_shortcut_facilities and \
@@ -366,6 +385,14 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             finally:
                 slow.cancel()
             body = result if isinstance(result, str) else result.text
+            # "I couldn't find the answer…" never answers a message that isn't a document question: what Kasafi
+            # can help with, and what they are looking for
+            if getattr(result, "found", True) is False and not getattr(result, "clarify", None) and \
+                    not getattr(result, "needs_pin", False) and not getattr(result, "needs_size", False) and \
+                    (understanding.capability in ("conversation", "other") if understanding is not None
+                     else not looks_like_request(question)):
+                from app.agent.conversational import help_text
+                body = help_text(lang, place)
             # Keep the turn for follow-ups ("check again", "what about 2024?"): 5 turns, 90 days, no number.
             store.add_turn(key, lang, question, body, getattr(result, "sources", []), getattr(result, "working", ""),
                            getattr(result, "quotes", ""))
@@ -447,10 +474,14 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
 
     # 5. Hazard alerts (app/alerts): sign-up and its explicit OK, the menu, STOP / DAINA, MORE; no model. Only with
     # KASAFI_ALERTS on (off on the server until step 6 is released)
+    # (the reading's 'alerts' with the words matching no sign-up: its restatement is tried too)
     if settings.kasafi_alerts and settings.kasafi_shortcut_alerts and kind in ("text", "button", "interactive") and \
-            (step := alerts_reply(
-            text, button, key, lang, store, store.get_last_lga(key),
-            seal=lambda: encrypt_number(sender, settings))) is not None:
+            ((step := alerts_reply(
+                text, button, key, lang, store, store.get_last_lga(key),
+                seal=lambda: encrypt_number(sender, settings))) is not None or
+             (u is not None and u.capability == "alerts" and u.restatement and
+              (step := alerts_reply(u.restatement, None, key, lang, store, store.get_last_lga(key),
+                                    seal=lambda: encrypt_number(sender, settings))) is not None)):
         if not step.ask:
             return [Out(body, buttons, lang=lang) for body, buttons in step.messages]
         if answer is not None:
@@ -881,6 +912,55 @@ def _place_for(key: str, store: UserStore) -> dict | None:
     return place
 
 
+# with no reading (the understanding step failed): the plain self-questions, the whole message only
+ABOUT_KASAFI = re.compile(r"(?i)^\s*(?:who are you|what are you|what can you do|how does (?:this|it) work|"
+                          r"who (?:made|built|created) you|are you a (?:bot|robot|person|human)|is this a bot|help|"
+                          r"hello|hi|thanks?(?: you)?|kai wa[ny]e ?ne|ke wa[cy]e ?ce|me za ka iya yi|wa ya yi ka|"
+                          r"good (?:morning|afternoon|evening)|bye|goodbye|assalamu alaikum|ina kwana|ina wuni|"
+                          r"sai anjima|sannu(?: da \w+)?|na gode)\s*[?.!]*\s*$")
+# a claim that a facility is nearer than another: checked by road, never searched in documents
+CLOSER = re.compile(r"(?i)\b(?:closer|nearer|ya fi kusa|ta fi kusa|fi kusa da)\b")
+REQUEST_WORDS = re.compile(r"(?i)\b(?:what|how|which|when|where|who|why|show|list|give|tell|find|send|is|are|does|"
+                           r"nawa|mene|menene|wane|wace|wanne|ina|yaya|yaushe|nuna|ba ni|fa[ɗd]a|budget|kasafi\w*)\b")
+CLAIM_WAIT = "facility-claim:"     # a facility claim waiting for the user's location: the facility's name follows
+
+
+def looks_like_request(text: str) -> bool:
+    """A request for information ('how much…', 'nearest hospital in Tambuwal'), not 'ok' or 'hmm'."""
+    text = text or ""
+    return "?" in text or bool(re.search(r"\d", text)) or len(text.split()) >= 4 or bool(REQUEST_WORDS.search(text))
+
+
+def claim_reading(text: str, name: str = ""):
+    """A facility claim's reading when the understanding step gave none (the facility found by its name in it)."""
+    from app.agent.understand import Understanding
+    return Understanding(kind="correction", capability="facility", level="facility", name=name, restatement=text)
+
+
+async def _conversational(text: str, key: str, lang: str, store: UserStore, settings: Settings, u) -> list[Out]:
+    from app.agent.conversational import reply
+    t0 = time.perf_counter()
+    body, how = await reply(strip_location(text), lang, store.recent_turns(key), _place_for(key, store), settings)
+    outs = [Out(body, lang=lang)]
+    _remember_turn(store, key, lang, text, outs)
+    log.info("conversational reply (%s) in %.2fs", how, time.perf_counter() - t0)
+    await _trace_route(settings, text, lang, f"conversation:{how}", u, outs, time.perf_counter() - t0)
+    return outs
+
+
+async def _trace_route(settings: Settings, text: str, lang: str, route: str, u, outs: list[Out],
+                       seconds: float) -> None:
+    """A trace row for a reply from a route of its own, with the reading that sent it there (admin traces page)."""
+    if not settings.has_database:
+        return
+    from app.agent.trace import save_event
+    detail = {**({"understanding": u.to_dict()} if u is not None else {}), "route": route,
+              "timings": {"route": round(seconds, 2), **({"understanding": round(u.seconds, 2)} if u else {})}}
+    await asyncio.to_thread(save_event, settings, strip_location(text), lang, "answered", route, detail,
+                            seconds + (u.seconds if u is not None else 0.0),
+                            "\n".join(o.text for o in outs if getattr(o, "text", "")))
+
+
 def _remember_turn(store: UserStore, key: str, lang: str, question: str, outs: list[Out]) -> None:
     """A shortcut's reply (a facility list, a correction) kept as a turn, so the next message is read with it."""
     body = "\n".join(o.text for o in outs if getattr(o, "text", ""))
@@ -901,7 +981,20 @@ CORRECTION_WORDS = {
            "why_line": "It wasn't in the list because I take the {k} nearest in a straight line before checking "
                        "road time, and it is {km} km away in a straight line.",
            "no_road": "{name} is {km} km from your pin in a straight line (road time unavailable now).",
-           "why_missed": "It should have been in the list: it is nearer than the ones I gave."},
+           "why_missed": "It should have been in the list: it is nearer than the ones I gave.",
+           # a claim with no list before it ('But UDUTH is closer to me' as a first message)
+           "need_location": "To check whether {name} is the closest to you, I need your location: share it, or "
+                            "tell me your LGA or town.",
+           "from_lga": "I don't have your exact location, so I measured from the centre of {lga} LGA (your LGA on "
+                       "file). Share your location for an exact answer.",
+           "where_lga": "{name}: {road} by road from the centre of {lga} LGA ({km} km in a straight line).",
+           "no_road_lga": "{name} is {km} km from the centre of {lga} LGA in a straight line (road time "
+                          "unavailable now).",
+           "other": "The nearest other {what}, {first}: {road} by road.",
+           "other_km": "The nearest other {what}, {first}: {km} km in a straight line.",
+           "cold_closer": "You're right: {name} is the closest {what} to {you}.",
+           "cold_not_closer": "{first} is closer to {you} than {name}.",
+           "you": "you", "you_lga": "the centre of {lga} LGA", "hospital": "hospital", "facility": "health facility"},
     "ha": {"closer": "Gaskiya ne: {name} ya fi kusa da kai fiye da waɗanda na lissafa.",
            "not_closer": "{first} ne har yanzu mafi kusa da kai ta hanya.",
            "where": "{name}: {road} ta hanya daga wurinka ({km} km a mike).",
@@ -910,29 +1003,69 @@ CORRECTION_WORDS = {
            "why_line": "Ba ya cikin jerin saboda ina ɗaukar {k} mafi kusa a mike kafin in duba lokacin tafiya ta "
                        "hanya, kuma yana da {km} km a mike.",
            "no_road": "{name} yana da {km} km daga wurinka a mike (ba a samu lokacin tafiya ta hanya yanzu ba).",
-           "why_missed": "Ya kamata ya kasance cikin jerin: ya fi waɗanda na bayar kusa."},
+           "why_missed": "Ya kamata ya kasance cikin jerin: ya fi waɗanda na bayar kusa.",
+           "need_location": "Don in duba ko {name} ne mafi kusa da kai, ina buƙatar wurinka: raba shi, ko faɗa mini "
+                            "ƙaramar hukumarka ko garinka.",
+           "from_lga": "Ba ni da ainihin wurinka, don haka na auna daga tsakiyar ƙaramar hukumar {lga} (wadda ke "
+                       "rubuce a wurina). Raba wurinka don amsa daidai.",
+           "where_lga": "{name}: {road} ta hanya daga tsakiyar ƙaramar hukumar {lga} ({km} km a mike).",
+           "no_road_lga": "{name} yana da {km} km daga tsakiyar ƙaramar hukumar {lga} a mike (ba a samu lokacin "
+                          "tafiya ta hanya yanzu ba).",
+           "other": "Wani {what} mafi kusa, {first}: {road} ta hanya.",
+           "other_km": "Wani {what} mafi kusa, {first}: {km} km a mike.",
+           "cold_closer": "Gaskiya ne: {name} ne {what} mafi kusa da {you}.",
+           "cold_not_closer": "{first} ya fi {name} kusa da {you}.",
+           "you": "kai", "you_lga": "tsakiyar ƙaramar hukumar {lga}", "hospital": "asibiti",
+           "facility": "cibiyar lafiya"},
 }
 
 
-async def _facility_correction(u, key: str, lang: str, settings: Settings, facility_fn: FacilityFn) -> list[Out] | None:
-    """'But UDUTH is closer to me': the named facility's distance from the pin, checked against the list just given,
-    and why it wasn't in it (the search's filter, or the straight-line shortlist before road time). None when there
-    is no pin, no list or no such facility (the message then goes on as usual)."""
+def _lga_centre(settings: Settings, pcode: str) -> tuple[float, float] | None:
+    import psycopg
+
+    from app.geo.facilities import lga_point
+    with psycopg.connect(settings.db_url(), connect_timeout=5) as conn:
+        return lga_point(conn, pcode)
+
+
+async def _facility_correction(u, key: str, lang: str, settings: Settings, facility_fn: FacilityFn,
+                               store: UserStore | None = None, spot: Spot | None = None) -> list[Out] | None:
+    """'But UDUTH is closer to me': the named facility's road distance from the pin, checked against the list just
+    given, and why it wasn't in it (the search's filter, or the straight-line shortlist before road time). With no
+    list (a cold claim, 2 Nov trace #123): against the nearest others of its kind, from the pin, or from the centre of
+    the LGA on file (said so); with neither, the location is asked for and the check runs when it comes. None when
+    no facility is named (the message then goes on as usual)."""
     from app.geo.facilities import distance_text
-    spot, search = location_memory.recall(key), location_memory.last_search(key)
-    if spot is None or search is None or not search.shown or not u.name:
-        return None
-    name = FACILITY_ALIASES.get(u.name.strip().lower(), u.name)
+    from app.geo.facilities import _query as nearest_query
+    spot = spot or location_memory.recall(key)
+    search = location_memory.last_search(key)
+    asked = (u.name or "").strip()
+    name = FACILITY_ALIASES.get(asked.lower(), asked)
     try:
-        hits = await asyncio.to_thread(lookup, settings, name)
+        hits = await asyncio.to_thread(lookup, settings, name or u.restatement)
     except Exception as e:          # noqa: BLE001
         log.warning("facility lookup failed: %s", type(e).__name__)
         return None
+    if not name:                    # no name read: only a facility the message names for certain
+        hits = [h for h in hits if h.score >= NAMED]
     if not hits:
         return None
-    levels = set(search.filters.levels)
+    w = CORRECTION_WORDS.get(lang, CORRECTION_WORDS["en"])
+    listed = spot is not None and search is not None and bool(search.shown)
+    levels = set(search.filters.levels) if listed else set()
     pick = next((h for h in hits if not levels or h.level in levels), hits[0])
+    lga = ""
+    if spot is None:
+        last = store.get_last_lga(key) if store is not None else None
+        point = await asyncio.to_thread(_lga_centre, settings, last) if last else None
+        if point is None:
+            location_memory.wait_for_location(key, CLAIM_WAIT + pick.name)
+            return [Out(w["need_location"].format(name=pick.name), lang=lang, location_request=True)]
+        lga = name_of(last) or last
+        spot = Spot(point[0], point[1], last, lga, how="lga")
     f = as_facility(pick, spot.lat, spot.lon)
+    if not listed:
+        return await _facility_claim(f, pick, spot, lga, key, lang, settings, w, nearest_query)
     first = search.shown[0]
     await add_routes(settings, spot.lat, spot.lon, [f, first], search.profile)
     w = CORRECTION_WORDS.get(lang, CORRECTION_WORDS["en"])
@@ -958,10 +1091,53 @@ async def _facility_correction(u, key: str, lang: str, settings: Settings, facil
     return [Out("\n".join(lines), lang=lang)]
 
 
+async def _facility_claim(f, pick, spot: Spot, lga: str, key: str, lang: str, settings: Settings, w: dict,
+                          nearest_query) -> list[Out]:
+    """A claim with no list before it: the named facility against the nearest others of its kind (hospitals for a
+    hospital), by road from the point (the pin, or the LGA's centre when `lga` is set)."""
+    from app.geo.facilities import Filters, distance_text
+    hospital = pick.level in ("Secondary", "Tertiary") or "hospital" in f"{pick.kind} {pick.name}".lower()
+    search = FacilitySearch(Filters(levels=("Secondary", "Tertiary")) if hospital else Filters())
+    try:
+        near = await asyncio.to_thread(nearest_query, settings, spot.lat, spot.lon, search.filters, 0)
+    except Exception as e:          # noqa: BLE001 - PostGIS down: the named facility's distance alone
+        log.warning("nearest facilities failed: %s", type(e).__name__)
+        near = []
+    others = [x for x in near if x.fid != f.fid][:3]
+    await add_routes(settings, spot.lat, spot.lon, [f, *others], search.profile)
+    routed = f.minutes is not None and all(x.minutes is not None for x in others)
+    what = w["hospital" if hospital else "facility"]
+    you = w["you_lga"].format(lga=lga) if lga else w["you"]
+    lines = [w["from_lga"].format(lga=lga)] if lga else []
+    road = distance_text(lang, f, search.profile)
+    lines.append(w["where_lga"].format(name=f.name, road=road, km=f.km, lga=lga) if lga and routed else
+                 w["no_road_lga"].format(name=f.name, km=f.km, lga=lga) if lga else
+                 w["where"].format(name=f.name, road=road, km=f.km) if routed else
+                 w["no_road"].format(name=f.name, km=f.km))
+    if not others:
+        search.shown = [f]
+    else:
+        measure = (lambda x: x.minutes) if routed else (lambda x: x.km)
+        best = min(others, key=measure)
+        lines.append(w["other"].format(what=what, first=best.name, road=distance_text(lang, best, search.profile))
+                     if routed else w["other_km"].format(what=what, first=best.name, km=best.km))
+        closer = measure(f) <= measure(best)
+        lines.append(w["cold_closer"].format(name=f.name, what=what, you=you) if closer else
+                     w["cold_not_closer"].format(first=best.name, name=f.name, you=you))
+        search.shown = [f, best] if closer else [best, f]          # 'route?' now means the nearer one
+        log.info("facility claim checked: %s, closer=%s, from %s", f.lga, closer, "the LGA" if lga else "the pin")
+    location_memory.remember_search(key, search)
+    return [Out("\n".join(lines), lang=lang)]
+
+
 async def _after_location(question: str, key: str, lang: str, settings: Settings, facility_fn: FacilityFn,
                           spot: Spot) -> list[Out]:
     """The question that asked for a location, answered now that there is one: a nearest-facility search, a route
-    to a named facility, or 'how far is it' for the facility last shown."""
+    to a named facility, 'how far is it' for the facility last shown, or a facility claim ('UDUTH is closer')."""
+    if question.startswith(CLAIM_WAIT):
+        name = question[len(CLAIM_WAIT):]
+        return await _facility_correction(claim_reading(name, name), key, lang, settings, facility_fn,
+                                          spot=spot) or []
     if is_facility_query(question):
         return await _facility_search(question, key, lang, settings, facility_fn, spot)
     if (named := await _named_facility(question, key, lang, settings, facility_fn, spot)):

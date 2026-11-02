@@ -3,6 +3,8 @@
 # .\deploy\deploy.ps1 and the same flags (it stays in the same window):
 #   deploy/deploy.sh               deploy origin/main (must equal your pushed local main)
 #   deploy/deploy.sh --rollback    go back one release
+#   deploy/deploy.sh --smoke [full]  the live smoke test alone (scripts/live_smoke.py; every deploy runs the 3-message
+#                                  set): real webhook path and model calls on the server, replies printed, none sent
 #   deploy/deploy.sh --sync-env    update the server's deploy/.env from your local .env (allowed keys only)
 #   deploy/deploy.sh --sync-index  copy the document index (documents/pages/chunks/budget_lines/budget_rows and the
 #                                  structured core: budget_items/projects/perf_items/entity_builds) from the dev DB
@@ -63,7 +65,7 @@ if [ -t 2 ]; then export KASAFI_PROGRESS=1; else export KASAFI_PROGRESS=0; fi
 # --- the run: its log, steps and final line -----------------------------------------------------------------------
 MODE=${1:-}
 NAME=${MODE#--}; NAME=${NAME:-deploy}
-case "$MODE" in -h|--help) sed -n '2,25p' "$0"; exit 0 ;; esac
+case "$MODE" in -h|--help) sed -n '2,27p' "$0"; exit 0 ;; esac
 mkdir -p deploy/logs/tmp
 LOGFILE=deploy/logs/$(date +%Y%m%d-%H%M%S)-$NAME.log
 export KASAFI_DEPLOY_LOG=$LOGFILE
@@ -164,6 +166,15 @@ health_step() {  # the public check, under a spinner; the last step of every ser
   KEPT=""
 }
 
+smoke_step() {  # $1 = deploy | full: live conversations on the server (scripts/live_smoke.py), replies printed
+  step "live smoke test ($1): real webhook path and model calls on the server, nothing sent to WhatsApp"
+  KEPT="the release stays live; the smoke test's replies are above (deploy/deploy.sh --rollback to go back)"
+  RC=0
+  run_remote smoke "$1" 2>&1 | tee -a "$LOGFILE" || RC=$?
+  [ "$RC" -eq 0 ] || fail "the live smoke test failed (the replies are above)"
+  KEPT=""
+}
+
 # --- preflight (fast; before anything slow) ------------------------------------------------------------------------
 pf_ssh() {
   "$SSH" -o BatchMode=yes -o ConnectTimeout=10 "$HOST" true 2>/dev/null \
@@ -207,7 +218,7 @@ size_of() { stat -c %s "$1"; }
 # --- modes ---------------------------------------------------------------------------------------------------------
 case "$MODE" in
   "")
-    steps 5
+    steps 6
     KEPT="nothing was sent to the server"
     step "preflight"
     [ "$(git rev-parse --abbrev-ref HEAD)" = main ] || fail "not on main. Fix: git checkout main"
@@ -229,7 +240,16 @@ case "$MODE" in
     remote "server" deploy "$LOCAL"
     after_remote "rolled back automatically"
     health_step
+    smoke_step deploy
     ok "live: $(result_commit | cut -c1-7) at $PUBLIC_URL"
+    ;;
+
+  --smoke)
+    steps 2
+    KEPT="nothing changed on the server"
+    step "preflight"; pf_ssh
+    smoke_step "${2:-deploy}"
+    ok "live smoke (${2:-deploy}) passed"
     ;;
 
   --rollback)

@@ -477,3 +477,85 @@ def test_a_broad_question_gets_a_deep_analysis_in_several_messages_and_the_brief
     sends = h.turn(text("full brief", me), 1, "full brief")
     kind, _, doc = sends[0]
     assert kind == "document" and doc["filename"] == "kasafi-brief.pdf" and doc["pdf"] == b"%PDF"
+
+
+# --- 2 Nov evening, live: messages about Kasafi and facility claims, with the understanding step on -----------------
+
+def _with_readings(monkeypatch, h):
+    """The harness with the understanding step on, its readings replayed from evals/understanding/recorded.json by
+    message, and the conversational reply's Muse Spark call stubbed (the route, the trace and delivery are real)."""
+    import json
+    from pathlib import Path
+
+    import app.providers.meta as M
+    from app.agent import understand as U
+    cases = json.loads(Path("evals/understanding/cases.json").read_text(encoding="utf-8"))["cases"]
+    recorded = json.loads(Path("evals/understanding/recorded.json").read_text(encoding="utf-8"))
+    by_message = {}
+    for c in cases:
+        d = {k: v for k, v in recorded[c["id"]].items() if k != "seconds"}
+        by_message.setdefault((c["message"], bool(c["turns"])), U.Understanding(**d))
+
+    async def understand_fn(text, history, place, settings, fallbacks=None):
+        # no reading recorded: the keyword routing decides
+        return by_message.get((text, bool(history))) or by_message.get((text, not history))
+
+    class Model:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return None
+
+        async def chat(self, messages, **kw):
+            hausa = "Hausa" in messages[-1]["content"].split("USER'S LANGUAGE:")[1][:12]
+            return type("R", (), {"content": "Ni ne Kasafi." if hausa else "I'm Kasafi, an assistant for Sokoto."})()
+    monkeypatch.setattr(M, "MetaClient", Model)
+    s = h.settings.model_copy(update={"kasafi_understanding": True})
+    monkeypatch.setattr(webhook, "get_settings", lambda: s)
+
+    async def handle(msg, wa, **kw):
+        kw["settings"] = s
+        return await conversation.handle(msg, wa, answer_fn=recorded_answer, voice_fn=fake_voice, guard_fn=fake_guard,
+                                         resolve_fn=fake_resolve, understand_fn=understand_fn, **kw)
+    monkeypatch.setattr(webhook, "handle", handle)
+
+
+def test_who_are_you_and_thanks_get_kasafis_own_reply_never_the_documents(harness, monkeypatch):
+    h, me, ha = harness, "2348000000910", "2348000000911"
+    _with_readings(monkeypatch, h)
+    consented(h, me, "en")
+    consented(h, ha, "ha")
+    for body, who in (("Who are you?", me), ("Kai wanene?", ha), ("What can you do?", me), ("Me za ka iya yi?", ha),
+                      ("Hello", me), ("Ina kwana", ha)):
+        sends = h.turn(text(body, who), 1, body)
+        assert "couldn't find" not in sends[0][2] and "Ban sami" not in sends[0][2]
+        assert sends[0][2] in ("I'm Kasafi, an assistant for Sokoto.", "Ni ne Kasafi.")
+    sends = h.turn(text("How much was allocated to works in 2026?", me), 2, "budget")   # progress line, answer
+    assert "Ministry of Works" in sends[1][2]
+    sends = h.turn(text("Thanks", me), 1, "thanks")
+    assert sends[0][2] == "I'm Kasafi, an assistant for Sokoto."
+
+
+def test_a_cold_but_uduth_is_closer_is_checked_from_the_lga_on_file(harness, monkeypatch):
+    """Trace #123: no list and no pin, Wamakko on file. The registry and PostGIS answer, from the LGA's centre."""
+    h, me = harness, "2348000000910"
+    _with_readings(monkeypatch, h)
+    consented(h, me, "en")
+    h.store().set_last_lga(h.key(me), "NG034021")
+    sends = h.turn(text("But uduth is closer to me", me), 1, "cold claim")
+    assert "centre of Wamakko LGA" in sends[0][2] and "Usman" in sends[0][2]
+    assert "documents" not in sends[0][2]
+
+
+def test_pin_nearest_hospital_then_but_uduth_is_closer(harness, monkeypatch):
+    h, me = harness, "2348000000911"
+    _with_readings(monkeypatch, h)
+    consented(h, me, "en")
+    h.turn(pin(LAT, LON, me), 2, "pin")
+    h.turn(text("Where is the nearest hospital?", me), lambda s: s and s[0][0] == "text", "nearest hospital")
+    sends = h.turn(text("But Uduth is closer to me", me), 1, "correction")
+    assert "Usman" in sends[0][2] and "from your pin" in sends[0][2]

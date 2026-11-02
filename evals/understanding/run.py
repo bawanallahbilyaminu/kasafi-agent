@@ -51,9 +51,13 @@ def score(reading: dict | None, expect: dict) -> list[str]:
 async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--provider", default="meta", choices=("meta", "open"))
+    ap.add_argument("--only", default="", help="comma-separated case ids: re-read only these (e.g. after a network "
+                                               "drop); the other recorded readings are kept")
     a = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
     cases = json.loads((HERE / "cases.json").read_text(encoding="utf-8"))["cases"]
+    only = {x.strip() for x in a.only.split(",") if x.strip()}
+    kept = json.loads((HERE / "recorded.json").read_text(encoding="utf-8")) if only else {}
     s = get_settings()
     if a.provider == "open":
         from app.providers.baseten import BasetenClient as Client
@@ -65,6 +69,12 @@ async def main() -> int:
     t0 = usage.total_dollars(s)
     async with Client(s) as client:
         for c in cases:
+            if only and c["id"] not in only:
+                reading = kept.get(c["id"])
+                recorded[c["id"]] = reading
+                secs.append((reading or {}).get("seconds", 0.0))
+                rows.append((c["id"], c["message"], reading, score(reading, c["expect"])))
+                continue
             u = await understand(c["message"], history_of(c), PLACES[c["place"]], client, s, model=model)
             reading = u.to_dict() if u else None
             recorded[c["id"]] = reading
@@ -79,7 +89,8 @@ async def main() -> int:
     lines = [f"# Conversation understanding eval ({a.provider})", "",
              f"{len(rows)} cases: **{len(rows) - n_wrong} right**, {n_wrong} wrong. Latency median "
              f"{statistics.median(secs):.2f} s, p90 {sorted(secs)[int(len(secs) * 0.9) - 1]:.2f} s; cost "
-             f"${cost:.4f} (${cost / len(rows):.4f} per message).", "",
+             f"${cost:.4f} (${cost / (len(only) or len(rows)):.4f} per message"
+             f"{f'; {len(only)} re-read with --only, the rest kept from the last run' if only else ''}).", "",
              "| Id | Message | Capability / level / time / kind | Restatement | Wrong |", "|---|---|---|---|---|"]
     for cid, msg, r, wrong in rows:
         r = r or {}

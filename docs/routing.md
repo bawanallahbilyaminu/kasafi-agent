@@ -107,9 +107,66 @@ standalone restatement in Kasafi's own place words ('my farm (the pin)', 'my war
   message is read with them.
 - Every model-written answer and the planner start with the shared core prompt (`app/agent/persona.py`).
 
-Eval: `evals/understanding/` (45 conversations, 30 multi-turn and 15 first messages, English and Hausa, including the
+Eval: `evals/understanding/` (65 conversations since 2 Nov evening: 45 plus 20 about Kasafi or the conversation and a cold facility claim; English and Hausa, including the
 three failures): 45/45 on Muse Spark, median 2.7 s, p90 3.7 s, $0.0020 per message (`report.md`); 45/45 on Muse
 Spark Open, median 2.0 s, p90 4.2 s (`report-open.md`). The deploy gate replays the recorded readings
 (`tests/test_understanding.py`) through the conversation handler, without a model call.
 
 Reasoning effort (2 Nov): `minimal` with 900 tokens. `low` with 3000 tokens was measured on the same 45 cases: 44/45, median 4.9 s, p90 8.2 s, $0.0049 per message (`report-low.md`), more precise on two readings and wrong on one, so no more reliable for twice the time and cost. The answer limit went from 120 s to 180 s (the answer loop 165 s, a deep analysis 210 s) so the 2-3 s of understanding never pushes a first-time pin (~95 s) or a deep analysis into the apology. Answers lead with what was asked: a flood question opens with the flood finding (pin and ward answers), a trend follows the year's finding unless the trend was asked, and hazard layers are summarised in the order the question names them.
+
+### The readings obeyed (2 Nov, evening live test)
+
+The live server ran the step on every message, but two readings had no route that honoured them. "Who are you?"
+(7:38 and 8:02 PM) was read as chit-chat and still went to the planner and the document search ("I couldn't find
+the answer to that in the documents I have"). A cold "But uduth is closer to me" (8:05 PM, trace #123, Wamakko on
+file, no list before it) was read as a facility correction, but the correction check needed a list and the facility
+shortcut excluded corrections, so it fell to page search in the EmONC assessment. The planner had read it right too
+(`verify_claim`, `facility_lookup`, UDUTH). The trace kept no reading, so it looked like the step never ran; the
+logs showed it had.
+
+Now:
+- **conversation** (greetings, who are you, what can you do, how does it work, who made you, is this a bot, can
+  you speak Hausa, thanks, goodbye, help): `app/agent/conversational.py`. One Muse Spark call under the core prompt
+  replies in the user's language: who Kasafi is, 3 or 4 example questions that fit the user's place on file ("send
+  your location" when there is none), and that answers come from public documents with the page as evidence. There
+  is no document search. If the call fails, fixed words in Hausa or English say the same. With no reading, the
+  plain self-questions and greetings (`ABOUT_KASAFI`) take the same route.
+- **"I couldn't find…" never answers a message that isn't a document question.** A reading of `other` that isn't a
+  request (`looks_like_request`) gets the help text directly. A not-found answer to a reading of `other` or
+  `conversation`, or to a short non-question when there is no reading, is replaced by the help text: what Kasafi
+  can help with, and what the user is looking for.
+- **A facility claim** (kind correction, or "closer / nearer / ya fi kusa" with a facility named) goes to
+  `_facility_correction` with or without a list. After a list, it is checked against that list as before. With no
+  list, the named facility is compared by road with the nearest others of its kind: from the pin, or from the centre
+  of the LGA on file (and the reply says so). With neither, the location is asked for, and the check runs when the
+  pin or a typed place arrives (`CLAIM_WAIT`). It never goes to the document search.
+- **Traces:** every answer's trace starts with the reading (`understanding`). Replies from routes of their own
+  (`conversation:model|fixed`, `facility_check`, `help`) get a trace row with the reading. The admin trace page
+  shows it as card 0, above the plan.
+
+Capability → route audit:
+
+| Capability | Route that honours the reading | When the keywords miss |
+|---|---|---|
+| conversation | `conversational.reply` (no search) | — (the reading decides) |
+| facility | correction or claim → `_facility_correction`; nearest, route and named → the facility shortcut; counts and named cards → `facility_route` | staff, equipment and services at facilities → documents (by design) |
+| place_history | `area_route` / `place_route` | the reading's level decides: pin → `place_answer`; ward, LGA or state → `area_route` with the reading's measure |
+| hazard | `official.route`, `hazard_route` | `hazard_route` with the reading's measure |
+| alerts | `alerts_reply` | `alerts_reply` on the restatement |
+| deep | `deep_path` (the reading alone suffices) | — |
+| place_budget | `lga_route` | the structured and document paths (a budget answer, without the LGA tool's by-sector layout) |
+| budget, statistics | the planner, the structured core and the document path | — |
+| other | the document path; not found → the help text | a non-request → the help text directly |
+
+Still not honoured as a hard route: `place_budget` when the restatement doesn't say "my area / my LGA" (the
+structured path answers instead), and `facility` questions with no name, no count and no nearest words (the
+document path answers).
+
+The dash rule (L36) had refused #123's corrected retry: its second pattern matched "a dash in the table means no"
+in "…means no figure is printed", which is the rule followed, not broken. A figure word after "no" now ends the
+match.
+
+Live smoke test: `scripts/live_smoke.py` sends conversations through the real webhook reply path in the server
+container, with real model calls and nothing sent to WhatsApp. `deploy/deploy.sh` runs the 3-message set after
+every deploy ("Who are you?", "Kai wanene?", a cold "But uduth is closer to me" with Wamakko on file), about $0.01.
+`deploy/deploy.sh --smoke full` runs the 8 conversations of this fix (about $0.15).

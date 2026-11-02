@@ -101,7 +101,9 @@ def record(a) -> dict:
         plan["need"] = _scrub(asdict(a.plan.need))
     if a.plan is not None and getattr(a.plan, "words", None):                 # overrides and conflicts: fields only
         plan["words"] = a.plan.words
-    t: dict = {"plan": plan, "timings": {k: round(v, 2) for k, v in a.timings.items()},
+    u = getattr(a, "understanding", None)           # what the message meant in the conversation: first on the page
+    t: dict = {**({"understanding": _scrub(u.to_dict())} if u is not None else {}),
+               "plan": plan, "timings": {k: round(v, 2) for k, v in a.timings.items()},
                "cited": [{"n": e.n, "doc": e.doc_id, "title": e.title, "page": e.page, "source": e.source}
                          for e in a.cited],
                "verified": a.verified}
@@ -161,16 +163,18 @@ def save(conn: psycopg.Connection, a, lang: str, seconds: float) -> None:
         log.warning("trace not saved: %s", type(e).__name__)
 
 
-def save_event(settings, question: str, lang: str, outcome_: str, path_: str, detail: dict, seconds: float) -> None:
-    """A row for something that isn't an answer (e.g. 'understanding_fallback': the conversation-understanding step
-    failed on both models and the keyword routing decided). Own connection; never raises."""
+def save_event(settings, question: str, lang: str, outcome_: str, path_: str, detail: dict, seconds: float,
+               answer: str = "") -> None:
+    """A row for something that isn't a document answer: 'understanding_fallback' (the conversation-understanding
+    step failed on both models and the keyword routing decided), or a reply from a route of its own (a
+    conversational reply, a facility check) with the reading that sent it there. Own connection; never raises."""
     import psycopg
     try:
         with psycopg.connect(settings.db_url(), connect_timeout=5) as conn:
             conn.execute("INSERT INTO traces (lang, question, outcome, path, seconds, trace, answer) "
                          "VALUES (%s, %s, %s, %s, %s, %s, %s)",
                          (lang, redact(question)[:1000] or "(empty)", outcome_, path_, round(seconds, 2),
-                          json.dumps(detail, default=str), ""))
+                          json.dumps(_scrub(detail), default=str), scrub_reply(answer)))
             conn.commit()
     except Exception as e:                                   # noqa: BLE001
         log.warning("event trace not saved: %s", type(e).__name__)

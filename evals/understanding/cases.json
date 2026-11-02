@@ -73,7 +73,7 @@
    "message": "Send me the full brief", "expect": {"capability": "deep", "kind": "follow_up"}},
   {"id": "u24", "place": "pin", "turns": [
      {"user": "Nearest PHC", "kasafi": "Nearest: 1. Kalambaina PHC 1.1 km 2. Arkilla PHC 3.0 km"}],
-   "message": "Thanks", "expect": {"capability": "chitchat", "kind": "chitchat"}},
+   "message": "Thanks", "expect": {"capability": "conversation", "kind": "chitchat"}},
   {"id": "u25", "place": "pin", "turns": [
      {"user": "Nearest PHC", "kasafi": "Nearest: 1. Kalambaina PHC 1.1 km 2. Arkilla PHC 3.0 km"}],
    "message": "Is Arkilla open at night?", "expect": {"capability": "facility", "level": "facility"}},
@@ -105,7 +105,27 @@
   {"id": "f11", "place": "none", "turns": [], "message": "What does the MICS say about birth registration in Sokoto?", "expect": {"capability": "statistics", "level": "document"}},
   {"id": "f12", "place": "none", "turns": [], "message": "Alert me when there will be floods in Goronyo", "expect": {"capability": "alerts"}},
   {"id": "f13", "place": "none", "turns": [], "message": "What projects is the government doing in Tambuwal?", "expect": {"capability": "place_budget", "level": "lga"}},
-  {"id": "f14", "place": "none", "turns": [], "message": "Sannu", "expect": {"capability": "chitchat"}},
-  {"id": "f15", "place": "none", "turns": [], "message": "Yaya yanayin ilimi a Sokoto?", "expect": {"capability": "deep"}}
+  {"id": "f14", "place": "none", "turns": [], "message": "Sannu", "expect": {"capability": "conversation"}},
+  {"id": "f15", "place": "none", "turns": [], "message": "Yaya yanayin ilimi a Sokoto?", "expect": {"capability": "deep"}},
+  {"id": "c01", "place": "none", "lang": "en", "turns": [], "message": "Who are you?", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c02", "place": "none", "lang": "ha", "turns": [], "message": "Kai wanene?", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c03", "place": "none", "lang": "ha", "turns": [], "message": "Me za ka iya yi?", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c04", "place": "none", "lang": "en", "turns": [], "message": "What can you do?", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c05", "place": "none", "lang": "en", "turns": [], "message": "How does this work?", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c06", "place": "none", "lang": "en", "turns": [], "message": "Who made you?", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c07", "place": "none", "lang": "en", "turns": [], "message": "Is this a bot?", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c08", "place": "none", "lang": "en", "turns": [], "message": "Can you speak Hausa?", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c09", "place": "pin", "lang": "ha", "turns": [{"user": "Kasafin ilimi na 2026 nawa ne?", "kasafi": "A 2026, an ware wa ilimi N117.75 biliyan."}], "message": "Na gode", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c10", "place": "none", "lang": "ha", "turns": [], "message": "Assalamu alaikum", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c11", "place": "none", "lang": "en", "turns": [], "message": "Hello", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c12", "place": "none", "lang": "ha", "turns": [{"user": "Ina asibiti mafi kusa?", "kasafi": "Asibitoci mafi kusa da kai: 1. Specialist Hospital Sokoto: 6.2 km"}], "message": "Sai anjima", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c13", "place": "pin", "lang": "en", "turns": [{"user": "Nearest PHC", "kasafi": "Nearest: 1. Kalambaina PHC 1.1 km 2. Arkilla PHC 3.0 km"}], "message": "Thank you, bye", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c14", "place": "none", "lang": "en", "turns": [], "message": "help", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c15", "place": "none", "lang": "ha", "turns": [], "message": "Ina kwana", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c16", "place": "none", "lang": "ha", "turns": [], "message": "Wa ya yi ka?", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c17", "place": "none", "lang": "ha", "turns": [], "message": "Kana jin Hausa?", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c18", "place": "none", "lang": "ha", "turns": [], "message": "Mutum ne kai ko na'ura?", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c19", "place": "none", "lang": "ha", "turns": [], "message": "Yaya kake aiki?", "expect": {"capability": "conversation", "kind": "chitchat"}},
+  {"id": "c20", "place": "lga", "lang": "en", "turns": [], "message": "But uduth is closer to me", "expect": {"capability": "facility", "level": "facility"}}
  ]
 }

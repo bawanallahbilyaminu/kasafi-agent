@@ -113,8 +113,8 @@ def _setup(case):
     s = make_settings(database_url="postgresql://x:y@127.0.0.1:1/none", kasafi_understanding=True)
     store = UserStore(":memory:")
     key = user_key(SENDER, s)
-    store.create(key, "ha" if case["id"] in ("u09", "u10", "u11", "u12", "u27", "u28", "f08", "f09", "f10", "f14",
-                                             "f15") else "en")
+    store.create(key, case.get("lang") or ("ha" if case["id"] in ("u09", "u10", "u11", "u12", "u27", "u28", "f08",
+                                                                  "f09", "f10", "f14", "f15") else "en"))
     store.give_consent(key)
     memory.forget(key)
     if case["place"] == "pin":
@@ -141,11 +141,22 @@ def test_each_conversation_reaches_the_capability_and_subject_it_means(case, mon
     async def answer(question, lang, **kw):
         seen["understanding"] = kw.get("understanding")
         return "ANSWER"
+
+    async def conversational(message, lang, history, place, settings, client_cls=None):
+        seen["conversational"] = (message, lang)
+        return "HELLO", "model"
+    import app.agent.conversational as CV
+    monkeypatch.setattr(CV, "reply", conversational)
     monkeypatch.setattr(s.__class__, "has_database", property(lambda self: False))
     msg = {"from": SENDER, "id": f"w-{case['id']}", "type": "text", "text": {"body": case["message"]}}
     outs = asyncio.run(C.handle(msg, None, store=store, settings=s, answer_fn=answer, guard_fn=_ok, place_fn=_none,
                                 understand_fn=understand_fn))
     assert len(seen.get("history") or []) == len(case["turns"])            # the conversation reached the step
+    if reading(case["id"]).capability == "conversation":    # about Kasafi or the conversation: never the documents
+        assert "understanding" not in seen and seen["conversational"][0] == case["message"]
+        assert outs and outs[-1].text == "HELLO"
+        assert case["expect"]["capability"] == "conversation"
+        return
     got = seen.get("understanding")
     assert got is not None and outs and outs[-1].text == "ANSWER"
     assert score(got.to_dict(), case["expect"]) == []
@@ -223,3 +234,140 @@ def test_a_past_flood_question_goes_to_place_history_never_the_forecast(conn, mo
     a = asyncio.run(A.answer_question("Has this area ever flooded", "en", conn, settings=make_settings(),
                                       place=place, understanding=reading("u02")))
     assert called == ["area"] and a.text == "WARD RECORD"
+
+
+# --- 2 Nov evening, live: 'Who are you?' and a cold 'But uduth is closer to me' went to the document search ----------
+
+UDUTH = SimpleNamespace(fid="f9", name="Usman Danfodio University Teaching Hospital", level="Tertiary",
+                        kind="Teaching Hospital", ownership="Public", lat=13.0266, lon=5.22, lga="Wamakko",
+                        lga_attr="Wamakko", emonc="", checked="", score=1.0)
+
+
+def _near(*a, **k):
+    return [Facility("f1", "Specialist Hospital Sokoto", "Secondary", "General Hospital", "Public", "", 13.06, 5.24,
+                     "Sokoto North", "", 6.5),
+            Facility("f9", UDUTH.name, "Tertiary", "Teaching Hospital", "Public", "", 13.0266, 5.22, "Wamakko", "", 4.0)]
+
+
+async def _routes(settings, lat, lon, facilities, profile="car", **kw):
+    for f in facilities:
+        f.road_km, f.minutes = (5.0, 9) if f.fid == "f9" else (9.0, 17)
+    return True
+
+
+def test_a_cold_claim_with_only_the_lga_on_file_is_checked_from_the_lgas_centre_and_says_so(monkeypatch) -> None:
+    """Trace #123: no list, no pin, Wamakko on file. The claim is checked by road against the nearest other
+    hospital, from the LGA's centre, and the reply says it measured from there."""
+    import app.geo.facilities as G
+    key = "k-cold-lga"
+    memory.forget(key)
+    store = UserStore(":memory:")
+    store.create(key, "en")
+    store.set_last_lga(key, "NG034021")
+    monkeypatch.setattr(C, "lookup", lambda settings, text: [UDUTH])
+    monkeypatch.setattr(C, "_lga_centre", lambda settings, pcode: (13.05, 5.17))
+    monkeypatch.setattr(G, "_query", _near)
+    monkeypatch.setattr(C, "add_routes", _routes)
+    u = U.Understanding(kind="correction", capability="facility", level="facility", name="Usmanu Danfodiyo "
+                        "University Teaching Hospital", restatement="UDUTH is closer to me in my LGA")
+    text = asyncio.run(C._facility_correction(u, key, "en", make_settings(), None, store=store))[0].text
+    assert "centre of Wamakko LGA (your LGA on file)" in text
+    assert "The nearest other hospital, Specialist Hospital Sokoto" in text
+    assert "You're right: Usman Danfodio University Teaching Hospital is the closest hospital to the centre of " \
+           "Wamakko LGA." in text
+
+
+def test_a_cold_claim_with_no_location_asks_for_it_and_checks_when_the_pin_comes(monkeypatch) -> None:
+    import app.geo.facilities as G
+    key = "k-cold-none"
+    memory.forget(key)
+    store = UserStore(":memory:")
+    store.create(key, "en")
+    monkeypatch.setattr(C, "lookup", lambda settings, text: [UDUTH])
+    monkeypatch.setattr(G, "_query", _near)
+    monkeypatch.setattr(C, "add_routes", _routes)
+    u = U.Understanding(kind="correction", capability="facility", level="facility", name="UDUTH",
+                        restatement="UDUTH is closer to me")
+    out = asyncio.run(C._facility_correction(u, key, "en", make_settings(), None, store=store))[0]
+    assert out.location_request and "I need your location" in out.text
+    waiting = memory.waiting_question(key)
+    assert waiting == C.CLAIM_WAIT + UDUTH.name
+    outs = asyncio.run(C._after_location(waiting, key, "en", make_settings(), None, PIN))
+    assert "from your pin" in outs[0].text and "is the closest hospital to you" in outs[0].text
+
+
+def test_couldnt_find_never_answers_a_message_that_isnt_a_document_question(monkeypatch) -> None:
+    """A reading of 'other' that the documents can't answer, and with no reading a short non-question: what Kasafi
+    can help with and what they're looking for, never 'I couldn't find the answer…'."""
+    from app.agent.answer import NOT_FOUND
+    case = {"id": "x-other", "place": "pin", "turns": []}
+    s, store, key = _setup(case)
+    monkeypatch.setattr(s.__class__, "has_database", property(lambda self: False))
+
+    async def answer(question, lang, **kw):
+        return SimpleNamespace(text=NOT_FOUND["en"], found=False, sources=[], working="", quotes="")
+
+    async def other(*a, **k):
+        return U.Understanding(kind="new", capability="other", restatement="Tell me something interesting")
+    msg = {"from": SENDER, "id": "w-x-other", "type": "text", "text": {"body": "Tell me something interesting about this"}}
+    outs = asyncio.run(C.handle(msg, None, store=store, settings=s, answer_fn=answer, guard_fn=_ok, place_fn=_none,
+                                understand_fn=other))
+    assert NOT_FOUND["en"] not in outs[-1].text and "What are you looking for?" in outs[-1].text
+    assert "Has my farm ever flooded?" in outs[-1].text              # examples that fit a user with a pin
+
+    async def failed(*a, **k):
+        return None
+    msg = {"from": SENDER, "id": "w-x-ok", "type": "text", "text": {"body": "ok then"}}
+    outs = asyncio.run(C.handle(msg, None, store=store, settings=s, answer_fn=answer, guard_fn=_ok, place_fn=_none,
+                                understand_fn=failed))
+    assert NOT_FOUND["en"] not in outs[-1].text and "What are you looking for?" in outs[-1].text
+
+
+def test_who_are_you_with_no_reading_still_gets_the_conversational_reply(monkeypatch) -> None:
+    case = {"id": "x-who", "place": "none", "turns": []}
+    s, store, key = _setup(case)
+    import app.agent.conversational as CV
+
+    async def conversational(message, lang, history, place, settings, client_cls=None):
+        return "I'm Kasafi", "model"
+    monkeypatch.setattr(CV, "reply", conversational)
+    monkeypatch.setattr(s.__class__, "has_database", property(lambda self: False))
+
+    async def failed(*a, **k):
+        return None
+
+    async def answer(*a, **k):
+        raise AssertionError("no document search for 'Who are you?'")
+    msg = {"from": SENDER, "id": "w-x-who", "type": "text", "text": {"body": "Who are you?"}}
+    outs = asyncio.run(C.handle(msg, None, store=store, settings=s, answer_fn=answer, guard_fn=_ok, place_fn=_none,
+                                understand_fn=failed))
+    assert outs[-1].text == "I'm Kasafi"
+
+
+def test_the_conversational_reply_falls_back_to_the_fixed_words_in_the_users_language() -> None:
+    from app.agent import conversational as CV
+
+    class Down(_Client):
+        replies = {"Down": TimeoutError()}
+    text, how = asyncio.run(CV.reply("Kai wanene?", "ha", [], None, make_settings(), client_cls=Down))
+    assert how == "fixed" and text.startswith("Ni ne Kasafi") and "aiko da wurinka" in text
+    _Client.replies = {"Meta": "# Hello\nI'm Kasafi."}
+    text, how = asyncio.run(CV.reply("Hello", "en", [], None, make_settings(), client_cls=Meta))
+    assert how == "model" and text == "Hello\nI'm Kasafi."
+
+
+def test_the_trace_carries_the_reading_first() -> None:
+    from app.agent import trace
+    from app.agent.answer import Answer
+    a = Answer("x", True, True)
+    a.understanding = reading("c20")
+    t = trace.record(a)
+    assert list(t)[0] == "understanding" and t["understanding"]["capability"] == "facility"
+
+
+def test_a_dash_said_to_mean_no_figure_is_the_rule_followed_not_a_misread() -> None:
+    """Trace #123: the retry said 'a dash in the table means no figure is printed' and was refused for it."""
+    from app.agent.answer import dash_misread
+    assert dash_misread("A dash in the table means no figure was printed for Wamakko.") == ""
+    assert dash_misread("In the table a dash means no data.") == ""
+    assert dash_misread("The dash is zero") and dash_misread("Dange Shuni shows no enrolment (- in the table)")

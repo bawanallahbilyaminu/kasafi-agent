@@ -31,7 +31,8 @@ log = logging.getLogger(__name__)
 
 KINDS = ("new", "follow_up", "correction", "clarification", "chitchat")
 CAPABILITIES = ("budget", "place_budget", "statistics", "deep", "hazard", "place_history", "facility", "alerts",
-                "chitchat", "other")
+                "conversation", "other")
+ALIASES = {"chitchat": "conversation"}      # the first prompt's name (2 Nov): recorded readings may still carry it
 LEVELS = ("pin", "ward", "lga", "state", "facility", "document", "project", "agency", "sector", "none")
 TIMES = ("past", "now", "forecast", "year", "span", "none")
 TURNS = 4
@@ -39,7 +40,7 @@ TURNS = 4
 SYSTEM = with_core("""TASK: read the user's NEW MESSAGE in the conversation and say what they mean. Reply with JSON \
 only:
 {"kind": "new|follow_up|correction|clarification|chitchat",
- "capability": "budget|place_budget|statistics|deep|hazard|place_history|facility|alerts|chitchat|other",
+ "capability": "budget|place_budget|statistics|deep|hazard|place_history|facility|alerts|conversation|other",
  "subject": {"level": "pin|ward|lga|state|facility|document|project|agency|sector|none", "name": "<as named>"},
  "time": {"kind": "past|now|forecast|year|span|none", "years": [<years named>]},
  "measure": "<what is asked: amount, spent, count, nearest, flooded, greenness, rain, coverage...>",
@@ -58,11 +59,16 @@ in my area" with no other cue).
 - place_history: what satellites show for a place in PAST years: was it flooded, green, bare; "ever", "before".
 - facility: the nearest health facility, a route or distance to one, a named facility's details, facility counts.
 - alerts: signing up for or stopping hazard alerts.
+- conversation: a message about Kasafi or the conversation itself, not a request for information: greetings, \
+"who are you", "what can you do", "how does it work", "who made you", "is this a bot", "can you speak Hausa", \
+thanks, goodbye, "help", "ok". Its kind is "chitchat" and its level "none".
 
 Rules:
 - A follow-up keeps the previous subject and place unless the message names new ones.
 - A correction or disagreement about the previous answer ("but X is closer", "that's not right") is kind \
-"correction"; the capability is the previous answer's; the subject is what the user names (e.g. the facility).
+"correction"; the capability is the previous answer's; the subject is what the user names (e.g. the facility). \
+A claim that a named facility is closer or nearer is capability "facility" with the facility as the subject, even \
+with no list before it.
 - "this land", "here", "my farm", "this place" with a pin = level "pin"; "this area", "my ward", "my community" = \
 "ward"; "my LGA", "my local government" = "lga". No place words and no pin: level "state" or "none".
 - "ever", "before", "in the past", "last year" = past; "will", "expected", "this season", "tomorrow" = forecast.
@@ -97,9 +103,10 @@ def parse(d: dict) -> Understanding | None:
         return None
     subj = d.get("subject") if isinstance(d.get("subject"), dict) else {}
     tm = d.get("time") if isinstance(d.get("time"), dict) else {}
+    cap = ALIASES.get(d.get("capability"), d.get("capability"))
     u = Understanding(
         kind=d.get("kind") if d.get("kind") in KINDS else "new",
-        capability=d.get("capability") if d.get("capability") in CAPABILITIES else "other",
+        capability=cap if cap in CAPABILITIES else "other",
         level=subj.get("level") if subj.get("level") in LEVELS else "none",
         name=str(subj.get("name") or "").strip()[:120],
         time=tm.get("kind") if tm.get("kind") in TIMES else "none",
