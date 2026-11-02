@@ -123,3 +123,18 @@ Muse Spark Open and the findings grouped by source; a budget comparison stays on
 section cards; otherwise "I didn't find this in the pages I read", naming the pages that may cover it); two figures
 for overlapping groups are both given with what each covers (compose rule 6h); amounts are shown in house style
 ("₦29.6 billion" for "NGN29,6 billion"), the printed form kept in show working. `tests/test_cards.py`.
+
+**L39 (2 Nov 2026): charts on text pages.** OCR ran only on pages without a text layer, so a chart on a text page was
+invisible. Charts are now found in code (images, form objects and clusters of filled shapes of chart size, kept only
+with the nearest 'Figure/Chart/Graph N' caption: regions found by axis-like numbers alone were all coloured table
+cells, page backgrounds or text boxes; a form object's inner shapes are in its own coordinates, so the form is the
+region; captions are searched across the page's width, nearest first, because they sit at the margin), read once by
+Muse Spark Open on Baseten into data, labels snapped to the page's own text ('PLATEEAU' -> 'PLATEAU'). Printed values
+are figures "(read from a chart label)"; values estimated from bar heights only give an order. The Health ROP's
+charts are not in our copy of its PDF at all (a Word 2013 export with 3 images in 43 pages): no reader can recover
+them. `tests/test_charts.py`.
+
+**L40 (2 Nov 2026): broad questions get a deep analysis.** 'What's the state of PHCs' got the registry's one-line
+count. A broad question now plans dimensions, reads up to 15 documents across the library on Muse Spark Open, keeps
+only claims whose value is printed on their page, and has one Muse Spark synthesis from those (figures not in a claim
+and verdict words removed in code). First server run: 9 documents, 49 checked figures, 29 s, $0.105. `tests/test_deep.py`.

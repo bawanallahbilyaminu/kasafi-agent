@@ -335,12 +335,33 @@ def keep_verified(text: str, claims: list[Claim]) -> str:
     return "\n".join(out)
 
 
+def short_title(title: str, most: int = 70) -> str:
+    """A title cut at a word, never mid-word ('...to Improve Healthcare Services', not '...Improve Hea')."""
+    t = (title or "").strip()
+    return t if len(t) <= most else t[:most].rsplit(" ", 1)[0].rstrip(" ,;:-(") + "…"
+
+
 def cite(text: str, claims: list[Claim]) -> str:
-    """[C3] -> (Title, p. 12), once per sentence."""
+    """[C3] -> (Title, p. 12); a source already cited in this text isn't repeated; the registry has no page;
+    amounts in house style ('₦150 million', never '150,000,000.00 NGN')."""
+    from app.agent.answer import readable_amounts
+    seen: set[str] = set()
+
     def sub(m):
         i = int(m.group(1)) - 1
-        return f"({claims[i].title[:60]}, p. {claims[i].page})" if 0 <= i < len(claims) else ""
-    return re.sub(r"\s*\[C(\d+)\]", lambda m: " " + sub(m), text or "").strip()
+        if not 0 <= i < len(claims):
+            return ""
+        c = claims[i]
+        ref = f"({short_title(c.title)})" if c.doc_id.startswith("registry:") or not c.page else \
+            f"({short_title(c.title)}, p. {c.page})"
+        if ref in seen:
+            return ""
+        seen.add(ref)
+        return " " + ref
+    out = re.sub(r"\s*\[C(\d+)\]", sub, text or "").strip()
+    out = re.sub(r"\b(\d[\d,]*(?:\.\d+)?)\s*NGN\s*(billion|million|trillion)?\b",
+                 lambda m: f"₦{m.group(1)}" + (f" {m.group(2)}" if m.group(2) else ""), out)
+    return readable_amounts(out, "en")
 
 
 async def synthesise(client, question: str, lang: str, claims: list[Claim], dims: list[Dimension],
@@ -415,7 +436,8 @@ async def deep_answer(conn: psycopg.Connection, question: str, english: str, lan
                 for s in d.get("sections") or [] if isinstance(s, dict)]
     sections = [(n, t) for n, t in sections if t]
     return DeepResult(cite(keep_verified(str(d.get("summary") or ""), claims), claims), sections,
-                      VERDICT.sub("", str(d.get("differ") or "")).strip(), str(d.get("missing") or "").strip(),
+                      cite(VERDICT.sub("", str(d.get("differ") or "")).strip(), claims),
+                      cite(str(d.get("missing") or "").strip(), claims),
                       claims, [r.doc_id for r in readings], usage.total_dollars(settings) - start_cost,
                       time.perf_counter() - t0, stopped)
 

@@ -177,3 +177,18 @@ def test_a_deep_analysis_reads_across_the_library_within_its_limits(conn) -> Non
     assert all(c.value != "987,654,321" for c in r.claims)                # invented figures never pass the check
     assert "77.7" not in r.summary and "poor" not in r.summary            # unverified figure and verdict word gone
     assert notes[0].startswith("🧭") and notes[1].startswith("📚 Reading") and notes[2].startswith("✍️")
+
+
+def test_citations_are_given_once_per_message_without_a_page_for_the_registry_and_amounts_in_house_style() -> None:
+    claims = [D.Claim("f", "s", "15,000,000.00", "", "2025", "", "budget-2025", "Sokoto State Government 2025 Approved "
+                      "Budget", 45),
+              D.Claim("f", "s", "934", "", "2024", "", "registry:facilities", "Health facility registry (NHFR / GRID3)",
+                      0),
+              D.Claim("f", "s", "1", "", "", "", "rop", "State Health Resource Optimization Plan (ROP) to Improve "
+                      "Healthcare Services in Sokoto", 9)]
+    text = D.cite("15,000,000.00 NGN for renovation [C1]. 150,000,000.00 NGN for solar [C1]. 934 facilities [C2]. "
+                  "Readiness [C3].", claims)
+    assert text.count("(Sokoto State Government 2025 Approved Budget, p. 45)") == 1
+    assert "(Health facility registry (NHFR / GRID3))" in text and "p. 0" not in text
+    assert "₦15.00 million" in text and "NGN" not in text
+    assert "Improve Healthcare…" in text or "Improve…" in text and "Hea," not in text
