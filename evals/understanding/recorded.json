@@ -1,0 +1,532 @@
+{
+ "u01": {
+  "kind": "correction",
+  "capability": "facility",
+  "level": "facility",
+  "name": "UDUTH",
+  "time": "none",
+  "years": [],
+  "measure": "nearest",
+  "restatement": "The user says UDUTH is closer to my farm (the pin) than the hospitals previously listed.",
+  "seconds": 4.1500021000392735
+ },
+ "u02": {
+  "kind": "follow_up",
+  "capability": "place_history",
+  "level": "ward",
+  "name": "my ward",
+  "time": "past",
+  "years": [],
+  "measure": "flooded",
+  "restatement": "Has my ward ever flooded in the past?",
+  "seconds": 4.068279999948572
+ },
+ "u03": {
+  "kind": "follow_up",
+  "capability": "place_history",
+  "level": "pin",
+  "name": "my farm (the pin)",
+  "time": "past",
+  "years": [],
+  "measure": "flooded",
+  "restatement": "Has my farm (the pin) ever flooded?",
+  "seconds": 2.686974400014151
+ },
+ "u04": {
+  "kind": "follow_up",
+  "capability": "hazard",
+  "level": "pin",
+  "name": "my farm",
+  "time": "forecast",
+  "years": [
+   2026
+  ],
+  "measure": "flood risk",
+  "restatement": "Will my farm (the pin) flood this rainy season?",
+  "seconds": 4.144983400008641
+ },
+ "u05": {
+  "kind": "follow_up",
+  "capability": "place_budget",
+  "level": "lga",
+  "name": "my LGA",
+  "time": "year",
+  "years": [
+   2026
+  ],
+  "measure": "spent",
+  "restatement": "How much of the 2026 budgeted amount for my LGA has actually been spent?",
+  "seconds": 3.8659622999839485
+ },
+ "u06": {
+  "kind": "follow_up",
+  "capability": "place_budget",
+  "level": "lga",
+  "name": "Wamakko",
+  "time": "span",
+  "years": [
+   2023,
+   2024,
+   2025
+  ],
+  "measure": "amount",
+  "restatement": "What did the government budget for my LGA in 2023 to 2025?",
+  "seconds": 3.661099100019783
+ },
+ "u07": {
+  "kind": "follow_up",
+  "capability": "facility",
+  "level": "facility",
+  "name": "Gidan Bubu Health Post",
+  "time": "none",
+  "years": [],
+  "measure": "route",
+  "restatement": "How do I get from my farm (the pin) to Gidan Bubu Health Post?",
+  "seconds": 2.160207899985835
+ },
+ "u08": {
+  "kind": "follow_up",
+  "capability": "statistics",
+  "level": "facility",
+  "name": "Kalambaina PHC",
+  "time": "now",
+  "years": [],
+  "measure": "nurse staffing adequacy",
+  "restatement": "Does Kalambaina PHC have enough nurses?",
+  "seconds": 2.596390300022904
+ },
+ "u09": {
+  "kind": "correction",
+  "capability": "facility",
+  "level": "facility",
+  "name": "Usmanu Danfodiyo University Teaching Hospital (UDUTH)",
+  "time": "none",
+  "years": [],
+  "measure": "nearest",
+  "restatement": "User says UDUTH is closer to my farm (the pin) than the listed facilities and asks to check the nearest hospital",
+  "seconds": 3.1503228000365198
+ },
+ "u10": {
+  "kind": "follow_up",
+  "capability": "place_history",
+  "level": "pin",
+  "name": "my farm (the pin)",
+  "time": "past",
+  "years": [],
+  "measure": "flooded",
+  "restatement": "Has my farm (the pin) ever been flooded?",
+  "seconds": 3.180595500045456
+ },
+ "u11": {
+  "kind": "follow_up",
+  "capability": "hazard",
+  "level": "pin",
+  "name": "",
+  "time": "forecast",
+  "years": [
+   2026
+  ],
+  "measure": "flooded",
+  "restatement": "Will my farm (the pin) flood this year?",
+  "seconds": 2.8885415999684483
+ },
+ "u12": {
+  "kind": "follow_up",
+  "capability": "place_budget",
+  "level": "lga",
+  "name": "my LGA",
+  "time": "year",
+  "years": [
+   2026
+  ],
+  "measure": "spent",
+  "restatement": "How much was spent out of the 2026 budget allocation for my LGA?",
+  "seconds": 3.2806127999792807
+ },
+ "u13": {
+  "kind": "follow_up",
+  "capability": "budget",
+  "level": "sector",
+  "name": "health",
+  "time": "year",
+  "years": [
+   2026
+  ],
+  "measure": "spent",
+  "restatement": "How much of the Sokoto State 2026 health budget was spent by June?",
+  "seconds": 2.6981163999880664
+ },
+ "u14": {
+  "kind": "correction",
+  "capability": "budget",
+  "level": "sector",
+  "name": "health",
+  "time": "year",
+  "years": [
+   2026
+  ],
+  "measure": "amount",
+  "restatement": "How much was budgeted for health in Sokoto State in 2026?",
+  "seconds": 2.551485000003595
+ },
+ "u15": {
+  "kind": "follow_up",
+  "capability": "statistics",
+  "level": "document",
+  "name": "DHS",
+  "time": "none",
+  "years": [],
+  "measure": "share of children fully vaccinated",
+  "restatement": "What share of children are fully vaccinated in Sokoto State according to the DHS?",
+  "seconds": 2.164226900029462
+ },
+ "u16": {
+  "kind": "follow_up",
+  "capability": "hazard",
+  "level": "pin",
+  "name": "my farm (the pin)",
+  "time": "forecast",
+  "years": [],
+  "measure": "dust",
+  "restatement": "Will there be dust tomorrow at my farm (the pin)?",
+  "seconds": 2.6317401999840513
+ },
+ "u17": {
+  "kind": "new",
+  "capability": "facility",
+  "level": "pin",
+  "name": "",
+  "time": "none",
+  "years": [],
+  "measure": "nearest hospital",
+  "restatement": "Which hospital nearest to my farm (the pin) can I go to if my child has trouble breathing?",
+  "seconds": 3.237260099966079
+ },
+ "u18": {
+  "kind": "follow_up",
+  "capability": "budget",
+  "level": "facility",
+  "name": "Specialist Hospital Sokoto",
+  "time": "year",
+  "years": [
+   2026
+  ],
+  "measure": "budgeted amount",
+  "restatement": "How much did the Sokoto State government budget for Specialist Hospital Sokoto in 2026?",
+  "seconds": 3.284662499965634
+ },
+ "u19": {
+  "kind": "follow_up",
+  "capability": "place_history",
+  "level": "pin",
+  "name": "",
+  "time": "span",
+  "years": [
+   2017,
+   2026
+  ],
+  "measure": "greenness",
+  "restatement": "Is my farm (the pin) getting greener over the years?",
+  "seconds": 2.80622680002125
+ },
+ "u20": {
+  "kind": "follow_up",
+  "capability": "place_history",
+  "level": "lga",
+  "name": "Wamakko",
+  "time": "past",
+  "years": [],
+  "measure": "flooded",
+  "restatement": "Has Wamakko LGA ever flooded?",
+  "seconds": 2.5207989000482485
+ },
+ "u21": {
+  "kind": "follow_up",
+  "capability": "place_budget",
+  "level": "lga",
+  "name": "my LGA",
+  "time": "none",
+  "years": [],
+  "measure": "budget for irrigation",
+  "restatement": "Is there any budget for irrigation in my LGA?",
+  "seconds": 3.358050099981483
+ },
+ "u22": {
+  "kind": "follow_up",
+  "capability": "budget",
+  "level": "sector",
+  "name": "education",
+  "time": "year",
+  "years": [
+   2026
+  ],
+  "measure": "budgeted",
+  "restatement": "What is Sokoto State budgeting and planning in 2026 to address out-of-school children?",
+  "seconds": 4.215537499985658
+ },
+ "u23": {
+  "kind": "follow_up",
+  "capability": "deep",
+  "level": "state",
+  "name": "Sokoto State",
+  "time": "now",
+  "years": [],
+  "measure": "overview",
+  "restatement": "Send me the full brief on the state of PHCs in Sokoto State",
+  "seconds": 3.538748899998609
+ },
+ "u24": {
+  "kind": "chitchat",
+  "capability": "chitchat",
+  "level": "none",
+  "name": "",
+  "time": "none",
+  "years": [],
+  "measure": "none",
+  "restatement": "The user says thank you for the nearest PHC information.",
+  "seconds": 2.818964899983257
+ },
+ "u25": {
+  "kind": "follow_up",
+  "capability": "facility",
+  "level": "facility",
+  "name": "Arkilla PHC",
+  "time": "now",
+  "years": [],
+  "measure": "opening hours",
+  "restatement": "Is Arkilla PHC open at night?",
+  "seconds": 1.7475633000140078
+ },
+ "u26": {
+  "kind": "follow_up",
+  "capability": "place_history",
+  "level": "lga",
+  "name": "my LGA",
+  "time": "past",
+  "years": [
+   2025
+  ],
+  "measure": "flooded",
+  "restatement": "Was there flooding in my LGA in 2025?",
+  "seconds": 2.8715544999577105
+ },
+ "u27": {
+  "kind": "follow_up",
+  "capability": "facility",
+  "level": "facility",
+  "name": "Specialist Hospital Sokoto",
+  "time": "none",
+  "years": [],
+  "measure": "route",
+  "restatement": "How do I get to Specialist Hospital Sokoto (the first one) from my farm (the pin)?",
+  "seconds": 1.8027050999808125
+ },
+ "u28": {
+  "kind": "follow_up",
+  "capability": "place_budget",
+  "level": "lga",
+  "name": "my LGA",
+  "time": "year",
+  "years": [
+   2026
+  ],
+  "measure": "education budget amount",
+  "restatement": "How much of the 2026 education budget is for my LGA?",
+  "seconds": 2.0020541999838315
+ },
+ "u29": {
+  "kind": "follow_up",
+  "capability": "place_budget",
+  "level": "lga",
+  "name": "my LGA",
+  "time": "year",
+  "years": [
+   2026
+  ],
+  "measure": "agriculture projects/amount",
+  "restatement": "Is there anything for farmers in the 2026 budget for my LGA?",
+  "seconds": 3.176720399991609
+ },
+ "u30": {
+  "kind": "correction",
+  "capability": "place_history",
+  "level": "pin",
+  "name": "my farm (the pin)",
+  "time": "past",
+  "years": [
+   2020
+  ],
+  "measure": "flooded",
+  "restatement": "Was my farm (the pin) flooded in 2020 as my neighbour claims?",
+  "seconds": 2.9807739999960177
+ },
+ "f01": {
+  "kind": "new",
+  "capability": "statistics",
+  "level": "state",
+  "name": "Sokoto State",
+  "time": "none",
+  "years": [],
+  "measure": "staff needed",
+  "restatement": "How many medical officers do PHCs in Sokoto State need?",
+  "seconds": 2.320303899992723
+ },
+ "f02": {
+  "kind": "new",
+  "capability": "deep",
+  "level": "state",
+  "name": "Sokoto State",
+  "time": "now",
+  "years": [],
+  "measure": "overview of PHCs",
+  "restatement": "What is the state of primary health centres in Sokoto State?",
+  "seconds": 1.734961599984672
+ },
+ "f03": {
+  "kind": "new",
+  "capability": "deep",
+  "level": "state",
+  "name": "Sokoto State",
+  "time": "none",
+  "years": [],
+  "measure": "overview",
+  "restatement": "Tell me about health in Sokoto State.",
+  "seconds": 2.342422599962447
+ },
+ "f04": {
+  "kind": "new",
+  "capability": "deep",
+  "level": "ward",
+  "name": "my ward",
+  "time": "now",
+  "years": [],
+  "measure": "overview",
+  "restatement": "Give a broad overview of what is happening in my ward.",
+  "seconds": 2.7242915999959223
+ },
+ "f05": {
+  "kind": "new",
+  "capability": "facility",
+  "level": "lga",
+  "name": "Tureta",
+  "time": "none",
+  "years": [],
+  "measure": "count",
+  "restatement": "How many PHCs are in Tureta LGA?",
+  "seconds": 1.6591099000070244
+ },
+ "f06": {
+  "kind": "new",
+  "capability": "budget",
+  "level": "sector",
+  "name": "education",
+  "time": "year",
+  "years": [
+   2025
+  ],
+  "measure": "spent",
+  "restatement": "How much did Sokoto State spend on education in 2025?",
+  "seconds": 2.2977661000331864
+ },
+ "f07": {
+  "kind": "new",
+  "capability": "hazard",
+  "level": "pin",
+  "name": "",
+  "time": "forecast",
+  "years": [],
+  "measure": "rain",
+  "restatement": "Will it rain on my farm (the pin) this week and is it safe to plant there?",
+  "seconds": 2.860634899989236
+ },
+ "f08": {
+  "kind": "new",
+  "capability": "budget",
+  "level": "agency",
+  "name": "Ministry of Health",
+  "time": "year",
+  "years": [
+   2026
+  ],
+  "measure": "amount",
+  "restatement": "How much was allocated to the Ministry of Health in Sokoto State in 2026?",
+  "seconds": 1.7375693999929354
+ },
+ "f09": {
+  "kind": "new",
+  "capability": "facility",
+  "level": "pin",
+  "name": "my farm (the pin)",
+  "time": "none",
+  "years": [],
+  "measure": "nearest",
+  "restatement": "Where is the nearest hospital to my farm (the pin)?",
+  "seconds": 2.0397669000085443
+ },
+ "f10": {
+  "kind": "new",
+  "capability": "place_history",
+  "level": "pin",
+  "name": "",
+  "time": "past",
+  "years": [],
+  "measure": "flooded",
+  "restatement": "Has my farm (the pin) ever been flooded?",
+  "seconds": 2.4403908000094816
+ },
+ "f11": {
+  "kind": "new",
+  "capability": "statistics",
+  "level": "document",
+  "name": "MICS",
+  "time": "none",
+  "years": [],
+  "measure": "birth registration coverage",
+  "restatement": "What does the MICS say about birth registration coverage in Sokoto State?",
+  "seconds": 1.2576569999800995
+ },
+ "f12": {
+  "kind": "new",
+  "capability": "alerts",
+  "level": "lga",
+  "name": "Goronyo",
+  "time": "forecast",
+  "years": [],
+  "measure": "flooded",
+  "restatement": "Alert me about future floods in Goronyo LGA",
+  "seconds": 1.8215742000029422
+ },
+ "f13": {
+  "kind": "new",
+  "capability": "place_budget",
+  "level": "lga",
+  "name": "Tambuwal",
+  "time": "none",
+  "years": [],
+  "measure": "projects",
+  "restatement": "What projects is the government doing in Tambuwal?",
+  "seconds": 2.7504596000071615
+ },
+ "f14": {
+  "kind": "chitchat",
+  "capability": "chitchat",
+  "level": "none",
+  "name": "",
+  "time": "none",
+  "years": [],
+  "measure": "greeting",
+  "restatement": "The user greets Kasafi with 'Sannu'.",
+  "seconds": 1.7739463999751024
+ },
+ "f15": {
+  "kind": "new",
+  "capability": "deep",
+  "level": "sector",
+  "name": "Education",
+  "time": "now",
+  "years": [],
+  "measure": "overview",
+  "restatement": "What is the state of education in Sokoto State?",
+  "seconds": 2.596579499950167
+ }
+}

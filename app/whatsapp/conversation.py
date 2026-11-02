@@ -55,6 +55,7 @@ from app.agent.calculate import CalcError, Calculation
 from app.evidence.crops import plan_crops
 from app.agent.calculate import result_text as calc_result_text
 from app.agent.answer import answer_from_documents
+from app.agent.understand import understand_message
 from app.whatsapp.voice import VoiceOutcome, is_pilot, reply_for_voice
 
 log = logging.getLogger(__name__)
@@ -161,8 +162,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                  resolve_fn: ResolveFn = resolve, guard_fn: GuardFn = scope.check,
                  answer_fn: AnswerFn | None | object = _DEFAULT, locate_fn: LocateFn = locate_point,
                  place_fn: PlaceFn = place_from_text, facility_fn: FacilityFn = search_replies,
-                 emergency_fn: EmergencyFn = emergency_lookup, classify_fn: ClassifyFn = em.classify) -> list[Out]:
-    """Returns the replies to send. `notify` sends a message right away (the "listening" ack)."""
+                 emergency_fn: EmergencyFn = emergency_lookup, classify_fn: ClassifyFn = em.classify,
+                 understand_fn=understand_message) -> list[Out]:
+    """Returns the replies to send. `notify` sends a message right away (the "listening" ack). `understand_fn`:
+    the conversation-understanding step (app/agent/understand.py), on with KASAFI_UNDERSTANDING."""
     sender, kind = msg.get("from", ""), msg.get("type")
     text = ((msg.get("text") or {}).get("body", "") if kind == "text" else
             (msg.get("button") or {}).get("text", "") if kind == "button" else "")   # a template's MORE / STOP
@@ -257,10 +260,24 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         if (typed := await place_fn(settings, text)) is not None:
             return _located(key, lang, store, typed) + await _after_location(waiting, key, lang, settings,
                                                                              facility_fn, typed)
+    # what the message means in the conversation (app/agent/understand.py): one small model call before any route,
+    # after the emergency fast path; keyword shortcuts below are hints it overrides. Not for commands, read-backs
+    # and pending choices, which have their own fixed replies.
+    u = None
+    if kind == "text" and text and settings.kasafi_understanding and _needs_understanding(text, key, store, settings):
+        u = await understand_fn(strip_location(text), store.recent_turns(key), _place_for(key, store), settings)
+    # a correction about the facilities just listed ('But UDUTH is closer to me'): checked against that answer
+    if u is not None and u.kind == "correction" and u.capability == "facility" and settings.has_database and \
+            (outs := await _facility_correction(u, key, lang, settings, facility_fn)) is not None:
+        _remember_turn(store, key, lang, text, outs)
+        return outs
     # "nearest hospital?" and its follow-ups ("next", "route?", "only government hospitals"): PostGIS and ORS, no model
     if text and settings.has_database and settings.kasafi_shortcut_facilities and \
-            (outs := await _facilities(text, key, lang, store, settings, place_fn,
-                                                                         facility_fn)) is not None:
+            (u is None or (u.capability == "facility" and u.kind != "correction")) and \
+            ((outs := await _facilities(text, key, lang, store, settings, place_fn, facility_fn)) is not None or
+             (u is not None and u.restatement and
+              (outs := await _facilities(u.restatement, key, lang, store, settings, place_fn, facility_fn)) is not None)):
+        _remember_turn(store, key, lang, text, outs)
         return outs
     # "show me a map" / "nuna min taswira" on its own: the map for what was just asked, no model
     if text and settings.has_database and MAP_ONLY.match(text):
@@ -293,7 +310,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
 
     answer = (answer_from_documents if settings.has_database else None) if answer_fn is _DEFAULT else answer_fn
 
-    async def respond(question: str, prefix: str, fallback: Out) -> list[Out]:
+    async def respond(question: str, prefix: str, fallback: Out, understanding=None) -> list[Out]:
         """Answer an in-scope, confirmed question from the documents, after `prefix` (what we heard).
 
         With no document store (dev, tests), the old acknowledgement `fallback` is sent instead.
@@ -326,13 +343,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                 sent.append(text)
                 await notify(Out(text))
             # the user's point (memory, 30 min) or LGA on file, for 'here' and hazards; only when there is one
-            spot, last = location_memory.recall(key), store.get_last_lga(key)
-            place = ({"lat": spot.lat, "lon": spot.lon, "lga_pcode": spot.lga_pcode, "lga": spot.lga, "ward": spot.ward,
-                      "wardcode": spot.wardcode, "ward_likely": spot.ward_likely} if spot else
-                     {"lga_pcode": last} if last else None)
-            if spot and spot.how == "pin":          # a farm pin: the shape the user gave, or ask when none can be drawn
-                place["shape"] = location_memory.shape(key)
-                place["ask_size"] = True
+            place = _place_for(key, store)
             try:
                 # every long job ends in an answer or an apology within the limit, never silence
                 from app.agent.deep import TIME_BUDGET_S, deep_question
@@ -343,7 +354,8 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                     # the history is read back from the store, where it was removed before writing
                     answer(strip_location(question), lang, settings=settings, notify=send_now,
                            history=store.recent_turns(key),
-                           **({"place": place} if place else {})), timeout=limit)
+                           **({"place": place} if place else {}),
+                           **({"understanding": understanding} if understanding is not None else {})), timeout=limit)
             finally:
                 slow.cancel()
             body = result if isinstance(result, str) else result.text
@@ -558,7 +570,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             store.clear_pending(key)
         if refusal := await _guarded([text], lang, guard_fn, settings):
             return [refusal]
-        return await respond(text[:1000], "", Out(t("echo", lang, text=text[:500])))
+        return await respond(text[:1000], "", Out(t("echo", lang, text=text[:500])), understanding=u)
     if button == "consent_ok":
         return [Out(t("consent_thanks", lang))]
     return [Out(t("other", lang))]
@@ -837,6 +849,106 @@ async def _named_facility(text: str, key: str, lang: str, settings: Settings, fa
         location_memory.wait_for_location(key, text)
         return [Out(FAC_WORDS.get(lang, FAC_WORDS["en"])["need_location"], lang=lang, location_request=True)]
     return await _facility_replies(spot, search, lang, settings, facility_fn, "route", key)
+
+
+def _needs_understanding(text: str, key: str, store: UserStore, settings: Settings) -> bool:
+    """Every message is understood except fixed commands and replies to a pending read-back, choice or offer."""
+    n = _norm(text)
+    if MAP_ONLY.match(text) or n in IMAGE_COMMANDS or n in SHOW_QUOTES or n in SHOW_WORKING or n in FULL_BRIEF:
+        return False
+    if store.get_pending(key, settings.kasafi_pending_ttl_minutes) or store.get_pending_clarify(key) or \
+            store.get_pending_calc(key) or store.get_pending_options(key):
+        return False
+    return quick_resolve(text) is None
+
+
+def _place_for(key: str, store: UserStore) -> dict | None:
+    """The user's point (memory, 30 min) or LGA on file, as the answer paths take it; None when there is none."""
+    spot, last = location_memory.recall(key), store.get_last_lga(key)
+    place = ({"lat": spot.lat, "lon": spot.lon, "lga_pcode": spot.lga_pcode, "lga": spot.lga, "ward": spot.ward,
+              "wardcode": spot.wardcode, "ward_likely": spot.ward_likely} if spot else
+             {"lga_pcode": last} if last else None)
+    if spot and spot.how == "pin":              # a farm pin: the shape the user gave, or ask when none can be drawn
+        place["shape"] = location_memory.shape(key)
+        place["ask_size"] = True
+    return place
+
+
+def _remember_turn(store: UserStore, key: str, lang: str, question: str, outs: list[Out]) -> None:
+    """A shortcut's reply (a facility list, a correction) kept as a turn, so the next message is read with it."""
+    body = "\n".join(o.text for o in outs if getattr(o, "text", ""))
+    if body:
+        store.add_turn(key, lang, question, body[:2000], [], "", "")
+
+
+# well-known abbreviations people use for facilities ('UDUTH is closer'): the registry spells the names out
+FACILITY_ALIASES = {"uduth": "Usman Danfodio University Teaching Hospital",
+                    "sosuth": "Sokoto State University Teaching Hospital",
+                    "sokoto specialist": "Specialist Hospital Sokoto"}
+CORRECTION_WORDS = {
+    "en": {"closer": "You're right: {name} is closer to you than the ones I listed.",
+           "not_closer": "{first} is still the closest of these to you by road.",
+           "where": "{name}: {road} by road from your pin ({km} km in a straight line).",
+           "first": "The nearest I listed, {first}: {road} by road.",
+           "why_filter": "It wasn't in the list because the search was for {what}.",
+           "why_line": "It wasn't in the list because I take the {k} nearest in a straight line before checking "
+                       "road time, and it is {km} km away in a straight line.",
+           "no_road": "{name} is {km} km from your pin in a straight line (road time unavailable now).",
+           "why_missed": "It should have been in the list: it is nearer than the ones I gave."},
+    "ha": {"closer": "Gaskiya ne: {name} ya fi kusa da kai fiye da waɗanda na lissafa.",
+           "not_closer": "{first} ne har yanzu mafi kusa da kai ta hanya.",
+           "where": "{name}: {road} ta hanya daga wurinka ({km} km a mike).",
+           "first": "Mafi kusa da na lissafa, {first}: {road} ta hanya.",
+           "why_filter": "Ba ya cikin jerin saboda binciken na {what} ne.",
+           "why_line": "Ba ya cikin jerin saboda ina ɗaukar {k} mafi kusa a mike kafin in duba lokacin tafiya ta "
+                       "hanya, kuma yana da {km} km a mike.",
+           "no_road": "{name} yana da {km} km daga wurinka a mike (ba a samu lokacin tafiya ta hanya yanzu ba).",
+           "why_missed": "Ya kamata ya kasance cikin jerin: ya fi waɗanda na bayar kusa."},
+}
+
+
+async def _facility_correction(u, key: str, lang: str, settings: Settings, facility_fn: FacilityFn) -> list[Out] | None:
+    """'But UDUTH is closer to me': the named facility's distance from the pin, checked against the list just given,
+    and why it wasn't in it (the search's filter, or the straight-line shortlist before road time). None when there
+    is no pin, no list or no such facility (the message then goes on as usual)."""
+    from app.geo.facilities import distance_text
+    spot, search = location_memory.recall(key), location_memory.last_search(key)
+    if spot is None or search is None or not search.shown or not u.name:
+        return None
+    name = FACILITY_ALIASES.get(u.name.strip().lower(), u.name)
+    try:
+        hits = await asyncio.to_thread(lookup, settings, name)
+    except Exception as e:          # noqa: BLE001
+        log.warning("facility lookup failed: %s", type(e).__name__)
+        return None
+    if not hits:
+        return None
+    levels = set(search.filters.levels)
+    pick = next((h for h in hits if not levels or h.level in levels), hits[0])
+    f = as_facility(pick, spot.lat, spot.lon)
+    first = search.shown[0]
+    await add_routes(settings, spot.lat, spot.lon, [f, first], search.profile)
+    w = CORRECTION_WORDS.get(lang, CORRECTION_WORDS["en"])
+    lines = []
+    if f.minutes is not None and first.minutes is not None:
+        lines.append(w["where"].format(name=f.name, road=distance_text(lang, f, search.profile), km=f.km))
+        lines.append(w["first"].format(first=first.name, road=distance_text(lang, first, search.profile)))
+        closer = f.minutes < first.minutes
+    else:
+        lines.append(w["no_road"].format(name=f.name, km=f.km))
+        closer = f.km < first.km
+    lines.append(w["closer"].format(name=f.name) if closer else w["not_closer"].format(first=first.name))
+    if f.fid not in {x.fid for x in search.shown}:
+        if levels and pick.level not in levels or search.filters.ownership and pick.ownership != search.filters.ownership:
+            lines.append(w["why_filter"].format(what=search.filters.describe(lang) or "another kind of facility"))
+        elif f.km > max(x.km for x in search.shown):
+            lines.append(w["why_line"].format(k=len(search.shown), km=f.km))
+        else:                       # nearer than every one listed and not filtered out: the list was wrong
+            lines.append(w["why_missed"])
+    search.shown = [f] + [x for x in search.shown if x.fid != f.fid]     # 'route?' now means this one
+    location_memory.remember_search(key, search)
+    log.info("facility correction checked: %s, closer=%s", f.lga, closer)
+    return [Out("\n".join(lines), lang=lang)]
 
 
 async def _after_location(question: str, key: str, lang: str, settings: Settings, facility_fn: FacilityFn,

@@ -98,6 +98,10 @@ class Settings(BaseSettings):
     # (the pre-planner facility search, the in-code hazard, place-history, alert sign-up and revenue-summary
     # routes) without removing the capability, which the planner can still use from the catalogue. All on by
     # default. The emergency fast path and the guardrails have no switch.
+    # conversation understanding before every route (app/agent/understand.py): meta = Muse Spark, open = Muse Spark
+    # Open on Baseten (faster, ~1.2 s vs ~2 s); off: the keyword routing alone
+    kasafi_understanding: bool = True
+    kasafi_understand_provider: str = "meta"
     kasafi_shortcut_facilities: bool = True
     kasafi_shortcut_hazards: bool = True
     kasafi_shortcut_place: bool = True

@@ -11,6 +11,8 @@ from __future__ import annotations
 import logging
 import re
 
+from app.agent.persona import with_core  # noqa: E402 - the shared core prompt
+
 log = logging.getLogger(__name__)
 
 SYSTEM = (
@@ -52,7 +54,7 @@ async def summarize(question: str, details: str, lang: str, settings, client) ->
         return ""
     try:
         with usage.stage("summary"):
-            r = await client.chat([{"role": "system", "content": SYSTEM.format(lang="Hausa" if lang == "ha"
+            r = await client.chat([{"role": "system", "content": with_core(SYSTEM).format(lang="Hausa" if lang == "ha"
                                                                                 else "English")},
                                    {"role": "user", "content": f"QUESTION: {question[:600]}\n\nDETAILS:\n{details[:6000]}"}],
                                   model=settings.meta_model, reasoning_effort="minimal", max_tokens=1200)

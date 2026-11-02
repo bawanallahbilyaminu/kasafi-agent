@@ -103,10 +103,11 @@ def test_the_answer_loop_shortcuts_honour_the_switches() -> None:
     with the switch off, each predicate's gate in _answer_question is skipped. Checked on the source so a new call
     site can't forget its switch."""
     src = Path("app/agent/answer.py").read_text(encoding="utf-8")
-    assert "settings.kasafi_shortcut_facilities and (fac := facility_route(" in src
-    assert "settings.kasafi_shortcut_hazards and (layers := hazard_route(" in src
-    assert "settings.kasafi_shortcut_hazards and \\" in src and "official.route(" in src
-    assert "place_on = shortcut and settings.kasafi_shortcut_place" in src
+    # each gate: its switch, then what the understanding step allows (app/agent/understand.py)
+    assert 'settings.kasafi_shortcut_facilities and allow("facility") and' in src
+    assert 'settings.kasafi_shortcut_hazards and allow("hazard") and \\\n                (layers := hazard_route(' in src
+    assert 'settings.kasafi_shortcut_hazards and allow("hazard") and \\' in src and "official.route(" in src
+    assert 'place_on = shortcut and settings.kasafi_shortcut_place and allow("place_history")' in src
     assert "or not settings.kasafi_shortcut_revenue" in src
 
 

@@ -44,6 +44,8 @@ import psycopg
 from app import usage
 from app.config import Settings
 
+from app.agent.persona import with_core  # noqa: E402 - the shared core prompt
+
 log = logging.getLogger(__name__)
 
 DEEP = re.compile(
@@ -1060,7 +1062,7 @@ async def synthesise(client, question: str, lang: str, claims: list[Claim], dims
     from app.agent.answer import chat_json
     lname = "Hausa" if lang == "ha" else "English"
     with usage.stage("deep_synthesis"):
-        d = await chat_json(client, [{"role": "system", "content": SYNTH_SYSTEM.format(lang=lname)},
+        d = await chat_json(client, [{"role": "system", "content": with_core(SYNTH_SYSTEM).format(lang=lname)},
                                      {"role": "user", "content": f"QUESTION: {question}\nDIMENSIONS: "
                                                                  f"{'; '.join(x.name for x in dims)}\n\nCHECKED "
                                                                  f"FIGURES:\n{claims_block(claims, dims)}"}],

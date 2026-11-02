@@ -186,6 +186,10 @@ def test_doesnt_print_is_only_said_after_the_whole_document_was_searched(conn) -
     read_all = [Evidence(i, DOC, "Report 2", 2025, pg, "text", t) for i, (pg, t) in enumerate(FIXTURE_PAGES.items(), 1)]
     same, changed = checked_absence(conn, p, read_all, read_all, text, "en")
     assert not changed and same == text
+    # an answer that answered keeps no 'I didn't find this' note: only the unverified sentence goes (3 Nov)
+    answered = "The report counts 1,240 hand pumps, 62% of them working. It does not publish the ward split."
+    out, changed = checked_absence(conn, p, read_p2, read_p2, answered, "en")
+    assert changed and out == "The report counts 1,240 hand pumps, 62% of them working."
 
 
 def test_cards_cascade_with_their_document(conn) -> None:

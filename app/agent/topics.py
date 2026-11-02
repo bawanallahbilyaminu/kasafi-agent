@@ -52,6 +52,8 @@ from app.providers.stt import parse_json_reply
 from app.retrieval.search import printed_names, printed_query, search
 from app.sources import dtm as dtm_api
 
+from app.agent.persona import with_core  # noqa: E402 - the shared core prompt
+
 log = logging.getLogger(__name__)
 
 MAX_SOURCES = 5
@@ -744,7 +746,7 @@ async def fact_cards(conn: psycopg.Connection, src: SourceResult, topic: Topic, 
         extra += f"Copy first, if printed for Sokoto: {want}. "
     body = "\n\n".join(f"--- page {n} ---\n{continued_from(conn, src.doc_id, n, t)}{page_excerpt(t)}"
                        for n, t in pages.items())
-    messages = [{"role": "system", "content": CARD_SYSTEM.format(extra=extra)},
+    messages = [{"role": "system", "content": with_core(CARD_SYSTEM).format(extra=extra)},
                 {"role": "user", "content": f"QUESTION: {question}\nDOCUMENT: {src.title}\n\n{body}"}]
     d = {}
     for _ in range(2):          # dense state tables can use up a reply on reasoning: once more on an empty one

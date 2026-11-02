@@ -14,7 +14,9 @@ from app.whatsapp.voice import VoiceOutcome, compose_reply
 
 
 def make_settings(**kw) -> Settings:
-    base = {"kasafi_hash_key": SecretStr("test-hash-key"), "meta_api_key": SecretStr("k")}
+    # the understanding step makes a model call: off unless a test turns it on (with a recorded reading)
+    base = {"kasafi_hash_key": SecretStr("test-hash-key"), "meta_api_key": SecretStr("k"),
+            "kasafi_understanding": False}
     return Settings(_env_file=None, **{**base, **kw})
 
 

@@ -81,3 +81,32 @@ report question about facilities, a place-history question with "health", a faci
 *kura* the village against *kura* dust, the two live misroutes. `uv run python evals/routing/run.py` applies the
 predicates in handler order in code (no model, no spend) and writes `evals/routing/report.md`; it is part of the
 pre-deploy gate. The named-facility cases need the facility registry (the dev database).
+
+## Conversation understanding before routing (3 Nov 2026)
+
+Three live failures on 3 Nov came from routing each message alone with keyword rules: "But Uduth is closer to me"
+after a hospital list (a correction) got the statewide capital budget; "Has this area ever flooded" after a pin (the
+past) got the season's forecast; "Has this land ever flooded?" (the pin's land) got a ranking of Wamakko's wards.
+
+Now every text message (after the emergency fast path; not fixed commands, read-backs or pending choices) first goes
+through one small Muse Spark call (`app/agent/understand.py`, minimal reasoning) with the last 4 turns (the user's
+messages and short summaries of Kasafi's replies with what they listed), the location on file and the keyword rules'
+reading as a hint. It returns the kind (new, follow-up, correction, clarification, chit-chat), the capability, the
+subject level (pin, ward, LGA, state, facility, document...), the time (past, now, forecast, year, span) and a
+standalone restatement in Kasafi's own place words ('my farm (the pin)', 'my ward', 'my LGA').
+
+- The conversation handler and the answer loop route from it: each shortcut (facility, hazard and outlook, place
+  history, LGA budget, deep analysis) answers only when the reading names its capability; the planner and the routes
+  work from the restatement. Feature switches still apply. When the call fails or times out (8 s), the keyword
+  routing decides as before. `KASAFI_UNDERSTANDING=false` turns the step off; `KASAFI_UNDERSTAND_PROVIDER=open` uses
+  Muse Spark Open on Baseten.
+- A correction about the facilities just listed is checked against that list (`_facility_correction`): the named
+  facility's road distance from the pin, the list's first, whether the user is right, and why it wasn't listed (the
+  search's filter, or the straight-line shortlist before road time). Facility replies are kept as turns, so the next
+  message is read with them.
+- Every model-written answer and the planner start with the shared core prompt (`app/agent/persona.py`).
+
+Eval: `evals/understanding/` (45 conversations, 30 multi-turn and 15 first messages, English and Hausa, including the
+three failures): 45/45 on Muse Spark, median 2.7 s, p90 3.7 s, $0.0020 per message (`report.md`); 45/45 on Muse
+Spark Open, median 2.0 s, p90 4.2 s (`report-open.md`). The deploy gate replays the recorded readings
+(`tests/test_understanding.py`) through the conversation handler, without a model call.
