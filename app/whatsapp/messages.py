@@ -73,8 +73,10 @@ def first_contact_notice(lang: str | None, source: str | None) -> tuple[str, str
 
 TEXTS = {
     "consent_thanks": {
-        "ha": "Na gode.\n\nYanzu ka aiko da tambayarka, a rubuce ko da saƙon murya.",
-        "en": "Thank you.\n\nNow send your question, as text or a voice note.",
+        "ha": "Na gode.\n\nYanzu ka aiko da tambayarka, a rubuce ko da saƙon murya.\n\nRubuta *menu* a kowane "
+              "lokaci don ganin abin da zan iya yi.",
+        "en": "Thank you.\n\nNow send your question, as text or a voice note.\n\nType *menu* any time to see what "
+              "I can do.",
     },
     "consent_thanks_ask_lang": {
         "both": "Na gode. Da wane harshe zan riƙa amsa?\n\nThank you. Which language should I reply in?",

@@ -108,7 +108,9 @@ class Settings(BaseSettings):
     # minimal, measured on the 45-conversation eval (2 Nov): 45/45, median 2.7 s, $0.0020; low with 3000 tokens:
     # 44/45, median 4.9 s, p90 8.2 s, $0.0049 (more precise on 2 cases, wrong on 1; no more reliable)
     kasafi_understand_effort: str = "minimal"
-    kasafi_understand_max_tokens: int = 900
+    # 1600 since the urgent rule (2 Nov night): on 'Where can I take my sick child?' minimal reasoning used 898 of
+    # 900 tokens and returned nothing (a retry, ~18 s); with room it finishes at ~500-900
+    kasafi_understand_max_tokens: int = 1600
     kasafi_shortcut_facilities: bool = True
     kasafi_shortcut_hazards: bool = True
     kasafi_shortcut_place: bool = True

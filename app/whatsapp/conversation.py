@@ -50,6 +50,7 @@ from app.providers.chat import ProviderError
 from app.providers.stt import heard_texts
 from app.users import UserStore, user_key
 from app.whatsapp.client import mask_phone
+from app.whatsapp import menu
 from app.whatsapp.messages import FIX_BUTTONS, LANG_BUTTONS, NOT_IN_PILOT, NOTICE_BUTTONS, first_contact_notice, t
 from app.whatsapp.corrections import Resolution, choose_option, quick_resolve, resolve
 from app.agent.calculate import CalcError, Calculation
@@ -70,7 +71,8 @@ IMAGE_COMMANDS = {"images off": False, "/images off": False, "no images": False,
                   "images on": True, "/images on": True, "kunna hotuna": True, "hotuna a kunna": True,
                   "/hotuna kunna": True}
 CONSENT_TEXTS = {"ok", "okay", "na yarda", "na amince", "i agree", "agree", "ok na yarda"}
-SLOW_ANSWER_S = 12.0        # after this, a "still checking" note (unless a fetch note was already sent)
+PROGRESS_AFTER_S = 8.0      # "Checking the documents…" only when the answer takes longer (the typing indicator before)
+SLOW_ANSWER_S = 25.0        # after this, a "still checking" note (unless a fetch note was already sent)
 # the rows and arithmetic behind the last answer, kept with the turn: sent from the store, no model call
 SHOW_QUOTES = {"quotes", "quote", "show quotes", "show the quotes", "/quotes", "nuna rubutun", "nuna min rubutun",
                "rubutun", "nuna rubutu", "/rubutu"}
@@ -100,6 +102,7 @@ class Out:
     location: dict | None = None       # sent as a location message (a facility's pin): latitude, longitude, name...
     image: bytes | None = None         # a map (JPEG), sent with `text` as its caption
     document: tuple[bytes, str] | None = None   # a PDF (bytes, file name), sent with `text` as its caption
+    menu: dict | None = None           # an interactive list: button, sections (app/whatsapp/menu.py)
 
     def __post_init__(self) -> None:   # every message: no look-alike letters from other scripts ('ҳ' for 'ƴ')
         self.text = normalize_letters(self.text, self.lang)
@@ -236,6 +239,16 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     resume = ""                                  # a place-history question that waited for this pin or shape
     resume_reading = None                        # … or a place-budget reading that waited for a location
     before: list[Out] = []                       # the replies that go out before the resumed question's answer
+    # the menu's rows and the buttons under answers (app/whatsapp/menu.py): shortcuts into the same pipeline. A row
+    # or a button gives a reading (no understanding call) and its restatement as the message, or a reply of its own
+    preset = None
+    if (row := menu.row_of(msg)) is not None or button in ANSWER_BUTTONS:
+        outs, preset, typed_as, lang = (await _menu_row(row, key, lang, settings) if row is not None else
+                                        await _answer_button(button, key, lang, store))
+        if outs is not None:
+            await _trace_route(settings, f"[{row or button}]", lang, f"menu:{row or button}", None, outs, 0.0)
+            return outs
+        kind, text = "text", typed_as
     # the farm's size or its corner pins, asked for when no outline could be drawn (app/place/shape.py); or
     # "these are the corners" with recent pins. Shapes and pins stay in memory only.
     waiting = location_memory.peek_question(key) or ""
@@ -256,6 +269,12 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             before += await _after_location(q, key, lang, settings, facility_fn, spot)    # the question that asked
             if q.startswith(PLACE_BUDGET_WAIT):                    # 'what does the budget give my area?'
                 resume, resume_reading = q[len(PLACE_BUDGET_WAIT):], place_budget_reading(q)
+            elif q.startswith(READING_WAIT):                       # a menu row or 'Send location' that waited
+                r = reading_from_wait(q)
+                if r.capability == "facility":
+                    before += await _facility_reading(r.restatement, r, key, lang, settings, facility_fn, spot) or []
+                else:
+                    resume, resume_reading = r.restatement, r
             elif not q.startswith((FACILITY_WAIT, CLAIM_WAIT)) and \
                     (place_route(q) or area_route(q, "", {"lga_pcode": spot.lga_pcode, "wardcode": spot.wardcode})) \
                     and not is_facility_query(q):                 # the farm's record, or 'my ward / my LGA'
@@ -267,14 +286,21 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         if (typed := await place_fn(settings, text)) is not None:
             located = _located(key, lang, store, typed) + await _after_location(waiting, key, lang, settings,
                                                                                 facility_fn, typed)
-            if not waiting.startswith(PLACE_BUDGET_WAIT):
+            if waiting.startswith(READING_WAIT) and (r := reading_from_wait(waiting)).capability != "facility":
+                before, resume, resume_reading = located, r.restatement, r
+            elif waiting.startswith(READING_WAIT):
+                return located + (await _facility_reading(r.restatement, r, key, lang, settings, facility_fn,
+                                                          typed) or [])
+            elif not waiting.startswith(PLACE_BUDGET_WAIT):
                 return located
-            before, resume, resume_reading = located, waiting[len(PLACE_BUDGET_WAIT):], place_budget_reading(waiting)
+            else:
+                before, resume, resume_reading = located, waiting[len(PLACE_BUDGET_WAIT):], \
+                    place_budget_reading(waiting)
     # what the message means in the conversation (app/agent/understand.py): one small model call before any route,
     # after the emergency fast path; keyword shortcuts below are hints it overrides. Not for commands, read-backs
     # and pending choices, which have their own fixed replies.
-    u = None
-    if kind == "text" and text and not resume and settings.kasafi_understanding and \
+    u = preset                                   # a menu row's or a button's reading: no model call needed
+    if u is None and kind == "text" and text and not resume and settings.kasafi_understanding and \
             _needs_understanding(text, key, store, settings):
         fallbacks: list[str] = []
         started_u = time.perf_counter()
@@ -295,6 +321,11 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         log.info("emergency from the understanding step (fast path layers: %s)", safety)
         return await _emergency(key, lang, em.Detection(True, maternal=maternal, by="understanding"), store,
                                 settings, emergency_fn, notify=_sender(notify))
+    # 'menu' / 'zaɓi', read as kind 'menu' (with no reading, the word alone): the interactive list
+    if kind == "text" and text and (u.kind == "menu" if u is not None else _norm(text) in MENU_WORDS):
+        outs = [menu_out(lang)]
+        await _trace_route(settings, text, lang, "menu", u, outs, 0.0)
+        return outs
     # a message about Kasafi or the conversation ('Who are you?', 'Na gode', 'help'): one Muse Spark call under the
     # core prompt, never the document search; with no reading, the plain self-questions the same way
     if kind == "text" and text and (u.capability == "conversation" if u is not None else ABOUT_KASAFI.match(text)):
@@ -385,13 +416,16 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         # one progress line per request: a place-history question sends its own ("checking about N years of
         # satellite images…", app/place/answer.py) on a first request and answers from the cache in seconds otherwise
         satellite = bool(place_route(question))
-        if not satellite:
-            await notify(Out(t(searching_key(question), lang)))   # planning + search + answer: median ~10 s
         sent: list[str] = []
         closed = False                            # set when the answer timed out: nothing of it is sent after that
 
-        async def still_working() -> None:        # a slow answer (a second search, a fallback) gets one more word
-            await asyncio.sleep(SLOW_ANSWER_S)
+        async def still_working() -> None:
+            # the typing indicator covers a quick answer: "Checking the documents…" only when it takes longer than
+            # PROGRESS_AFTER_S, and a slow one (a second search, a fallback) gets one more word later
+            await asyncio.sleep(PROGRESS_AFTER_S)
+            if not sent and not satellite:
+                await notify(Out(t(searching_key(question), lang)))
+            await asyncio.sleep(SLOW_ANSWER_S - PROGRESS_AFTER_S)
             if not sent and not satellite:
                 await notify(Out(t("still_working", lang)))
         slow = asyncio.create_task(still_working())
@@ -461,6 +495,12 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             return [Out(text_out, lang=lang)]
         crops = (plan_crops(result, settings.kasafi_max_images)
                  if result is not None and settings.kasafi_evidence_images and store.images_on(key) else None)
+        answered = result is not None and getattr(result, "found", True) is not False
+        if answered and understanding is not None and understanding.capability not in ("conversation", "other") \
+                and not offer and (closing := menu.closing_offer(lang, understanding, text_out)):
+            text_out = f"{text_out}\n\n{closing}"          # one short next step tied to this answer
+        if understanding is not None:
+            _remember_reading(key, understanding)          # for 'Hausa / English' and 'Send location' buttons
         outs = [Out(text_out, CALC_BUTTONS.get(lang, CALC_BUTTONS["en"]) if offer else None, crops or None, lang)]
         if (deep := getattr(result, "deep", None)) is not None:     # one short message per dimension; the brief kept
             outs += [Out(p, lang=lang) for p in getattr(result, "parts", []) or []]
@@ -482,6 +522,8 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             outs += [Out(m.caption, lang=lang, image=m.jpeg) for m in drawn]
             if len(drawn) < len(specs):            # the answer always has its map; when it can't be drawn, say so
                 outs.append(Out(t("map_failed", lang), lang=lang))
+        if result is not None and not offer:
+            _add_buttons(outs, lang, result, understanding, question, _place_for(key, store))
         return outs
 
     if resume:                                   # the pin or the shape arrived: the place-history question goes on
@@ -996,6 +1038,106 @@ def _waiting_search(question: str) -> FacilitySearch:
                                   emonc=d.get("emonc") or ""), profile=profile_from(d.get("q") or ""))
 
 
+READING_WAIT = "reading:"          # a menu row or 'Send location' waiting for the location: the reading (JSON) follows
+MENU_WORDS = {"menu", "/menu", "zaɓi", "zabi", "zaɓuɓɓuka", "zabubbuka"}   # with no reading (the step failed)
+ANSWER_BUTTONS = {menu.BTN_WORKING, menu.BTN_BRIEF, menu.BTN_LANG, menu.BTN_LOCATION, menu.BTN_MENU}
+LAST_READING_S = 1800
+_last_reading: dict[str, tuple[float, Any]] = {}   # key -> (time, the last answered reading): in memory only
+
+
+def menu_out(lang: str) -> Out:
+    p = menu.menu_payload(lang)
+    return Out(p["body"], lang=lang, menu={"button": p["button"], "sections": p["sections"]})
+
+
+def _wait_with_reading(key: str, u) -> None:
+    location_memory.wait_for_location(key, READING_WAIT + json.dumps(
+        {k: v for k, v in u.to_dict().items() if k not in ("safety", "seconds")}))
+
+
+def reading_from_wait(waiting: str):
+    from app.agent.understand import Understanding
+    return Understanding(**json.loads(waiting[len(READING_WAIT):]))
+
+
+def _remember_reading(key: str, u) -> None:
+    now = time.time()
+    _last_reading[key] = (now, u)
+    for k in [k for k, (at, _) in _last_reading.items() if now - at > LAST_READING_S]:
+        _last_reading.pop(k, None)
+
+
+def _last(key: str):
+    at, u = _last_reading.get(key, (0.0, None))
+    return u if time.time() - at <= LAST_READING_S else None
+
+
+PLACE_CAPABILITIES = {"place_budget", "place_history", "hazard", "facility"}
+
+
+def _add_buttons(outs: list[Out], lang: str, result, u, question: str, place: dict | None) -> None:
+    """Reply buttons under an answer (at most 3; 'Menu' when nothing else applies). On the answer itself when it is
+    one message of 1,024 characters or fewer with no images; otherwise on a short last message ('Anything else?'),
+    so the answer is never cut and the buttons come after its images."""
+    asked_in = detect_language(question)
+    needs_location = u is not None and (u.capability in PLACE_CAPABILITIES or u.level in ("pin", "ward", "lga")) \
+        and not (place and place.get("lat") is not None)
+    buttons = menu.answer_buttons(lang, working=bool(getattr(result, "working", "")),
+                                  brief=getattr(result, "deep", None) is not None,
+                                  other_lang=bool(asked_in) and asked_in != lang, needs_location=needs_location)
+    first = outs[0]
+    if len(outs) == 1 and not first.crops and not first.buttons and len(first.text) <= menu.BODY_WITH_BUTTONS:
+        first.buttons = buttons
+    else:
+        outs.append(Out(menu.words(lang)["anything_else"], buttons, lang=lang))
+
+
+async def _menu_row(row: str, key: str, lang: str, settings: Settings) -> tuple:
+    """(replies, None, '', lang) for a row with a reply of its own; (None, reading, restatement, lang) for a row that
+    enters the pipeline. A row that needs a place uses the point of the last 30 minutes, else asks for it."""
+    from app.agent.understand import Understanding
+    from app.whatsapp.messages import PRIVACY_URL
+    w = menu.words(lang)
+    if row == "menu_docs":
+        return [Out(w["docs"], lang=lang)], None, "", lang
+    if row == "menu_lang":
+        return [Out(w["lang"], LANG_BUTTONS, lang=lang)], None, "", lang
+    if row == "menu_privacy":
+        return [Out(w["privacy"].format(url=PRIVACY_URL), lang=lang)], None, "", lang
+    if row == "menu_about":
+        u = Understanding(kind="chitchat", capability="conversation", restatement=w["about"])
+        return None, u, w["about"], lang
+    u = menu.reading_for(row)
+    if location_memory.recall(key) is None:
+        if u.capability == "facility":
+            _wait_for_search(key, u.restatement, Filters())
+        else:
+            _wait_with_reading(key, u)
+        return [Out(w["need_place"][row], lang=lang, location_request=True)], None, "", lang
+    return None, u, u.restatement, lang
+
+
+async def _answer_button(button: str, key: str, lang: str, store: UserStore) -> tuple:
+    """A reply button under an answer, as the command it stands for (typed words still work)."""
+    w = menu.words(lang)
+    if button == menu.BTN_WORKING:
+        return None, None, "show working", lang
+    if button == menu.BTN_BRIEF:
+        return None, None, "full brief", lang
+    if button == menu.BTN_MENU:
+        return [menu_out(lang)], None, "", lang
+    last = _last(key)
+    if button == menu.BTN_LOCATION:
+        if last is not None:            # the answer that wanted a pin is answered again when it comes
+            _wait_with_reading(key, last)
+        return [Out(w["send_location"], lang=lang, location_request=True)], None, "", lang
+    other = "en" if lang == "ha" else "ha"   # BTN_LANG: switch, and the same question answered in the other language
+    store.set_lang(key, other)
+    if last is None:
+        return [Out(t("lang_set", other), lang=other)], None, "", other
+    return None, last, last.restatement, other
+
+
 def place_budget_reading(waiting: str):
     """The reading a place-budget question resumes with once the location has come."""
     from app.agent.understand import Understanding
@@ -1256,6 +1398,8 @@ async def _after_location(question: str, key: str, lang: str, settings: Settings
                           spot: Spot) -> list[Out]:
     """The question that asked for a location, answered now that there is one: a nearest-facility search, a route
     to a named facility, 'how far is it' for the facility last shown, or a facility claim ('UDUTH is closer')."""
+    if question.startswith(READING_WAIT):          # a menu row's or a button's reading: resumed by the caller
+        return []
     if question.startswith(CLAIM_WAIT):
         name = question[len(CLAIM_WAIT):]
         return await _facility_correction(claim_reading(name, name), key, lang, settings, facility_fn,

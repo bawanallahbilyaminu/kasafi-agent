@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from app.geo.location import Spot, memory
 from app.place import answer as A
 from app.users import UserStore, user_key
+from app.whatsapp import conversation as C
 from app.whatsapp.conversation import SIZE_WAIT, handle
 from tests.helpers import make_settings
 
@@ -82,12 +83,14 @@ def test_skip_then_the_answer_is_sent_even_when_the_facility_check_runs() -> Non
     memory.forget(key)
 
 
-def test_a_place_question_sends_no_generic_progress_line_and_others_still_do() -> None:
+def test_a_place_question_sends_no_generic_progress_line_and_others_still_do(monkeypatch) -> None:
+    monkeypatch.setattr(C, "PROGRESS_AFTER_S", 0.0)          # every answer counts as slow here
     s = make_settings()
     store, key = _user(s)
     notified: list[str] = []
 
     async def answer(question, lang, *, settings, notify=None, history=None, place=None):
+        await asyncio.sleep(0.05)
         return FakeAnswer("ANSWER")
     _run(_text("How green was my farm in 2024?"), store, s, answer, notified)
     assert notified == []
@@ -203,7 +206,8 @@ def test_the_text_goes_before_a_stalled_map_and_the_map_has_its_own_deadline(mon
     outs = asyncio.run(run())                                     # (asyncio.run then waits for the abandoned thread)
     answered = [at for at, text in sent if text == "ANSWER"]
     assert answered and answered[0] < 0.1                         # the text went before the map was tried
-    assert outs[0].text == "ANSWER" and outs[-1].text.startswith("(The map")   # the note, at the map's deadline
+    assert outs[0].text == "ANSWER" and outs[-2].text.startswith("(The map")   # the note, at the map's deadline
+    assert outs[-1].text == "Anything else?" and outs[-1].buttons               # the buttons come last
     assert took["handle"] < 0.4                                   # the stalled map (0.6 s) never held the turn
 
 

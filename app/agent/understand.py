@@ -29,7 +29,7 @@ from app.config import Settings
 
 log = logging.getLogger(__name__)
 
-KINDS = ("new", "follow_up", "correction", "clarification", "chitchat")
+KINDS = ("new", "follow_up", "correction", "clarification", "chitchat", "menu")
 CAPABILITIES = ("budget", "place_budget", "statistics", "deep", "hazard", "place_history", "facility", "alerts",
                 "conversation", "other")
 ALIASES = {"chitchat": "conversation"}      # the first prompt's name (2 Nov): recorded readings may still carry it
@@ -42,7 +42,7 @@ TURNS = 4
 
 SYSTEM = with_core("""TASK: read the user's NEW MESSAGE in the conversation and say what they mean. Reply with JSON \
 only:
-{"kind": "new|follow_up|correction|clarification|chitchat",
+{"kind": "new|follow_up|correction|clarification|chitchat|menu",
  "capability": "budget|place_budget|statistics|deep|hazard|place_history|facility|alerts|conversation|other",
  "subject": {"level": "pin|ward|lga|state|facility|document|project|agency|sector|none", "name": "<as named>"},
  "time": {"kind": "past|now|forecast|year|span|none", "years": [<years named>]},
@@ -68,6 +68,8 @@ in my area" with no other cue).
 - conversation: a message about Kasafi or the conversation itself, not a request for information: greetings, \
 "who are you", "what can you do", "how does it work", "who made you", "is this a bot", "can you speak Hausa", \
 thanks, goodbye, "help", "ok". Its kind is "chitchat" and its level "none".
+- A request to see the menu or the list of options ("menu", "zaɓi", "options", "show me the options", "nuna min \
+zaɓuɓɓuka") is kind "menu", capability "conversation".
 
 Rules:
 - A follow-up keeps the previous subject and place unless the message names new ones.

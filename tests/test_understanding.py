@@ -164,13 +164,16 @@ def test_each_conversation_reaches_the_capability_and_subject_it_means(case, mon
         assert case["expect"].get("urgent") and "understanding" not in seen
         assert outs[0].text.startswith("🚨")
         return
+    if reading(case["id"]).kind == "menu":                  # 'menu' / 'zaɓi': the interactive list, nothing else
+        assert case["expect"].get("kind") == "menu" and outs[0].menu and "understanding" not in seen
+        return
     if reading(case["id"]).capability == "conversation":    # about Kasafi or the conversation: never the documents
         assert "understanding" not in seen and seen["conversational"][0] == case["message"]
         assert outs and outs[-1].text == "HELLO"
         assert case["expect"]["capability"] == "conversation"
         return
     got = seen.get("understanding")
-    assert got is not None and outs and outs[-1].text == "ANSWER"
+    assert got is not None and outs and outs[-1].text.startswith("ANSWER")    # with its closing offer, if any
     assert score(got.to_dict(), case["expect"]) == []
     if case["place"] == "pin":
         assert seen["place"] and seen["place"].get("lat") is not None
@@ -436,7 +439,7 @@ def test_a_place_budget_reading_with_no_place_asks_for_it_and_resumes_with_the_r
     msg = {"from": SENDER, "id": "w-pb2", "type": "text", "text": {"body": "Tambuwal"}}
     outs = asyncio.run(C.handle(msg, None, store=store, settings=s, answer_fn=answer, guard_fn=_ok, place_fn=typed,
                                 understand_fn=understand_fn))
-    assert outs[-1].text == "PLACE BUDGET"
+    assert outs[-1].text.startswith("PLACE BUDGET")             # with its closing offer
     q, u, place = seen[-1]
     assert q == reading_pb.restatement and u.capability == "place_budget" and place["lga_pcode"] == "NG034019"
 

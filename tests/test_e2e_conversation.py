@@ -73,6 +73,15 @@ class FakeWA:
         FakeWA.sent.append(("location_request", to, body))
         return {}
 
+    async def send_list(self, to, body, button, sections, header=""):
+        FakeWA.sent.append(("list", to, {"body": body, "button": button, "sections": sections}))
+        return {}
+
+    typing: list = []
+
+    async def mark_typing(self, message_id):
+        FakeWA.typing.append(message_id)
+
     async def send_location(self, to, latitude, longitude, name="", address=""):
         FakeWA.sent.append(("location", to, {"latitude": latitude, "longitude": longitude, "name": name, "address": address}))
         return {}
@@ -119,7 +128,8 @@ VOICE_Q = SpeechResult(transcript="Nawa aka ware wa noma a 2026?", english="How 
                        language="ha", confidence="high", needs_confirmation=False)
 
 
-async def recorded_answer(question: str, lang: str, *, settings, notify=None, history=None, place=None):
+async def recorded_answer(question: str, lang: str, *, settings, notify=None, history=None, place=None,
+                          understanding=None):
     """The model-backed answer, replaced by recorded replies keyed on the question's words."""
     q = question.lower()
     from app.agent.deep import deep_answer, deep_question, render
@@ -271,7 +281,7 @@ def test_consent_language_pin_place_question_size_and_skip(harness):
     assert sends[1][2].startswith("📍 Got it: you're in")
     sends = h.turn(text("How green was my farm in 2024?", me), 1, "place question")
     assert sends[0][2].startswith("I couldn't draw this farm's outline")
-    sends = h.turn(text("skip", me), lambda s: [k for k, _, _ in s] == ["text", "text", "image", "image"], "skip")
+    sends = h.turn(text("skip", me), lambda s: [k for k, _, _ in s] == ["text", "text", "image", "image", "buttons"], "skip")
     assert sends[0][2].startswith("🛰️") and "satellite record" in sends[1][2] and "circle of about 1 ha" in sends[1][2]
     h.turn(text("show working", me), 1, "show working")
 
@@ -284,16 +294,16 @@ def test_pin_then_how_has_farming_evolved_in_my_ward_is_about_that_ward(harness)
     sends = h.turn(pin(LAT, LON, me), 2, "pin")
     assert sends[1][2].startswith("📍 Got it: you're in")
     sends = h.turn(text("How has farming evolved in my ward over the years", me),
-                   lambda s: [k for k, _, _ in s][-2:] == ["text", "image"], "my ward")
+                   lambda s: [k for k, _, _ in s][-3:] == ["text", "image", "buttons"], "my ward")
     body = [p for k, _, p in sends if k == "text"][-1]
     assert body.startswith("*Peak greenness: ") and " ward" in body.split("\n")[0] and "Your pin is in" in body
     assert "Since 20" in body and "232 wards" not in body and "244 wards" not in body and "MODIS NDVI" not in body
     sends = h.turn(text("How has farming evolved in my LGA over the years", me),
-                   lambda s: [k for k, _, _ in s][-2:] == ["text", "image"], "my LGA")
+                   lambda s: [k for k, _, _ in s][-3:] == ["text", "image", "buttons"], "my LGA")
     body = [p for k, _, p in sends if k == "text"][-1]
     assert body.startswith("*Peak greenness: wards of ") and "Since 20" in body and "*Ranking (" in body
     sends = h.turn(text("How has farming evolved across the state over the years", me),
-                   lambda s: [k for k, _, _ in s][-2:] == ["text", "image"], "the state")
+                   lambda s: [k for k, _, _ in s][-3:] == ["text", "image", "buttons"], "the state")
     body = [p for k, _, p in sends if k == "text"][-1]
     assert body.startswith("*Peak greenness: the 23 LGAs of Sokoto State") and "Sokoto State's farmland greenness" in body
 
@@ -303,7 +313,7 @@ def test_my_ward_in_hausa_and_the_pin_asked_for_when_none_is_on_file(harness):
     consented(h, me, "ha")
     sends = h.turn(text("Yaya noma ya canza a unguwata tun shekaru?", me), lambda s: s[-1][0] == "location_request", "no pin yet")
     assert "wurin kansa" in sends[-1][2]
-    sends = h.turn(pin(LAT, LON, me), lambda s: s[-1][0] == "image", "pin resumes the question")
+    sends = h.turn(pin(LAT, LON, me), lambda s: s[-2][0] == "image" and s[-1][0] == "buttons", "pin resumes the question")
     body = [p for k, _, p in sends if k == "text" and "Wurinka yana gundumar" in str(p)]
     assert body and body[0].startswith("*Koriyar ƙololuwa: gundumar ") and "Tun 20" in body[0]
 
@@ -315,7 +325,7 @@ def test_a_size_in_kadada_gives_the_circle_of_that_area(harness):
     sends = h.turn(text("Yaya koriyar gonata a 2024?", me), 1, "place question")
     assert "Girman gonar nawa ne" in sends[0][2]
     # the acknowledgement first, then the progress line, the answer and its two images
-    sends = h.turn(text("3 kadada", me), lambda s: [k for k, _, _ in s] == ["text", "text", "text", "image", "image"], "size")
+    sends = h.turn(text("3 kadada", me), lambda s: [k for k, _, _ in s] == ["text", "text", "text", "image", "image", "buttons"], "size")
     assert sends[0][2].startswith("An gama: da'irar hekta 1.21") and sends[1][2].startswith("🛰️")
     assert "1.21 ha you gave" in sends[2][2]                                        # the recorded answer saw the shape
 
@@ -329,7 +339,7 @@ def test_corner_pins_then_an_gama_make_the_plot(harness):
     for i, (lat, lon) in enumerate(corners, 1):
         sends = h.turn(pin(lat, lon, me), 1, f"corner {i}")
         assert sends[0][2].startswith(f"📍 An karɓi wurin kusurwa na {i}")
-    sends = h.turn(text("an gama", me), lambda s: [k for k, _, _ in s] == ["text", "text", "text", "image", "image"], "an gama")
+    sends = h.turn(text("an gama", me), lambda s: [k for k, _, _ in s] == ["text", "text", "text", "image", "image", "buttons"], "an gama")
     assert sends[0][2].startswith("An gama: gona ta kusan hekta 4.8") and sends[1][2].startswith("🛰️")
     assert "4 corner pins" in sends[2][2]
 
@@ -388,13 +398,13 @@ def test_alert_sign_up_and_daina(harness):
 def test_budget_question_show_working_and_recheck(harness):
     h, me = harness, "2348000000906"
     consented(h, me, "en")
-    sends = h.turn(text("How much is budgeted for roads in 2026?", me), 2, "budget question")   # the ack, then the answer
-    assert sends[0][2].startswith("🔎") or "document" in sends[0][2].lower()
-    assert "₦12.50 billion" in sends[1][2]
+    # a quick answer: the typing indicator, no progress line; its buttons on the answer itself
+    sends = h.turn(text("How much is budgeted for roads in 2026?", me), 1, "budget question")
+    assert sends[0][0] == "buttons" and "₦12.50 billion" in sends[0][2]
     sends = h.turn(text("show working", me), 1, "show working")
     assert "Rows added" in sends[0][2]
-    sends = h.turn(text("recheck", me), 2, "recheck")
-    assert "Checked again" in sends[1][2]
+    sends = h.turn(text("recheck", me), 1, "recheck")                     # quick: no progress line
+    assert "Checked again" in sends[0][2]
 
 
 def test_a_missing_document_is_fetched_as_a_word_file_converted_and_cited(harness, tmp_path, monkeypatch):
@@ -442,8 +452,9 @@ def test_a_missing_document_is_fetched_as_a_word_file_converted_and_cited(harnes
     consented(h, me, "en")
     try:
         sends = h.turn(text("What does the Sokoto water supply plan 2026 budget for the Rural Water and Sanitation Agency?", me),
-                       lambda s_: [k for k, _, _ in s_][-1] == "text" and len(s_) >= 2, "missing document fetched as a Word file")
-        reply = [p for k, _, p in sends if k == "text"][-1]
+                       lambda s_: [k for k, _, _ in s_][-1] in ("text", "buttons") and len(s_) >= 2,
+                       "missing document fetched as a Word file")
+        reply = [p for k, _, p in sends if k in ("text", "buttons")][-1]
         assert "12,345,678.00" in reply and "page 1 (PDF converted from the Word original)" in reply
         assert any("Looking for it" in str(p) for k, _, p in sends if k == "text")
         assert (tmp_path / "fetched" / "e2e-office-plan.docx").exists() and (tmp_path / "fetched" / "e2e-office-plan.pdf").exists()
@@ -534,8 +545,8 @@ def test_who_are_you_and_thanks_get_kasafis_own_reply_never_the_documents(harnes
         sends = h.turn(text(body, who), 1, body)
         assert "couldn't find" not in sends[0][2] and "Ban sami" not in sends[0][2]
         assert sends[0][2] in ("I'm Kasafi, an assistant for Sokoto.", "Ni ne Kasafi.")
-    sends = h.turn(text("How much was allocated to works in 2026?", me), 2, "budget")   # progress line, answer
-    assert "Ministry of Works" in sends[1][2]
+    sends = h.turn(text("How much was allocated to works in 2026?", me), 1, "budget")   # quick: no progress line
+    assert "Ministry of Works" in sends[0][2]
     sends = h.turn(text("Thanks", me), 1, "thanks")
     assert sends[0][2] == "I'm Kasafi, an assistant for Sokoto."
 
@@ -559,3 +570,33 @@ def test_pin_nearest_hospital_then_but_uduth_is_closer(harness, monkeypatch):
     h.turn(text("Where is the nearest hospital?", me), lambda s: s and s[0][0] == "text", "nearest hospital")
     sends = h.turn(text("But Uduth is closer to me", me), 1, "correction")
     assert "Usman" in sends[0][2] and "from your pin" in sends[0][2]
+
+
+# --- 2 Nov: the menu (an interactive list) and the typing indicator through the real webhook path ------------------
+
+def row(rid, sender):
+    return {"from": sender, "id": f"wamid.e2e{next(_ids)}", "type": "interactive",
+            "interactive": {"type": "list_reply", "list_reply": {"id": rid, "title": rid}}}
+
+
+def test_menu_then_budget_for_my_area_then_the_pin_answers(harness, monkeypatch):
+    h, me = harness, "2348000000908"
+    _with_readings(monkeypatch, h)
+    consented(h, me, "en")
+    FakeWA.typing = []
+    sends = h.turn(text("menu", me), 1, "menu")
+    assert sends[0][0] == "list" and len(sends[0][2]["sections"][0]["rows"]) == 8
+    assert FakeWA.typing                                            # the typing indicator went on the message
+    sends = h.turn(row("menu_budget", me), 1, "budget row")
+    assert sends[0][0] == "location_request"
+    sends = h.turn(pin(LAT, LON, me), lambda s: len(s) >= 3, "pin answers the row")
+    assert any("Ministry of Works" in str(p) or "₦" in str(p) for _, _, p in sends)
+
+
+def test_menu_in_hausa(harness, monkeypatch):
+    h, me = harness, "2348000000909"
+    _with_readings(monkeypatch, h)
+    consented(h, me, "ha")
+    sends = h.turn(text("menu", me), 1, "menu in Hausa")
+    assert sends[0][0] == "list" and sends[0][2]["button"] == "Buɗe zaɓuɓɓuka"
+    assert sends[0][2]["sections"][0]["rows"][0]["title"] == "Kasafin yankina"

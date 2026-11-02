@@ -26,9 +26,13 @@ def consented(lang: str = "ha") -> UserStore:
     return store
 
 
-def test_typed_question_gets_searching_ack_then_answer() -> None:
+def test_typed_question_gets_searching_ack_then_answer(monkeypatch) -> None:
+    """The 'checking the documents' line only when the answer takes longer than PROGRESS_AFTER_S (the typing
+    indicator covers a quick one, 2 Nov)."""
+    from app.whatsapp import conversation
+    monkeypatch.setattr(conversation, "PROGRESS_AFTER_S", 0.01)
     calls, notified = [], []
-    outs, _ = run_handle(text(Q), store=consented(), answer_calls=calls, notified=notified)
+    outs, _ = run_handle(text(Q), store=consented(), answer_calls=calls, notified=notified, answer_delay=0.05)
     assert calls == [(Q, "ha")]
     assert [o.text for o in notified] == [t("searching", "ha")]
     assert outs[0].text == f"ANSWER[ha]: {Q}"
@@ -47,14 +51,15 @@ def test_show_working_sends_the_stored_working_without_a_model(ask: str) -> None
 
 def test_a_slow_answer_gets_one_still_checking_note(monkeypatch) -> None:
     from app.whatsapp import conversation
-    monkeypatch.setattr(conversation, "SLOW_ANSWER_S", 0.01)
+    monkeypatch.setattr(conversation, "PROGRESS_AFTER_S", 0.01)
+    monkeypatch.setattr(conversation, "SLOW_ANSWER_S", 0.03)
     notified, calls = [], []
-    outs, _ = run_handle(text(Q), store=consented(), answer_calls=calls, notified=notified, answer_delay=0.05)
+    outs, _ = run_handle(text(Q), store=consented(), answer_calls=calls, notified=notified, answer_delay=0.1)
     assert [o.text for o in notified] == [t("searching", "ha"), t("still_working", "ha")]
     assert outs[0].text == f"ANSWER[ha]: {Q}"
     notified = []
-    run_handle(text(Q), store=consented(), answer_calls=calls, notified=notified)      # a quick one: no extra note
-    assert [o.text for o in notified] == [t("searching", "ha")]
+    run_handle(text(Q), store=consented(), answer_calls=calls, notified=notified)      # a quick one: no note at all
+    assert [o.text for o in notified] == []
 
 
 def test_english_user_gets_english_answer() -> None:

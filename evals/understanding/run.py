@@ -41,7 +41,9 @@ def score(reading: dict | None, expect: dict) -> list[str]:
     caps = expect["capability"] if isinstance(expect["capability"], list) else [expect["capability"]]
     if reading["capability"] not in caps:
         wrong.append(f"capability {reading['capability']} (want {'/'.join(caps)})")
-    if bool(reading.get("urgent")) != bool(expect.get("urgent")):       # an emergency now, or a false alarm
+    # 'either': a conditional ('if my child has trouble breathing'); the rule says urgent when unsure, and the fast
+    # path still gives the nearest suitable facility, so either reading is acceptable
+    if expect.get("urgent") != "either" and bool(reading.get("urgent")) != bool(expect.get("urgent")):
         wrong.append(f"urgent {reading.get('urgent')} (want {bool(expect.get('urgent'))})")
     for k in ("level", "time", "kind", "care", "facility_level", "ownership"):
         want = expect.get(k)

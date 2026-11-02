@@ -205,3 +205,29 @@ The fast reply's median is 0.12 s. `deploy/deploy.sh --smoke emergency` runs the
 Place history: a SAM 3.1 outline over 20 ha (`SAM_MAX_HA`) is rarely one farm. The size is asked for instead, and
 the reply says why ("about 47 ha, more than one farm usually is"). A size the farmer gives, or their corner pins,
 keep the 50 ha limit.
+
+### The menu, buttons under answers, and the typing indicator (2 Nov, night)
+
+These are shortcuts into the same pipeline, not a separate bot (`app/whatsapp/menu.py`).
+
+- **Typing indicator:** after the consent gate, the user's message is marked read with `typing_indicator: {type:
+  "text"}` (Cloud API "Typing indicators"; dismissed at our reply or after 25 s). It is fire and forget with a 3 s
+  limit, and a failure is only logged. Meta's docs don't say it can be re-sent, so it isn't. "Checking the
+  documents…" goes out only when the answer takes longer than 8 s (`PROGRESS_AFTER_S`); "still checking" follows
+  at 25 s.
+- **Menu:** the understanding step reads "menu" / "zaɓi" / "nuna min zaɓuɓɓuka" as kind `menu` (with no reading,
+  the word alone). It is an interactive list of 8 rows (at most 10; titles ≤24, descriptions ≤72, button ≤20).
+  There is no alerts row while alerts are in dry run. A row tap enters the pipeline as a reading (a capability hint
+  plus a restatement) with no model call, and is traced like any message. The place rows (budget, nearest facility,
+  farm history, rain and flood outlook) use a point shared in the last 30 minutes, else send the location request,
+  and resume with the same reading when the pin or a typed place comes (`READING_WAIT`). "My data and privacy"
+  explains the existing DELETE MY DATA / GOGE BAYANAI NA command.
+- **Buttons under answers** (at most 3, ≤20 characters): Show working (when there is working), Full brief (PDF)
+  (deep analyses), Hausa/English (when the question's language differs from the reply's: switches, and answers the
+  same reading again), Send location (place capabilities with no pin; the pin answers the same reading again),
+  otherwise Menu. They map to the existing commands, which still work typed. A long answer, or one with images or
+  maps, is never cut: its buttons go on a short last message ("Anything else?").
+- **Closing offer:** at most one short next step tied to the answered capability ("Want the same for another
+  year?"). It is never added on emergency, refusal, conversation or help replies, or when the answer already ends
+  with a question.
+- **"Type menu any time"** appears once: in the consent thanks, in the "who are you" reply and in the help text.

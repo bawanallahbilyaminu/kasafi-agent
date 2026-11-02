@@ -98,7 +98,8 @@ def sent_key(out) -> tuple:
     import hashlib
     image = hashlib.sha1(out.image).hexdigest() if getattr(out, "image", None) else ""
     loc = tuple(sorted((out.location or {}).items())) if getattr(out, "location", None) else ()
-    return (out.text, image, loc, bool(getattr(out, "location_request", False)), tuple(out.buttons or ()))
+    return (out.text, image, loc, bool(getattr(out, "location_request", False)), tuple(out.buttons or ()),
+            bool(getattr(out, "menu", None)))
 
 
 def unique_crops(crops, turn: set) -> list:
@@ -129,6 +130,8 @@ async def deliver(client, to: str, out) -> None:
             await client.send_text(to, part)
     elif getattr(out, "location", None):
         await client.send_location(to, **out.location)
+    elif getattr(out, "menu", None):              # the menu: an interactive list (app/whatsapp/menu.py)
+        await client.send_list(to, out.text, out.menu["button"], out.menu["sections"], out.menu.get("header", ""))
     elif getattr(out, "location_request", False) or out.buttons:
         parts = split_text(out.text, SHORT_LIMIT)
         for part in split_text("\n\n".join(parts[:-1])) if len(parts) > 1 else []:
@@ -159,6 +162,7 @@ async def _reply(messages: list[dict[str, Any]]) -> None:
                 turn.add(key)
                 await deliver(client, to, out)
 
+            typing = start_typing(client, msg, store, settings)                 # never awaited before the answer
             try:
                 for out in await handle(msg, client, store=store, settings=settings, notify=send):
                     await send(out)
@@ -184,8 +188,37 @@ async def _reply(messages: list[dict[str, Any]]) -> None:
                         save_failure(settings, "(reply failed)", lang, f"{type(e).__name__}: {e}"[:300], 0.0)
                 except Exception:                                   # noqa: BLE001
                     log.exception("apology to %s failed too", mask_phone(msg.get("from", "")))
+            finally:
+                if typing is not None:                  # done long ago, or cut off now: never blocks a reply
+                    typing.cancel()
     finally:
         await client.aclose()
+
+
+TYPING_TIMEOUT_S = 3.0
+
+
+def start_typing(client, msg: dict[str, Any], store, settings) -> asyncio.Task | None:
+    """The typing indicator on the user's message (marked read), for consented users only: fire and forget, at
+    most TYPING_TIMEOUT_S, a failure logged and nothing else. WhatsApp drops it at our reply or after 25 s; the
+    progress line covers longer answers (the docs don't say it can be re-sent)."""
+    from app.users import user_key
+    msg_id = msg.get("id", "")
+    if not msg_id or not msg.get("from") or not hasattr(client, "mark_typing"):
+        return None
+    try:
+        user = store.get(user_key(msg["from"], settings))
+    except Exception:                       # noqa: BLE001
+        return None
+    if not (user and user.consented):       # after the consent gate only
+        return None
+
+    async def run() -> None:
+        try:
+            await asyncio.wait_for(client.mark_typing(msg_id), TYPING_TIMEOUT_S)
+        except Exception as e:              # noqa: BLE001 - a missing indicator never matters
+            log.info("typing indicator not shown: %s", type(e).__name__)
+    return asyncio.get_running_loop().create_task(run())
 
 
 @router.get("/webhook", response_class=PlainTextResponse)

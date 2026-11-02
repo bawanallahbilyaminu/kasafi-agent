@@ -8,7 +8,8 @@ that ignores a live reading (2 Nov: 'Who are you?' read as chitchat went to the 
 
 --set deploy (default, ~$0.01): "Who are you?", "Kai wanene?", a cold "But uduth is closer to me" (Wamakko on file).
 --set full (~$0.15): the 8 conversations of the 2 Nov fix (pin + nearest hospital + correction, pin + flood history,
-an English and a Hausa budget question, thanks).
+an English and a Hausa budget question, thanks), then the menu: "menu" -> tap "Budget for my area" -> share the
+location -> the answer, and "zaɓi" in Hausa.
 --set emergency (~$0.15): the 40 off-list cases of evals/emergency (x01-x20 must fire: a miss fails; y01-y20 must
 not: a false alarm is reported, not failed).
 
@@ -56,6 +57,14 @@ def answered(r: str) -> str:
     return never_not_found(r) or ("" if len(r) > 40 else "no answer")
 
 
+def a_list(r: str) -> str:
+    return "" if "[list «" in r else "no menu list"
+
+
+def asks_location(r: str) -> str:
+    return "" if "[location request]" in r else "no location request"
+
+
 def flood_record(r: str) -> str:
     return "" if any(w in r.lower() for w in ("flood", "water", "ambaliya", "satellite")) else "no flood record"
 
@@ -73,6 +82,9 @@ FULL = DEPLOY + [
     ("budget", "en", None, [("How much is allocated to the Ministry of Health in the 2026 budget?", answered)]),
     ("budget in Hausa", "ha", None, [("Nawa aka ware wa ilimi a kasafin 2026?", answered)]),
     ("thanks", "en", None, [("thanks", no_documents)]),
+    ("menu, budget row, pin", "en", None, [("menu", a_list), ("[row:menu_budget]", asks_location),
+                                           ("[pin]", answered)]),
+    ("menu in Hausa", "ha", None, [("zaɓi", a_list)]),
 ]
 
 
@@ -106,6 +118,13 @@ class Capture:
     async def send_location_request(self, to, body):
         Capture.sent.append(f"{body}\n[location request]")
 
+    async def send_list(self, to, body, button, sections, header=""):
+        rows = [f"  {r['id']}: {r['title']} — {r.get('description', '')}" for s in sections for r in s["rows"]]
+        Capture.sent.append(f"{body}\n[list «{button}»]\n" + "\n".join(rows))
+
+    async def mark_typing(self, message_id):
+        Capture.sent_typing = getattr(Capture, "sent_typing", 0) + 1
+
     async def send_location(self, to, latitude, longitude, name="", address=""):
         Capture.sent.append("[a location pin]")
 
@@ -127,6 +146,12 @@ class Capture:
 
 def message(sender: str, body: str | None = None, pin: tuple | None = None) -> dict:
     base = {"from": sender, "id": f"wamid.smoke{int(time.time())}{next(_ids)}"}
+    if body == "[pin]":
+        pin = PIN
+    elif body and body.startswith("[row:"):            # a tap on a menu row
+        rid = body[5:-1]
+        return {**base, "type": "interactive", "interactive": {"type": "list_reply",
+                                                               "list_reply": {"id": rid, "title": rid}}}
     if pin:
         return {**base, "type": "location", "location": {"latitude": pin[0], "longitude": pin[1]}}
     return {**base, "type": "text", "text": {"body": body}}

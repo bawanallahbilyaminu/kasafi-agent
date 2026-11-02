@@ -52,7 +52,7 @@
   {"id": "u17", "place": "pin", "turns": [
      {"user": "Is it going to be very hot tomorrow here?", "kasafi": "Tomorrow at your pin: up to 41 C, a heat caution day."},
      {"user": "What about the dust?", "kasafi": "Air quality tomorrow: moderate dust, AQI 85."}],
-   "message": "Which hospital near me can I go to if my child has trouble breathing?", "expect": {"capability": "facility"}},
+   "message": "Which hospital near me can I go to if my child has trouble breathing?", "expect": {"capability": "facility", "urgent": "either"}},
   {"id": "u18", "place": "pin", "turns": [
      {"user": "Nearest hospital", "kasafi": "Nearest hospitals: 1. Specialist Hospital Sokoto 6.2 km 2. Women and Children Welfare Clinic 7.0 km"}],
    "message": "How much did the government budget for Specialist Hospital this year?", "expect": {"capability": "budget"}},
@@ -97,7 +97,7 @@
   {"id": "f03", "place": "none", "turns": [], "message": "tell me about health in Sokoto", "expect": {"capability": "deep"}},
   {"id": "f04", "place": "pin", "turns": [], "message": "what's happening in my area?", "expect": {"capability": ["deep", "place_budget"]}},
   {"id": "f05", "place": "none", "turns": [], "message": "How many PHCs are in Tureta?", "expect": {"capability": "facility"}},
-  {"id": "f06", "place": "none", "turns": [], "message": "How much did Sokoto spend on education last year?", "expect": {"capability": "budget", "time": "year"}},
+  {"id": "f06", "place": "none", "turns": [], "message": "How much did Sokoto spend on education last year?", "expect": {"capability": "budget", "time": ["year", "past"]}},
   {"id": "f07", "place": "pin", "turns": [], "message": "Is it safe to plant this week, will it rain?", "expect": {"capability": "hazard", "time": "forecast"}},
   {"id": "f08", "place": "none", "turns": [], "message": "Nawa aka ware wa ma'aikatar lafiya a 2026?", "expect": {"capability": "budget"}},
   {"id": "f09", "place": "pin", "turns": [], "message": "Ina asibiti mafi kusa da ni?", "expect": {"capability": "facility"}},
@@ -132,7 +132,7 @@
   {"id": "m03", "place": "pin", "lang": "en", "turns": [], "message": "Nearest place for antenatal care", "expect": {"capability": "facility", "care": "maternal"}},
   {"id": "m04", "place": "pin", "lang": "ha", "turns": [], "message": "A ina matata za ta haihu?", "expect": {"capability": "facility", "care": "maternal"}},
   {"id": "m05", "place": "pin", "lang": "en", "turns": [], "message": "Is there anywhere I can deliver a baby around here?", "expect": {"capability": "facility", "care": "maternal"}},
-  {"id": "m06", "place": "pin", "lang": "en", "turns": [], "message": "Where can I take my sick child?", "expect": {"capability": "facility", "care": "children"}},
+  {"id": "m06", "place": "pin", "lang": "en", "turns": [], "message": "Where can I take my sick child?", "expect": {"capability": "facility", "care": "children", "urgent": "either"}},
   {"id": "m07", "place": "pin", "lang": "ha", "turns": [], "message": "Ina asibitin gwamnati mafi kusa?", "expect": {"capability": "facility", "care": "general", "facility_level": "hospital", "ownership": "public"}},
   {"id": "m08", "place": "pin", "lang": "en", "turns": [], "message": "Is there a private clinic near me?", "expect": {"capability": "facility", "facility_level": "primary", "ownership": "private"}},
   {"id": "m09", "place": "pin", "lang": "en", "turns": [
@@ -140,6 +140,11 @@
    "message": "Only government ones", "expect": {"capability": "facility", "kind": "follow_up", "care": "maternal", "ownership": "public"}},
   {"id": "m10", "place": "pin", "lang": "en", "turns": [
      {"user": "What is the government budgeting for my area?", "kasafi": "The 2026 budget has 163 capital projects located in Wamakko, worth N79.98 billion, mostly health."}],
-   "message": "Anything for schools?", "expect": {"capability": "place_budget"}}
+   "message": "Anything for schools?", "expect": {"capability": "place_budget"}},
+  {"id": "k01", "place": "none", "lang": "en", "turns": [], "message": "menu", "expect": {"capability": "conversation", "kind": "menu"}},
+  {"id": "k02", "place": "pin", "lang": "ha", "turns": [], "message": "zaɓi", "expect": {"capability": "conversation", "kind": "menu"}},
+  {"id": "k03", "place": "none", "lang": "ha", "turns": [
+     {"user": "Nawa aka ware wa lafiya a 2026?", "kasafi": "A 2026, an ware wa lafiya N124.41 biliyan."}],
+   "message": "Nuna min zaɓuɓɓuka", "expect": {"capability": "conversation", "kind": "menu"}}
  ]
 }

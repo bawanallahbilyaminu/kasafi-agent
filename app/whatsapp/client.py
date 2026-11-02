@@ -164,6 +164,38 @@ class WhatsAppClient:
             resp.raise_for_status()
         return resp.json()
 
+    async def send_list(self, to: str, body: str, button: str, sections: list[dict], header: str = "") -> dict:
+        """Interactive list message (developers.facebook.com, "Interactive list messages"): one button of 20
+        characters or fewer, 1-10 rows over all sections, row titles 24 and descriptions 72 characters or fewer,
+        section titles 24, header 60, body 4096."""
+        rows = [r for s in sections for r in s["rows"]]
+        if not 1 <= len(rows) <= 10 or len(button) > 20 or len(body) > 4096 or len(header) > 60 or \
+                any(len(r["title"]) > 24 or len(r.get("description", "")) > 72 or len(r["id"]) > 200 for r in rows) \
+                or any(len(s.get("title", "")) > 24 for s in sections):
+            raise ValueError("WhatsApp list: 1-10 rows, titles <= 24, descriptions <= 72, button <= 20 chars")
+        interactive: dict = {"type": "list", "body": {"text": body}, "action": {"button": button, "sections": sections}}
+        if header:
+            interactive["header"] = {"type": "text", "text": header}
+        resp = await self._http.post(f"/{self.phone_number_id}/messages", json={
+            "messaging_product": "whatsapp", "recipient_type": "individual", "to": to, "type": "interactive",
+            "interactive": interactive,
+        })
+        if not resp.is_success:
+            log.warning("WhatsApp list to %s failed: HTTP %s, Graph error code %s",
+                        mask_phone(to), resp.status_code, _graph_code(resp))
+            resp.raise_for_status()
+        return resp.json()
+
+    async def mark_typing(self, message_id: str) -> None:
+        """Mark the user's message read and show the typing indicator ("Typing indicators": dismissed by our reply
+        or after 25 seconds). Best effort: the caller never waits long for it and a failure is only logged."""
+        resp = await self._http.post(f"/{self.phone_number_id}/messages", json={
+            "messaging_product": "whatsapp", "status": "read", "message_id": message_id,
+            "typing_indicator": {"type": "text"},
+        })
+        if not resp.is_success:
+            log.info("typing indicator failed: HTTP %s, Graph error code %s", resp.status_code, _graph_code(resp))
+
     async def send_location_request(self, to: str, body: str) -> dict:
         """Interactive location request message: the user's "Share location" button (body of 1024 or fewer)."""
         resp = await self._http.post(f"/{self.phone_number_id}/messages", json={

@@ -37,6 +37,8 @@ information. Reply to it as Kasafi.
 lines that fit this user (the LOCATION ON FILE: with a pin or an LGA, examples about "my area" or "my farm"; with \
 none, include "send your location" for the nearest health facility or a farm's flood history); and that it answers \
 from public documents (budgets, reports, surveys) and shows the page as evidence.
+- For who / what / how / help, end with one line saying they can type "menu" any time to see the options (in \
+Hausa: 'Rubuta *menu* a kowane lokaci don ganin abin da zan iya yi.'). Not for thanks, greetings or goodbye.
 - Facts you may use: Kasafi is an automated assistant (a bot), not a person; it was built by Halal Numeriq Limited \
 on Meta's Muse Spark models; it reads and replies in Hausa and English and listens to voice notes.
 - Never give figures or facts about budgets, places or reports here, and never say you looked anything up.
@@ -75,8 +77,9 @@ def place_kind(place: dict | None) -> str:
 def help_text(lang: str, place: dict | None) -> str:
     """Who Kasafi is, 4 example questions that fit the user's place on file, and what they are looking for."""
     w = HELP.get(lang, HELP["en"])
+    from app.whatsapp.menu import words
     examples = "\n".join(f"• {q}" for q in w[place_kind(place)])
-    return f"{w['intro']}\n{examples}\n\n{w['ask']}"
+    return f"{w['intro']}\n{examples}\n\n{w['ask']} {words(lang)['type_menu']}"
 
 
 def user_message(message: str, lang: str, history: list[dict] | None, place: dict | None) -> str:

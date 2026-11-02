@@ -143,7 +143,8 @@ def test_when_the_map_cant_be_drawn_the_text_says_so(monkeypatch) -> None:
         return Verdict("ok", "none")
     msg = {"from": "2348000000078", "id": "w", "type": "text", "text": {"body": "dust today?"}}
     outs = asyncio.run(conv.handle(msg, None, store=store, settings=s, answer_fn=answer, guard_fn=guard))
-    assert outs[-1].text == "(The map for this answer couldn't be drawn this time.)"
+    assert outs[-2].text == "(The map for this answer couldn't be drawn this time.)"
+    assert outs[-1].buttons                                    # 'Anything else?' with the buttons, after it
 
 
 def test_a_hazard_answer_always_carries_a_map_when_it_has_data(monkeypatch) -> None:
@@ -212,7 +213,8 @@ def test_an_answers_maps_follow_its_text_unless_images_are_off(monkeypatch) -> N
         from app.guardrails.scope import Verdict
         return Verdict("ok", "none")
     outs = asyncio.run(conv.handle(msg, None, store=store, settings=s, answer_fn=answer, guard_fn=guard))
-    assert outs[-1].image == b"\xff\xd8jpeg" and outs[-1].text.startswith("Heat today") and drawn
+    assert outs[-2].image == b"\xff\xd8jpeg" and outs[-2].text.startswith("Heat today") and drawn
+    assert outs[-1].buttons and not outs[-1].image             # the buttons after the map
     store.set_images(key, False)
     outs = asyncio.run(conv.handle(msg, None, store=store, settings=s, answer_fn=answer, guard_fn=guard))
     assert not any(o.image for o in outs)
