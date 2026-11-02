@@ -27,4 +27,5 @@ scripts/
 !scripts/ocr_pages.py
 !scripts/official_outlooks.py
 !scripts/fetch_hazards.py
+!scripts/live_smoke.py
 *.log

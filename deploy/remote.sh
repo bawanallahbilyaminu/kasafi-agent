@@ -58,18 +58,20 @@ wait_healthy() {  # $1 = commit the container must report
 }
 
 build_and_start() {  # $1 = commit; runs migrations between build and start
+  # called inside `if`, where bash ignores set -e: every step returns on failure itself (2 Nov: a failed build went
+  # on to run migrations with the old image and "start" the old container; only the health check caught it)
   local commit=$1
   say "building $(short "$commit")"
-  KASAFI_COMMIT=$commit dc build --quiet api db     # db: pgvector + PostGIS (db/Dockerfile), cached after once
-  docker tag "$IMAGE:latest" "$IMAGE:$(short "$commit")"
+  KASAFI_COMMIT=$commit dc build --quiet api db || { say "build failed"; return 1; }   # db: pgvector + PostGIS
+  docker tag "$IMAGE:latest" "$IMAGE:$(short "$commit")" || return 1
   say "starting database"
-  dc up -d --wait db
+  dc up -d --wait db || { say "database didn't start"; return 1; }
   if [ -f "$APP/alembic.ini" ]; then
     say "running database migrations"
-    dc run --rm --no-deps api alembic upgrade head
+    dc run --rm --no-deps api alembic upgrade head || { say "migrations failed"; return 1; }
   fi
   say "starting containers"
-  dc up -d --no-build api backup
+  dc up -d --no-build api backup || { say "containers didn't start"; return 1; }
 }
 
 checkout() { git -c advice.detachedHead=false checkout -q --detach "$1"; }
