@@ -139,7 +139,7 @@ count. A broad question now plans dimensions, reads up to 15 documents across th
 only claims whose value is printed on their page, and has one Muse Spark synthesis from those (figures not in a claim
 and verdict words removed in code). First server run: 9 documents, 49 checked figures, 29 s, $0.105. `tests/test_deep.py`.
 
-**L41 (3 Nov 2026): a deep brief needs a checklist, not the first claims found.** The first PHC brief led with
+**L41 (2 Nov 2026): a deep brief needs a checklist, not the first claims found.** The first PHC brief led with
 whatever the readers returned first: table serial numbers, the number of LGAs, a WHO global estimate, "with year not
 stated", a year no source gave ("In 2016 assessment"), NDHS key findings (national) given as Sokoto's, and a
 government health budget set against total health spending as a "disagreement". Now a known subject has a measure

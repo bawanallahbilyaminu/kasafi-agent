@@ -1,4 +1,4 @@
-"""Bulk import of a publisher's public documents (3 Nov 2026; first site: mof.sk.gov.ng).
+"""Bulk import of a publisher's public documents (2 Nov 2026; first site: mof.sk.gov.ng).
 
 Public side only: the WordPress REST media listing (/wp-json/wp/v2/media, public, no login) and the site's own
 sitemap pages' links to files on the same site. Never WordPress admin credentials. robots.txt is honoured and

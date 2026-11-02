@@ -154,7 +154,7 @@ def test_each_conversation_reaches_the_capability_and_subject_it_means(case, mon
 
 
 def test_a_correction_about_a_listed_facility_is_checked_against_the_list(monkeypatch) -> None:
-    """3 Nov 17:10: 'But Uduth is closer to me' after a nearest-hospital list got the statewide capital budget.
+    """2 Nov 17:10: 'But Uduth is closer to me' after a nearest-hospital list got the statewide capital budget.
     Now: UDUTH's road distance from the pin against the list's first, and why it wasn't listed."""
     key = "k-correction"
     memory.remember(key, PIN)
@@ -201,7 +201,7 @@ def conn():
 
 
 def test_a_past_flood_question_goes_to_place_history_never_the_forecast(conn, monkeypatch) -> None:
-    """3 Nov 17:20: 'Has this area ever flooded' after a pin got the 2026 official forecast. With the reading
+    """2 Nov 17:20: 'Has this area ever flooded' after a pin got the 2026 official forecast. With the reading
     (place_history, ward, past) the ward's satellite record answers; the outlook and hazard routes may not."""
     from app.agent import answer as A
     from app.agent.answer import Plan

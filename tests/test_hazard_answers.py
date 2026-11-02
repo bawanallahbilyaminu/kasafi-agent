@@ -243,7 +243,7 @@ async def _ok():
 
 
 def test_the_layer_asked_first_leads_the_answer() -> None:
-    """3 Nov: answers lead with what was asked; the summary leads with the first layer, now in the question's
+    """2 Nov: answers lead with what was asked; the summary leads with the first layer, now in the question's
     own order."""
     from app.hazards.answer import layers_asked
     heat_first = layers_asked("How hot will it be tomorrow, and will it rain?")

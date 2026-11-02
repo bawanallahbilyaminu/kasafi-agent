@@ -823,7 +823,7 @@ def informativeness(c: Claim, measures: set[str], pairs: set[int] = frozenset())
 
 def _value_key(c: Claim) -> str:
     """The same figure on the same page once ('26 PHCs out of 84 met the minimum' and '26 facilities to build' are
-    two figures: the 3 Nov live run lost the first to the second)."""
+    two figures: the 2 Nov live run lost the first to the second)."""
     return f"{re.sub(r'[^\d.%]', '', c.value).rstrip('0').rstrip('.')}|{c.measure}|{c.doc_id}|{c.page}"
 
 
@@ -878,7 +878,7 @@ def select_claims(claims: list[Claim], dims: list[Dimension], question: str = ""
             chosen.append(c)
         cap = per_dimension + (3 if any(c.from_rows for c in chosen) else 0)
         # coverage first: each checklist measure with a claim keeps its best one before any measure gets a second
-        # (the 3 Nov live run read EmONC's 7.6% but two antenatal and two immunisation figures filled the 5 places)
+        # (the 2 Nov live run read EmONC's 7.6% but two antenatal and two immunisation figures filled the 5 places)
         firsts = {id(next(c for c in chosen if c.measure == m.id)) for m in d.measures
                   if any(c.measure == m.id for c in chosen)}
         keep = set(list(firsts)[:cap])

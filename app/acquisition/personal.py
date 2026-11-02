@@ -1,4 +1,4 @@
-"""Personal data in public documents (3 Nov 2026): pages listing people are withheld.
+"""Personal data in public documents (2 Nov 2026): pages listing people are withheld.
 
 A page is withheld when it lists people together with a personal identifier or pay: names with phone numbers,
 NIN/BVN, bank account numbers or salaries (beneficiary lists, nominal rolls, payment schedules). Budget lines for
@@ -39,12 +39,12 @@ def personal_reason(text: str) -> str:
     names = [m.group(0) for m in NAME_ROW.finditer(t) if not AGENCY_WORDS.search(m.group(0))]
     if len(PHONE.findall(t)) >= 3 and len(names) >= 3:
         return "names with phone numbers"
-    # an ID list has a name column and an ID column; a budget's or accounts' 11-digit codes are neither (3 Nov:
+    # an ID list has a name column and an ID column; a budget's or accounts' 11-digit codes are neither (2 Nov:
     # the 2021 proposed budget's project codes and the 2019 accounts' agency codes were withheld)
     if len(LONG_ID.findall(t)) >= 5 and len(names) >= 5 and NAME_HEADER.search(t) and \
             re.search(r"(?i)\b(?:NIN|BVN|account\s*(?:no|number)|acct\.?\s*no|NUBAN)\b", t):
         return "names with NIN, BVN or account numbers"
-    # a pay list has a name column; a budget's 'SALARY' and 'PERSONNEL COST' lines have none (3 Nov: the 2023
+    # a pay list has a name column; a budget's 'SALARY' and 'PERSONNEL COST' lines have none (2 Nov: the 2023
     # approved budget's personnel tables were flagged)
     if NAME_HEADER.search(t) and re.search(r"(?i)\b(?:salary|net\s*pay|gross\s*pay|grade\s*level)\b", t):
         rows = [r for r in SALARY_ROW.findall(t) if not AGENCY_WORDS.search(r)]

@@ -1,4 +1,4 @@
-"""The code-side exclusion screen after the confirm step (audit F1, 3 Nov 2026; CLAUDE.md hard rule 5).
+"""The code-side exclusion screen after the confirm step (audit F1, 2 Nov 2026; CLAUDE.md hard rule 5).
 
 The confirm step is a model reading untrusted text: a document could tell it "excluded=false". So code checks too:
 - the title naming attacks, banditry, insurgency, security operations or partisan election material forces

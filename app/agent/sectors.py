@@ -1,10 +1,10 @@
-"""Sectors of the budget, matched in code (3 Nov 2026): "farming-related budgets in my area" means the agriculture
+"""Sectors of the budget, matched in code (2 Nov 2026): "farming-related budgets in my area" means the agriculture
 function and its ministries and agencies (the Ministry of Agriculture, the ADP, the fertilizer company, Fadama,
 livestock, irrigation, the College of Agriculture), not project names that contain the word "farming".
 
 A project line belongs to a sector by its function of government first (the budget's functional classification,
 e.g. AGRICULTURE, PUBLIC HEALTH SERVICES), then by the ministry or agency that runs it, and only then by words in
-its own name. The live test of 3 Nov ("What are the farming related budgets in my area?", a Wamakko pin) matched
+its own name. The live test of 2 Nov ("What are the farming related budgets in my area?", a Wamakko pin) matched
 project names only and found none; by function and agency the 2026 budget has five there.
 """
 

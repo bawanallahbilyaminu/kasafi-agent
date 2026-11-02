@@ -1,4 +1,4 @@
-"""'What is the government budgeting for my area?' from a pin (3 Nov live test, the demo opener): sectors matched
+"""'What is the government budgeting for my area?' from a pin (2 Nov live test, the demo opener): sectors matched
 by function and agency, projects located in the LGA by sector, progress from the latest report, statewide lines
 that may cover it, the follow-up on spending, and never an empty sources line."""
 
@@ -189,7 +189,7 @@ def conn():
 
 
 def test_farming_in_wamakko_finds_the_agriculture_lines_by_agency(conn) -> None:
-    """3 Nov live test: 'No project in the 2026 budget is located in Wamakko' and an empty sources line. By function
+    """2 Nov live test: 'No project in the 2026 budget is located in Wamakko' and an empty sources line. By function
     and agency the 2026 budget has agriculture lines there, and statewide ones that may cover it."""
     r = lga_projects(conn, {"lga": "Wamakko", "year": 2026, "terms": ["farming"],
                             "question": "What are the farming related budgets in my area?"})
@@ -205,7 +205,7 @@ def test_all_sectors_for_my_area_with_progress_from_the_latest_report(conn) -> N
 
 
 def test_wamakko_year_by_year_with_each_years_own_budget_and_the_spending_periods(conn) -> None:
-    """3 Nov live test: 'used 2024-2026' with no 2024 figure, and two runs with different 2025 figures. Each year
+    """2 Nov live test: 'used 2024-2026' with no 2024 figure, and two runs with different 2025 figures. Each year
     now comes from its own budget (or, for a year whose project list isn't in the library, the next budget's
     revised column), with project-level spending and its period, and agency spending labelled statewide."""
     from app.agent.analysis import lga_years

@@ -408,7 +408,7 @@ def when_text(years: dict[int, H.YearRow], lang: str) -> str:
 
 def summary(h: H.History, lang: str, today: date, water_first: bool = False) -> str:
     """The plain summary; `water_first` (a flood or water question): the water finding opens it, greenness and
-    bare soil follow as context (3 Nov: 'Has this land ever flooded?' opened with greenness)."""
+    bare soil follow as context (2 Nov: 'Has this land ever flooded?' opened with greenness)."""
     t = _t(lang)
     lines: list[str] = []
     usable = h.usable_years()

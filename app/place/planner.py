@@ -900,7 +900,7 @@ def ward_answer(conn, question: str, english: str, lang: str, wardcode: str, tod
                                                 lga=lga, lga_dir=t["trend_dir"][ld], state_dir=t["trend_dir"][sd],
                                                 what=what)
     # what was asked leads: a trend question opens with the trend; otherwise the year's finding comes first and
-    # the trend follows as context (3 Nov: 'Has this area ever flooded' opened with a greenness trend)
+    # the trend follows as context (2 Nov: 'Has this area ever flooded' opened with a greenness trend)
     if trend_line and trend_asked(text):
         lines.append(trend_line)
         trend_line = ""

@@ -82,9 +82,9 @@ report question about facilities, a place-history question with "health", a faci
 predicates in handler order in code (no model, no spend) and writes `evals/routing/report.md`; it is part of the
 pre-deploy gate. The named-facility cases need the facility registry (the dev database).
 
-## Conversation understanding before routing (3 Nov 2026)
+## Conversation understanding before routing (2 Nov 2026)
 
-Three live failures on 3 Nov came from routing each message alone with keyword rules: "But Uduth is closer to me"
+Three live failures on 2 Nov came from routing each message alone with keyword rules: "But Uduth is closer to me"
 after a hospital list (a correction) got the statewide capital budget; "Has this area ever flooded" after a pin (the
 past) got the season's forecast; "Has this land ever flooded?" (the pin's land) got a ranking of Wamakko's wards.
 
@@ -112,4 +112,4 @@ three failures): 45/45 on Muse Spark, median 2.7 s, p90 3.7 s, $0.0020 per messa
 Spark Open, median 2.0 s, p90 4.2 s (`report-open.md`). The deploy gate replays the recorded readings
 (`tests/test_understanding.py`) through the conversation handler, without a model call.
 
-Reasoning effort (3 Nov): `minimal` with 900 tokens. `low` with 3000 tokens was measured on the same 45 cases: 44/45, median 4.9 s, p90 8.2 s, $0.0049 per message (`report-low.md`), more precise on two readings and wrong on one, so no more reliable for twice the time and cost. The answer limit went from 120 s to 180 s (the answer loop 165 s, a deep analysis 210 s) so the 2-3 s of understanding never pushes a first-time pin (~95 s) or a deep analysis into the apology. Answers lead with what was asked: a flood question opens with the flood finding (pin and ward answers), a trend follows the year's finding unless the trend was asked, and hazard layers are summarised in the order the question names them.
+Reasoning effort (2 Nov): `minimal` with 900 tokens. `low` with 3000 tokens was measured on the same 45 cases: 44/45, median 4.9 s, p90 8.2 s, $0.0049 per message (`report-low.md`), more precise on two readings and wrong on one, so no more reliable for twice the time and cost. The answer limit went from 120 s to 180 s (the answer loop 165 s, a deep analysis 210 s) so the 2-3 s of understanding never pushes a first-time pin (~95 s) or a deep analysis into the apology. Answers lead with what was asked: a flood question opens with the flood finding (pin and ward answers), a trend follows the year's finding unless the trend was asked, and hazard layers are summarised in the order the question names them.

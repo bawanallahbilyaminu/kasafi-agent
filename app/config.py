@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     eval_daily_usd: float = 5.0
     # How long a read-back question waits for Eh / A'a / a correction
     kasafi_pending_ttl_minutes: int = 15
-    # every long job ends in an answer or an apology within this; 180 s since the understanding step (3 Nov):
+    # every long job ends in an answer or an apology within this; 180 s since the understanding step (2 Nov):
     # a first-time pin's satellite record takes ~95 s, a deep analysis up to 180 s on its own limit
     kasafi_answer_timeout_s: float = 180.0
     kasafi_second_plan_s: float = 4.0           # the Open model's second-opinion plan, only when the words conflict (0 = off)
@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     kasafi_understanding: bool = True
     kasafi_understand_provider: str = "meta"
     kasafi_understand_timeout_s: float = 20.0      # per model; then once on the other model, then keyword routing
-    # minimal, measured on the 45-conversation eval (3 Nov): 45/45, median 2.7 s, $0.0020; low with 3000 tokens:
+    # minimal, measured on the 45-conversation eval (2 Nov): 45/45, median 2.7 s, $0.0020; low with 3000 tokens:
     # 44/45, median 4.9 s, p90 8.2 s, $0.0049 (more precise on 2 cases, wrong on 1; no more reliable)
     kasafi_understand_effort: str = "minimal"
     kasafi_understand_max_tokens: int = 900

@@ -1046,7 +1046,7 @@ def checked_absence(conn: psycopg.Connection, plan: "Plan", evidence: list, cite
              "; ".join(f"{d} {ps}" for d, ps in left.items()))
     out = drop_absence_sentences(text)
     # an answer that answered (it still gives figures) loses the unverified 'doesn't print' sentence and gets no
-    # note: 'I didn't find this' under a full answer reads as if the question wasn't answered (3 Nov). The note
+    # note: 'I didn't find this' under a full answer reads as if the question wasn't answered (2 Nov). The note
     # goes once, after the bullets, only when the absence was the answer.
     if ANSWER_FIGURE.search(out):
         return out, True
@@ -1998,7 +1998,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         if conn is not None and allow("place_budget", "budget") and \
                 (spec := lga_route(question, plan, place, history)):
             # 'what is the government budgeting for my area?' from a pin, and 'how much of that has been spent?'
-            # after it: the projects located in the LGA on file, in code (3 Nov demo opener)
+            # after it: the projects located in the LGA on file, in code (2 Nov demo opener)
             log.info("lga route: %s%s", spec.get("lga"), " (spent)" if spec.get("focus") == "spent" else "")
             plan.analysis, plan.budget_query, profile_compare = spec, {}, False
         if plan.analysis and not plan.budget_query and not profile_compare:   # counts and sums in SQL
@@ -3902,7 +3902,7 @@ def _offer(lang: str) -> str:
 
 def sources_line(cited: list[Evidence], lang: str) -> str:
     """One line: 'Madogara: <document>, shafi 49, 61; <document>, shafi 12'. Empty when nothing is cited: a
-    'Sources:' with nothing after it is never printed (3 Nov live test)."""
+    'Sources:' with nothing after it is never printed (2 Nov live test)."""
     w = ANALYSIS_WORDS.get(lang, ANALYSIS_WORDS["en"])
     cited = [e for e in cited if e.title and e.page]
     if not cited:
@@ -4042,7 +4042,7 @@ YEARS_WORDS = {
 
 def lga_years_answer(conn, plan: Plan, res: AnalysisResult, lang: str, t: dict, acq) -> Answer:
     """Year by year for a place: each year's projects from its own budget, the project-level spending the budgets
-    print with its period, agency-level spending labelled statewide, and the total over the span (3 Nov)."""
+    print with its period, agency-level spending labelled statewide, and the total over the span (2 Nov)."""
     w = YEARS_WORDS.get(lang, YEARS_WORDS["en"])
     ends = QUARTER_END[lang if lang in QUARTER_END else "en"]
     subject, y0, y1 = res.subject, res.rows[0].name, res.rows[-1].name
@@ -4109,7 +4109,7 @@ def sector_label(key: str, lang: str, w: dict) -> str:
 
 def lga_text(res: AnalysisResult, w: dict, v: dict, lang: str, spent_focus: bool = False) -> tuple[str, str]:
     """The projects located in the LGA (by sector, or the sector asked), what was spent on them, and the statewide
-    lines that may cover it: never a bare 'no project' (3 Nov 2026)."""
+    lines that may cover it: never a bare 'no project' (2 Nov 2026)."""
     f = res.facts
     sector = sector_label(res.focus, lang, w) if res.focus else ""
     v = {**v, "sector": sector}

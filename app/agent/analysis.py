@@ -256,7 +256,7 @@ def other_lga(name: str, here: str, lgas: set[str]) -> str:
                  if _norm(x) != _norm(here) and len(x) > 2 and named(x)), "")
 
 
-# administrative items: not programmes that serve a community (3 Nov demo polish: 'PURCHASE OF AEROPLANE' had led
+# administrative items: not programmes that serve a community (2 Nov demo polish: 'PURCHASE OF AEROPLANE' had led
 # the statewide lines that 'may also cover Wamakko')
 ADMIN_ITEM = re.compile(r"(?i)\b(?:aeroplane|aircraft|airplane|helicopter|jet|vehicles?|motor\s*cycles?|cars?|"
                         r"buses|bus|trucks?|furniture|office\s+(?:block|building|complex|equipment|accommodation)|"
@@ -338,7 +338,7 @@ def lga_projects(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
         g[0], g[1] = g[0] + 1, g[1] + (a_cur or 0)
     res.groups = sorted(((k, v[0], v[1], v[2]) for k, v in groups.items()), key=lambda x: -x[2])
     # the largest community-facing lines lead; lines whose names place them in Sokoto city (Government House, the
-    # township) are counted but not listed, and said in one line (3 Nov demo polish)
+    # township) are counted but not listed, and said in one line (2 Nov demo polish)
     city = [x for x in lines if in_city(x[0], loc[1])]
     res.count("city_n", len(city), doc, city[0][4] if city else None)
     shown = [x for x in lines if not in_city(x[0], loc[1]) and not ADMIN_ITEM.search(x[0])]

@@ -1,4 +1,4 @@
-"""Kasafi's shared core prompt (3 Nov 2026): who it is, what it can and can't do, how it behaves in a conversation,
+"""Kasafi's shared core prompt (2 Nov 2026): who it is, what it can and can't do, how it behaves in a conversation,
 and its voice. It goes at the top of the understanding step, the planner and every model-written answer; each
 task's own rules follow it unchanged. Kept short (under ~400 words): it is sent with every call."""
 

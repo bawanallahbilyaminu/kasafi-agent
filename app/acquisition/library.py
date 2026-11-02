@@ -237,7 +237,7 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
         got_series = series or (meta.get("series") if meta.get("series") in SERIES else None)
         got_edition = edition or (meta.get("edition") if valid_edition(meta.get("edition")) else None)
         # an edition of the approved budget series is the approved budget book, never its proposal, an amendment or
-        # the appropriation law (3 Nov: the 2026 proposal and first amendment had taken the 2026 budget's edition)
+        # the appropriation law (2 Nov: the 2026 proposal and first amendment had taken the 2026 budget's edition)
         if got_series == "sokoto_budget" and not edition and re.search(
                 r"(?i)propos|draft|amend|supplementary|appropriation\s+law|\blaw\b|citizen|call\s+circular",
                 f"{meta.get('title') or ''} {description}"):

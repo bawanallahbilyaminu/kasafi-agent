@@ -171,7 +171,7 @@ def test_per_agency_economic_rows_belong_to_their_agency(conn) -> None:
     assert n >= 5
 
 
-# --- the older project list (2023 and 2024 budgets, 3 Nov) ---------------------------------------------------------
+# --- the older project list (2023 and 2024 budgets, 2 Nov) ---------------------------------------------------------
 
 OLD_PAGE = """CAPITAL EXPENDITURE BY PROJECT
 Project Name Economic Code and

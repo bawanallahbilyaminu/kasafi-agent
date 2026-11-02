@@ -194,7 +194,7 @@ def test_citations_are_given_once_per_message_without_a_page_for_the_registry_an
     assert "Improve Healthcare…" in text or "Improve…" in text and "Hea," not in text
 
 
-# --- the 3 Nov brief review: measures, selection, years, differences, amounts -----------------------------------
+# --- the 2 Nov brief review: measures, selection, years, differences, amounts -----------------------------------
 
 def C(dim, statement, value, kind="", measure="", year="", entity="Sokoto State", doc="msp", doc_year=2020, page=6,
       unit=""):
@@ -249,7 +249,7 @@ def test_claims_are_ranked_by_informativeness_and_capped_per_dimension() -> None
 
 
 def test_staffing_pairs_required_and_available_for_the_same_cadre() -> None:
-    """The server run of 3 Nov set 3,125 JCHEWs and 46 medical officers required against 3,395 frontline staff and
+    """The server run of 2 Nov set 3,125 JCHEWs and 46 medical officers required against 3,395 frontline staff and
     1,927 CHOs: no cadre on both sides. The nurse/midwife pair is the comparison."""
     dims = [D.Dimension("staffing", [], measures=[D.Measure("staff_have", "available"),
                                                   D.Measure("staff_need", "required")])]
@@ -265,7 +265,7 @@ def test_staffing_pairs_required_and_available_for_the_same_cadre() -> None:
 
 
 def test_every_measure_found_keeps_a_claim_before_any_measure_gets_a_second() -> None:
-    """3 Nov live run: EmONC's 7.6% was read, but two antenatal-care and two immunisation figures (higher scores)
+    """2 Nov live run: EmONC's 7.6% was read, but two antenatal-care and two immunisation figures (higher scores)
     filled the dimension's 5 places, and EmONC was reported 'not found'."""
     dims = [D.phc_checklist().dimensions[3]]
     claims = [C("service coverage", f"ANC figure {i}", f"{20 + i}.1%", "share", "cov_anc", "2024") for i in range(2)]
@@ -342,7 +342,7 @@ def test_the_not_found_line_uses_hausa_measure_names_in_a_hausa_answer() -> None
 
 
 def test_the_same_number_from_two_findings_on_a_page_is_two_claims_and_a_denominator_isnt_repeated() -> None:
-    """3 Nov live run: '26 PHCs out of 84 met the minimum human resources requirements' (ROP p. 9) was lost to
+    """2 Nov live run: '26 PHCs out of 84 met the minimum human resources requirements' (ROP p. 9) was lost to
     '26 facilities to build' (MSP p. 7) by a value-only dedupe, and '84 PHCs assessed' was said instead."""
     dims = [D.phc_checklist().dimensions[0]]
     build = C("facilities and infrastructure", "26 facilities need to be constructed", "26", "gap", "fac_need", page=7)

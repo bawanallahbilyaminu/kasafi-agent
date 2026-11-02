@@ -1,6 +1,6 @@
-"""Conversation understanding (3 Nov 2026): what the user means, before any route.
+"""Conversation understanding (2 Nov 2026): what the user means, before any route.
 
-Routing had read each message alone with keyword rules. Three live failures on 3 Nov (17:10-17:27) came from that:
+Routing had read each message alone with keyword rules. Three live failures on 2 Nov (17:10-17:27) came from that:
 "But Uduth is closer to me" after a nearest-hospital list (a correction about a hospital) was read as a place and
 got the statewide capital budget; "Has this area ever flooded" after a pin (the past) got this season's forecast;
 "Has this land ever flooded?" (the pin's own land) got a ranking of Wamakko's wards.
@@ -173,7 +173,7 @@ async def understand(message: str, history: list[dict] | None, place: dict | Non
                      ) -> Understanding | None:
     """One model call (a second when the reply isn't the JSON asked for); None when it fails or runs out of time,
     with the reason appended to `why`. Effort and token budget: KASAFI_UNDERSTAND_EFFORT / _MAX_TOKENS ('low'
-    needs room to think: at 600 tokens it returned nothing, 3 Nov)."""
+    needs room to think: at 600 tokens it returned nothing, 2 Nov)."""
     import asyncio
 
     from app.providers.stt import parse_json_reply

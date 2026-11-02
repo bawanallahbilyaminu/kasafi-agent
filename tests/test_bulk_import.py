@@ -106,13 +106,13 @@ CODES_PAGE = """SOKOTO STATE GOVERNMENT
 
 
 def test_budget_and_account_codes_are_not_personal_ids() -> None:
-    """3 Nov: the 2021 proposed budget's 11-digit project codes and the 2019 accounts' agency codes were withheld
+    """2 Nov: the 2021 proposed budget's 11-digit project codes and the 2019 accounts' agency codes were withheld
     as 'names with NIN, BVN or account numbers'. An ID list needs a name column and an ID column."""
     assert personal_reason(CODES_PAGE) == ""
 
 
 def test_a_budgets_personnel_table_is_not_a_pay_list() -> None:
-    """3 Nov: the 2023 approved budget's 'SALARY' / 'PERSONNEL COST' lines were taken for a pay list."""
+    """2 Nov: the 2023 approved budget's 'SALARY' / 'PERSONNEL COST' lines were taken for a pay list."""
     assert personal_reason(BUDGET_PERSONNEL) == ""
 
 
