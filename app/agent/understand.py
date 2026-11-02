@@ -35,7 +35,6 @@ CAPABILITIES = ("budget", "place_budget", "statistics", "deep", "hazard", "place
 LEVELS = ("pin", "ward", "lga", "state", "facility", "document", "project", "agency", "sector", "none")
 TIMES = ("past", "now", "forecast", "year", "span", "none")
 TURNS = 4
-TIMEOUT_S = 8.0
 
 SYSTEM = with_core("""TASK: read the user's NEW MESSAGE in the conversation and say what they mean. Reply with JSON \
 only:
@@ -164,32 +163,45 @@ def keyword_hint(text: str, place: dict | None) -> str:
     return ", ".join(hints) or "none"
 
 
+def user_message(message: str, history: list[dict] | None, place: dict | None) -> str:
+    return (f"CONVERSATION (oldest first):\n{conversation_text(history)}\n\nLOCATION ON FILE: {place_text(place)}\n"
+            f"HINT: {keyword_hint(message, place)}\n\nNEW MESSAGE: {message[:600]}")
+
+
 async def understand(message: str, history: list[dict] | None, place: dict | None, client, settings: Settings,
-                     model: str | None = None) -> Understanding | None:
-    """One small model call; None when it fails or times out (the keyword routing then decides). Minimal reasoning:
-    'low' spent a 600-token budget thinking and returned nothing, and took ~4.5 s (3 Nov)."""
+                     model: str | None = None, timeout_s: float | None = None, why: list | None = None
+                     ) -> Understanding | None:
+    """One model call (a second when the reply isn't the JSON asked for); None when it fails or runs out of time,
+    with the reason appended to `why`. Effort and token budget: KASAFI_UNDERSTAND_EFFORT / _MAX_TOKENS ('low'
+    needs room to think: at 600 tokens it returned nothing, 3 Nov)."""
     import asyncio
 
     from app.providers.stt import parse_json_reply
-    user = (f"CONVERSATION (oldest first):\n{conversation_text(history)}\n\nLOCATION ON FILE: {place_text(place)}\n"
-            f"HINT: {keyword_hint(message, place)}\n\nNEW MESSAGE: {message[:600]}")
+    user = user_message(message, history, place)
+    limit = timeout_s or settings.kasafi_understand_timeout_s
     t0 = time.perf_counter()
     u = None
-    for attempt in (1, 2):         # one retry when the reply isn't the JSON asked for (1 in 45 on 3 Nov)
+    for attempt in (1, 2):
         try:
             with usage.stage("understand"):
                 r = await asyncio.wait_for(client.chat([{"role": "system", "content": SYSTEM},
                                                         {"role": "user", "content": user}],
                                                        model=model or settings.meta_model,
-                                                       reasoning_effort="minimal",
-                                                       max_tokens=900 if model is None else 3000),
-                                           max(1.0, TIMEOUT_S - (time.perf_counter() - t0)))
+                                                       reasoning_effort=settings.kasafi_understand_effort,
+                                                       max_tokens=settings.kasafi_understand_max_tokens),
+                                           max(1.0, limit - (time.perf_counter() - t0)))
             u = parse(parse_json_reply(r.content))
+            if u is None and why is not None:
+                why.append("reply without a restatement")
             break
         except ValueError as e:     # not JSON: once more, within the same time limit
             log.info("understanding reply not JSON (attempt %d): %s", attempt, type(e).__name__)
-        except Exception as e:      # noqa: BLE001 - the keyword routing as before
-            log.warning("understanding failed (%s): keyword routing", type(e).__name__)
+            if why is not None:
+                why.append(f"not JSON (attempt {attempt})")
+        except Exception as e:      # noqa: BLE001 - the caller decides what comes next
+            log.warning("understanding failed (%s)", type(e).__name__)
+            if why is not None:
+                why.append(f"{type(e).__name__} after {time.perf_counter() - t0:.1f}s")
             return None
     if u is not None:
         u.seconds = time.perf_counter() - t0
@@ -198,14 +210,27 @@ async def understand(message: str, history: list[dict] | None, place: dict | Non
     return u
 
 
-async def understand_message(message: str, history: list[dict] | None, place: dict | None, settings: Settings
-                             ) -> Understanding | None:
-    """The step for the conversation: its own client (Muse Spark, or Muse Spark Open when
-    KASAFI_UNDERSTAND_PROVIDER=open), closed after the call."""
-    if settings.kasafi_understand_provider == "open" and settings.baseten_api_key:
-        from app.providers.baseten import BasetenClient
-        async with BasetenClient(settings) as client:
-            return await understand(message, history, place, client, settings, model=settings.baseten_model)
+async def understand_message(message: str, history: list[dict] | None, place: dict | None, settings: Settings,
+                             fallbacks: list | None = None) -> Understanding | None:
+    """The step for the conversation: Muse Spark (or Muse Spark Open with KASAFI_UNDERSTAND_PROVIDER=open), then
+    once on the other model when the first fails; None when both fail (the keyword routing then decides), with
+    the reasons appended to `fallbacks` for the trace."""
+    from app.providers.baseten import BasetenClient
     from app.providers.meta import MetaClient
-    async with MetaClient(settings) as client:
-        return await understand(message, history, place, client, settings)
+    order = [("meta", MetaClient, None), ("open", BasetenClient, settings.baseten_model)]
+    if settings.kasafi_understand_provider == "open":
+        order.reverse()
+    why: list[str] = []
+    for name, client_cls, model in order:
+        if name == "open" and not settings.baseten_api_key:
+            continue
+        async with client_cls(settings) as client:
+            if (u := await understand(message, history, place, client, settings, model=model, why=why)) is not None:
+                if why:
+                    log.info("understood on %s after: %s", name, "; ".join(why))
+                return u
+        why = [f"{name}: {w}" if not w.startswith(("meta:", "open:")) else w for w in why]
+    if fallbacks is not None:
+        fallbacks.extend(why or ["no model available"])
+    log.warning("understanding fell back to the keyword routing: %s", "; ".join(why))
+    return None

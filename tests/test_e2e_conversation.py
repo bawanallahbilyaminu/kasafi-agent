@@ -146,7 +146,7 @@ async def recorded_answer(question: str, lang: str, *, settings, notify=None, hi
             from app.place.answer import W
             return Stub(W["ha" if lang == "ha" else "en"]["ask_size"], False, needs_size=True)
         if notify is not None:
-            await notify("🛰️ I'm checking about 10 years of satellite images for this spot. I'll send it in about a minute.")
+            await notify("🛰️ I'm checking about 10 years of satellite images for this spot. The first time takes about 1–2 minutes.")
         how = {"given_circle": f"the circle of {shape.get('area_ha')} ha you gave", "corners": f"from your {shape.get('corners')} corner pins"
                }.get(shape.get("method"), "a circle of about 1 ha")
         return Stub(PLACE_TEXT.format(lga=place.get("lga", "?"), shape=f"Plot shape: {how}."), working="Per year: 2024 …",

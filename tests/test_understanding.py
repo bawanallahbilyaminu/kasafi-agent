@@ -44,6 +44,55 @@ def test_a_reply_that_isnt_the_json_asked_for_is_no_reading() -> None:
     assert (u.kind, u.capability, u.level, u.time) == ("new", "other", "none", "none")
 
 
+class _Client:
+    """A model client that fails (an exception) or answers with a reading's JSON."""
+    replies: dict = {}
+
+    def __init__(self, settings, *a, **k):
+        self.name = type(self).__name__
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return None
+
+    async def chat(self, messages, **kw):
+        r = self.replies[self.name]
+        if isinstance(r, Exception):
+            raise r
+        return SimpleNamespace(content=r)
+
+
+class Meta(_Client):
+    pass
+
+
+class Open(_Client):
+    pass
+
+
+GOOD = json.dumps({"kind": "new", "capability": "place_history", "subject": {"level": "pin", "name": ""},
+                   "time": {"kind": "past", "years": []}, "measure": "flooded",
+                   "restatement": "Has my farm (the pin) ever flooded?"})
+
+
+def test_when_muse_spark_fails_muse_spark_open_reads_it_and_when_both_fail_the_fallback_is_recorded(monkeypatch):
+    import app.providers.baseten as B
+    import app.providers.meta as M
+    monkeypatch.setattr(M, "MetaClient", Meta)
+    monkeypatch.setattr(B, "BasetenClient", Open)
+    s = make_settings(baseten_api_key="b")
+    _Client.replies = {"Meta": TimeoutError(), "Open": GOOD}
+    fallbacks: list = []
+    u = asyncio.run(U.understand_message("Has this land ever flooded?", [], None, s, fallbacks=fallbacks))
+    assert u is not None and u.capability == "place_history" and fallbacks == []
+    _Client.replies = {"Meta": TimeoutError(), "Open": "not json at all"}
+    u = asyncio.run(U.understand_message("Has this land ever flooded?", [], None, s, fallbacks=fallbacks))
+    assert u is None and fallbacks[0].startswith("meta: TimeoutError") and \
+        any(f.startswith("open: not JSON") for f in fallbacks)
+
+
 def test_kasafis_reply_is_summed_up_with_what_it_listed() -> None:
     s = U.summary("Nearest hospitals to you (by road):\n1. Specialist Hospital Sokoto: 6.2 km\n2. Women and "
                   "Children Welfare Clinic: 7.0 km")
@@ -85,7 +134,7 @@ def test_each_conversation_reaches_the_capability_and_subject_it_means(case, mon
     s, store, key = _setup(case)
     seen: dict = {}
 
-    async def understand_fn(text, history, place, settings):
+    async def understand_fn(text, history, place, settings, fallbacks=None):
         seen["history"], seen["place"] = history, place
         return reading(case["id"])
 

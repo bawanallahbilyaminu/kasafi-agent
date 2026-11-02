@@ -240,3 +240,13 @@ def test_generated_hazard_cases_are_what_the_answer_gives() -> None:
 async def _ok():
     from app.guardrails.scope import Verdict
     return Verdict("ok", "test")
+
+
+def test_the_layer_asked_first_leads_the_answer() -> None:
+    """3 Nov: answers lead with what was asked; the summary leads with the first layer, now in the question's
+    own order."""
+    from app.hazards.answer import layers_asked
+    heat_first = layers_asked("How hot will it be tomorrow, and will it rain?")
+    rain_first = layers_asked("Will it rain tomorrow, and how hot will it be?")
+    assert heat_first.index("heat") < heat_first.index("rain")
+    assert rain_first.index("rain") < rain_first.index("heat")

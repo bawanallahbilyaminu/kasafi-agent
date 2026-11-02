@@ -265,7 +265,14 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     # and pending choices, which have their own fixed replies.
     u = None
     if kind == "text" and text and settings.kasafi_understanding and _needs_understanding(text, key, store, settings):
-        u = await understand_fn(strip_location(text), store.recent_turns(key), _place_for(key, store), settings)
+        fallbacks: list[str] = []
+        started_u = time.perf_counter()
+        u = await understand_fn(strip_location(text), store.recent_turns(key), _place_for(key, store), settings,
+                                fallbacks=fallbacks)
+        if u is None and settings.has_database:     # both models failed: the keyword routing decides; counted
+            from app.agent.trace import save_event
+            await asyncio.to_thread(save_event, settings, strip_location(text), lang, "understanding_fallback",
+                                    "understanding", {"fallback": fallbacks}, time.perf_counter() - started_u)
     # a correction about the facilities just listed ('But UDUTH is closer to me'): checked against that answer
     if u is not None and u.kind == "correction" and u.capability == "facility" and settings.has_database and \
             (outs := await _facility_correction(u, key, lang, settings, facility_fn)) is not None:
@@ -347,7 +354,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             try:
                 # every long job ends in an answer or an apology within the limit, never silence
                 from app.agent.deep import TIME_BUDGET_S, deep_question
-                limit = max(settings.kasafi_answer_timeout_s, TIME_BUDGET_S + 10) if deep_question(question) \
+                limit = max(settings.kasafi_answer_timeout_s, TIME_BUDGET_S + 30) if deep_question(question) \
                     else settings.kasafi_answer_timeout_s                    # a deep analysis: 180 s
                 result = await asyncio.wait_for(
                     # an exact location typed or spoken into the question never reaches a model (app/privacy.py);

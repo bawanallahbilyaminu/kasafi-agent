@@ -123,7 +123,7 @@ W = {
         "ward_scope": "Your pin is in {ward} ward{likely} of {lga} LGA, so this answer is about that ward, compared with the "
                       "whole of {lga} LGA and the state.",
         "ward_scope_no_ward": "Your location gives {lga} LGA but not a ward, so this answer is about the LGA's wards.",
-        "trend_head": "Since {first}, {ward}'s farmland greenness {dir}; {lga} LGA's {lga_dir}, and the state's {state_dir} "
+        "trend_head": "Since {first}, {ward}'s {what} {dir}; {lga} LGA's {lga_dir}, and the state's {state_dir} "
                       "({first}–{last}, {n} years with normal data).",
         "trend_dir": {"rising": "has been rising", "falling": "has been falling", "no clear change": "shows no clear change",
                       "": "has too few years to call"},
@@ -226,7 +226,7 @@ W = {
         "ward_scope": "Wurinka yana gundumar {ward}{likely} ta Ƙaramar Hukumar {lga}, saboda haka wannan amsa ta wannan gunduma ce, "
                       "an kwatanta ta da dukkan Ƙaramar Hukumar {lga} da jihar.",
         "ward_scope_no_ward": "Wurinka ya nuna Ƙaramar Hukumar {lga} amma ba gunduma ba, saboda haka wannan amsa ta gundumomin ƙaramar hukumar ce.",
-        "trend_head": "Tun {first}, koriyar gonakin {ward} {dir}; ta Ƙaramar Hukumar {lga} {lga_dir}, ta jiha kuma {state_dir} "
+        "trend_head": "Tun {first}, {what} a {ward} {dir}; ta Ƙaramar Hukumar {lga} {lga_dir}, ta jiha kuma {state_dir} "
                       "({first}–{last}, shekaru {n} masu bayanai na yau da kullum).",
         "trend_dir": {"rising": "tana ƙaruwa", "falling": "tana raguwa", "no clear change": "ba ta nuna canji a fili",
                       "": "ba ta da isassun shekaru"},
@@ -889,13 +889,21 @@ def ward_answer(conn, question: str, english: str, lang: str, wardcode: str, tod
     lines = [t["head_ward"].format(short=short[0].upper() + short[1:], ward=ward, likely=likely, lga=lga),
              t["ward_scope"].format(ward=ward, likely=likely, lga=lga)]
     wanted_trend = trend_asked(text) or want is None
+    trend_line = ""
     if wanted_trend and spec["first"]:
         wd, first, last, n = trend_of(conn, measure, "ward", wardcode)
         ld = trend_of(conn, measure, "lga", lga_pcode)[0]
         sd = trend_of(conn, measure, "state", STATE)[0]
         if n:
-            lines.append(t["trend_head"].format(first=first, last=last, n=n, ward=ward, dir=t["trend_dir"][wd], lga=lga,
-                                                lga_dir=t["trend_dir"][ld], state_dir=t["trend_dir"][sd]))
+            what = ("farmland greenness" if lang != "ha" else "koriyar gonaki") if key == "greenness" else short
+            trend_line = t["trend_head"].format(first=first, last=last, n=n, ward=ward, dir=t["trend_dir"][wd],
+                                                lga=lga, lga_dir=t["trend_dir"][ld], state_dir=t["trend_dir"][sd],
+                                                what=what)
+    # what was asked leads: a trend question opens with the trend; otherwise the year's finding comes first and
+    # the trend follows as context (3 Nov: 'Has this area ever flooded' opened with a greenness trend)
+    if trend_line and trend_asked(text):
+        lines.append(trend_line)
+        trend_line = ""
     # the headline year: the ward against its own usual, its LGA's wards and the state
     rows = rows_for(conn, measure, "ward", y, lga_pcode)
     cut = low_data_cut(rows, measure)
@@ -918,6 +926,8 @@ def ward_answer(conn, question: str, english: str, lang: str, wardcode: str, tod
                                                m=len(ranked), state=_fmt(spec, float(state_row[0]))))
         else:
             lines.append(t["ward_year_norain"].format(year=y, ward=ward, how=how, value=_fmt(spec, mine[2]), usual=_fmt(spec, usual)))
+    if trend_line:
+        lines.append(trend_line)
     lines.append(skipped_line(t, lang, y, skipped, unfinished))
     res = {"greenness": "250 m", "flood": "200 m", "flood_map": "375 m", "water": "30 m", "bare": "200 m", "rain": "~9 km"}[key]
     period = f"{loaded[0]}–{loaded[-1]}" if spec["first"] else "1984–2020"

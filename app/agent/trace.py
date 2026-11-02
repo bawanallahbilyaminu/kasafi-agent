@@ -161,6 +161,21 @@ def save(conn: psycopg.Connection, a, lang: str, seconds: float) -> None:
         log.warning("trace not saved: %s", type(e).__name__)
 
 
+def save_event(settings, question: str, lang: str, outcome_: str, path_: str, detail: dict, seconds: float) -> None:
+    """A row for something that isn't an answer (e.g. 'understanding_fallback': the conversation-understanding step
+    failed on both models and the keyword routing decided). Own connection; never raises."""
+    import psycopg
+    try:
+        with psycopg.connect(settings.db_url(), connect_timeout=5) as conn:
+            conn.execute("INSERT INTO traces (lang, question, outcome, path, seconds, trace, answer) "
+                         "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                         (lang, redact(question)[:1000] or "(empty)", outcome_, path_, round(seconds, 2),
+                          json.dumps(detail, default=str), ""))
+            conn.commit()
+    except Exception as e:                                   # noqa: BLE001
+        log.warning("event trace not saved: %s", type(e).__name__)
+
+
 def save_failure(settings, question: str, lang: str, reason: str, seconds: float, apology: str = "") -> None:
     """A question that got an apology instead of an answer (a timeout, a crash): its own trace row, outcome
     'failed', with the reason, so the admin page shows it. Runs on its own connection; never raises."""

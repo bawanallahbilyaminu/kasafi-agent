@@ -1682,7 +1682,8 @@ REPHRASE = {
 }
 
 
-LOOP_BUDGET_S = 120.0       # the whole plan -> act -> check loop (a topic sweep has its own ~90 s inside it)
+LOOP_BUDGET_S = 165.0       # the whole plan -> act -> check loop (a first-time pin's record ~95 s; a topic
+                            # sweep has its own ~90 s inside it); under the conversation's 180 s
 
 TIMED_OUT = {
     "ha": "Na ɗauki lokaci mai tsawo ina nema ban gama ba. Don Allah a sake tambaya nan gaba kaɗan.",

@@ -97,8 +97,9 @@ standalone restatement in Kasafi's own place words ('my farm (the pin)', 'my war
 
 - The conversation handler and the answer loop route from it: each shortcut (facility, hazard and outlook, place
   history, LGA budget, deep analysis) answers only when the reading names its capability; the planner and the routes
-  work from the restatement. Feature switches still apply. When the call fails or times out (8 s), the keyword
-  routing decides as before. `KASAFI_UNDERSTANDING=false` turns the step off; `KASAFI_UNDERSTAND_PROVIDER=open` uses
+  work from the restatement. Feature switches still apply. When the call fails or runs out of time (20 s), it is tried once on
+  Muse Spark Open; when that fails too, the keyword routing decides and a trace row with outcome
+  `understanding_fallback` records why (admin traces page). `KASAFI_UNDERSTANDING=false` turns the step off; `KASAFI_UNDERSTAND_PROVIDER=open` uses
   Muse Spark Open on Baseten.
 - A correction about the facilities just listed is checked against that list (`_facility_correction`): the named
   facility's road distance from the pin, the list's first, whether the user is right, and why it wasn't listed (the
@@ -110,3 +111,5 @@ Eval: `evals/understanding/` (45 conversations, 30 multi-turn and 15 first messa
 three failures): 45/45 on Muse Spark, median 2.7 s, p90 3.7 s, $0.0020 per message (`report.md`); 45/45 on Muse
 Spark Open, median 2.0 s, p90 4.2 s (`report-open.md`). The deploy gate replays the recorded readings
 (`tests/test_understanding.py`) through the conversation handler, without a model call.
+
+Reasoning effort (3 Nov): `minimal` with 900 tokens. `low` with 3000 tokens was measured on the same 45 cases: 44/45, median 4.9 s, p90 8.2 s, $0.0049 per message (`report-low.md`), more precise on two readings and wrong on one, so no more reliable for twice the time and cost. The answer limit went from 120 s to 180 s (the answer loop 165 s, a deep analysis 210 s) so the 2-3 s of understanding never pushes a first-time pin (~95 s) or a deep analysis into the apology. Answers lead with what was asked: a flood question opens with the flood finding (pin and ward answers), a trend follows the year's finding unless the trend was asked, and hazard layers are summarised in the order the question names them.

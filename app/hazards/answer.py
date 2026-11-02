@@ -51,7 +51,10 @@ def layers_asked(question: str, measures: list[str] | None = None, own: str | No
     'is there a flood warning?' answers floods, never an overview that leads with heat."""
     if MONEY.search(question or ""):
         return []
-    found = [layer for layer, pat in WORDS.items() if re.search(rf"(?i)(?<![\w'ƙɓɗƴ])(?:{pat})(?![\w'ƙɓɗƴ])", question or "")]
+    # in the order the question names them: the summary leads with the first, so what was asked first leads (3 Nov)
+    hits = [(m.start(), layer) for layer, pat in WORDS.items()
+            if (m := re.search(rf"(?i)(?<![\w'ƙɓɗƴ])(?:{pat})(?![\w'ƙɓɗƴ])", question or ""))]
+    found = [layer for _, layer in sorted(hits)]
     planned = [MEASURE_LAYERS[m] for m in measures or [] if m in MEASURE_LAYERS]
     said = own if own is not None else question
     named = [layer for layer, pat in WORDS.items() if layer != "overview"

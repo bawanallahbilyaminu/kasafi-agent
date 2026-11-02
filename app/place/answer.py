@@ -106,8 +106,8 @@ W = {
     "en": {
         "need_pin": "To look at a place's history I need the spot itself: tap the button below and send the pin of "
                     "your farm or plot (or the pond, dam or field you mean).",
-        "progress": "🛰️ I'm checking about {n} years of satellite images for this spot. I'll send it in about a "
-                    "minute.",
+        "progress": "🛰️ I'm checking about {n} years of satellite images for this spot. The first time takes "
+                    "about 1–2 minutes.",
         "head": "*What the satellite record shows for this spot ({lga} LGA)* — experimental",
         "peak": "This rainy season ({year}) the plot was {green} ({n} years with enough clear images, {first}–{last}). "
                 "June–October rain was {rain}, and the greenness is {verdict}.",
@@ -229,8 +229,8 @@ W = {
     "ha": {
         "need_pin": "Don in duba tarihin wuri ina buƙatar wurin kansa: danna maɓallin da ke ƙasa ka aiko da wurin "
                     "gonarka ko filinka (ko tafki, madatsar ruwa ko filin da kake nufi).",
-        "progress": "🛰️ Ina duba hotunan tauraron ɗan adam na kusan shekaru {n} na wannan wuri. Zan aiko nan da "
-                    "kusan minti ɗaya.",
+        "progress": "🛰️ Ina duba hotunan tauraron ɗan adam na kusan shekaru {n} na wannan wuri. A karon farko "
+                    "yana ɗaukar kusan minti 1 zuwa 2.",
         "head": "*Abin da hotunan tauraron ɗan adam suka nuna game da wannan wuri (Ƙaramar Hukumar {lga})* — na gwaji",
         "peak": "A daminar {year} gonar ta kasance {green} (shekaru {n} masu isassun hotuna bayyanannu, "
                 "{first}–{last}). Ruwan saman Yuni–Oktoba ya kasance {rain}, kuma koriyar {verdict}.",
@@ -406,7 +406,9 @@ def when_text(years: dict[int, H.YearRow], lang: str) -> str:
 
 # --- the summary ------------------------------------------------------------------------------------------------
 
-def summary(h: H.History, lang: str, today: date) -> str:
+def summary(h: H.History, lang: str, today: date, water_first: bool = False) -> str:
+    """The plain summary; `water_first` (a flood or water question): the water finding opens it, greenness and
+    bare soil follow as context (3 Nov: 'Has this land ever flooded?' opened with greenness)."""
     t = _t(lang)
     lines: list[str] = []
     usable = h.usable_years()
@@ -441,8 +443,8 @@ def summary(h: H.History, lang: str, today: date) -> str:
             g = t["trend_words"][h.trends["greenness"][0]]
             bsi = t["bsi_words"][h.trends["bare_soil"][0]] if "bare_soil" in h.trends else ""
             lines.append(t["trend"].format(first=usable[0], g=g, bsi=bsi))
-    lines.append(water_sentence(h, lang))
-    return " ".join(lines)
+    water = water_sentence(h, lang)
+    return " ".join([water, *lines] if water_first else [*lines, water]).strip()
 
 
 def _short_date(iso: str, lang: str) -> str:
@@ -739,7 +741,9 @@ async def place_answer(conn, settings, question: str, english: str, lang: str, p
     t2 = time.perf_counter()
     context = library_context(conn, lang, lga, pcode, today) if conn is not None else ""
     timing["context"] = time.perf_counter() - t2
-    text = "\n\n".join(x for x in [t["head"].format(lga=lga or "–"), summary(h, lang, today),
+    # what was asked leads: a flood or water question opens with the water finding
+    first = summary(h, lang, today, water_first=water_asked(f"{question} {english}"))
+    text = "\n\n".join(x for x in [t["head"].format(lga=lga or "–"), first,
                                    outline_line(outline, lang) + "\n" + facts_line(h, lang), context,
                                    t["referral"], t["sources"]] if x)
     given = {"shape": shape} if shape.get("geometry") else {}      # the user's shape, in memory only, for the map
