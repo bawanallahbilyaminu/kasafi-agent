@@ -172,7 +172,7 @@ def test_a_deep_analysis_reads_across_the_library_within_its_limits(conn) -> Non
                                   "What is the state of primary health care centres in Sokoto State?", "en",
                                   client=StubModel(bad_figure=True), open_client=StubModel(), settings=make_settings(),
                                   notify=notify))
-    assert 3 <= len(r.documents) <= D.MAX_DOCS + 1 and r.claims
+    assert 3 <= len(r.documents) <= D.MAX_DOCS + D.EXTRA_DOCS + 1 and r.claims
     assert "registry:facilities" in r.documents                           # the registry counts for facilities
     assert all(c.value != "987,654,321" for c in r.claims)                # invented figures never pass the check
     assert "77.7" not in r.summary and "poor" not in r.summary            # unverified figure and verdict word gone
@@ -189,6 +189,108 @@ def test_citations_are_given_once_per_message_without_a_page_for_the_registry_an
     text = D.cite("15,000,000.00 NGN for renovation [C1]. 150,000,000.00 NGN for solar [C1]. 934 facilities [C2]. "
                   "Readiness [C3].", claims)
     assert text.count("(Sokoto State Government 2025 Approved Budget, p. 45)") == 1
-    assert "(Health facility registry (NHFR / GRID3))" in text and "p. 0" not in text
-    assert "₦15.00 million" in text and "NGN" not in text
+    assert "(GRID3/NHFR registry, Nov 2024)" in text and "p. 0" not in text
+    assert "₦15 million for renovation" in text and "NGN" not in text
     assert "Improve Healthcare…" in text or "Improve…" in text and "Hea," not in text
+
+
+# --- the 3 Nov brief review: measures, selection, years, differences, amounts -----------------------------------
+
+def C(dim, statement, value, kind="", measure="", year="", entity="Sokoto State", doc="msp", doc_year=2020, page=6,
+      unit=""):
+    return D.Claim(dim, statement, value, unit, year, entity, doc, "Sokoto State Minimum Service Package", page,
+                   measure, kind, doc_year)
+
+
+@pytest.mark.parametrize("q, subject", [("What's the state of PHCs in Sokoto?", "primary health care"),
+                                        ("Yaya yanayin cibiyoyin kiwon lafiya a Sokoto?", "primary health care"),
+                                        ("How is basic education doing?", "basic education"),
+                                        ("What's the situation of roads in Sokoto?", None)])
+def test_a_known_subject_has_a_measure_checklist(q, subject) -> None:
+    cl = D.checklist_for(q)
+    assert (cl.subject if cl else None) == subject
+    if cl and subject == "primary health care":
+        ids = {m.id for d in cl.dimensions for m in d.measures}
+        assert {"fac_count", "fac_need", "staff_have", "staff_need", "money_alloc", "money_actual", "cov_imm",
+                "cov_anc", "cov_sba", "emonc", "plan_targets"} <= ids
+
+
+def test_serial_numbers_codes_and_background_are_never_figures() -> None:
+    assert D.junk(C("f", "Serial number of the facility in the table", "12"))
+    assert D.junk(C("f", "Facility code", "34/12/1/1/1/0012"))
+    assert D.junk(C("f", "Budget line", "23020106"))
+    assert D.junk(C("f", "Sokoto State has 23 LGAs", "23"))
+    assert D.junk(C("f", "Number of political wards in the state", "244"))
+    assert D.junk(C("f", "WHO estimates that 20-40% of health spending is wasted", "20-40%", entity="Global"))
+    assert D.junk(C("f", "Background", "5", kind="context"))
+    assert not D.junk(C("f", "Total personnel in the PHC system", "11202"))
+    assert not D.junk(C("f", "Number of PHC facilities in Sokoto State", "798", "aggregate", "fac_count"))
+    assert not D.junk(C("f", "Number of political wards", "244"), "how many wards are there")   # asked: kept
+
+
+def test_claims_are_ranked_by_informativeness_and_capped_per_dimension() -> None:
+    dims = [D.Dimension("staffing", [], measures=[D.Measure("staff_have", "available"),
+                                                  D.Measure("staff_need", "required")])]
+    claims = [C("staffing", "The blueprint has 18 objectives", "18", "detail"),
+              C("staffing", "Nurses/midwives available", "78", "aggregate", "staff_have"),
+              C("staffing", "Nurses/midwives required", "244", "target", "staff_need"),
+              C("staffing", "CHEWs available", "787", "aggregate", "staff_have"),
+              C("staffing", "JCHEWs required", "3,125", "target", "staff_need"),
+              C("staffing", "Medical officers required", "46", "target", "staff_need"),
+              C("staffing", "Nurses/midwives required (copy)", "244", "target", "staff_need")]
+    got = D.select_claims(claims, dims)
+    assert [c.value for c in got][:2] == ["3,125", "244"]                  # targets and gaps before totals
+    assert "18" not in [c.value for c in got]                              # trivia never fills a full dimension
+    assert len(got) <= D.PER_DIMENSION and sum(c.measure == "staff_need" for c in got) == D.PER_MEASURE
+    assert [c.value for c in got].count("244") == 1                        # the same figure once
+    cov = D.coverage(got, dims)
+    assert cov == [("staffing", ["available", "required"], [])]
+
+
+def test_a_figure_without_its_own_year_carries_its_documents_date_and_no_year_is_invented() -> None:
+    c = C("f", "Number of PHC facilities", "798", "aggregate", "fac_count")
+    assert c.when == "as of the 2020 report"
+    assert D.Claim("f", "s", "934", "", "", "", "registry:facilities", D.REGISTRY_REF, 0).when == "Nov 2024"
+    text = D.keep_verified("Sokoto had 798 PHC facilities as of the 2020 report [C1]. In 2016 assessment, 798 "
+                           "facilities were counted [C1]. There were 798 facilities, with year not stated [C1].", [c])
+    assert "as of the 2020 report" in text and "2016" not in text and "not stated" not in text
+
+
+def test_a_national_surveys_figures_are_never_given_as_sokotos() -> None:
+    survey = D.Reading("ndhs-2024", "Nigeria DHS 2024", 2024, [(241, "63% of women received ANC")], national=True)
+    state = D.Reading("ndhs-2024", "Nigeria DHS 2024", 2024, [(250, "Sokoto 26.4 13.0")], national=True)
+    plan = D.Reading("msp", "Sokoto MSP", 2020, [(6, "798 facilities")])
+    assert not D.national_ok(survey, "Women age 15-49", "63% of women received ANC")
+    assert not D.national_ok(survey, "Nigeria", "Sokoto ... 63%")
+    assert D.national_ok(state, "Sokoto", "Sokoto 26.4 13.0")
+    assert D.national_ok(plan, "Sokoto State", "798 facilities")
+    assert not D.national_ok(plan, "Nigeria (national)", "")
+
+
+def test_amounts_keep_their_space_and_house_style() -> None:
+    assert D.house_amounts("15,000,000.00 NGN allocated to renovation") == "₦15 million allocated to renovation"
+    assert D.house_amounts("a target of NGN4 billion NGN in 2023") == "a target of ₦4 billion in 2023"
+    assert D.merge_refs("₦7.12 billion (Budget 2026, p. 18) (Budget 2026, p. 32)") == \
+        "₦7.12 billion (Budget 2026, pp. 18, 32)"
+
+
+def test_the_synthesis_is_told_to_compare_like_with_like_and_what_a_difference_is() -> None:
+    s = D.SYNTH_SYSTEM
+    assert "5-6 plain sentences that answer the question across the dimensions" in s
+    assert "same measure for the same place and period" in s and "measure different things" in s
+    assert "never write that a year is not stated" in s
+    dims = D.phc_checklist().dimensions
+    block = D.claims_block([C("staffing", "Nurses required", "244", "target", "staff_need")], dims)
+    assert "## staffing" in block and "measure: staff required" in block and "when: as of the 2020 report" in block
+
+
+def test_the_agencys_money_comes_from_the_budget_and_bir_rows(conn) -> None:
+    claims = D.money_claims(conn, D.phc_checklist(), "funding and spending")
+    by = {(c.measure, c.kind, c.year): c for c in claims if "revised" not in c.statement and "final budget,"
+          not in c.statement}
+    approved = by[("money_alloc", "trend", "2025")]
+    assert approved.value == "13,196,854,692.00" and approved.doc_id == "budget-2025-approved" and approved.from_rows
+    assert by[("money_actual", "trend", "2024")].doc_id == "bpr-2024-q4"          # the Q4 report's full year
+    share = by[("money_alloc", "share", "2025")]
+    assert share.calculated and share.value == "26.6%" and "calculated" in share.statement
+    assert by[("money_actual", "gap", "2025")].value == "11.3%"                 # the final budget's share spent

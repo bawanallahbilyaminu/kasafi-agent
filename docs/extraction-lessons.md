@@ -138,3 +138,15 @@ them. `tests/test_charts.py`.
 count. A broad question now plans dimensions, reads up to 15 documents across the library on Muse Spark Open, keeps
 only claims whose value is printed on their page, and has one Muse Spark synthesis from those (figures not in a claim
 and verdict words removed in code). First server run: 9 documents, 49 checked figures, 29 s, $0.105. `tests/test_deep.py`.
+
+**L41 (3 Nov 2026): a deep brief needs a checklist, not the first claims found.** The first PHC brief led with
+whatever the readers returned first: table serial numbers, the number of LGAs, a WHO global estimate, "with year not
+stated", a year no source gave ("In 2016 assessment"), NDHS key findings (national) given as Sokoto's, and a
+government health budget set against total health spending as a "disagreement". Now a known subject has a measure
+checklist per dimension (PHCs: facility counts and needs, staff available and required by cadre, the PHC agency's
+allocation, share of the health budget and actual spending per year read in code from the budget and BIR rows, MICS/
+NDHS coverage from the survey's Sokoto state table, EmONC capability, plan targets); each measure still missing after
+the first reading gets its own search; codes, serials and background are dropped; claims are ranked (gaps, targets,
+trends, shares over details) and capped at 5 per dimension; a figure without its own year carries its document's
+date; a national survey's figure counts only for Sokoto on a page printing Sokoto; the synthesis compares like with
+like and calls a difference only for the same measure and scope. `tests/test_deep.py`.
