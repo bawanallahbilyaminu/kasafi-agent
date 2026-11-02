@@ -116,7 +116,8 @@ def test_the_routing_eval_set_runs_with_every_switch_off() -> None:
     s = make_settings(**OFF)
     for c in cases:
         got = route_for(c["question"], s, conn=None)
-        if c["expected"] in ("emergency", "guard", "map"):      # no switch: safety, guardrails, "show me the map"
+        # no switch: safety, guardrails, "show me the map", and the deep analysis (the answer loop's own path)
+        if c["expected"] in ("emergency", "guard", "map", "deep"):
             assert got == c["expected"], (c["id"], got)
         else:
             assert got == "planner", (c["id"], got)        # every shortcut off: the planner decides
