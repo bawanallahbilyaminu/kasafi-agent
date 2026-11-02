@@ -28,6 +28,7 @@ from app import usage
 from app.acquisition.convert import ConversionError, convert_to_pdf
 from app.acquisition.fetch import FetchError, download_pdf
 from app.acquisition.filetype import EXTENSIONS, sniff
+from app.acquisition.personal import record_withheld, screen_pages
 from app.acquisition.find import find_local, rank_candidates, search_candidates
 from app.acquisition.policy import USER_AGENT, Robots, host_allowed
 from app.acquisition.review import open_web_candidates, open_web_trusted, queue_domain
@@ -54,7 +55,7 @@ CATEGORIES = ("budget", "budget_performance", "fiscal", "accountability", "plan"
 
 @dataclass
 class Acquired:
-    status: str                # local | known | indexed | not_found | failed | limit | awaiting (domain queued) | off
+    status: str                # local | known | indexed | skipped | not_found | failed | limit | awaiting | off
     doc_id: str | None = None
     title: str = ""
     url: str = ""
@@ -139,11 +140,14 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
                           client: ChatClient, http: httpx.AsyncClient, robots: Robots | None = None,
                           series: str | None = None, edition: str | None = None,
                           download_timeout: httpx.Timeout | None = None, allowed=host_allowed,
-                          scheduled: bool = False) -> Acquired:
+                          scheduled: bool = False, acquisition: str | None = None, screen=None) -> Acquired:
     """`series`/`edition`: the edition we were looking for (find_latest); the document must match it.
     `allowed`: the domain check for every hop (an open-web result: review.open_web_trusted).
     `scheduled`: fetched by a scheduled crawler (the NCDC reports): kept as acquisition 'scheduled', so it doesn't
-    use up the daily fetch limit that users' questions draw on."""
+    use up the daily fetch limit that users' questions draw on. `acquisition`: another label ('imported': the bulk
+    import of a publisher's site, app/acquisition/bulk.py).
+    `screen(pages) -> skip reason or ''`: checked after parsing, before the confirm call (the bulk import's
+    near-duplicate check). Pages listing people with personal data are always withheld (app/acquisition/personal.py)."""
     t: dict[str, float] = {}
     if known := _known(conn, url=url):
         return Acquired("known", known, url=url)
@@ -186,6 +190,9 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
         t0 = time.perf_counter()
         pages, image_pages = await extract_pages_sandboxed(pdf)
         t["parse"] = time.perf_counter() - t0
+        if screen and (why := screen(pages)):
+            return Acquired("skipped", url=url, detail=why, timings=t)
+        pages, withheld = screen_pages(pages)          # lists of people with personal data: never searched or shown
         t0 = time.perf_counter()
         ids = [r[0] for r in conn.execute("SELECT id FROM documents ORDER BY id").fetchall()]
         meta = await confirm_document(description, pages, ids, client, settings)
@@ -215,15 +222,16 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
                "category": meta.get("category") if meta.get("category") in CATEGORIES else None,
                "year": year, "publisher": str(meta.get("publisher") or "")[:200] or None,
                "source_url": url, "final_url": dl.final_url, "fetched_at": dl.fetched_at,
-               "acquisition": "scheduled" if scheduled else "fetched",
+               "acquisition": acquisition or ("scheduled" if scheduled else "fetched"),
                "series": got_series, "edition": got_edition if got_series else None, **provenance}
         t0 = time.perf_counter()
         res = index_document(conn, doc, path, pages=pages, sha=sha, image_pages=image_pages)
+        record_withheld(conn, doc_id, withheld)
         conn.commit()      # searchable now, and visible to the background OCR's own connection
         t["index"] = time.perf_counter() - t0
         log.info("fetched and indexed %s (%s %s): %d pages, %d chunks, %d need OCR, sha=%s", doc_id, doc["series"],
                  doc["edition"], res.pages, res.chunks, res.empty_pages, sha[:12])
-        scanned = [i for i, p in enumerate(pages, 1) if needs_ocr(i, p, image_pages)]
+        scanned = [i for i, p in enumerate(pages, 1) if needs_ocr(i, p, image_pages) and i not in withheld]
         if scanned:
             schedule_ocr(doc_id, path, scanned[:BACKGROUND_OCR_PAGES], settings)
         # its document and section cards, in the background on Muse Spark Open (Baseten): the answer doesn't wait
@@ -383,6 +391,13 @@ async def ocr_pages(doc_id: str, path: Path, pages: list[int], settings: Setting
 
 
 def save_ocr_page(conn: psycopg.Connection, doc_id: str, page: int, text: str) -> None:
+    from app.acquisition.personal import is_withheld, personal_reason, record_withheld
+    if is_withheld(conn, doc_id, page):            # a list of people: never given text
+        return
+    if why := personal_reason(text):               # a scanned list of people: withheld once read
+        with conn.transaction():
+            record_withheld(conn, doc_id, {page: why})
+        return
     text = accounting_negatives(text)
     with conn.transaction():
         conn.execute("UPDATE pages SET text = %s, source = 'ocr' WHERE doc_id = %s AND page = %s", (text, doc_id, page))

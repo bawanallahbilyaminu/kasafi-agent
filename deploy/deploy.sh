@@ -364,7 +364,7 @@ case "$MODE" in
     docker compose exec -T db pg_dump -U kasafi -d kasafi --data-only --no-owner \
       -t documents -t pages -t chunks -t budget_lines -t budget_rows \
       -t budget_items -t projects -t perf_items -t entity_builds \
-      -t doc_cards -t section_cards -t doc_links -t charts | gzip \
+      -t doc_cards -t section_cards -t doc_links -t charts -t withheld_pages | gzip \
       | "${KIT[@]}" meter "$tmp" --label "pg_dump | gzip" || fail "pg_dump failed (is the dev DB running?)"
     step "uploading $(( $(size_of "$tmp") / 1000000 )) MB to $HOST"
     [ "$FREE" -gt $(( $(size_of "$tmp") * 10 )) ] || fail "the server has too little disk for this index ($(( FREE / 1000000 )) MB free)"

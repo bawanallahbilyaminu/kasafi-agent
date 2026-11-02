@@ -242,7 +242,22 @@ def _stored_chart_crop(req: CropRequest, settings: Settings) -> bytes | None:
         return None
 
 
+def _withheld(req: CropRequest, settings: Settings) -> bool:
+    """A page withheld for personal data (app/acquisition/personal.py) is never shown."""
+    try:
+        import psycopg
+
+        from app.acquisition.personal import is_withheld
+        with psycopg.connect(settings.db_url(), connect_timeout=3) as conn:
+            return is_withheld(conn, req.doc_id, req.page)
+    except Exception:              # noqa: BLE001 - no database: the page has no withheld record to check
+        return False
+
+
 async def _make_crop(req: CropRequest, settings: Settings) -> bytes | None:
+    if settings.has_database and _withheld(req, settings):
+        log.info("evidence crop %s p%d: withheld (personal data)", req.doc_id, req.page)
+        return None
     if settings.has_database and (chart := _stored_chart_crop(req, settings)):
         log.info("evidence crop %s p%d: the chart (read from a chart label)", req.doc_id, req.page)
         return chart
