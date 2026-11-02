@@ -132,7 +132,7 @@ def test_planned_analysis_answers_without_a_compose_call(monkeypatch) -> None:
     a = asyncio.run(ans.answer_question("Wadanne ayyuka ne za a yi a Tambuwal?", "en", conn=None,
                                         settings=make_settings(), client_factory=lambda s: fake))
     assert len(fake.calls) == 1                                                 # the planner only
-    assert a.text.startswith("The 2026 budget has 2 projects located in Tambuwal, with ₦3.00 billion allocated.")
+    assert a.text.startswith("The 2026 budget has 2 capital projects located in Tambuwal, with ₦3.00 billion allocated.")
     assert "not the local government's own allocation" in a.text and "• Completion of Premier Hospital" in a.text
     assert "📄 *Sources:* Budget, p. 61, 67" in a.text
 

@@ -30,6 +30,7 @@ import psycopg
 
 from app.agent.budget_query import SOKOTO_LGAS
 from app.agent.category import matches, resolve_scope
+from app.agent.sectors import sector_asked, sector_of, sector_sql
 from app.retrieval.entities import AMOUNTS
 
 log = logging.getLogger(__name__)
@@ -73,6 +74,9 @@ class AnalysisResult:
     report: str = ""              # the implementation report used for spending so far, e.g. "Q2 2026"
     clarify: list[dict] = field(default_factory=list)
     reason: str = ""              # why nothing was found
+    groups: list = field(default_factory=list)       # lga_projects: (sector, lines, amount, page), largest first
+    statewide: list = field(default_factory=list)    # lga_projects: the largest statewide lines (Row)
+    agencies: list = field(default_factory=list)     # lga_projects: the agencies running them, capital so far (Row)
 
     def money(self, key: str, value, doc_id: str, page: int | None) -> None:
         if value is not None:
@@ -268,36 +272,93 @@ def lga_projects(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
     if not loc:
         res.reason = "no_lga"
         return res
-    cond, a = _terms_sql(spec.get("terms") or [])
+    # the sector asked ('farming-related') by function and agency first (app/agent/sectors.py); other topic words
+    # as before, on the project's own name
+    sector = sector_asked(" ".join(spec.get("terms") or []), spec.get("question") or "")
+    if sector:
+        cond, a = sector_sql(sector)
+        res.focus = sector.key
+    else:
+        cond, a = _terms_sql(spec.get("terms") or [])
     extra = f" AND {cond}" if cond else ""
     args = [doc, loc[0]] + a
     n, s_cur, n_prev, s_rev, s_spent, page = conn.execute(
         f"SELECT count(*) FILTER (WHERE COALESCE({cur}, 0) > 0), sum({cur}), "
-        f"count(*) FILTER (WHERE COALESCE({rev}, 0) > 0), sum({rev}), sum({spent}), min(page) "
-        f"FROM projects p WHERE doc_id = %s AND location_code = %s{extra}", args).fetchone()
+        # last year's budget and spending of the same lines (those with a this-year allocation): 'of these lines'
+        f"count(*) FILTER (WHERE COALESCE({cur}, 0) > 0 AND COALESCE({rev}, 0) > 0), "
+        f"sum({rev}) FILTER (WHERE COALESCE({cur}, 0) > 0), sum({spent}) FILTER (WHERE COALESCE({cur}, 0) > 0), "
+        f"min(page) FROM projects p WHERE doc_id = %s AND location_code = %s{extra}", args).fetchone()
     res.count("n", n, doc, page)
     res.money("cur", s_cur or 0, doc, page)
     res.count("n_prev", n_prev, doc, page)
     res.money("prev", s_rev or 0, doc, page)
     res.money("spent", s_spent or 0, doc, page)
-    sw_n, sw_cur = conn.execute(f"SELECT count(*), sum({cur}) FROM projects p WHERE doc_id = %s AND location_code = "
-                                f"%s AND COALESCE({cur}, 0) > 0" + extra, [doc, STATEWIDE] + a).fetchone()
-    res.count("statewide_n", sw_n, doc, None)
-    res.money("statewide_cur", sw_cur or 0, doc, None)
+    if sector and not n:              # none of the sector's lines here: what the LGA does have, in every sector
+        n_all, s_all, p_all = conn.execute(
+            f"SELECT count(*) FILTER (WHERE COALESCE({cur}, 0) > 0), sum({cur}), min(page) FROM projects p "
+            f"WHERE doc_id = %s AND location_code = %s", [doc, loc[0]]).fetchone()
+        res.count("n_all", n_all, doc, p_all)
+        res.money("cur_all", s_all or 0, doc, p_all)
     lgas = {n for (n,) in conn.execute("SELECT DISTINCT location_name FROM projects WHERE doc_id = %s AND "
                                        "location_code <> %s", (doc, STATEWIDE))} | set(SOKOTO_LGAS)
-    for name, a_cur, a_rev, a_spent, pg, mda in conn.execute(
-            f"SELECT name, {cur}, {rev}, {spent}, page, mda_name FROM projects p WHERE doc_id = %s AND "
-            f"location_code = %s AND COALESCE({cur}, 0) > 0{extra} ORDER BY {cur} DESC, seq LIMIT {TOP}", args):
+    ward = (spec.get("ward") or "").strip()
+    lines = conn.execute(
+        f"SELECT name, {cur}, {rev}, {spent}, page, mda_name, mda_code, function_name FROM projects p "
+        f"WHERE doc_id = %s AND location_code = %s AND COALESCE({cur}, 0) > 0{extra} ORDER BY {cur} DESC, seq",
+        args).fetchall()
+    groups: dict[str, list] = {}
+    for name, a_cur, a_rev, a_spent, pg, mda, mda_code, fn in lines:
+        s = sector_of(fn or "", mda or "", name)
+        g = groups.setdefault(s.key if s else "other", [0, Decimal(0), pg])
+        g[0], g[1] = g[0] + 1, g[1] + (a_cur or 0)
+    res.groups = sorted(((k, v[0], v[1], v[2]) for k, v in groups.items()), key=lambda x: -x[2])
+    for name, a_cur, a_rev, a_spent, pg, mda, mda_code, fn in lines[:TOP]:
         res.rows.append(Row(name, a_cur, doc, pg, {"mda": mda, "budget_prev": a_rev or 0, "spent": a_spent or 0,
-                                                    "other_lga": other_lga(name, loc[1], lgas)}))
-    res.found = n > 0 or n_prev > 0
-    res.reason = "" if res.found else "none_tagged"
+                                                    "other_lga": other_lga(name, loc[1], lgas),
+                                                    "ward": bool(ward) and ward.lower() in name.lower()}))
+    # progress: the latest implementation report prints spending by ministry and agency, not by project or LGA;
+    # the capital spent so far by the agencies that run these lines, said as what it is
+    agencies = sorted({r[6] for r in lines if r[6]})
+    if agencies and (rep := latest_report(conn, year)):
+        rdoc, quarter = rep
+        budget, got, rpage = conn.execute(
+            "SELECT sum(COALESCE(revised, original)), sum(ytd_spent), min(page) FROM perf_items WHERE doc_id = %s "
+            "AND classification = 'administrative' AND spend_kind = 'capital' AND code = ANY(%s)",
+            (rdoc, agencies)).fetchone()
+        if budget:
+            res.titles.update(_titles(conn, {rdoc}))
+            res.report = f"Q{quarter} {year}"
+            res.count("rep_agencies", len(agencies), rdoc, rpage)
+            res.count("rep_quarter", quarter, rdoc, rpage)
+            res.money("rep_budget", budget, rdoc, rpage)
+            res.money("rep_spent", got or 0, rdoc, rpage)
+            res.pct("rep_rate", got or 0, budget, rdoc, rpage)
+            for name, a_budget, a_got, pg in conn.execute(
+                    "SELECT name, COALESCE(revised, original), ytd_spent, page FROM perf_items WHERE doc_id = %s AND "
+                    "classification = 'administrative' AND spend_kind = 'capital' AND code = ANY(%s) "
+                    "ORDER BY COALESCE(revised, original) DESC LIMIT %s", (rdoc, agencies, TOP)):
+                res.agencies.append(Row(name, a_budget or Decimal(0), rdoc, pg, {"spent": a_got or Decimal(0)}))
+    # statewide lines in the sector (or all), which may cover the LGA: their total and the largest three by name
+    sw = conn.execute(f"SELECT name, {cur}, page FROM projects p WHERE doc_id = %s AND location_code = %s "
+                      f"AND COALESCE({cur}, 0) > 0{extra} ORDER BY {cur} DESC, seq", [doc, STATEWIDE] + a).fetchall()
+    res.count("statewide_n", len(sw), doc, sw[0][2] if sw else None)
+    res.money("statewide_cur", sum((r[1] for r in sw), Decimal(0)), doc, sw[0][2] if sw else None)
+    res.statewide = [Row(name, amt, doc, pg) for name, amt, pg in sw[:3]]
+    res.found = n > 0 or n_prev > 0 or bool(sw)
+    res.reason = "" if n or n_prev else "none_tagged"
+    scope = f", {sector.en} by function and agency" if sector else \
+        (f", matching {', '.join(spec['terms'][:4])}" if cond else "")
     res.working = [f"Source: the {year} budget's capital project list ({doc}); only lines whose location is "
-                   f"{loc[0]} {loc[1]}" + (f", matching {', '.join(spec['terms'][:4])}" if cond else "") + ".",
+                   f"{loc[0]} {loc[1]}{scope}.",
                    f"{year} budget: {n} lines, {cur} {s_cur or 0:,.2f}; {prev}: {n_prev} lines, {rev} "
                    f"{s_rev or 0:,.2f}, {spent} {s_spent or 0:,.2f}",
-                   f"Not counted: {sw_n} statewide lines ({cur} {sw_cur or 0:,.2f}) the budget doesn't split by LGA."]
+                   "By sector: " + "; ".join(f"{k} {c} lines {v:,.2f}" for k, c, v, _ in res.groups),
+                   f"Statewide lines (not split by LGA){scope}: {len(sw)}, {cur} "
+                   f"{sum((r[1] for r in sw), Decimal(0)):,.2f}"]
+    if res.report:
+        res.working.append(f"Progress: {res.report} implementation report, capital of the {len(agencies)} agencies "
+                           f"that run these lines (the report doesn't split spending by project or LGA): revised "
+                           f"budget {res.facts['rep_budget'].value:,.2f}, spent {res.facts['rep_spent'].value:,.2f}")
     return res
 
 
