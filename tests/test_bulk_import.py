@@ -81,6 +81,22 @@ def test_near_duplicate_text_is_found_by_shingles() -> None:
     assert bulk.near_duplicate(["a completely different document " + " ".join(map(str, range(300)))], prints)[0] == ""
 
 
+BUDGET_PERSONNEL = """2 EXPENDITURES 170,152,000.87 385,590,999.00 213,835,340.59 377,590,999.00
+21 PERSONNEL COST 102,300,500.87 27,590,999.00 7,428,631.68 27,590,999.00
+2101 SALARY 102,300,500.87 27,590,999.00 7,428,631.68 27,590,999.00
+210101 SALARIES AND WAGES 102,300,500.87 27,590,999.00 7,428,631.68 27,590,999.00
+21010101 SALARY 102,300,500.87 27,590,999.00 7,428,631.68 27,590,999.00
+22 OTHER RECURRENT COSTS 67,851,500.00 358,000,000.00 206,406,708.91 350,000,000.00
+2202 OVERHEAD COST 67,751,500.00 355,000,000.00 206,406,708.91 347,000,000.00
+220201 TRAVEL & TRANSPORT - GENERAL 700,000.00 35,000,000.00 20,000,000.00 25,000,000.00
+22020202 TELEPHONE CHARGES 44,451,500.00 3,000,000.00 0.00 4,000,000.00"""
+
+
+def test_a_budgets_personnel_table_is_not_a_pay_list() -> None:
+    """3 Nov: the 2023 approved budget's 'SALARY' / 'PERSONNEL COST' lines were taken for a pay list."""
+    assert personal_reason(BUDGET_PERSONNEL) == ""
+
+
 PAYROLL = "\n".join(["S/N NAME GRADE LEVEL STEP NET PAY"] +
                     [f"{i} Abubakar Musa{i % 3 and 'wa' or ''} GL 07 3 {45 + i},{100 + i}.00" for i in range(1, 9)])
 PHONES = "\n".join(["S/N NAME LGA PHONE NUMBER"] + [f"{i} Fatima Bello Wamakko 0803{i:03d}{i:04d}" for i in range(1, 6)])

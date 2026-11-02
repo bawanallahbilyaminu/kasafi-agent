@@ -26,7 +26,11 @@ NAME_ROW = re.compile(r"(?m)^\s*(?:\d{1,4}[.)]?\s+)?(?:(?:Alh|Mal|Hajiya|Dr|Mr|M
 SALARY_ROW = re.compile(r"(?m)^\s*(?:\d{1,4}[.)]?\s+)?[A-Z][A-Za-z'’-]+\s+[A-Z][A-Za-z'’-]+.*?\b\d{1,3}(?:,\d{3})+"
                         r"(?:\.\d{2})?\s*$")
 AGENCY_WORDS = re.compile(r"(?i)\b(?:ministry|agency|board|commission|office|department|government|council|"
-                          r"total|sub-total|programme|project|construction|purchase|fund|hospital|college|school)\b")
+                          r"total|sub-total|programme|project|construction|purchase|fund|hospital|college|school|"
+                          r"cost|costs|salary|salaries|wages|overhead|expenditure|recurrent|transport|travel|"
+                          r"utilities|materials|supplies|allowance|allowances|loans?|advances|charges|maintenance|"
+                          r"capital|revenue|personnel|general|others|description|code)\b")
+NAME_HEADER = re.compile(r"(?i)\b(?:names?|full\s+name|surname)\b")
 
 
 def personal_reason(text: str) -> str:
@@ -37,7 +41,9 @@ def personal_reason(text: str) -> str:
         return "names with phone numbers"
     if len(LONG_ID.findall(t)) >= 5 and len(names) >= 5 and ID_HEADER.search(t):
         return "names with NIN, BVN or account numbers"
-    if ID_HEADER.search(t) and re.search(r"(?i)\b(?:salary|net\s*pay|gross\s*pay|grade\s*level)\b", t):
+    # a pay list has a name column; a budget's 'SALARY' and 'PERSONNEL COST' lines have none (3 Nov: the 2023
+    # approved budget's personnel tables were flagged)
+    if NAME_HEADER.search(t) and re.search(r"(?i)\b(?:salary|net\s*pay|gross\s*pay|grade\s*level)\b", t):
         rows = [r for r in SALARY_ROW.findall(t) if not AGENCY_WORDS.search(r)]
         if len(rows) >= 5:
             return "names with salaries"
