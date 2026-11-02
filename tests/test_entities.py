@@ -169,3 +169,71 @@ def test_per_agency_economic_rows_belong_to_their_agency(conn) -> None:
     n = conn.execute("SELECT count(*) FROM budget_items WHERE doc_id = 'budget-2026-approved' AND code = '22020307' "
                      "AND mda_code LIKE '0521%%'").fetchone()[0]
     assert n >= 5
+
+
+# --- the older project list (2023 and 2024 budgets, 3 Nov) ---------------------------------------------------------
+
+OLD_PAGE = """CAPITAL EXPENDITURE BY PROJECT
+Project Name Economic Code and
+Description
+2022 Full Year
+Actuals
+2023 Revised
+Budget
+2023 Performance
+January to
+September
+2024 Executive
+Budget Proposal
+2024 Approved
+Budget
+Total Capital
+Expenditure
+ 1,000,000.00
+ 165,000,000.00
+ -
+ 165,000,000.00
+ 210,000,000.00
+Purchase of 1No Toyota
+Hilux
+23010108 -
+PURCHASE OF
+BUSES
+ -
+ 25,000,000.00 -
+ 25,000,000.00
+ 30,000,000.00
+Relocation of flood victims
+in Sakkwai and Lokoko in Tangaza
+23040105 - WATER
+POLLUTION
+PREVENTION & CONTROL
+ 1,000,000.00
+ 40,000,000.00 -
+ 40,000,000.00
+ 50,000,000.00
+Quick response to victims of flood
+23040102 - EROSION
+& FLOOD CONTROL -
+ 100,000,000.00 -
+ 100,000,000.00
+ 130,000,000.00"""
+
+
+def test_the_older_project_list_is_read_row_by_row_and_adds_up_to_its_printed_total() -> None:
+    """The 2024 budget's 'CAPITAL EXPENDITURE BY PROJECT': no MDA or location code on the row; the LGA only from
+    the project's own name, recorded as such; an economic name ending in '-' before a '-' cell."""
+    from app.retrieval.entities import Checks, check_projects_total, parse_projects_by_econ
+    projects, info = parse_projects_by_econ([(123, OLD_PAGE)], {"TANGAZA": "33331900"})
+    assert [p.name for p in projects] == ["Purchase of 1No Toyota Hilux",
+                                         "Relocation of flood victims in Sakkwai and Lokoko in Tangaza",
+                                         "Quick response to victims of flood"]
+    assert projects[0].econ_code == "23010108" and projects[0].econ_name == "PURCHASE OF BUSES"
+    assert projects[2].econ_name == "EROSION & FLOOD CONTROL"
+    assert projects[1].location_code == "33331900" and projects[1].other["located_by"] == "name"
+    assert projects[0].location_code == "" and projects[0].mda_code == ""            # not printed, never guessed
+    assert projects[1].amounts["approved_2024"] == Decimal("50000000.00")
+    assert projects[1].amounts["actual_2022"] == Decimal("1000000.00")
+    checks = Checks()
+    check_projects_total(projects, info, checks)
+    assert checks.results["projects:total"]["failed"] == 0 and info["unparsed"] == 0

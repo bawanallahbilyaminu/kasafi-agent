@@ -434,7 +434,7 @@ def ranking(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
         n_all = conn.execute(f"SELECT count(*) FROM projects WHERE {w}", args).fetchone()[0]
     elif of == "lga":
         sql = (f"SELECT initcap(location_name), sum({col}), min(page), count(*) FROM projects WHERE {w} AND "
-               f"location_code <> '{STATEWIDE}' GROUP BY location_name ORDER BY 2 {order} LIMIT {top}")
+               f"location_code NOT IN ('{STATEWIDE}', '') GROUP BY location_name ORDER BY 2 {order} LIMIT {top}")
         rows = [(n, v, p, {"lines": k}) for n, v, p, k in conn.execute(sql, args)]
         n_all = conn.execute(f"SELECT count(DISTINCT location_code) FROM projects WHERE {w} AND location_code <> "
                              f"'{STATEWIDE}'", args).fetchone()[0]
@@ -736,8 +736,23 @@ def lga_years(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
             n, s, pg = conn.execute(f"SELECT count(*) FILTER (WHERE COALESCE({col}, 0) > 0), sum({col}), min(page) "
                                     f"FROM projects WHERE doc_id = %s AND location_code = %s", (own, loc[0])).fetchone()
             d.update(source="own", n=n, approved=s or Decimal(0), doc=own, page=pg)
+            # the 2023 / 2024 layout prints no locations: its lines are placed by the LGA their names give
+            if conn.execute("SELECT 1 FROM projects WHERE doc_id = %s AND location_code = '' LIMIT 1",
+                            (own,)).fetchone():
+                d["source"] = "own_named"
+                # and what the next budget, which prints locations, gives for the year: the lines its spending
+                # columns refer to, and their agencies
+                if (nxt := lists.get(y + 1)) and (col := _amount_col(f"revised_{y}")) and \
+                        (nloc := lga_code(conn, nxt, spec["lga"])):
+                    nn, ns, npg = conn.execute(
+                        f"SELECT count(*) FILTER (WHERE COALESCE({col}, 0) > 0), sum({col}), min(page) FROM projects "
+                        f"WHERE doc_id = %s AND location_code = %s", (nxt, nloc[0])).fetchone()
+                    d.update(next_n=nn, next_approved=ns or Decimal(0), next_doc=nxt, next_page=npg)
+                    agencies = [r[0] for r in conn.execute(
+                        "SELECT DISTINCT mda_code FROM projects WHERE doc_id = %s AND location_code = %s AND "
+                        "COALESCE(mda_code, '') <> ''", (nxt, nloc[0]))]
             agencies = [r[0] for r in conn.execute("SELECT DISTINCT mda_code FROM projects WHERE doc_id = %s AND "
-                                                   "location_code = %s AND mda_code IS NOT NULL", (own, loc[0]))]
+                                                   "location_code = %s AND COALESCE(mda_code, '') <> ''", (own, loc[0]))]
         elif (nxt := lists.get(y + 1)) and (col := _amount_col(f"revised_{y}")) and \
                 (loc := lga_code(conn, nxt, spec["lga"])):
             # no project list of the year's own in the library: the next budget prints the year's revised budget
@@ -745,7 +760,7 @@ def lga_years(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
                                     f"FROM projects WHERE doc_id = %s AND location_code = %s", (nxt, loc[0])).fetchone()
             d.update(source="next", n=n, approved=s or Decimal(0), doc=nxt, page=pg)
             agencies = [r[0] for r in conn.execute("SELECT DISTINCT mda_code FROM projects WHERE doc_id = %s AND "
-                                                   "location_code = %s AND mda_code IS NOT NULL", (nxt, loc[0]))]
+                                                   "location_code = %s AND COALESCE(mda_code, '') <> ''", (nxt, loc[0]))]
         # project-level spending printed by a later budget: full-year actuals first, then January-September
         for kind in ("actual", "jan_sep"):
             col = _amount_col(f"{kind}_{y}")
@@ -771,7 +786,7 @@ def lga_years(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
         res.rows.append(Row(str(y), d.get("approved") or Decimal(0), d.get("doc") or d.get("spent_doc") or "",
                             d.get("page") or d.get("spent_page") or 0, d))
     res.titles = _titles(conn, {x for r in res.rows for x in (r.detail.get("doc"), r.detail.get("spent_doc"),
-                                                              r.detail.get("rep_doc")) if x})
+                                                              r.detail.get("rep_doc"), r.detail.get("next_doc")) if x})
     doc0 = next((r.doc_id for r in res.rows if r.doc_id), "")
     res.money("span_spent", total, doc0, None)
     res.count("span_periods", len(periods), doc0, None)

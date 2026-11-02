@@ -215,5 +215,14 @@ def test_wamakko_year_by_year_with_each_years_own_budget_and_the_spending_period
                                                                                                     "jan_sep")
     assert by["2026"]["source"] == "own" and by["2026"]["n"] > 100 and "spent_kind" not in by["2026"]
     assert by["2026"].get("rep_doc")                      # 2026: spending by agency only, from the latest report
-    assert by["2024"]["source"] in ("own", "next") and by["2024"].get("spent_kind")
+    assert by["2024"]["source"] in ("own", "own_named", "next") and by["2024"].get("spent_kind")
     assert r.facts["span_spent"].value == sum(d.get("spent") or 0 for d in by.values())
+
+
+def test_a_year_whose_budget_prints_no_locations_says_so_and_gives_the_next_budgets_figures(conn) -> None:
+    from app.agent.analysis import lga_years
+    r = lga_years(conn, {"lga": "Wamakko", "years": [2024]})
+    d = r.rows[0].detail
+    if d.get("source") != "own_named":
+        pytest.skip("the 2024 project list isn't built on this database")
+    assert d["n"] > 0 and d.get("next_doc") == "budget-2025-approved" and d["next_n"] > d["n"]

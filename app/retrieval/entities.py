@@ -41,7 +41,9 @@ log = logging.getLogger(__name__)
 
 AMOUNTS = ("actual_2022", "actual_2023", "actual_2024", "jan_sep_2023", "jan_sep_2024", "jan_sep_2025",
            "revised_2023", "revised_2024", "revised_2025", "original_2025", "approved_2024", "approved_2025",
-           "approved_2026", "proposal_2024", "estimate_2026", "estimate_2027", "estimate_2028")
+           "approved_2026", "proposal_2024", "estimate_2026", "estimate_2027", "estimate_2028",
+           # the 2023 approved budget's columns (migration 0030)
+           "actual_2021", "revised_2022", "jan_sep_2022", "approved_2023", "estimate_2024", "estimate_2025")
 PERF_AMOUNTS = ("original", "revised", "final", "quarter_spent", "ytd_spent")
 BUDGET_CATEGORIES = {"budget"}
 PERF_CATEGORIES = {"budget_performance"}
@@ -389,6 +391,103 @@ def parse_projects(pages: list[tuple[int, str]], pdf_path=None) -> tuple[list[Pr
     return projects, info
 
 
+# --- the older project list (2023 and 2024 budgets) --------------------------------------------
+# 'CAPITAL EXPENDITURE BY PROJECT' with one row per project: its name, '<8-digit economic code> - <name>', (2023:
+# '<5-digit function code> - <name>') and one amount or '-' per column. No MDA and no location code is printed on
+# the row; a project's LGA is taken only from its own name ('... in Tangaza') and recorded as such.
+
+OLD_TITLE = re.compile(r"(?i)capital expenditure by project")
+_OLD_LABEL = re.compile(r"20\d\d (?:Full Year Actuals|Revised Budget|Performance January to September|Executive "
+                        r"Budget Proposal|Approved Budget|Out-Year Estimate)")
+_ECON_ANCHOR = re.compile(r"(?<!\d)(2\d{7}) ?- ")
+_FUNC_TOKEN = re.compile(r"^7\d{4}$")
+_AMT_TOKEN = re.compile(r"^" + _NUM + r"$")
+_TABLE_END = re.compile(r"(?m)^\s*0\d{11}\s+[A-Z]|Expenditure by (?:Administrative|Economic|Functional|Programme)")
+
+
+def _lga_in_name(name: str) -> str | None:
+    from app.agent.budget_query import SOKOTO_LGAS
+    hits = [lga for lga in SOKOTO_LGAS if re.search(rf"(?i)(?<![a-z]){re.escape(lga)}(?![a-z])", name)]
+    return hits[0] if len(hits) == 1 else None
+
+
+def parse_projects_by_econ(pages: list[tuple[int, str]], lga_codes: dict[str, str] | None = None
+                           ) -> tuple[list[Project], dict]:
+    """The older statewide project list: (projects, info as parse_projects gives, plus 'located_by_name')."""
+    info: dict = {"labels": [], "printed": {}, "pages": [], "unparsed": 0, "placed": 0, "located_by_name": 0}
+    start = next((i for i, (_, t) in enumerate(pages) if OLD_TITLE.search(t or "")), None)
+    if start is None:
+        return [], info
+    flat_parts, offsets = [], []
+    for k, (page, raw) in enumerate(pages[start:]):
+        flat = " ".join((raw or "").split())
+        if k and (_TABLE_END.search(raw or "") or OLD_TITLE.search(flat) and "Total Capital Expenditure" in flat
+                  and k > 1):
+            break
+        offsets.append((sum(len(x) + 1 for x in flat_parts), page))
+        flat_parts.append(flat)
+        info["pages"].append(page)
+    text = " ".join(flat_parts)
+    # the column labels after the title and before the total row ('Sokoto State Government 2023 Approved Budget -
+    # Capital Expenditure by Project' names a year too)
+    after_title = OLD_TITLE.search(text).end()
+    total_at = text.find("Total Capital Expenditure", after_title)
+    labels = _OLD_LABEL.findall(text[after_title:total_at if total_at > 0 else after_title + 3000])
+    m_total = re.search(r"Total Capital Expenditure((?: " + _NUM + r"){%d})" % len(labels), text)
+    if not labels or not m_total:
+        return [], info
+    cols = [column_of(*p) if (p := parse_column(lab)) else None for lab in labels]
+    info["labels"] = labels
+    info["printed"] = {c: str(_amount(v)) for c, v in zip(cols, m_total.group(1).split()) if c}
+    n = len(cols)
+
+    def page_at(pos: int) -> int:
+        return max((pg for off, pg in offsets if off <= pos), default=offsets[0][1])
+    anchors = list(_ECON_ANCHOR.finditer(text, m_total.end()))
+    name = text[m_total.end():anchors[0].start()].strip() if anchors else ""
+    projects: list[Project] = []
+    for k, a in enumerate(anchors):
+        region = text[a.end():anchors[k + 1].start() if k + 1 < len(anchors) else len(text)].split()
+        runs, i = [], 0                                    # maximal runs of amount tokens: (start, end)
+        while i < len(region):
+            if _AMT_TOKEN.match(region[i]):
+                j = i
+                while j < len(region) and _AMT_TOKEN.match(region[j]):
+                    j += 1
+                runs.append((i, j))
+                i = j
+            else:
+                i += 1
+        run = next((r for r in reversed(runs) if r[1] - r[0] >= n), None)
+        if run is None:
+            info["unparsed"] += 1
+            name = " ".join(region[runs[-1][1]:] if runs else [])
+            continue
+        head, nums, next_name = region[:run[1] - n], region[run[1] - n:run[1]], region[run[1]:]
+        func = next((x for x, t in enumerate(head) if _FUNC_TOKEN.match(t) and x + 1 < len(head)
+                     and head[x + 1] == "-"), None)
+        econ_name = " ".join(head[:func] if func is not None else head).strip(" -")
+        func_code = head[func] if func is not None else None
+        func_name = " ".join(head[func + 2:]).strip(" -") if func is not None else None
+        lga = _lga_in_name(name)
+        code = (lga_codes or {}).get(lga.upper()) if lga else None
+        # no MDA or location code is printed on the row: '' (not printed), never a guess
+        p = Project(page_at(a.start()), name or "(name not printed)", "", "", a.group(1), econ_name, func_code,
+                    func_name or None, code or "", lga.upper() if lga and code else "")
+        if lga:
+            p.other["located_by"] = "name"
+            info["located_by_name"] += 1
+        for col, label, v in zip(cols, labels, nums):
+            amount = _amount(v)
+            if col and amount is not None:
+                p.amounts[col] = amount
+            elif amount is not None:
+                p.other[label] = str(amount)
+        projects.append(p)
+        name = " ".join(next_name)
+    return projects, info
+
+
 # --- reconciliation ----------------------------------------------------------------------------
 
 CHECKED = ("administrative", "economic", "function", "programme", "location")
@@ -532,6 +631,16 @@ def check_grand_totals(items: list[Item], columns: tuple[str, ...], checks: Chec
                            f"administrative {ref.amounts[col]:,.2f}")
 
 
+def check_projects_total(projects: list[Project], info: dict, checks: Checks) -> None:
+    """The older layout: the projects add up to the printed Total Capital Expenditure, column by column (no MDA on
+    the row, so no per-MDA check)."""
+    for col, printed in info["printed"].items():
+        s = sum((p.amounts.get(col, Decimal(0)) for p in projects), Decimal(0))
+        checks.add("projects:total", abs(s - Decimal(printed)) <= TOLERANCE,
+                   f"{col}: projects add up to {s:,.2f}, printed Total Capital Expenditure {Decimal(printed):,.2f}")
+    checks.add("projects:rows_parsed", info["unparsed"] == 0, f"{info['unparsed']} rows not parsed")
+
+
 def check_projects(projects: list[Project], info: dict, items: list[Item], checks: Checks) -> None:
     for col, printed in info.get("printed", {}).items():
         s = sum((p.amounts.get(col, Decimal(0)) for p in projects), Decimal(0))
@@ -627,13 +736,24 @@ def build(conn: psycopg.Connection, doc_id: str, pdf_path: Path | None = None) -
             items = budget_items(conn, doc_id)
             pages = conn.execute("SELECT page, text FROM pages WHERE doc_id = %s ORDER BY page", (doc_id,)).fetchall()
             projects, info = parse_projects(pages, pdf_path or pdf_for(doc_id))
+            older = False
+            if not projects:                    # the 2023 / 2024 layout: no MDA or location code on the row
+                codes = {name.upper(): code for code, name in conn.execute(
+                    "SELECT DISTINCT location_code, location_name FROM projects WHERE location_code IS NOT NULL")}
+                projects, info = parse_projects_by_econ(pages, codes)
+                older = bool(projects)
             _write_items(conn, doc_id, items)
             _write_projects(conn, doc_id, projects)
             columns = AMOUNTS
-            check_projects(projects, info, items, checks)
+            if older:
+                check_projects_total(projects, info, checks)
+            else:
+                check_projects(projects, info, items, checks)
             counts.update(budget_items=len(items), projects=len(projects), project_rows_unparsed=info["unparsed"],
                           project_rows_placed_by_position=info["placed"],
                           items_with_mda=sum(1 for x in items if x.mda_code))
+            if older:
+                counts.update(project_layout=1, projects_located_by_name=info["located_by_name"])
         else:
             items, year, quarter = perf_items(conn, doc_id)
             _write_perf(conn, doc_id, items, year, quarter)

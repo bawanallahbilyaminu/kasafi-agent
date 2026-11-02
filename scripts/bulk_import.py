@@ -146,7 +146,7 @@ def summary(state: Path) -> None:
     items, others, spent = loaded
     s = get_settings()
     say(bulk.report(items, others))
-    for status in ("indexed", "duplicate", "flagged", "excluded", "failed", "new"):
+    for status in ("indexed", "duplicate", "flagged", "excluded", "skipped", "failed", "new"):
         mine = [i for i in items if i.status == status]
         if mine:
             say(f"\n{status.upper()} ({len(mine)}):")

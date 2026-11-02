@@ -3969,6 +3969,10 @@ YEARS_WORDS = {
     "en": {
         "lead": "Projects located in {subject}, year by year ({y0}–{y1}), from each year's own budget:",
         "own": "{y}: {n} projects located in {subject} in the {y} budget, {approved} approved.",
+        "own_named": "{y}: the {y} budget prints no project locations; {n} of its projects name {subject} in "
+                     "their own names, {approved} approved.",
+        "next_also": " The {y1n} budget, which prints locations, lists {n} lines located in {subject} with a {y} "
+                     "revised budget of {approved}.",
         "next": "{y}: the {y} budget's project list isn't in the library; the {y1n} budget lists {n} lines located "
                 "in {subject} with a {y} revised budget of {approved}.",
         "none": "{y}: no project list for this year is in the library.",
@@ -3989,6 +3993,10 @@ YEARS_WORDS = {
     "ha": {
         "lead": "Ayyukan da ke {subject}, shekara-shekara ({y0}–{y1}), daga kasafin kowace shekara:",
         "own": "{y}: ayyuka {n} da ke {subject} a kasafin {y}, an amince da {approved}.",
+        "own_named": "{y}: kasafin {y} bai buga wuraren ayyuka ba; ayyuka {n} sun ambaci {subject} a sunayensu, "
+                     "an amince da {approved}.",
+        "next_also": " Kasafin {y1n}, wanda ya buga wurare, ya lissafa layuka {n} da ke {subject} da kasafin {y} "
+                     "da aka sabunta na {approved}.",
         "next": "{y}: jerin ayyukan kasafin {y} ba ya ɗakin karatu; kasafin {y1n} ya lissafa layuka {n} da ke "
                 "{subject} da kasafin {y} da aka sabunta na {approved}.",
         "none": "{y}: babu jerin ayyukan wannan shekarar a ɗakin karatu.",
@@ -4018,12 +4026,15 @@ def lga_years_answer(conn, plan: Plan, res: AnalysisResult, lang: str, t: dict, 
     lines, agency_only, cited = [], [], {}
     for r in res.rows:
         d, y = r.detail, int(r.name)
-        if d.get("source") == "own":
-            s = w["own"].format(y=y, n=f"{d['n']:,}", subject=subject, approved=_money(d["approved"]))
+        if d.get("source") in ("own", "own_named"):
+            s = w[d["source"]].format(y=y, n=f"{d['n']:,}", subject=subject, approved=_money(d["approved"]))
         elif d.get("source") == "next":
             s = w["next"].format(y=y, y1n=y + 1, n=f"{d['n']:,}", subject=subject, approved=_money(d["approved"]))
         else:
             s = w["none"].format(y=y)
+        if d.get("source") == "own_named" and d.get("next_doc"):
+            s += w["next_also"].format(y=y, y1n=y + 1, n=f"{d['next_n']:,}", subject=subject,
+                                       approved=_money(d["next_approved"]))
         if d.get("spent_kind"):
             sy = re.search(r"budget-(\d{4})", d["spent_doc"]).group(1)
             s += w[f"spent_{d['spent_kind']}"].format(spent=_money(d["spent"]), y=y, spent_n=f"{d['spent_n']:,}",
@@ -4037,7 +4048,8 @@ def lga_years_answer(conn, plan: Plan, res: AnalysisResult, lang: str, t: dict, 
             if not d.get("spent_kind"):
                 agency_only.append(str(y))
         lines.append("• " + s)
-        for key_doc, key_page in (("doc", "page"), ("spent_doc", "spent_page"), ("rep_doc", "rep_page")):
+        for key_doc, key_page in (("doc", "page"), ("next_doc", "next_page"), ("spent_doc", "spent_page"),
+                                  ("rep_doc", "rep_page")):
             if d.get(key_doc) and d.get(key_page):
                 cited[(d[key_doc], d[key_page])] = None
     total = res.facts["span_spent"].value
