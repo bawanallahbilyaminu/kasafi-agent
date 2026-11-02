@@ -88,8 +88,9 @@ async def ingest(state: Path, max_usd: float, limit: int | None) -> None:
                 except Exception as e:  # noqa: BLE001 - one file must not stop the run
                     conn.rollback()
                     got = library.Acquired("failed", url=it.url, detail=f"{type(e).__name__}: {e}"[:300])
-                if library._CARD_TASKS:                     # its charts and cards, before the next document
-                    await asyncio.gather(*list(library._CARD_TASKS), return_exceptions=True)
+                # its OCR (Muse Spark Open in a batch run), charts and cards, before the next document
+                while pending := list(library._background) + list(library._CARD_TASKS):
+                    await asyncio.gather(*pending, return_exceptions=True)
                 it.cost = usage.total_dollars(s) - before
                 it.doc_id = got.doc_id or it.doc_id
                 it.detail = got.detail

@@ -369,11 +369,16 @@ async def ocr_pages(doc_id: str, path: Path, pages: list[int], settings: Setting
     out_dir = path.parent / f"{doc_id}-ocr"
     try:
         images = await render_pages_sandboxed(path, pages, out_dir)
-        async with MetaClient(settings, timeout=240) as client:
+        # a batch run (the bulk import) reads on Muse Spark Open; live fetches keep Muse Spark
+        batch = settings.kasafi_batch_provider.lower() in ("baseten", "fireworks") and settings.baseten_api_key
+        if batch:
+            from app.providers.baseten import BasetenClient
+        async with (BasetenClient(settings) if batch else MetaClient(settings, timeout=240)) as client:
             with psycopg.connect(settings.db_url(), autocommit=True) as conn:
                 for page, jpg in sorted(images.items()):
                     try:
-                        text = await ocr_image(client, jpg.read_bytes(), model=settings.meta_model)
+                        text = await ocr_image(client, jpg.read_bytes(),
+                                               model=settings.baseten_model if batch else settings.meta_model)
                     except ProviderError as e:
                         log.warning("background OCR failed for %s p%d: %s", doc_id, page, type(e).__name__)
                         continue
