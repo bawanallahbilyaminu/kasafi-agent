@@ -371,3 +371,119 @@ def test_a_dash_said_to_mean_no_figure_is_the_rule_followed_not_a_misread() -> N
     assert dash_misread("A dash in the table means no figure was printed for Wamakko.") == ""
     assert dash_misread("In the table a dash means no data.") == ""
     assert dash_misread("The dash is zero") and dash_misread("Dange Shuni shows no enrolment (- in the table)")
+
+
+# --- the two audit gaps: place_budget and facility readings decide their routes whatever the wording ---------------
+
+def test_a_place_budget_reading_gives_the_lga_tool_whatever_the_wording() -> None:
+    from app.agent.answer import Plan, reading_lga_route
+    plan = Plan(english_question="x", search_queries=[], doc_ids=[])
+    pin = {"lat": 13.045, "lon": 5.155, "lga_pcode": "NG034021", "lga": "Wamakko", "ward": "Kalambaina"}
+    farmers = U.Understanding(kind="follow_up", capability="place_budget", level="lga", measure="projects",
+                              restatement="Is there anything for farmers in my LGA's budget?")
+    spec = reading_lga_route(farmers, farmers.restatement, plan, pin)
+    assert spec["tool"] == "lga_projects" and spec["lga"] == "Wamakko" and spec["ward"] == "Kalambaina"
+    named = U.Understanding(capability="place_budget", level="lga", name="Tambuwal",
+                            restatement="What projects is the government doing in Tambuwal?")
+    spec = reading_lga_route(named, named.restatement, plan, pin)
+    assert spec["lga"] == "Tambuwal" and spec["ward"] == ""                # a named LGA beats the one on file
+    saved = reading_lga_route(farmers, farmers.restatement, plan, {"lga_pcode": "NG034021"})
+    assert saved["lga"] == "Wamakko"                                         # the LGA on file alone (no pin)
+    assert reading_lga_route(farmers, farmers.restatement, plan, None) == {"tool": "need_place"}
+    span = U.Understanding(capability="place_budget", level="lga", time="span", years=[2024, 2025, 2026],
+                           restatement="What did my LGA get each year?")
+    assert reading_lga_route(span, span.restatement, plan, pin)["tool"] == "lga_years"
+    assert reading_lga_route(U.Understanding(capability="budget", restatement="x"), "x", plan, pin) is None
+
+
+def test_a_place_budget_reading_with_no_place_asks_for_it_and_resumes_with_the_reading(monkeypatch) -> None:
+    case = {"id": "x-pb", "place": "none", "turns": []}
+    s, store, key = _setup(case)
+    monkeypatch.setattr(s.__class__, "has_database", property(lambda self: False))
+    reading_pb = U.Understanding(kind="new", capability="place_budget", level="lga", measure="projects",
+                                 restatement="Is there anything for farmers in my LGA's budget?")
+    seen = []
+
+    async def answer(question, lang, **kw):
+        seen.append((question, kw.get("understanding"), kw.get("place")))
+        if len(seen) == 1:
+            return SimpleNamespace(text="Which area do you mean?", found=False, needs_pin=True, sources=[],
+                                   working="", quotes="")
+        return "PLACE BUDGET"
+
+    async def understand_fn(*a, **k):
+        return reading_pb
+
+    async def typed(settings, text):
+        return Spot(12.9, 4.6, "NG034019", "Tambuwal", how="place") if text == "Tambuwal" else None
+    msg = {"from": SENDER, "id": "w-pb1", "type": "text", "text": {"body": "Anything for farmers?"}}
+    outs = asyncio.run(C.handle(msg, None, store=store, settings=s, answer_fn=answer, guard_fn=_ok, place_fn=typed,
+                                understand_fn=understand_fn))
+    assert outs[-1].location_request
+    assert memory.peek_question(key) == C.PLACE_BUDGET_WAIT + reading_pb.restatement
+    msg = {"from": SENDER, "id": "w-pb2", "type": "text", "text": {"body": "Tambuwal"}}
+    outs = asyncio.run(C.handle(msg, None, store=store, settings=s, answer_fn=answer, guard_fn=_ok, place_fn=typed,
+                                understand_fn=understand_fn))
+    assert outs[-1].text == "PLACE BUDGET"
+    q, u, place = seen[-1]
+    assert q == reading_pb.restatement and u.capability == "place_budget" and place["lga_pcode"] == "NG034019"
+
+
+def test_a_facility_reading_without_name_count_or_nearest_goes_to_the_facilities(monkeypatch) -> None:
+    """'Is there anywhere I can deliver a baby?' read as facility: the nearest search of that kind (maternal care),
+    the location asked for first when there is none; never the documents."""
+    key = "k-fac-reading"
+    memory.forget(key)
+    u = U.Understanding(kind="new", capability="facility", level="none", measure="nearest", care="maternal",
+                        facility_level="any", ownership="any",
+                        restatement="Is there a health facility where I can deliver a baby near me?")
+    out = asyncio.run(C._facility_reading("Is there anywhere I can deliver a baby?", u, key, "en", make_settings(),
+                                          None))[0]
+    assert out.location_request and memory.peek_question(key).startswith(C.FACILITY_WAIT)
+    searched = []
+
+    async def facility_fn(settings, lat, lon, search, lang, mode="list"):
+        searched.append(search.filters)
+        return []
+
+    async def run():
+        return await C._after_location(memory.waiting_question(key), key, "en", make_settings(), facility_fn, PIN)
+    asyncio.run(run())
+    assert searched and searched[0].emonc                         # 'deliver a baby' -> maternal (EmONC) care
+
+
+def test_a_facility_reading_naming_one_gives_its_registry_card(monkeypatch) -> None:
+    key = "k-fac-named"
+    memory.forget(key)
+    monkeypatch.setattr(C, "lookup", lambda settings, text: [UDUTH])
+    monkeypatch.setattr(C, "card", lambda f, lang, others: f"CARD {f.name}")
+    u = U.Understanding(kind="new", capability="facility", level="facility", name="UDUTH",
+                        restatement="Does UDUTH have an emergency unit?")
+    outs = asyncio.run(C._facility_reading("Does uduth have emergency?", u, key, "en", make_settings(), None))
+    assert outs[0].text == f"CARD {UDUTH.name}"
+
+
+def test_the_reading_chooses_the_facilities_and_the_words_only_without_one() -> None:
+    """2 Nov: 'where can my wife deliver a baby' matched no maternal keyword. The reading's care, level and ownership
+    decide; the keyword filters are the fallback when the understanding step gave no reading."""
+    from app.geo.facilities import Filters
+    words = "Where can my wife deliver a baby?"
+    maternal = U.parse({"kind": "new", "capability": "facility", "subject": {"level": "none"}, "time": {"kind": "now"},
+                        "facility": {"care": "maternal", "level": "any", "ownership": "public"},
+                        "restatement": "Where is the nearest government facility where my wife can deliver?"})
+    f = C.reading_filters(maternal, words)
+    assert f.emonc == "bemonc" and f.ownership == "Public" and f.levels == ()
+    general = U.parse({"kind": "new", "capability": "facility", "subject": {"level": "none"},
+                       "facility": {"care": "general", "level": "hospital", "ownership": "any"},
+                       "restatement": "Where is the nearest maternity hospital?"})
+    assert C.reading_filters(general, "maternity").emonc == ""        # the reading, not the word, decides
+    assert C.reading_filters(general, "x").levels == ("Secondary", "Tertiary")
+    assert C.reading_filters(None, "nearest maternity").emonc == "bemonc"   # no reading: the keywords
+    follow = U.parse({"kind": "follow_up", "capability": "facility", "subject": {"level": "none"},
+                      "facility": {"care": "general", "level": "any", "ownership": "public"},
+                      "restatement": "Only government ones"})
+    kept = C.reading_filters(follow, "only government ones", Filters(emonc="bemonc"))
+    assert kept.emonc == "bemonc" and kept.ownership == "Public"       # a follow-up keeps the list's care
+    budget = U.parse({"kind": "new", "capability": "budget", "facility": {"care": "maternal"},
+                      "restatement": "Maternal health budget 2026"})
+    assert budget.care == ""                                           # facility filters only for facility readings

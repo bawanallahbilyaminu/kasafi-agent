@@ -107,7 +107,7 @@ standalone restatement in Kasafi's own place words ('my farm (the pin)', 'my war
   message is read with them.
 - Every model-written answer and the planner start with the shared core prompt (`app/agent/persona.py`).
 
-Eval: `evals/understanding/` (65 conversations since 2 Nov evening: 45 plus 20 about Kasafi or the conversation and a cold facility claim; English and Hausa, including the
+Eval: `evals/understanding/` (75 conversations since 2 Nov evening: 45, 10 facility filters and place-budget wordings, plus 20 about Kasafi or the conversation and a cold facility claim; English and Hausa, including the
 three failures): 45/45 on Muse Spark, median 2.7 s, p90 3.7 s, $0.0020 per message (`report.md`); 45/45 on Muse
 Spark Open, median 2.0 s, p90 4.2 s (`report-open.md`). The deploy gate replays the recorded readings
 (`tests/test_understanding.py`) through the conversation handler, without a model call.
@@ -149,18 +149,25 @@ Capability → route audit:
 | Capability | Route that honours the reading | When the keywords miss |
 |---|---|---|
 | conversation | `conversational.reply` (no search) | — (the reading decides) |
-| facility | correction or claim → `_facility_correction`; nearest, route and named → the facility shortcut; counts and named cards → `facility_route` | staff, equipment and services at facilities → documents (by design) |
+| facility | correction or claim → `_facility_correction`; nearest, route and named → the facility shortcut; counts and named cards → `facility_route` | `_facility_reading`: the facility the reading names (its card), else a nearest search with the reading's filters; the location asked for when there is none. Staff, equipment, services and money at facilities, and a report named, stay with the documents (the registry holds none of them) |
 | place_history | `area_route` / `place_route` | the reading's level decides: pin → `place_answer`; ward, LGA or state → `area_route` with the reading's measure |
 | hazard | `official.route`, `hazard_route` | `hazard_route` with the reading's measure |
 | alerts | `alerts_reply` | `alerts_reply` on the restatement |
 | deep | `deep_path` (the reading alone suffices) | — |
-| place_budget | `lga_route` | the structured and document paths (a budget answer, without the LGA tool's by-sector layout) |
+| place_budget | `lga_route` | `reading_lga_route`, before the statewide paths: an LGA the message names, else the LGA on file; with neither, the location is asked for and the question resumes with the same reading |
 | budget, statistics | the planner, the structured core and the document path | — |
 | other | the document path; not found → the help text | a non-request → the help text directly |
 
-Still not honoured as a hard route: `place_budget` when the restatement doesn't say "my area / my LGA" (the
-structured path answers instead), and `facility` questions with no name, no count and no nearest words (the
-document path answers).
+Both gaps the first audit left are closed: a `place_budget` reading takes the LGA tool whatever the wording, and a
+`facility` reading with no name, count or "nearest" goes to the facilities.
+
+**The reading chooses the facilities** (2 Nov). It carries `facility: {care: maternal|children|general, level:
+hospital|primary|any, ownership: public|private|any}`. "Where can my wife deliver a baby", "matata na naƙuda", "a ina
+za ta haihu" and "nearest place for antenatal care" are maternal care from the meaning, whatever the words
+(`reading_filters`). A follow-up keeps its list's care unless the reading changes it. The keyword filters
+(`filters_from`, `MATERNAL`) are only the fallback when the step gave no reading. The same rule applies everywhere: a
+missed phrasing is fixed in the reading (prompt, schema, examples) and added as an understanding case, never as a new
+keyword. There is no paediatric filter in the registry yet, so `children` searches all facilities.
 
 The dash rule (L36) had refused #123's corrected retry: its second pattern matched "a dash in the table means no"
 in "…means no figure is printed", which is the rule followed, not broken. A figure word after "no" now ends the

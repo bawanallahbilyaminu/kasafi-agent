@@ -1932,6 +1932,23 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             return Answer(text, True, True, plan=plan, timings=t, exact=f"{summary}\n{ha.text}",
                           partial=not ha.found, quotes=quotes,
                           maps=maps_for(q, ha, today, conn) if ha.found else [])
+        # the reading's place_budget decides it whatever the wording (the keyword route needs 'my area' and a budget
+        # word): the LGA tool, before the statewide paths; no LGA named or on file: the location is asked for, and
+        # the question resumes when it comes
+        if conn is not None and (spec := reading_lga_route(u, question, plan, place)):
+            if spec["tool"] == "need_place":
+                return Answer(NEED_PLACE.get(lang, NEED_PLACE["en"]), False, True, plan=plan, timings=t,
+                              needs_pin=True)
+            if not lga_route(question, plan, place, history):        # the keyword route keeps its own spec
+                log.info("lga route from the reading: %s", spec.get("lga"))
+                plan.analysis, plan.budget_query = spec, {}
+                t0 = time.perf_counter()
+                res = run_analysis(conn, spec)
+                t["answer"] = time.perf_counter() - t0
+                if res is not None and (a := analysis_answer(conn, plan, res, lang, t, None)) is not None:
+                    return a
+                log.info("lga route from the reading gave no answer; the usual paths follow")
+                plan.analysis = {}
         # an intention ('plan to raise', 'proposed', 'target') that a plan or policy in the library states: that
         # plan's pages answer first, before the budget tables and before any fetch (1 Nov 2026)
         if conn is not None and (wanted := intention_docs(conn, question, plan)):
@@ -3952,6 +3969,40 @@ SPAN = re.compile(r"(?i)\b(?:(?:past|last|previous)\s+(\d|two|three|four|five)\s
                   r"from\s+(20[1-3]\d)\s+(?:to|until|-)\s+(20[1-3]\d)|each\s+year|every\s+year|year\s+by\s+year|"
                   r"over\s+the\s+(?:past\s+)?years|(?:a\s+)?cikin\s+shekaru\s+(\d|biyu|uku|hudu|huɗu|biyar)|"
                   r"kowace\s+shekara|tun\s+(?:daga\s+)?(20[1-3]\d))\b")
+
+
+def reading_lga_route(u, question: str, plan: Plan, place: dict | None) -> dict | None:
+    """The LGA tool from the understanding step's place_budget reading, whatever the wording ('anything for
+    farmers there?', 'projects in Tambuwal'): an LGA the message names, else the LGA on file (pin or saved);
+    {'tool': 'need_place'} when there is neither (the location is asked for). None for other readings."""
+    from app.hazards.advisories import lgas_in
+    from app.sources.lga_names import name_of
+    if u is None or u.capability != "place_budget":
+        return None
+    named = lgas_in(f"{u.name} {question}") if u.level != "pin" else []
+    pcode = named[0] if named else (place or {}).get("lga_pcode", "")
+    lga = name_of(pcode) or ((place or {}).get("lga") if not named else "")
+    if not lga:
+        return {"tool": "need_place"}
+    latest = lagos_today().year
+    if u.time == "span" and (span := span_years(question, latest) or
+                             (sorted(set(u.years)) if len(u.years) > 1 else [])):
+        return {"tool": "lga_years", "lga": lga, "years": span, "question": question}
+    spec = {"tool": "lga_projects", "lga": lga, "ward": (place or {}).get("ward") or "" if not named else "",
+            "terms": list(plan.analysis.get("terms") or []) if plan.analysis.get("tool") == "lga_projects" else [],
+            "question": question}
+    if u.years:
+        spec["year"] = u.years[0]
+    if SPENT_Q.search(question) or u.measure.lower() in ("spent", "spending", "released"):
+        spec["focus"] = "spent"
+    return spec
+
+
+NEED_PLACE = {
+    "en": "Which area do you mean? Share your location, or tell me your LGA, and I'll show what the budget gives it.",
+    "ha": "Wane yanki kake nufi? Raba wurinka, ko faɗa mini ƙaramar hukumarka, in nuna maka abin da kasafin kuɗi "
+          "ya ware masa.",
+}
 
 
 def span_years(question: str, latest: int) -> list[int]:

@@ -126,6 +126,20 @@
   {"id": "c17", "place": "none", "lang": "ha", "turns": [], "message": "Kana jin Hausa?", "expect": {"capability": "conversation", "kind": "chitchat"}},
   {"id": "c18", "place": "none", "lang": "ha", "turns": [], "message": "Mutum ne kai ko na'ura?", "expect": {"capability": "conversation", "kind": "chitchat"}},
   {"id": "c19", "place": "none", "lang": "ha", "turns": [], "message": "Yaya kake aiki?", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c20", "place": "lga", "lang": "en", "turns": [], "message": "But uduth is closer to me", "expect": {"capability": "facility", "level": "facility"}}
+  {"id": "c20", "place": "lga", "lang": "en", "turns": [], "message": "But uduth is closer to me", "expect": {"capability": "facility", "level": "facility"}},
+  {"id": "m01", "place": "pin", "lang": "en", "turns": [], "message": "Where can my wife deliver a baby?", "expect": {"capability": "facility", "care": "maternal"}},
+  {"id": "m02", "place": "pin", "lang": "ha", "turns": [], "message": "Matata na naƙuda, ina zan kai ta?", "expect": {"capability": "facility", "care": "maternal"}},
+  {"id": "m03", "place": "pin", "lang": "en", "turns": [], "message": "Nearest place for antenatal care", "expect": {"capability": "facility", "care": "maternal"}},
+  {"id": "m04", "place": "pin", "lang": "ha", "turns": [], "message": "A ina matata za ta haihu?", "expect": {"capability": "facility", "care": "maternal"}},
+  {"id": "m05", "place": "pin", "lang": "en", "turns": [], "message": "Is there anywhere I can deliver a baby around here?", "expect": {"capability": "facility", "care": "maternal"}},
+  {"id": "m06", "place": "pin", "lang": "en", "turns": [], "message": "Where can I take my sick child?", "expect": {"capability": "facility", "care": "children"}},
+  {"id": "m07", "place": "pin", "lang": "ha", "turns": [], "message": "Ina asibitin gwamnati mafi kusa?", "expect": {"capability": "facility", "care": "general", "facility_level": "hospital", "ownership": "public"}},
+  {"id": "m08", "place": "pin", "lang": "en", "turns": [], "message": "Is there a private clinic near me?", "expect": {"capability": "facility", "facility_level": "primary", "ownership": "private"}},
+  {"id": "m09", "place": "pin", "lang": "en", "turns": [
+     {"user": "Where can my wife deliver a baby?", "kasafi": "Nearest facilities with emergency obstetric care: 1. Kalambaina PHC 1.1 km 2. Women and Children Welfare Clinic 7.0 km"}],
+   "message": "Only government ones", "expect": {"capability": "facility", "kind": "follow_up", "care": "maternal", "ownership": "public"}},
+  {"id": "m10", "place": "pin", "lang": "en", "turns": [
+     {"user": "What is the government budgeting for my area?", "kasafi": "The 2026 budget has 163 capital projects located in Wamakko, worth N79.98 billion, mostly health."}],
+   "message": "Anything for schools?", "expect": {"capability": "place_budget"}}
  ]
 }

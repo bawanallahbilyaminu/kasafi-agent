@@ -3,12 +3,15 @@
   "kind": "correction",
   "capability": "facility",
   "level": "facility",
-  "name": "UDUTH",
+  "name": "Usmanu Danfodiyo University Teaching Hospital",
   "time": "none",
   "years": [],
   "measure": "nearest",
-  "restatement": "Is UDUTH closer to my farm (the pin) than the hospitals listed as nearest?",
-  "seconds": 3.2254713000147603
+  "restatement": "Is Usmanu Danfodiyo University Teaching Hospital closer to my farm (the pin) than the hospitals previously listed?",
+  "care": "general",
+  "facility_level": "hospital",
+  "ownership": "any",
+  "seconds": 3.7909798999899067
  },
  "u02": {
   "kind": "follow_up",
@@ -19,7 +22,10 @@
   "years": [],
   "measure": "flooded",
   "restatement": "Has my ward ever flooded?",
-  "seconds": 2.945546499977354
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 4.555213599989656
  },
  "u03": {
   "kind": "follow_up",
@@ -30,20 +36,24 @@
   "years": [],
   "measure": "flooded",
   "restatement": "Has my farm (the pin) ever flooded?",
-  "seconds": 3.4364399000187404
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.7498746999772266
  },
  "u04": {
   "kind": "follow_up",
   "capability": "hazard",
   "level": "pin",
-  "name": "",
+  "name": "my farm (the pin)",
   "time": "forecast",
-  "years": [
-   2026
-  ],
+  "years": [],
   "measure": "flooded",
-  "restatement": "Will my farm (the pin) flood this rainy season?",
-  "seconds": 2.2579989000223577
+  "restatement": "Will my farm (the pin) flood this season?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 4.542312500008848
  },
  "u05": {
   "kind": "follow_up",
@@ -55,14 +65,17 @@
    2026
   ],
   "measure": "spent",
-  "restatement": "How much of the 2026 budget for my LGA has actually been spent?",
-  "seconds": 1.9158781999722123
+  "restatement": "How much of the 2026 budgeted amount for my LGA has actually been spent?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 3.7834224999533035
  },
  "u06": {
   "kind": "follow_up",
   "capability": "place_budget",
   "level": "lga",
-  "name": "",
+  "name": "my LGA",
   "time": "span",
   "years": [
    2023,
@@ -71,7 +84,10 @@
   ],
   "measure": "amount",
   "restatement": "What did the government budget for my LGA in the past three years (2023-2025)?",
-  "seconds": 3.791871799970977
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 3.4321781000471674
  },
  "u07": {
   "kind": "follow_up",
@@ -82,7 +98,10 @@
   "years": [],
   "measure": "route",
   "restatement": "How do I get from my farm (the pin) to Gidan Bubu Health Post?",
-  "seconds": 2.633031600038521
+  "care": "general",
+  "facility_level": "primary",
+  "ownership": "any",
+  "seconds": 2.394607399997767
  },
  "u08": {
   "kind": "follow_up",
@@ -91,31 +110,40 @@
   "name": "Kalambaina PHC",
   "time": "now",
   "years": [],
-  "measure": "staffing nurses adequacy",
+  "measure": "nurses staffing adequacy",
   "restatement": "Does Kalambaina PHC have enough nurses?",
-  "seconds": 2.834615900006611
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 3.3837502999813296
  },
  "u09": {
   "kind": "correction",
   "capability": "facility",
   "level": "facility",
-  "name": "UDUTH",
+  "name": "Usmanu Danfodiyo University Teaching Hospital",
   "time": "none",
   "years": [],
   "measure": "nearest",
-  "restatement": "The user says UDUTH is closer to my farm (the pin) than the facilities previously listed",
-  "seconds": 2.2930678999982774
+  "restatement": "Usmanu Danfodiyo University Teaching Hospital is closer to my farm (the pin) than the hospitals listed",
+  "care": "general",
+  "facility_level": "hospital",
+  "ownership": "any",
+  "seconds": 2.4752453999826685
  },
  "u10": {
   "kind": "follow_up",
   "capability": "place_history",
   "level": "pin",
-  "name": "",
+  "name": "my farm (the pin)",
   "time": "past",
   "years": [],
   "measure": "flooded",
   "restatement": "Has my farm (the pin) ever been flooded?",
-  "seconds": 2.911081900005229
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.767093600006774
  },
  "u11": {
   "kind": "follow_up",
@@ -127,8 +155,11 @@
    2026
   ],
   "measure": "flooded",
-  "restatement": "Will my farm (the pin) be flooded this year?",
-  "seconds": 3.5652662999927998
+  "restatement": "Will my farm (the pin) flood this year?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 4.732409399992321
  },
  "u12": {
   "kind": "follow_up",
@@ -141,7 +172,10 @@
   ],
   "measure": "spent",
   "restatement": "How much was spent from the 2026 budget allocation for my LGA?",
-  "seconds": 2.5611406000098214
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.113807399990037
  },
  "u13": {
   "kind": "follow_up",
@@ -152,9 +186,12 @@
   "years": [
    2026
   ],
-  "measure": "spent",
-  "restatement": "How much of Sokoto State's 2026 health budget was spent by June 2026?",
-  "seconds": 2.778461600013543
+  "measure": "spent by June",
+  "restatement": "How much of the Sokoto State 2026 health budget was spent by June?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.3440761999809183
  },
  "u14": {
   "kind": "correction",
@@ -166,19 +203,25 @@
    2026
   ],
   "measure": "amount budgeted",
-  "restatement": "What was budgeted for health in Sokoto State in 2026?",
-  "seconds": 1.388238999992609
+  "restatement": "How much was budgeted for health in Sokoto State in 2026 - the user says it is much smaller than stated",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 3.1331688999780454
  },
  "u15": {
   "kind": "follow_up",
   "capability": "statistics",
   "level": "document",
   "name": "DHS",
-  "time": "past",
+  "time": "none",
   "years": [],
-  "measure": "vaccination coverage",
+  "measure": "share of children fully vaccinated",
   "restatement": "What share of children are fully vaccinated in Sokoto State according to the DHS?",
-  "seconds": 2.5744594000279903
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.014006100012921
  },
  "u16": {
   "kind": "follow_up",
@@ -187,9 +230,12 @@
   "name": "",
   "time": "forecast",
   "years": [],
-  "measure": "dust / air quality",
-  "restatement": "Will it be dusty tomorrow at my farm (the pin)?",
-  "seconds": 2.2823892000014894
+  "measure": "dust",
+  "restatement": "What is the dust forecast for tomorrow at my farm (the pin)?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 4.946522000012919
  },
  "u17": {
   "kind": "new",
@@ -199,8 +245,11 @@
   "time": "now",
   "years": [],
   "measure": "nearest",
-  "restatement": "Which nearest hospital to my farm (the pin) can I go to if my child has trouble breathing?",
-  "seconds": 4.156133999989834
+  "restatement": "Which hospital nearest to my farm (the pin) can I go to if my child has trouble breathing?",
+  "care": "children",
+  "facility_level": "hospital",
+  "ownership": "any",
+  "seconds": 3.5574548000004143
  },
  "u18": {
   "kind": "follow_up",
@@ -211,9 +260,12 @@
   "years": [
    2026
   ],
-  "measure": "amount",
+  "measure": "budgeted amount",
   "restatement": "How much did Sokoto State budget for Specialist Hospital Sokoto in 2026?",
-  "seconds": 2.927951199992094
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.7329437999869697
  },
  "u19": {
   "kind": "follow_up",
@@ -224,7 +276,10 @@
   "years": [],
   "measure": "greenness",
   "restatement": "Is my farm (the pin) getting greener over the years?",
-  "seconds": 2.6555179999559186
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.70264719997067
  },
  "u20": {
   "kind": "follow_up",
@@ -235,7 +290,10 @@
   "years": [],
   "measure": "flooded",
   "restatement": "Has my LGA ever flooded?",
-  "seconds": 3.537043899996206
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 3.3013932000030763
  },
  "u21": {
   "kind": "follow_up",
@@ -244,9 +302,12 @@
   "name": "my LGA",
   "time": "none",
   "years": [],
-  "measure": "amount",
-  "restatement": "Is there any irrigation budget for my LGA?",
-  "seconds": 4.070952699985355
+  "measure": "irrigation budget",
+  "restatement": "Is there any budget for irrigation in my LGA?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 3.083807600021828
  },
  "u22": {
   "kind": "follow_up",
@@ -258,8 +319,11 @@
    2026
   ],
   "measure": "amount",
-  "restatement": "What is Sokoto State budgeting and planning in the 2026 budget to address out-of-school children?",
-  "seconds": 3.3136098999530077
+  "restatement": "What is Sokoto State doing about out-of-school children in the 2026 budget?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.7622607000521384
  },
  "u23": {
   "kind": "follow_up",
@@ -269,8 +333,11 @@
   "time": "none",
   "years": [],
   "measure": "overview of PHCs",
-  "restatement": "Send me the full brief on the state of PHCs in Sokoto State",
-  "seconds": 2.1707441000035033
+  "restatement": "Send me the full brief on PHCs in Sokoto State",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.871318399964366
  },
  "u24": {
   "kind": "chitchat",
@@ -279,9 +346,12 @@
   "name": "",
   "time": "none",
   "years": [],
-  "measure": "none",
+  "measure": "",
   "restatement": "The user says thank you.",
-  "seconds": 2.082092800003011
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.482563099998515
  },
  "u25": {
   "kind": "follow_up",
@@ -290,9 +360,12 @@
   "name": "Arkilla PHC",
   "time": "now",
   "years": [],
-  "measure": "open",
+  "measure": "open at night",
   "restatement": "Is Arkilla PHC open at night?",
-  "seconds": 1.9274745999719016
+  "care": "general",
+  "facility_level": "primary",
+  "ownership": "any",
+  "seconds": 3.2103146000299603
  },
  "u26": {
   "kind": "follow_up",
@@ -304,8 +377,11 @@
    2025
   ],
   "measure": "flooded",
-  "restatement": "Was there flooding in my LGA last year (2025)?",
-  "seconds": 2.6675408000010066
+  "restatement": "Was there flooding in my LGA in 2025?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 3.095137300028
  },
  "u27": {
   "kind": "follow_up",
@@ -316,7 +392,10 @@
   "years": [],
   "measure": "route",
   "restatement": "How do I get to Specialist Hospital Sokoto from my farm (the pin)?",
-  "seconds": 1.8481827999930829
+  "care": "general",
+  "facility_level": "hospital",
+  "ownership": "any",
+  "seconds": 2.3236194999772124
  },
  "u28": {
   "kind": "follow_up",
@@ -328,8 +407,11 @@
    2026
   ],
   "measure": "amount",
-  "restatement": "How much of the 2026 education budget is for my LGA?",
-  "seconds": 2.400992500013672
+  "restatement": "How much of the 2026 education budget is allocated to my LGA?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.0806458999868482
  },
  "u29": {
   "kind": "follow_up",
@@ -340,9 +422,12 @@
   "years": [
    2026
   ],
-  "measure": "amount",
-  "restatement": "Is there anything budgeted for farmers in my LGA in 2026?",
-  "seconds": 3.6046345999930054
+  "measure": "agriculture projects for farmers",
+  "restatement": "Is there anything for farmers in the 2026 budget for my LGA?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 3.5905506000272
  },
  "u30": {
   "kind": "correction",
@@ -354,19 +439,25 @@
    2020
   ],
   "measure": "flooded",
-  "restatement": "Did my farm (the pin) flood in 2020 as my neighbour claims?",
-  "seconds": 1.939831800002139
+  "restatement": "Was my farm (the pin) flooded in 2020 as my neighbour claims?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.278740900044795
  },
  "f01": {
   "kind": "new",
   "capability": "statistics",
   "level": "state",
   "name": "Sokoto State",
-  "time": "none",
+  "time": "now",
   "years": [],
   "measure": "staff needed",
-  "restatement": "How many medical officers do PHCs need in Sokoto State?",
-  "seconds": 2.105978999985382
+  "restatement": "How many medical officers do primary health centres need in Sokoto State?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 3.009177199972328
  },
  "f02": {
   "kind": "new",
@@ -377,7 +468,10 @@
   "years": [],
   "measure": "overview of PHCs",
   "restatement": "What is the state of primary health centres in Sokoto State?",
-  "seconds": 1.4317164000240155
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.291017100040335
  },
  "f03": {
   "kind": "new",
@@ -388,7 +482,10 @@
   "years": [],
   "measure": "overview",
   "restatement": "Tell me about health in Sokoto State.",
-  "seconds": 1.8374217999516986
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.5800862000323832
  },
  "f04": {
   "kind": "new",
@@ -399,7 +496,10 @@
   "years": [],
   "measure": "overview",
   "restatement": "What is happening in my ward?",
-  "seconds": 2.7301523000351153
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.0745293000363745
  },
  "f05": {
   "kind": "new",
@@ -410,7 +510,10 @@
   "years": [],
   "measure": "count",
   "restatement": "How many PHCs are in Tureta LGA?",
-  "seconds": 1.9287465999950655
+  "care": "general",
+  "facility_level": "primary",
+  "ownership": "any",
+  "seconds": 1.3615283999824896
  },
  "f06": {
   "kind": "new",
@@ -423,20 +526,26 @@
   ],
   "measure": "spent",
   "restatement": "How much did Sokoto State spend on education in 2025?",
-  "seconds": 1.6341451999614947
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.149211599957198
  },
  "f07": {
   "kind": "new",
   "capability": "hazard",
   "level": "pin",
-  "name": "",
+  "name": "my farm (the pin)",
   "time": "forecast",
   "years": [
    2026
   ],
   "measure": "rain",
   "restatement": "Will it rain this week at my farm (the pin) and is it safe to plant there?",
-  "seconds": 3.029375499987509
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.0840459000319242
  },
  "f08": {
   "kind": "new",
@@ -447,20 +556,26 @@
   "years": [
    2026
   ],
-  "measure": "amount",
-  "restatement": "How much was allocated to the Ministry of Health of Sokoto State in 2026?",
-  "seconds": 2.234880300005898
+  "measure": "amount allocated",
+  "restatement": "How much was allocated to the Ministry of Health in Sokoto State in 2026?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.4894925999687985
  },
  "f09": {
   "kind": "new",
   "capability": "facility",
   "level": "pin",
-  "name": "my farm (the pin)",
+  "name": "",
   "time": "none",
   "years": [],
   "measure": "nearest",
   "restatement": "Where is the nearest hospital to my farm (the pin)?",
-  "seconds": 3.6580518999835476
+  "care": "general",
+  "facility_level": "hospital",
+  "ownership": "any",
+  "seconds": 2.8948797999764793
  },
  "f10": {
   "kind": "new",
@@ -471,18 +586,24 @@
   "years": [],
   "measure": "flooded",
   "restatement": "Has my farm (the pin) ever been flooded?",
-  "seconds": 2.930532999977004
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.9856364000006579
  },
  "f11": {
   "kind": "new",
   "capability": "statistics",
   "level": "document",
-  "name": "the MICS",
+  "name": "MICS",
   "time": "none",
   "years": [],
   "measure": "birth registration coverage",
-  "restatement": "What does the MICS say about birth registration in Sokoto State?",
-  "seconds": 2.7269887999864295
+  "restatement": "What does the MICS say about birth registration coverage in Sokoto State?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.2092590000247583
  },
  "f12": {
   "kind": "new",
@@ -491,9 +612,12 @@
   "name": "Goronyo",
   "time": "forecast",
   "years": [],
-  "measure": "flood alerts",
-  "restatement": "Sign me up for alerts when there will be floods in Goronyo",
-  "seconds": 4.214660600002389
+  "measure": "flooded",
+  "restatement": "Sign me up for flood alerts for Goronyo LGA",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.063976899953559
  },
  "f13": {
   "kind": "new",
@@ -503,8 +627,11 @@
   "time": "none",
   "years": [],
   "measure": "projects",
-  "restatement": "What projects is the Sokoto State government doing in Tambuwal LGA?",
-  "seconds": 3.7991982999956235
+  "restatement": "What projects is the government doing in Tambuwal LGA?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 3.4181565000326373
  },
  "f14": {
   "kind": "chitchat",
@@ -514,19 +641,25 @@
   "time": "none",
   "years": [],
   "measure": "greeting",
-  "restatement": "The user greets Kasafi.",
-  "seconds": 1.251875999965705
+  "restatement": "The user says hello.",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.7833286999957636
  },
  "f15": {
   "kind": "new",
   "capability": "deep",
-  "level": "state",
-  "name": "Sokoto State",
-  "time": "now",
+  "level": "sector",
+  "name": "education in Sokoto State",
+  "time": "none",
   "years": [],
-  "measure": "overview of education",
+  "measure": "overview",
   "restatement": "What is the state of education in Sokoto State?",
-  "seconds": 2.978019099973608
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.3298009000136517
  },
  "c01": {
   "kind": "chitchat",
@@ -535,9 +668,12 @@
   "name": "",
   "time": "none",
   "years": [],
-  "measure": "identity",
-  "restatement": "Who are you (what is Kasafi)?",
-  "seconds": 1.817517199961003
+  "measure": "",
+  "restatement": "Who are you?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.468621300009545
  },
  "c02": {
   "kind": "chitchat",
@@ -546,9 +682,12 @@
   "name": "",
   "time": "none",
   "years": [],
-  "measure": "identity",
+  "measure": "none",
   "restatement": "Who are you?",
-  "seconds": 1.2394167999736965
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.149069699982647
  },
  "c03": {
   "kind": "chitchat",
@@ -559,7 +698,10 @@
   "years": [],
   "measure": "capabilities",
   "restatement": "What can you do?",
-  "seconds": 1.9416361000039615
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.053384599974379
  },
  "c04": {
   "kind": "chitchat",
@@ -568,9 +710,12 @@
   "name": "",
   "time": "none",
   "years": [],
-  "measure": "capabilities",
-  "restatement": "What can you (Kasafi) do?",
-  "seconds": 1.447709100029897
+  "measure": "none",
+  "restatement": "What can you do?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.5105800000019372
  },
  "c05": {
   "kind": "chitchat",
@@ -579,20 +724,26 @@
   "name": "",
   "time": "none",
   "years": [],
-  "measure": "explanation",
-  "restatement": "How does Kasafi work?",
-  "seconds": 1.420112900028471
+  "measure": "",
+  "restatement": "How does Kasafi work and what can it do?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.6907435999601148
  },
  "c06": {
   "kind": "chitchat",
   "capability": "conversation",
   "level": "none",
-  "name": "",
+  "name": "none",
   "time": "none",
   "years": [],
-  "measure": "origin",
-  "restatement": "Who made you?",
-  "seconds": 2.1197672999696806
+  "measure": "none",
+  "restatement": "Who made you (Kasafi)?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.8844405999989249
  },
  "c07": {
   "kind": "chitchat",
@@ -601,20 +752,26 @@
   "name": "",
   "time": "none",
   "years": [],
-  "measure": "identity",
+  "measure": "",
   "restatement": "Is Kasafi a bot?",
-  "seconds": 1.5801614999654703
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.6334211999783292
  },
  "c08": {
   "kind": "chitchat",
   "capability": "conversation",
   "level": "none",
-  "name": "",
+  "name": "none",
   "time": "none",
   "years": [],
-  "measure": "language ability",
+  "measure": "language",
   "restatement": "Can you speak Hausa?",
-  "seconds": 1.3607972000027075
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.761960000032559
  },
  "c09": {
   "kind": "chitchat",
@@ -623,9 +780,12 @@
   "name": "",
   "time": "none",
   "years": [],
-  "measure": "",
+  "measure": "none",
   "restatement": "The user says thank you.",
-  "seconds": 1.1573599000112154
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.0309357999940403
  },
  "c10": {
   "kind": "chitchat",
@@ -636,7 +796,10 @@
   "years": [],
   "measure": "greeting",
   "restatement": "The user greets with Assalamu alaikum.",
-  "seconds": 1.9111991000245325
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.3722805000143126
  },
  "c11": {
   "kind": "chitchat",
@@ -645,9 +808,12 @@
   "name": "",
   "time": "none",
   "years": [],
-  "measure": "greeting",
-  "restatement": "The user says hello to Kasafi.",
-  "seconds": 1.3884969999780878
+  "measure": "none",
+  "restatement": "The user is saying hello to Kasafi.",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.5381660999846645
  },
  "c12": {
   "kind": "chitchat",
@@ -656,9 +822,12 @@
   "name": "",
   "time": "none",
   "years": [],
-  "measure": "goodbye",
-  "restatement": "goodbye, see you later",
-  "seconds": 2.289800100028515
+  "measure": "",
+  "restatement": "Goodbye, see you later",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.538868400035426
  },
  "c13": {
   "kind": "chitchat",
@@ -669,18 +838,24 @@
   "years": [],
   "measure": "none",
   "restatement": "The user says thank you and goodbye.",
-  "seconds": 2.149838999961503
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.552545199985616
  },
  "c14": {
   "kind": "chitchat",
   "capability": "conversation",
   "level": "none",
-  "name": "none",
+  "name": "",
   "time": "none",
   "years": [],
-  "measure": "help",
+  "measure": "",
   "restatement": "The user asks for help about what Kasafi can do.",
-  "seconds": 1.9599012000253424
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.5068311999784783
  },
  "c15": {
   "kind": "chitchat",
@@ -690,8 +865,11 @@
   "time": "none",
   "years": [],
   "measure": "greeting",
-  "restatement": "The user greets Kasafi.",
-  "seconds": 1.290263100003358
+  "restatement": "The user greets Kasafi with good morning.",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.1323645999655128
  },
  "c16": {
   "kind": "chitchat",
@@ -700,9 +878,12 @@
   "name": "",
   "time": "none",
   "years": [],
-  "measure": "",
-  "restatement": "Who made you?",
-  "seconds": 3.114457299991045
+  "measure": "none",
+  "restatement": "Who made you / who created you?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.9204875000286847
  },
  "c17": {
   "kind": "chitchat",
@@ -711,9 +892,12 @@
   "name": "",
   "time": "none",
   "years": [],
-  "measure": "none",
+  "measure": "",
   "restatement": "Do you understand Hausa?",
-  "seconds": 1.9066669000312686
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.1633823000011034
  },
  "c18": {
   "kind": "chitchat",
@@ -724,7 +908,10 @@
   "years": [],
   "measure": "identity",
   "restatement": "Are you a human or a machine?",
-  "seconds": 1.2683703999500722
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 1.9560790000250563
  },
  "c19": {
   "kind": "chitchat",
@@ -733,9 +920,12 @@
   "name": "",
   "time": "none",
   "years": [],
-  "measure": "how Kasafi works",
+  "measure": "how it works",
   "restatement": "How do you work?",
-  "seconds": 2.1998809999786317
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.3271705000079237
  },
  "c20": {
   "kind": "correction",
@@ -745,7 +935,152 @@
   "time": "none",
   "years": [],
   "measure": "nearest",
-  "restatement": "Is UDUTH closer to me in my LGA than the previous answer?",
-  "seconds": 2.0014503999846056
+  "restatement": "Usmanu Danfodiyo University Teaching Hospital (UDUTH) is closer to me",
+  "care": "general",
+  "facility_level": "hospital",
+  "ownership": "any",
+  "seconds": 3.1860989999840967
+ },
+ "m01": {
+  "kind": "new",
+  "capability": "facility",
+  "level": "pin",
+  "name": "",
+  "time": "none",
+  "years": [],
+  "measure": "nearest",
+  "restatement": "Where can my wife deliver a baby near my farm (the pin)?",
+  "care": "maternal",
+  "facility_level": "any",
+  "ownership": "any",
+  "seconds": 2.2508418999495916
+ },
+ "m02": {
+  "kind": "new",
+  "capability": "facility",
+  "level": "pin",
+  "name": "",
+  "time": "now",
+  "years": [],
+  "measure": "nearest",
+  "restatement": "Where near my farm (the pin) should I take my wife who is in labour to deliver?",
+  "care": "maternal",
+  "facility_level": "any",
+  "ownership": "any",
+  "seconds": 3.0709098000079393
+ },
+ "m03": {
+  "kind": "new",
+  "capability": "facility",
+  "level": "facility",
+  "name": "",
+  "time": "none",
+  "years": [],
+  "measure": "nearest",
+  "restatement": "Where is the nearest place for antenatal care to my farm (the pin)?",
+  "care": "maternal",
+  "facility_level": "any",
+  "ownership": "any",
+  "seconds": 2.777414400014095
+ },
+ "m04": {
+  "kind": "new",
+  "capability": "facility",
+  "level": "facility",
+  "name": "",
+  "time": "none",
+  "years": [],
+  "measure": "nearest place to deliver",
+  "restatement": "Where near my farm (the pin) can my wife deliver a baby?",
+  "care": "maternal",
+  "facility_level": "any",
+  "ownership": "any",
+  "seconds": 2.4289727000286803
+ },
+ "m05": {
+  "kind": "new",
+  "capability": "facility",
+  "level": "pin",
+  "name": "",
+  "time": "none",
+  "years": [],
+  "measure": "nearest",
+  "restatement": "Where is the nearest health facility to my farm (the pin) where I can deliver a baby?",
+  "care": "maternal",
+  "facility_level": "any",
+  "ownership": "any",
+  "seconds": 3.059055100020487
+ },
+ "m06": {
+  "kind": "new",
+  "capability": "facility",
+  "level": "facility",
+  "name": "",
+  "time": "none",
+  "years": [],
+  "measure": "nearest",
+  "restatement": "Where can I take my sick child near my farm (the pin)?",
+  "care": "children",
+  "facility_level": "any",
+  "ownership": "any",
+  "seconds": 2.870079100015573
+ },
+ "m07": {
+  "kind": "new",
+  "capability": "facility",
+  "level": "facility",
+  "name": "",
+  "time": "none",
+  "years": [],
+  "measure": "nearest",
+  "restatement": "Where is the nearest government hospital to my farm (the pin)?",
+  "care": "general",
+  "facility_level": "hospital",
+  "ownership": "public",
+  "seconds": 3.7091111000045203
+ },
+ "m08": {
+  "kind": "new",
+  "capability": "facility",
+  "level": "pin",
+  "name": "",
+  "time": "none",
+  "years": [],
+  "measure": "nearest",
+  "restatement": "Is there a private clinic near my farm (the pin)?",
+  "care": "general",
+  "facility_level": "primary",
+  "ownership": "private",
+  "seconds": 2.52115159999812
+ },
+ "m09": {
+  "kind": "follow_up",
+  "capability": "facility",
+  "level": "pin",
+  "name": "",
+  "time": "none",
+  "years": [],
+  "measure": "nearest",
+  "restatement": "Where can my wife deliver a baby near my farm (the pin), only government facilities?",
+  "care": "maternal",
+  "facility_level": "any",
+  "ownership": "public",
+  "seconds": 4.181076099979691
+ },
+ "m10": {
+  "kind": "follow_up",
+  "capability": "place_budget",
+  "level": "lga",
+  "name": "my LGA",
+  "time": "year",
+  "years": [
+   2026
+  ],
+  "measure": "amount",
+  "restatement": "What does the 2026 budget give for schools in my LGA?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "seconds": 2.785430100047961
  }
 }

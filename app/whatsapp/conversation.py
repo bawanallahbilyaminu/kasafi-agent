@@ -19,7 +19,8 @@ import logging
 import re
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, replace
 from typing import Any
 
 import httpx
@@ -27,7 +28,7 @@ import httpx
 from app.config import Settings
 from app.data_rights import DELETED_REPLY, delete_user_data, is_delete_command
 from app.geo.facilities import WORDS as FAC_WORDS
-from app.geo.facilities import (FacilitySearch, add_routes, emergency_lookup, filters_from, follow_up,
+from app.geo.facilities import (Filters, FacilitySearch, add_routes, emergency_lookup, filters_from, follow_up,
                                 is_facility_query, location_payload, profile_from, search_replies)
 from app.geo.facilities import FACILITY as FACILITY_WORD
 from app.geo.facility_info import NAMED, ROUTE_TO, as_facility, card, counted, is_count, lookup
@@ -231,6 +232,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     # 5. Consented: limits (skipped for our own test numbers), then work
     lang = user.lang or "ha"
     resume = ""                                  # a place-history question that waited for this pin or shape
+    resume_reading = None                        # … or a place-budget reading that waited for a location
     before: list[Out] = []                       # the replies that go out before the resumed question's answer
     # the farm's size or its corner pins, asked for when no outline could be drawn (app/place/shape.py); or
     # "these are the corners" with recent pins. Shapes and pins stay in memory only.
@@ -250,7 +252,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             location_memory.add_pin(key, *pin)                                            # a corner candidate
         if pin and (spot := location_memory.recall(key)) and (q := location_memory.waiting_question(key)):
             before += await _after_location(q, key, lang, settings, facility_fn, spot)    # the question that asked
-            if (place_route(q) or area_route(q, "", {"lga_pcode": spot.lga_pcode, "wardcode": spot.wardcode})) \
+            if q.startswith(PLACE_BUDGET_WAIT):                    # 'what does the budget give my area?'
+                resume, resume_reading = q[len(PLACE_BUDGET_WAIT):], place_budget_reading(q)
+            elif not q.startswith((FACILITY_WAIT, CLAIM_WAIT)) and \
+                    (place_route(q) or area_route(q, "", {"lga_pcode": spot.lga_pcode, "wardcode": spot.wardcode})) \
                     and not is_facility_query(q):                 # the farm's record, or 'my ward / my LGA'
                 resume = q
         if not resume:
@@ -258,13 +263,17 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     # the reply to "share your location, or tell me your LGA or town": a typed place, from our own gazetteer
     if text and (waiting := location_memory.waiting_question(key)) is not None:
         if (typed := await place_fn(settings, text)) is not None:
-            return _located(key, lang, store, typed) + await _after_location(waiting, key, lang, settings,
-                                                                             facility_fn, typed)
+            located = _located(key, lang, store, typed) + await _after_location(waiting, key, lang, settings,
+                                                                                facility_fn, typed)
+            if not waiting.startswith(PLACE_BUDGET_WAIT):
+                return located
+            before, resume, resume_reading = located, waiting[len(PLACE_BUDGET_WAIT):], place_budget_reading(waiting)
     # what the message means in the conversation (app/agent/understand.py): one small model call before any route,
     # after the emergency fast path; keyword shortcuts below are hints it overrides. Not for commands, read-backs
     # and pending choices, which have their own fixed replies.
     u = None
-    if kind == "text" and text and settings.kasafi_understanding and _needs_understanding(text, key, store, settings):
+    if kind == "text" and text and not resume and settings.kasafi_understanding and \
+            _needs_understanding(text, key, store, settings):
         fallbacks: list[str] = []
         started_u = time.perf_counter()
         u = await understand_fn(strip_location(text), store.recent_turns(key), _place_for(key, store), settings,
@@ -300,11 +309,24 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     # "nearest hospital?" and its follow-ups ("next", "route?", "only government hospitals"): PostGIS and ORS, no model
     if text and settings.has_database and settings.kasafi_shortcut_facilities and \
             (u is None or (u.capability == "facility" and u.kind != "correction")) and \
-            ((outs := await _facilities(text, key, lang, store, settings, place_fn, facility_fn)) is not None or
+            ((outs := await _facilities(text, key, lang, store, settings, place_fn, facility_fn, u)) is not None or
              (u is not None and u.restatement and
-              (outs := await _facilities(u.restatement, key, lang, store, settings, place_fn, facility_fn)) is not None)):
+              (outs := await _facilities(u.restatement, key, lang, store, settings, place_fn, facility_fn,
+                                         u)) is not None)):
         _remember_turn(store, key, lang, text, outs)
         return outs
+    # a facility reading the keyword shortcut didn't take ('Is there anywhere I can deliver a baby?', 'what about
+    # UDTH?'): the registry and the nearest search, the location asked for when there is none; never the documents.
+    # Staff, equipment, services and money at facilities, and a report named, stay with the documents (the registry
+    # holds none of them)
+    if text and settings.has_database and settings.kasafi_shortcut_facilities and u is not None and \
+            u.capability == "facility" and u.kind != "correction" and not document_question(text) and \
+            not (other_subject(f"{text} {u.restatement}") and not is_facility_query(f"{text} {u.restatement}")):
+        t_route = time.perf_counter()
+        if (outs := await _facility_reading(text, u, key, lang, settings, facility_fn)) is not None:
+            _remember_turn(store, key, lang, text, outs)
+            await _trace_route(settings, text, lang, "facility_reading", u, outs, time.perf_counter() - t_route)
+            return outs
     # "show me a map" / "nuna min taswira" on its own: the map for what was just asked, no model
     if text and settings.has_database and MAP_ONLY.match(text):
         return await _map_only(key, lang, store, settings)
@@ -415,7 +437,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             store.set_pending_clarify(key, options)
             return [Out(text_out, [(f"clar_{i}", o["title"][:20]) for i, o in enumerate(options[:3])])]   # split when sent
         if getattr(result, "needs_pin", False):             # a place-history question: the pin first, then the answer
-            location_memory.wait_for_location(key, question)
+            # a place-budget reading waits with its restatement, and resumes with the same reading
+            location_memory.wait_for_location(key, PLACE_BUDGET_WAIT + understanding.restatement
+                                              if understanding is not None and
+                                              understanding.capability == "place_budget" else question)
             return [Out(text_out, lang=lang, location_request=True)]
         if getattr(result, "needs_size", False):            # no outline: the farm's size or corner pins, then the answer
             location_memory.wait_for_location(key, SIZE_WAIT + question)
@@ -451,7 +476,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             for o in before:
                 await notify(o)
             before = []
-        return before + await respond(resume, "", Out(t("echo", lang, text=resume[:500])))
+        return before + await respond(resume, "", Out(t("echo", lang, text=resume[:500])), understanding=resume_reading)
 
     async def resolution_reply(res: Resolution, pending_q: str, reply: str = "") -> list[Out]:
         if res.kind == "ambiguous":            # replace or add? Ask once; the pending question stays
@@ -817,9 +842,10 @@ async def _map_only(key: str, lang: str, store: UserStore, settings: Settings) -
 
 
 async def _facilities(text: str, key: str, lang: str, store: UserStore, settings: Settings, place_fn: PlaceFn,
-                      facility_fn: FacilityFn) -> list[Out] | None:
+                      facility_fn: FacilityFn, reading=None) -> list[Out] | None:
     """A facility question or a follow-up to one; None when the message is neither. Without a point: a place the
-    question names ("nearest clinic in Gwadabawa"), else the location request, the question kept for the pin."""
+    question names ("nearest clinic in Gwadabawa"), else the location request, the question kept for the pin.
+    `reading`: the understanding step's reading, whose care, level and ownership choose the facilities."""
     spot, search = location_memory.recall(key), location_memory.last_search(key)
     if search is not None and (step := follow_up(text)):
         # a facility the message names wins over the shortcut: "how far is Arkilla PHC" is the route to Arkilla,
@@ -832,7 +858,7 @@ async def _facilities(text: str, key: str, lang: str, store: UserStore, settings
         if step == "next":
             search.skip += len(search.shown) or 3
         elif step == "filter":
-            search.filters, search.skip = filters_from(text, search.filters), 0
+            search.filters, search.skip = reading_filters(reading, text, search.filters), 0
         search.profile = profile_from(text, search.profile)
         log.info("facility follow-up: %s", step)
         return await _facility_replies(spot, search, lang, settings, facility_fn, "route" if step == "route" else "list",
@@ -854,10 +880,10 @@ async def _facilities(text: str, key: str, lang: str, store: UserStore, settings
         location_memory.remember(key, typed)
         store.set_last_lga(key, typed.lga_pcode)
         spot = typed
-    if spot is None:
-        location_memory.wait_for_location(key, text)
+    if spot is None:                     # the search waits for the pin with the filters chosen now
+        _wait_for_search(key, text, reading_filters(reading, text))
         return [Out(FAC_WORDS.get(lang, FAC_WORDS["en"])["need_location"], lang=lang, location_request=True)]
-    return await _facility_search(text, key, lang, settings, facility_fn, spot)
+    return await _facility_search(text, key, lang, settings, facility_fn, spot, reading)
 
 
 async def _named_facility(text: str, key: str, lang: str, settings: Settings, facility_fn: FacilityFn,
@@ -923,6 +949,45 @@ CLOSER = re.compile(r"(?i)\b(?:closer|nearer|ya fi kusa|ta fi kusa|fi kusa da)\b
 REQUEST_WORDS = re.compile(r"(?i)\b(?:what|how|which|when|where|who|why|show|list|give|tell|find|send|is|are|does|"
                            r"nawa|mene|menene|wane|wace|wanne|ina|yaya|yaushe|nuna|ba ni|fa[ɗd]a|budget|kasafi\w*)\b")
 CLAIM_WAIT = "facility-claim:"     # a facility claim waiting for the user's location: the facility's name follows
+PLACE_BUDGET_WAIT = "place-budget:"  # a place-budget reading waiting for a location: its restatement follows
+FACILITY_WAIT = "facility-search:"  # a facility reading waiting for a location: the message follows
+
+
+def reading_filters(u, text: str, base: Filters = Filters()) -> Filters:
+    """The facilities a search is for, from the understanding step's reading (care, level, ownership), on top of
+    `base` (a follow-up keeps its list's filters unless the reading changes them): 'where can my wife deliver a
+    baby' is maternal care whatever the words. The keyword filters (filters_from) only when there is no reading."""
+    if u is None or u.capability != "facility" or not u.care:
+        return filters_from(text, base)
+    f = base
+    if u.ownership in ("public", "private"):
+        f = replace(f, ownership=u.ownership.title())
+    if u.facility_level == "hospital":
+        f = replace(f, levels=("Secondary", "Tertiary"))
+    elif u.facility_level == "primary":
+        f = replace(f, levels=("Primary",))
+    if u.care == "maternal":
+        f = replace(f, emonc=f.emonc or "bemonc")
+    return f
+
+
+def _wait_for_search(key: str, words: str, filters: Filters) -> None:
+    """A facility search waiting for the location, with the filters the reading chose (the pin resumes it)."""
+    location_memory.wait_for_location(key, FACILITY_WAIT + json.dumps(
+        {"q": words[:600], "levels": list(filters.levels), "own": filters.ownership, "emonc": filters.emonc}))
+
+
+def _waiting_search(question: str) -> FacilitySearch:
+    d = json.loads(question[len(FACILITY_WAIT):])
+    return FacilitySearch(Filters(levels=tuple(d.get("levels") or ()), ownership=d.get("own") or "",
+                                  emonc=d.get("emonc") or ""), profile=profile_from(d.get("q") or ""))
+
+
+def place_budget_reading(waiting: str):
+    """The reading a place-budget question resumes with once the location has come."""
+    from app.agent.understand import Understanding
+    return Understanding(kind="new", capability="place_budget", level="lga",
+                         restatement=waiting.removeprefix(PLACE_BUDGET_WAIT))
 
 
 def looks_like_request(text: str) -> bool:
@@ -1130,6 +1195,37 @@ async def _facility_claim(f, pick, spot: Spot, lga: str, key: str, lang: str, se
     return [Out("\n".join(lines), lang=lang)]
 
 
+async def _facility_reading(text: str, u, key: str, lang: str, settings: Settings, facility_fn: FacilityFn,
+                            spot: Spot | None = None) -> list[Out] | None:
+    """A facility reading with no name, count or 'nearest' words the shortcut knows: the facility the reading names
+    (its registry card), else a nearest search of the kind the words ask for (maternity, hospitals, government…)
+    from the point; with no point, the location is asked for and the search runs when it comes."""
+    words = f"{text} {u.restatement}"
+    if u.name:
+        name = FACILITY_ALIASES.get(u.name.strip().lower(), u.name)
+        try:
+            hits = await asyncio.to_thread(lookup, settings, name)
+        except Exception as e:      # noqa: BLE001 - PostGIS down: the message goes on as usual
+            log.warning("facility lookup failed: %s", type(e).__name__)
+            return None
+        if hits and hits[0].score >= NAMED:
+            f, others = hits[0], [h for h in hits[1:] if h.score >= NAMED - 0.05][:3]
+            spot = spot or location_memory.recall(key)
+            location_memory.remember_search(key, FacilitySearch(
+                shown=[as_facility(f, spot.lat if spot else None, spot.lon if spot else None)]))
+            log.info("facility from the reading: %s LGA", f.lga)
+            return [Out(card(f, lang, others), lang=lang)]
+    spot = spot or location_memory.recall(key)
+    filters = reading_filters(u, words)                # care, level and ownership from the reading
+    if spot is None:
+        _wait_for_search(key, words, filters)
+        return [Out(FAC_WORDS.get(lang, FAC_WORDS["en"])["need_location"], lang=lang, location_request=True)]
+    search = FacilitySearch(filters, profile=profile_from(words))
+    location_memory.remember_search(key, search)
+    log.info("facility search from the reading: %s LGA, care %s", spot.lga, u.care or "-")
+    return await _facility_replies(spot, search, lang, settings, facility_fn, "list", key)
+
+
 async def _after_location(question: str, key: str, lang: str, settings: Settings, facility_fn: FacilityFn,
                           spot: Spot) -> list[Out]:
     """The question that asked for a location, answered now that there is one: a nearest-facility search, a route
@@ -1138,6 +1234,10 @@ async def _after_location(question: str, key: str, lang: str, settings: Settings
         name = question[len(CLAIM_WAIT):]
         return await _facility_correction(claim_reading(name, name), key, lang, settings, facility_fn,
                                           spot=spot) or []
+    if question.startswith(FACILITY_WAIT):     # a facility search that waited for the location, its filters kept
+        search = _waiting_search(question)
+        location_memory.remember_search(key, search)
+        return await _facility_replies(spot, search, lang, settings, facility_fn, "list", key)
     if is_facility_query(question):
         return await _facility_search(question, key, lang, settings, facility_fn, spot)
     if (named := await _named_facility(question, key, lang, settings, facility_fn, spot)):
@@ -1149,11 +1249,12 @@ async def _after_location(question: str, key: str, lang: str, settings: Settings
 
 
 async def _facility_search(question: str, key: str, lang: str, settings: Settings, facility_fn: FacilityFn,
-                           spot: Spot) -> list[Out]:
-    """A new search for the question (its filters and travel mode) from the point; [] when it isn't one."""
+                           spot: Spot, reading=None) -> list[Out]:
+    """A new search for the question (the reading's filters, else the words'; its travel mode) from the point; []
+    when it isn't one."""
     if not is_facility_query(question):
         return []
-    search = FacilitySearch(filters_from(question), profile=profile_from(question))
+    search = FacilitySearch(reading_filters(reading, question), profile=profile_from(question))
     location_memory.remember_search(key, search)
     return await _facility_replies(spot, search, lang, settings, facility_fn, "list", key)
 
