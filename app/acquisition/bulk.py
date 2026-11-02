@@ -100,8 +100,9 @@ def edition_of(title: str, url: str, cls: str) -> tuple[str | None, str | None, 
     q = re.search(r"(?i)\b(?:Q|quarter\s*)([1-4])\b|\b([1-4])(?:st|nd|rd|th)\s+quarter", text)
     if cls == "bir" and year and q:
         return "sokoto_bir", f"{year}-Q{q.group(1) or q.group(2)}", year
-    if cls == "budget" and year and re.search(r"(?i)approved|appropriation", text) and \
-            not re.search(r"(?i)amend|supplementary|revised|proposal|citizen", text):
+    # the approved budget book only: an appropriation law is its own document (the library keeps both)
+    if cls == "budget" and year and re.search(r"(?i)approved", text) and \
+            not re.search(r"(?i)amend|supplementary|revised|proposal|citizen|appropriation|\blaw\b", text):
         return "sokoto_budget", str(year), year
     return None, None, year
 

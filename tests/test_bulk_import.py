@@ -31,7 +31,10 @@ def test_editions_from_the_title() -> None:
     assert bulk.edition_of("Sokoto State 2026 Q3 BIR WORD REPORT", U + "a.pdf", "bir")[:2] == ("sokoto_bir", "2026-Q3")
     assert bulk.edition_of("budget-performance-report-for-2nd-quarter-2023", U + "a.pdf", "bir")[:2] == \
         ("sokoto_bir", "2023-Q2")
-    assert bulk.edition_of("Appropriation Law, 2025", U + "a.pdf", "budget")[:2] == ("sokoto_budget", "2025")
+    assert bulk.edition_of("SOKOTO-STATE-2024-APPROVED-BUDGET", U + "a.pdf", "budget")[:2] == ("sokoto_budget", "2024")
+    # the appropriation law, a proposal or an amendment is its own document, never the budget book's edition
+    assert bulk.edition_of("Appropriation Law, 2025", U + "a.pdf", "budget")[:2] == (None, None)
+    assert bulk.edition_of("SOKOTO STATE GOVERNMENT 2025 BUDGET PROPOSAL", U + "a.pdf", "budget")[:2] == (None, None)
     assert bulk.edition_of("2026-First-Amended-Budget", U + "a.pdf", "budget")[:2] == (None, None)
 
 

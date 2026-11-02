@@ -140,14 +140,16 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
                           client: ChatClient, http: httpx.AsyncClient, robots: Robots | None = None,
                           series: str | None = None, edition: str | None = None,
                           download_timeout: httpx.Timeout | None = None, allowed=host_allowed,
-                          scheduled: bool = False, acquisition: str | None = None, screen=None) -> Acquired:
+                          scheduled: bool = False, acquisition: str | None = None, screen=None,
+                          ocr_head: bool = False) -> Acquired:
     """`series`/`edition`: the edition we were looking for (find_latest); the document must match it.
     `allowed`: the domain check for every hop (an open-web result: review.open_web_trusted).
     `scheduled`: fetched by a scheduled crawler (the NCDC reports): kept as acquisition 'scheduled', so it doesn't
     use up the daily fetch limit that users' questions draw on. `acquisition`: another label ('imported': the bulk
     import of a publisher's site, app/acquisition/bulk.py).
     `screen(pages) -> skip reason or ''`: checked after parsing, before the confirm call (the bulk import's
-    near-duplicate check). Pages listing people with personal data are always withheld (app/acquisition/personal.py)."""
+    near-duplicate check). `ocr_head`: a scanned document's first pages are OCR'd before the confirm call (the
+    bulk import; its other pages go to the background OCR as usual). Pages listing people with personal data are always withheld (app/acquisition/personal.py)."""
     t: dict[str, float] = {}
     if known := _known(conn, url=url):
         return Acquired("known", known, url=url)
@@ -190,6 +192,8 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
         t0 = time.perf_counter()
         pages, image_pages = await extract_pages_sandboxed(pdf)
         t["parse"] = time.perf_counter() - t0
+        if ocr_head and sum(len((p or "").strip()) for p in pages[:3]) < 200:
+            pages = await _ocr_head(pdf, pages, settings)      # a scanned document: its first pages read first
         if screen and (why := screen(pages)):
             return Acquired("skipped", url=url, detail=why, timings=t)
         pages, withheld = screen_pages(pages)          # lists of people with personal data: never searched or shown
@@ -210,7 +214,18 @@ async def fetch_and_index(conn: psycopg.Connection, url: str, description: str, 
             dl.path.replace(fetch_dir / f"{doc_id}{EXTENSIONS[provenance['original_format']]}")
         got_series = series or (meta.get("series") if meta.get("series") in SERIES else None)
         got_edition = edition or (meta.get("edition") if valid_edition(meta.get("edition")) else None)
-        if got_series and got_edition and not edition:     # no edition asked: a newer one in the library wins
+        # an edition of the approved budget series is the approved budget book, never its proposal, an amendment or
+        # the appropriation law (3 Nov: the 2026 proposal and first amendment had taken the 2026 budget's edition)
+        if got_series == "sokoto_budget" and not edition and re.search(
+                r"(?i)propos|draft|amend|supplementary|appropriation\s+law|\blaw\b|citizen|call\s+circular",
+                f"{meta.get('title') or ''} {description}"):
+            got_series = got_edition = None
+        # one document per edition: a second document of a held edition is indexed without a series
+        if got_series and got_edition and not edition and conn.execute(
+                "SELECT 1 FROM documents WHERE series = %s AND edition = %s", (got_series, got_edition)).fetchone():
+            got_series = got_edition = None
+        if got_series and got_edition and not edition and acquisition != "imported":
+            # no edition asked: a newer one in the library wins (an import keeps older editions: they are history)
             newer = conn.execute("SELECT id, edition FROM documents WHERE series = %s AND edition > %s "
                                  "ORDER BY edition DESC LIMIT 1", (got_series, got_edition)).fetchone()
             if newer:
@@ -362,6 +377,36 @@ async def ocr_finished(conn: psycopg.Connection, doc_id: str, settings: Settings
             await ocr_pages(doc_id, Path(settings.kasafi_fetch_dir) / f"{doc_id}.pdf",
                             waiting[:BACKGROUND_OCR_PAGES], settings)
     return conn.execute("SELECT count(*) FROM pages WHERE doc_id = %s AND source = 'none'", (doc_id,)).fetchone()[0]
+
+
+HEAD_PAGES = 3
+
+
+async def _ocr_head(pdf: Path, pages: list[str], settings: Settings) -> list[str]:
+    """The first pages of a scanned document read (Muse Spark Open in a batch run, else Muse Spark), so the confirm
+    step sees its title page; a page the reader can't read keeps its (empty) text layer."""
+    out_dir = pdf.parent / f"{pdf.stem}-head"
+    pages = list(pages)
+    batch = settings.kasafi_batch_provider.lower() in ("baseten", "fireworks") and settings.baseten_api_key
+    try:
+        images = await render_pages_sandboxed(pdf, list(range(1, min(HEAD_PAGES, len(pages)) + 1)), out_dir)
+        if batch:
+            from app.providers.baseten import BasetenClient
+        async with (BasetenClient(settings) if batch else MetaClient(settings, timeout=240)) as client:
+            for page, jpg in sorted(images.items()):
+                try:
+                    pages[page - 1] = await ocr_image(client, jpg.read_bytes(),
+                                                      model=settings.baseten_model if batch else settings.meta_model)
+                except ProviderError as e:
+                    log.warning("head OCR failed for %s p%d: %s", pdf.name, page, type(e).__name__)
+    except Exception:              # noqa: BLE001 - the text layer as it is
+        log.exception("head OCR stopped for %s", pdf.name)
+    finally:
+        for f in out_dir.glob("*.jpg"):
+            f.unlink(missing_ok=True)
+        if out_dir.exists():
+            out_dir.rmdir()
+    return pages
 
 
 async def ocr_pages(doc_id: str, path: Path, pages: list[int], settings: Settings) -> int:

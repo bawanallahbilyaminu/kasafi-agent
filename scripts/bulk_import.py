@@ -48,7 +48,8 @@ async def discover(site: str, state: Path) -> None:
     say(bulk.report(items, others))
 
 
-async def ingest(state: Path, max_usd: float, limit: int | None) -> None:
+async def ingest(state: Path, max_usd: float, limit: int | None, retry: bool = False,
+                 classes: set[str] | None = None) -> None:
     s = get_settings()
     if s.kasafi_batch_provider.lower() not in ("baseten", "fireworks"):
         sys.exit("set KASAFI_BATCH_PROVIDER=baseten: the import runs on Muse Spark Open only")
@@ -58,7 +59,11 @@ async def ingest(state: Path, max_usd: float, limit: int | None) -> None:
     items, others, spent_before = loaded
     from app.providers.fireworks import BatchModel
     client = BatchModel(s)
-    todo = [i for i in items if i.status == "new"][:limit]
+    if retry:                                     # failed ones tried again (after a fix), in their place in the order
+        for i in items:
+            if i.status == "failed":
+                i.status, i.detail = "new", ""
+    todo = [i for i in items if i.status == "new" and (not classes or i.cls in classes)][:limit]
     say(f"{len(todo)} documents to ingest; spent so far ${spent_before:.2f}; cap ${max_usd:.2f}")
     with psycopg.connect(s.db_url()) as conn:
         prints = bulk.library_fingerprints(conn)
@@ -84,7 +89,8 @@ async def ingest(state: Path, max_usd: float, limit: int | None) -> None:
                 await asyncio.sleep(bulk.DELAY_S)
                 try:
                     got = await library.fetch_and_index(conn, it.url, it.title, settings=s, client=client, http=http,
-                                                        robots=robots, acquisition="imported", screen=screen)
+                                                        robots=robots, acquisition="imported", screen=screen,
+                                                        ocr_head=True)
                 except Exception as e:  # noqa: BLE001 - one file must not stop the run
                     conn.rollback()
                     got = library.Acquired("failed", url=it.url, detail=f"{type(e).__name__}: {e}"[:300])
@@ -96,6 +102,13 @@ async def ingest(state: Path, max_usd: float, limit: int | None) -> None:
                 it.detail = got.detail
                 it.status = {"indexed": "indexed", "known": "duplicate", "skipped": "flagged" if flagged else
                              "duplicate"}.get(got.status, "excluded" if "excluded content" in got.detail else "failed")
+                if got.status == "known" and conn.execute(          # this import's own earlier, interrupted run
+                        "SELECT 1 FROM documents WHERE id = %s AND acquisition = 'imported' AND source_url = %s",
+                        (got.doc_id, it.url)).fetchone():
+                    it.status, got.detail = "indexed", ""
+                    if not conn.execute("SELECT 1 FROM doc_cards WHERE doc_id = %s", (got.doc_id,)).fetchone():
+                        from app.retrieval.chart_build import build_charts_later
+                        await build_charts_later(got.doc_id, s)
                 if it.status == "duplicate" and not it.dedupe:
                     it.dedupe = got.detail or f"same file as {got.doc_id}"
                 if got.status == "indexed":
@@ -159,6 +172,8 @@ def main() -> int:
     ap.add_argument("--replan", action="store_true")
     ap.add_argument("--max-usd", type=float, default=8.0)
     ap.add_argument("--limit", type=int)
+    ap.add_argument("--retry", action="store_true", help="try the failed documents again")
+    ap.add_argument("--classes", help="only these classes, e.g. budget,bir,citizens,mtef,plans,accounts")
     a = ap.parse_args()
     state = ROOT / "data" / "bulk" / f"{a.site}.json"
     if a.discover:
@@ -166,7 +181,8 @@ def main() -> int:
     if a.replan:
         replan(state)
     if a.ingest:
-        asyncio.run(ingest(state, a.max_usd, a.limit))
+        asyncio.run(ingest(state, a.max_usd, a.limit, a.retry,
+                           set(a.classes.split(",")) if a.classes else None))
     if a.summary:
         summary(state)
     sys.stdout.flush()
