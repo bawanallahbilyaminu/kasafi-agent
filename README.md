@@ -65,6 +65,114 @@ evaluate*); each row is a capability this release serves, not a measurement of a
 | **Muse Voice Transcribe** | One of two transcripts of each voice note; Muse Spark's audio reading is the other. | [`app/providers/stt.py`](app/providers/stt.py), [`app/whatsapp/voice.py`](app/whatsapp/voice.py) |
 | **SAM 3.1** (Meta Model API) | Crops the cited table row from the source page as evidence. Draws a farm's outline from a satellite image. | [`app/evidence/crops.py`](app/evidence/crops.py), [`app/place/outline.py`](app/place/outline.py); client [`app/providers/sam.py`](app/providers/sam.py) |
 
+## Architecture
+
+```mermaid
+flowchart TD
+    WA["WhatsApp message<br/>text, voice note or location pin"] --> WH["Webhook<br/>signature check"]
+    WH --> EM1{"Emergency phrase list<br/>(local, before consent)"}
+    EM1 -- yes --> FAST["Emergency fast path<br/>verified numbers, nearest suitable facility,<br/>pin and road distance"]
+    EM1 -- no --> CONSENT{"Consent given?"}
+    CONSENT -- no --> NOTICE["Consent notice<br/>(nothing reaches a model)"]
+    CONSENT -- yes --> VOICE["Voice note: Muse Voice Transcribe +<br/>Muse Spark audio, merged; read-back if unsure"]
+    VOICE --> GUARD{"Guardrails<br/>politics, conflict, medical advice"}
+    CONSENT -- "yes, text" --> GUARD
+    GUARD -- refuse --> REFUSE["Polite refusal<br/>and what Kasafi can do"]
+    GUARD -- allow --> PLAN["PLANNER<br/>Muse Spark fills the information need;<br/>the question's own words settle period,<br/>measure and publisher (Muse Spark Open on conflict)"]
+
+    PLAN --> ROUTE{"ROUTING in code"}
+    ROUTE --> BUD["Structured budget tools<br/>budget items, projects, performance:<br/>sums and shares in SQL"]
+    ROUTE --> LIB["Library search<br/>meaning + keywords + rare phrases,<br/>document and section cards"]
+    ROUTE --> HAZ["Hazards and official sources<br/>Open-Meteo, GloFAS, FIRMS;<br/>NEMA, NIHSA, NiMet, NCDC"]
+    ROUTE --> FAC["Facilities and routes<br/>GRID3/NHFR, PostGIS, ORS"]
+    ROUTE --> PLACE["Place history (experimental)<br/>Sentinel-2/-1, MODIS, JRC, UNOSAT"]
+    ROUTE --> DEEP["Deep analysis<br/>measure checklist per dimension,<br/>up to 15 documents in parallel"]
+
+    LIB -- "document missing" --> ACQ["ACQUIRE<br/>allowlist + robots.txt, size limits,<br/>sandboxed parse, confirm step, index"]
+    ACQ --> LIB
+
+    BUD --> READ["READERS<br/>Muse Spark and Muse Spark Open read the rows;<br/>charts read once by Muse Spark Open;<br/>SAM 3.1 crops the cited row"]
+    LIB --> READ
+    DEEP --> READ
+    READ --> VERIFY["VERIFICATION in code<br/>every figure printed on its page and row,<br/>entity, year and period bound, arithmetic in code"]
+    VERIFY -- "part missing or wrong" --> PLAN
+    VERIFY --> ANS["ANSWER<br/>summary, details, sources"]
+    HAZ --> ANS
+    FAC --> ANS
+    PLACE --> ANS
+    ANS --> OUT["WhatsApp reply<br/>+ evidence crop or map<br/>+ full brief PDF for a deep analysis"]
+```
+
+Design details: [`docs/architecture.md`](docs/architecture.md), [`docs/hazard-and-services.md`](docs/hazard-and-services.md),
+[`docs/place-history.md`](docs/place-history.md), [`docs/routing.md`](docs/routing.md).
+
+## What makes it agentic, not basic RAG
+
+Basic RAG fetches some text and asks a model to answer from it. Kasafi decides what to do at each step, checks the
+result in code and acts on a failed check. Four examples from the code:
+
+1. **Planning and routing.** Muse Spark plans each question: what is asked, for which entity, level and period,
+   and which capabilities can answer it. Code then reads the question's own words in English and Hausa (the
+   period, spent or approved, the publisher named) and overrides the plan where they are clear
+   ([`app/agent/words.py`](app/agent/words.py)); when they conflict, Muse Spark Open gives a second plan. A routing
+   rule in code sends each question to the structured budget tools, the library search, hazards, facilities,
+   place history or a deep analysis ([`app/agent/routing.py`](app/agent/routing.py)). The routing set of 74
+   questions that carry another feature's words is checked in code at 0 wrong ([`evals/routing/`](evals/routing)).
+2. **Fetching the documents it is missing.** When the plan needs a document the library doesn't hold,
+   `find_and_fetch` ([`app/acquisition/library.py`](app/acquisition/library.py)) tries the publisher's own address,
+   publisher listings and allowlisted search; downloads with a check on every redirect; parses in a separate,
+   resource-limited process; confirms it is the right document and edition; indexes it with its URL, hash and date;
+   and answers. The next user gets it from the library.
+3. **Deep analysis with a measure checklist.** A broad question ("What's the state of PHCs in Sokoto?") is split
+   into dimensions, each with the measures a neutral analyst would look for: facility counts and needs, staff
+   available and required by cadre, the PHC agency's allocation, share and actual spending per year, coverage
+   from the surveys' Sokoto tables, EmONC capability, plan targets ([`app/agent/deep.py`](app/agent/deep.py)).
+   Muse Spark Open reads up to 15 documents in parallel; budget figures come from the budget and implementation
+   report rows in code. A measure still missing gets its own search, twice, before it is reported as not found.
+   Claims are ranked (gaps, targets, trends and shares before single items), and one Muse Spark call writes the
+   summary from the checked claims only.
+4. **Verification and redo.** Every figure in a draft answer is looked up on its cited page and bound to its row's
+   entity, year and period ([`app/agent/attribution.py`](app/agent/attribution.py)); a figure that isn't printed
+   and wasn't calculated in code is dropped. For a budget-line question, Muse Spark and Muse Spark Open pick rows
+   independently and code answers only from the rows both chose
+   ([`app/agent/line_answer.py`](app/agent/line_answer.py)). If a part of the question was not answered for the
+   entity, level and period asked, the plan is redone once with that part named
+   ([`app/agent/completeness.py`](app/agent/completeness.py)); anything still missing is said in the reply.
+
+## Data sources and use
+
+Kasafi answers only from public documents and public data.
+
+| Source | Used for | Terms and credit |
+| --- | --- | --- |
+| Sokoto State budgets, implementation reports, appropriation laws, plans and policies; development-partner and survey reports (MICS, NDHS, NBS, SBS) | Document answers, deep analyses | Public documents, cited by document and page; used for reference only |
+| Sokoto State Ministry of Finance site (mof.sk.gov.ng) | Bulk import of its public document listing | Public listing only (no login), robots.txt honoured, one request a second |
+| GRID3 Nigeria / NHFR facility registry (Nov 2024) | Facility counts, nearest facility | Credited "GRID3 Nigeria / NHFR"; licence not yet confirmed, so the file is kept out of git |
+| OCHA COD-AB boundaries, GRID3 wards | LGAs and wards | Credited on maps |
+| Open-Meteo (weather, air quality, rain archive) | Hazard answers, place history rainfall | Free tier for non-commercial use within its daily limits; a paid key is planned |
+| GloFAS river discharge (Copernicus Emergency Management Service) | River flood outlook | Labelled as a model estimate; official outlooks lead |
+| NASA FIRMS (VIIRS) | Fire hotspots | Free MAP_KEY; called "satellite heat detections" |
+| NEMA, SEMA, NIHSA, NiMet, NCDC | Official advisories, outlooks, outbreak figures | Official sources, cited with their dates |
+| IOM DTM | Displacement figures | Through IOM's public API |
+| Sentinel-2 and Sentinel-1 (Copernicus), MODIS, ESA WorldCover | Place history | Read through the Planetary Computer data API |
+| JRC Global Surface Water | Water history and the water-body layer | Credited on the answer |
+| UNOSAT flood extents (via HDX) | Official flood maps for 2022 and 2024 | CC BY-SA, credited |
+| OpenStreetMap | Base map roads, rivers, water-body names | "© OpenStreetMap contributors" |
+| OpenRouteService | Road distance and directions | Free key within its limits |
+
+- **Fetching rules.** Only https links on an allowlist of government and partner domains are fetched
+  ([`app/acquisition/policy.py`](app/acquisition/policy.py)); other domains wait for a person to approve them on
+  `/admin/review`. Every request identifies itself as `KasafiBot/1.0` and checks robots.txt; a site whose
+  robots.txt says `ai-input=no` is refused.
+- **Minimal excerpts.** Each model call gets only what its step needs: a few page excerpts for an answer, the first
+  pages of a fetched document, one page image at a time for OCR, the band of the page around a cited row for
+  SAM 3.1.
+- **Personal data in public documents.** Pages that list people with phone numbers, NIN/BVN, account numbers or
+  salaries are withheld: the document is indexed, but those pages are never searched, quoted or cropped
+  ([`app/acquisition/personal.py`](app/acquisition/personal.py)).
+- **Excluded content.** Documents about conflict, security operations or banditry, and partisan political
+  material, are not indexed. Budget figures for security lines are answered as plain cited figures.
+
 ## How answers are checked
 
 - **The words settle what they can.** Before the planner's plan is used, code reads the question's own words in
