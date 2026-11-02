@@ -570,7 +570,9 @@ def share_swing(conn: psycopg.Connection, cl: Checklist, agency: dict, sector: d
             f"{big['name']} capital (₦{_naira(big[1][0])} in {y1}, ₦{_naira(big[2][0])} in {y2})")
     if code[0] != big_code and 1 in own and 2 in own:
         said += f", while {name}'s own capital went from ₦{_naira(own[1][0])} to ₦{_naira(own[2][0])}"
-    return Claim(dim_name, said, big[2][1], "NGN", f"{y1}-{y2}", "Sokoto State", a2.doc_id, a2.title, big[2][2],
+    # the value is the y2 figure; each figure in the label carries its own year ('92.52 billion in 2025-2026' was
+    # written from a combined year)
+    return Claim(dim_name, said, big[2][1], "NGN", str(y2), "Sokoto State", a2.doc_id, a2.title, big[2][2],
                  "money_alloc", "gap", a2.doc_year, True, True)
 
 
