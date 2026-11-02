@@ -557,7 +557,9 @@ def index_document(conn: psycopg.Connection, doc: dict, path: Path, *, force: bo
         else:
             sources.append("none" if ocr_it else "text")   # "none" keeps its title text until OCR'd
     empty = sources.count("none")
-    pages = [accounting_negatives(p) for p in pages]
+    # a line addressing an AI is never evidence (app/retrieval/injection.py): removed before chunks and lines
+    from app.retrieval.injection import strip_instructions
+    pages = [accounting_negatives(strip_instructions(p)[0]) for p in pages]
     labelled: list[str] = []
     line_titles: list[list[str]] = []
     chunked = contextual_chunks(pages, labelled, line_titles)

@@ -114,7 +114,8 @@ _DELIM = re.compile(r"(?i)<\s*/?\s*untrusted_document\s*>")
 def untrusted(text: str) -> str:
     """Document text inside delimiters, with any copy of the delimiters in the text removed first (a page can't
     close the block and speak as the user)."""
-    return f"<untrusted_document>\n{_DELIM.sub(' ', text or '')}\n</untrusted_document>"
+    from app.retrieval.injection import strip_instructions
+    return f"<untrusted_document>\n{_DELIM.sub(' ', strip_instructions(text or '')[0])}\n</untrusted_document>"
 
 
 async def confirm_document(description: str, pages: list[str], existing_ids: list[str], client: ChatClient,
@@ -469,7 +470,8 @@ def save_ocr_page(conn: psycopg.Connection, doc_id: str, page: int, text: str) -
         with conn.transaction():
             record_withheld(conn, doc_id, {page: why})
         return
-    text = accounting_negatives(text)
+    from app.retrieval.injection import strip_instructions
+    text = accounting_negatives(strip_instructions(text)[0])
     with conn.transaction():
         conn.execute("UPDATE pages SET text = %s, source = 'ocr' WHERE doc_id = %s AND page = %s", (text, doc_id, page))
         conn.execute("DELETE FROM chunks WHERE doc_id = %s AND page = %s", (doc_id, page))
