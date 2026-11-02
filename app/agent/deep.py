@@ -845,7 +845,16 @@ def select_claims(claims: list[Claim], dims: list[Dimension], question: str = ""
             per_m[c.measure] = per_m.get(c.measure, 0) + 1
             chosen.append(c)
         cap = per_dimension + (3 if any(c.from_rows for c in chosen) else 0)
-        out += chosen[:cap]
+        # coverage first: each checklist measure with a claim keeps its best one before any measure gets a second
+        # (the 3 Nov live run read EmONC's 7.6% but two antenatal and two immunisation figures filled the 5 places)
+        firsts = {id(next(c for c in chosen if c.measure == m.id)) for m in d.measures
+                  if any(c.measure == m.id for c in chosen)}
+        keep = set(list(firsts)[:cap])
+        for c in chosen:
+            if len(keep) >= cap:
+                break
+            keep.add(id(c))
+        out += [c for c in chosen if id(c) in keep]
     return out
 
 
@@ -1111,20 +1120,24 @@ async def deep_answer(conn: psycopg.Connection, question: str, english: str, lan
         await notify(w["reading"].format(n=len(readings), kinds=kinds_of(conn, readings, bool(money))))
     claims, stopped = await read_all(open_client or client, readings, subject, dims, settings)
     claims = money + claims
-    # round 2: each measure still without a claim gets its own search, within what's left of the caps
-    found = {c.measure for c in select_claims(claims, dims, question)}
-    missing = {m.id for d in dims for m in d.measures if m.id not in found and not m.structured}
-    if missing and not stopped:
-        read = {(r.doc_id, p) for r in readings for p, _ in r.pages}
-        extra = measure_sources(conn, subject, dims, missing, read)
+    # rounds 2-3: each measure still without a claim gets its own search on pages not read yet, within what's left
+    # of the caps; a measure is 'not found' only after its searches came back empty
+    read = {(r.doc_id, p) for r in readings for p, _ in r.pages}
+    for round_no in (2, 3):
+        found = {c.measure for c in claims if not junk(c, question)}
+        missing = {m.id for d in dims for m in d.measures if m.id not in found and not m.structured}
         left = READ_DEADLINE_S - (time.perf_counter() - t0)
         spent_now = usage.total_dollars(settings) - start_cost
-        if extra and left > 20 and spent_now < COST_CAP_USD:
-            log.info("deep: round 2 for %s: %s", sorted(missing), ", ".join(r.doc_id for r in extra))
-            more, stopped = await read_all(open_client or client, extra, subject, dims, settings,
-                                           cost_cap=COST_CAP_USD - spent_now, deadline_s=left)
-            claims += more
-            readings += extra
+        if not missing or stopped or left <= 20 or spent_now >= COST_CAP_USD:
+            break
+        extra = measure_sources(conn, subject, dims, missing, read)
+        if not extra:
+            break
+        log.info("deep: round %d for %s: %s", round_no, sorted(missing), ", ".join(r.doc_id for r in extra))
+        more, stopped = await read_all(open_client or client, extra, subject, dims, settings,
+                                       cost_cap=COST_CAP_USD - spent_now, deadline_s=left)
+        claims += more
+        readings += extra
     log.info("deep: %d verified claims%s", len(claims), f" (stopped: {stopped})" if stopped else "")
     chosen = select_claims(claims, dims, question)
     cov = coverage(chosen, dims)

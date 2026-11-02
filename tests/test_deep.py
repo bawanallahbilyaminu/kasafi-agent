@@ -264,6 +264,21 @@ def test_staffing_pairs_required_and_available_for_the_same_cadre() -> None:
     assert "244" in got and "78" in got
 
 
+def test_every_measure_found_keeps_a_claim_before_any_measure_gets_a_second() -> None:
+    """3 Nov live run: EmONC's 7.6% was read, but two antenatal-care and two immunisation figures (higher scores)
+    filled the dimension's 5 places, and EmONC was reported 'not found'."""
+    dims = [D.phc_checklist().dimensions[3]]
+    claims = [C("service coverage", f"ANC figure {i}", f"{20 + i}.1%", "share", "cov_anc", "2024") for i in range(2)]
+    claims += [C("service coverage", f"Births figure {i}", f"{40 + i}.1%", "share", "cov_sba", "2024")
+               for i in range(2)]
+    claims += [C("service coverage", f"Vaccination figure {i}", f"{60 + i}.1%", "share", "cov_imm", "2021")
+               for i in range(2)]
+    claims += [C("service coverage", "Share of BEmONC facilities fully functioning", "7.6%", "detail", "emonc")]
+    got = D.select_claims(claims, dims)
+    assert len(got) == D.PER_DIMENSION and "7.6%" in [c.value for c in got]
+    assert D.coverage(got, dims)[0][2] == []                               # nothing reported missing
+
+
 @pytest.mark.parametrize("statement, unit", [("The Blueprint 2023-2026 has 262 interventions", "interventions"),
                                              ("The Blueprint has 18 objectives", ""),
                                              ("The plan has one goal", "goal"),
