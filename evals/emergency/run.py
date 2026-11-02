@@ -24,6 +24,7 @@ sys.path.insert(0, str(ROOT))
 from app import usage  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.geo.location import Spot, memory  # noqa: E402
+from app.agent.understand import understand_message  # noqa: E402
 from app.guardrails import emergency as em  # noqa: E402
 from app.users import UserStore, user_key  # noqa: E402
 from app.whatsapp.conversation import handle  # noqa: E402
@@ -44,12 +45,22 @@ async def detection(settings, cases: dict) -> list[dict]:
             took = time.perf_counter() - t0
             before = await em.decide(c["text"], settings, False)
             path = "phrase" if d.hit and not d.ambiguous else "classifier" if (d.hit or d.health) else "none"
-            out.append({**c, "want": want, "fired": after is not None, "fired_before_consent": before is not None,
-                        "path": path, "seconds": round(took, 2)})
+            # the second layer (2 Nov): when the fast path stays quiet, the understanding step's 'urgent' (as the
+            # conversation handler runs it after consent)
+            urgent, reason = None, ""
+            if after is None:
+                u = await understand_message(c["text"], [], None, settings)
+                urgent, reason = (u.urgent, u.urgent_reason) if u is not None else (None, "no reading")
+            fired_by = (after.by or "phrase") if after is not None else "understanding" if urgent else "none"
+            out.append({**c, "want": want, "fired": after is not None or bool(urgent),
+                        "fired_before_consent": before is not None, "path": path, "fired_by": fired_by,
+                        "urgent": urgent, "reason": reason, "seconds": round(took, 2)})
     return out
 
 
 async def timing(settings) -> list[dict]:
+    # the fast reply itself (no ORS, as the label says): on WhatsApp the road distance follows it as a second message
+    settings = settings.model_copy(update={"ors_api_key": None})
     store, sender, out = UserStore(":memory:"), "2340000000777", []
     key = user_key(sender, settings)
     store.create(key, "en")
@@ -62,7 +73,9 @@ async def timing(settings) -> list[dict]:
                                 store=store, settings=settings, answer_fn=None)
             took = time.perf_counter() - t0
             out.append({"place": name, "maternal": maternal, "seconds": round(took, 3),
-                        "facility": next((o.location["name"] for o in outs if o.location), None),
+                        # pins carry coordinates only since 1 Nov: the facility is named in the text
+                        "facility": next((ln.strip(" *📍") for o in outs for ln in (o.text or "").splitlines()
+                                          if ln.startswith("📍")), None) if any(o.location for o in outs) else None,
                         "first_line": outs[0].text.splitlines()[0]})
     memory.forget(key)
     return out
@@ -82,12 +95,24 @@ def report(det: list[dict], tim: list[dict]) -> str:
              f"(before consent: {len(quiet) - sum(r['fired_before_consent'] for r in quiet)}/{len(quiet)})",
              f"- decided by: phrase list {by_path['phrase']}, classifier {by_path['classifier']}, "
              f"neither {by_path['none']}",
+             f"- fired by (must fire): " + ", ".join(
+                 f"{k} {sum(1 for r in fire if r['fired_by'] == k)}"
+                 for k in ("phrase", "classifier", "understanding", "none")),
+             f"- off-list set (x/y): must fire {sum(r['fired'] for r in fire if r.get('set') == 'off_list')}/"
+             f"{sum(1 for r in fire if r.get('set') == 'off_list')}, false alarms "
+             f"{sum(r['fired'] for r in quiet if r.get('set') == 'off_list')}/"
+             f"{sum(1 for r in quiet if r.get('set') == 'off_list')}",
              f"- classifier time: median {statistics.median(cls):.2f} s, max {max(cls):.2f} s" if cls else "",
              f"- fast path end to end (handler, PostGIS, no ORS): median {statistics.median(t['seconds'] for t in tim):.3f}"
              f" s, max {max(t['seconds'] for t in tim):.3f} s over {len(tim)} runs", "",
              "## Wrong", ""]
     lines += [f"- {r['id']} ({r['lang']}, {r['path']}): \"{r['text']}\": "
-              f"{'did not fire' if r['want'] else 'fired'}" for r in missed + false] or ["- none"]
+              f"{'did not fire' if r['want'] else 'fired by ' + r['fired_by']}"
+              f"{' (understanding: ' + r['reason'] + ')' if r.get('reason') else ''}" for r in missed + false] \
+        or ["- none"]
+    lines += ["", "## Caught only by the understanding step", ""]
+    lines += [f"- {r['id']}: \"{r['text']}\": {r['reason']}" for r in fire if r["fired_by"] == "understanding"] \
+        or ["- none"]
     lines += ["", "## Before consent (phrase list only): wrong", ""]
     lines += [f"- {r['id']}: \"{r['text']}\": {'did not fire' if r['want'] else 'fired'}"
               for r in det if r["fired_before_consent"] != r["want"]] or ["- none"]
@@ -101,6 +126,8 @@ async def main() -> None:
     settings = get_settings()
     cases = json.loads((HERE / "cases.json").read_text(encoding="utf-8"))
     det = await detection(settings, cases)
+    (HERE / "results.json").write_text(json.dumps({"detection": det}, indent=1, ensure_ascii=False),
+                                       encoding="utf-8")                 # kept even if the timing part fails
     tim = await timing(settings)
     text = report(det, tim)
     (HERE / "report.md").write_text(text, encoding="utf-8")

@@ -153,6 +153,11 @@ W = {
         "outline_given": "Plot shape: the circle of {ha} ha you gave, around your pin (no outline could be drawn "
                          "from the satellite image).",
         "outline_corners": "Plot shape: about {ha} ha, from your {n} corner pins: approximate, not a boundary.",
+        "ask_size_big": "The outline I could draw around your pin from the satellite image is about {ha} ha, more than "
+                        "one farm usually is (it probably takes in neighbouring fields), so I won't use it. How big "
+                        "is your farm, in acres or hectares (for example «3 acres» or «2 ha»)? Or send the pins of "
+                        "its 3 to 6 corners, then say *done*. If you don't know, say *skip* and I'll use a circle of "
+                        "about 1 ha around your pin.",
         "ask_size": "I couldn't draw this farm's outline from the satellite image. How big is the farm, in acres or "
                     "hectares (for example «3 acres» or «2 ha»)? Or send the pins of its 3 to 6 corners, then say "
                     "*done*. If you don't know, say *skip* and I'll use a circle of about 1 ha around your pin.",
@@ -278,6 +283,11 @@ W = {
                          "hoton tauraron ɗan adam ba).",
         "outline_corners": "Siffar gona: kusan hekta {ha}, daga wuraren kusurwoyi {n} da ka aiko: kiyasi ce, ba "
                            "iyakar mallaka ba.",
+        "ask_size_big": "Iyakar da na iya zanawa kewaye da wurinka daga hoton tauraron ɗan adam ta kai kusan hekta "
+                        "{ha}, ta fi girman gona ɗaya (wataƙila ta haɗa da gonakin makwabta), don haka ba zan yi "
+                        "amfani da ita ba. Girman gonarka nawa ne, a kadada (acre) ko hekta (misali «kadada 3» ko "
+                        "«hekta 2»)? Ko ka aiko da wuraren kusurwoyinta 3 zuwa 6, sannan ka ce *an gama*. Idan ba ka "
+                        "sani ba, ka ce *tsallake*, zan yi amfani da da'ira ta kusan hekta 1 kewaye da wurinka.",
         "ask_size": "Ban iya zana iyakar wannan gona daga hoton tauraron ɗan adam ba. Girman gonar nawa ne, a "
                     "kadada (acre) ko hekta (misali «kadada 3» ko «hekta 2»)? Ko ka aiko da wuraren kusurwoyinta 3 "
                     "zuwa 6, sannan ka ce *an gama*. Idan ba ka sani ba, ka ce *tsallake*, zan yi amfani da da'ira ta "
@@ -719,7 +729,10 @@ async def place_answer(conn, settings, question: str, english: str, lang: str, p
     else:
         outline = await plot_outline(conn, settings, lat, lon, today=today)
         if may_ask and not outline.is_plot:
-            return PlaceAnswer(t["ask_size"], False, needs_size=True, outline=outline)
+            # an outline refused as too big for one farm: the size question says so
+            big = outline.note == "too_big" and outline.drawn_ha
+            ask = t["ask_size_big"].format(ha=f"{outline.drawn_ha:.0f}") if big else t["ask_size"]
+            return PlaceAnswer(ask, False, needs_size=True, outline=outline)
     if fresh and may_ask:
         await notify(t["progress"].format(n=today.year - H.GOOD_FROM + 1))
     timing["outline"] = time.perf_counter() - t0

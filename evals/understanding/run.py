@@ -41,6 +41,8 @@ def score(reading: dict | None, expect: dict) -> list[str]:
     caps = expect["capability"] if isinstance(expect["capability"], list) else [expect["capability"]]
     if reading["capability"] not in caps:
         wrong.append(f"capability {reading['capability']} (want {'/'.join(caps)})")
+    if bool(reading.get("urgent")) != bool(expect.get("urgent")):       # an emergency now, or a false alarm
+        wrong.append(f"urgent {reading.get('urgent')} (want {bool(expect.get('urgent'))})")
     for k in ("level", "time", "kind", "care", "facility_level", "ownership"):
         want = expect.get(k)
         if want is not None and reading.get(k) not in (want if isinstance(want, list) else [want]):

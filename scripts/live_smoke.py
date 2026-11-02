@@ -9,6 +9,8 @@ that ignores a live reading (2 Nov: 'Who are you?' read as chitchat went to the 
 --set deploy (default, ~$0.01): "Who are you?", "Kai wanene?", a cold "But uduth is closer to me" (Wamakko on file).
 --set full (~$0.15): the 8 conversations of the 2 Nov fix (pin + nearest hospital + correction, pin + flood history,
 an English and a Hausa budget question, thanks).
+--set emergency (~$0.15): the 40 off-list cases of evals/emergency (x01-x20 must fire: a miss fails; y01-y20 must
+not: a false alarm is reported, not failed).
 
 Senders are synthetic numbers (2340000000…, not valid Nigerian numbers), consented for the run and deleted after it
 (DELETE MY DATA's own function). Traces are written as for any user. Exit 1 when a check fails.
@@ -74,6 +76,23 @@ FULL = DEPLOY + [
 ]
 
 
+def emergency_set() -> list:
+    """The off-list emergency cases (evals/emergency/cases.json, x01-x20 must fire, y01-y20 must not): through the
+    real handler, with the classifier and the understanding step live. A miss fails; a false alarm is reported."""
+    import json
+    cases = json.loads((Path(__file__).resolve().parents[1] / "evals" / "emergency" / "cases.json")
+                       .read_text(encoding="utf-8"))
+
+    def fires(r: str) -> str:
+        return "" if r.startswith("🚨") else "MISSED EMERGENCY"
+
+    def quiet(r: str) -> str:
+        return "false alarm" if r.startswith("🚨") else ""
+    return ([(c["id"], c["lang"], None, [(c["text"], fires)]) for c in cases["must_fire"] if c.get("set") == "off_list"]
+            + [(c["id"], c["lang"], None, [(c["text"], quiet)]) for c in cases["must_not"]
+               if c.get("set") == "off_list"])
+
+
 class Capture:
     """Stands in for WhatsAppClient: what would be sent is kept, nothing leaves the server."""
     sent: list[str] = []
@@ -122,19 +141,20 @@ async def turn(msg: dict) -> tuple[str, float]:
 
 async def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--set", default="deploy", choices=("deploy", "full"))
+    ap.add_argument("--set", default="deploy", choices=("deploy", "full", "emergency"))
     a = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
     base = get_settings()
-    senders = [f"23400000000{n:02d}" for n in range(1, 20)]
+    senders = [f"23400000000{n:02d}" for n in range(1, 60)]
     # only for these synthetic senders and only in this process: allowed, no daily limits
     s = base.model_copy(update={"kasafi_open_access": True,
                                 "kasafi_exempt_numbers": ",".join([base.kasafi_exempt_numbers, *senders]).strip(",")})
     webhook.get_settings = lambda: s
     webhook.WhatsAppClient = Capture
     store = webhook.get_store()
-    failed = 0
-    for (name, lang, place, turns), sender in zip(DEPLOY if a.set == "deploy" else FULL, senders):
+    failed = alarms = 0
+    chosen = {"deploy": DEPLOY, "full": FULL}.get(a.set) or emergency_set()
+    for (name, lang, place, turns), sender in zip(chosen, senders):
         key = user_key(sender, s)
         delete_user_data(sender, store=store, settings=s)
         memory.forget(key)
@@ -150,12 +170,16 @@ async def main() -> int:
             for body, check in turns:
                 reply, secs = await turn(message(sender, body))
                 problem = "silence" if not reply.strip() else check(reply)
-                failed += bool(problem)
-                print(f"> {body}\n{reply}\n({secs:.1f}s) {'FAIL: ' + problem if problem else 'ok'}", flush=True)
+                alarm = problem == "false alarm"              # acceptable in small numbers: reported, not failed
+                failed += bool(problem) and not alarm
+                alarms += alarm
+                mark = ("NOTE: " if alarm else "FAIL: ") + problem if problem else "ok"
+                print(f"> {body}\n{reply}\n({secs:.1f}s) {mark}", flush=True)
         finally:
             delete_user_data(sender, store=store, settings=s)
             memory.forget(key)
-    print(f"\nlive smoke ({a.set}): {'all ok' if not failed else f'{failed} failed'}", flush=True)
+    print(f"\nlive smoke ({a.set}): {'all ok' if not failed else f'{failed} failed'}"
+          f"{f', {alarms} false alarm(s)' if alarms else ''}", flush=True)
     return 1 if failed else 0
 
 

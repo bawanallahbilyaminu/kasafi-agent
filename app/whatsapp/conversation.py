@@ -184,8 +184,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     consented = bool(user and user.consented and allowed)          # the classifier (a model) only after consent
     early_lang = (user.lang if user and user.lang else None) or (detect_language(text) if text else None) or "ha"
     # the emergency fast path, for everyone: a phrase fires at once; the classifier only after consent
+    safety: dict = {"phrase": False, "classifier": "not asked"}     # what the fast path's layers said (the trace)
     if text and (d := em.detect(text)) and (d.hit or (d.health and consented)):
-        if (verdict := await em.decide(text, settings, consented, classify_fn)) is not None:
+        if (verdict := await em.decide(text, settings, consented, classify_fn, why=safety)) is not None:
+            await _trace_emergency(settings, early_lang, verdict.by or "phrase", safety, consented)
             return await _emergency(key, early_lang, verdict, store, settings, emergency_fn,
                                     notify=_sender(notify))
     # the answer to the fast path's location request: a pin or a typed place, even before consent (no model)
@@ -281,7 +283,18 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         if u is None and settings.has_database:     # both models failed: the keyword routing decides; counted
             from app.agent.trace import save_event
             await asyncio.to_thread(save_event, settings, strip_location(text), lang, "understanding_fallback",
-                                    "understanding", {"fallback": fallbacks}, time.perf_counter() - started_u)
+                                    "understanding", {"fallback": fallbacks, "safety": safety},
+                                    time.perf_counter() - started_u)
+    if u is not None:
+        u.safety = safety
+    # the safety net behind the fast path (2 Nov): an emergency happening now that its phrases and classifier missed
+    # ('matata na naƙuda'), read from the meaning; 2-4 s later than a phrase, but never missed
+    if u is not None and u.urgent:
+        maternal = u.care == "maternal" or bool(em.MATERNAL.search(text))
+        await _trace_emergency(settings, lang, "understanding", {**safety, "urgent": True}, True)
+        log.info("emergency from the understanding step (fast path layers: %s)", safety)
+        return await _emergency(key, lang, em.Detection(True, maternal=maternal, by="understanding"), store,
+                                settings, emergency_fn, notify=_sender(notify))
     # a message about Kasafi or the conversation ('Who are you?', 'Na gode', 'help'): one Muse Spark call under the
     # core prompt, never the document search; with no reading, the plain self-questions the same way
     if kind == "text" and text and (u.capability == "conversation" if u is not None else ABOUT_KASAFI.match(text)):
@@ -1011,6 +1024,19 @@ async def _conversational(text: str, key: str, lang: str, store: UserStore, sett
     log.info("conversational reply (%s) in %.2fs", how, time.perf_counter() - t0)
     await _trace_route(settings, text, lang, f"conversation:{how}", u, outs, time.perf_counter() - t0)
     return outs
+
+
+async def _trace_emergency(settings: Settings, lang: str, layer: str, safety: dict, consented: bool) -> None:
+    """A trace row that the fast path fired and which layer fired it (phrase, classifier, understanding), with what
+    each layer said. As the fast path's own logging: never the message, the reason or the place."""
+    if not settings.has_database:
+        return
+    from app.agent.trace import save_event
+    # on a daemon thread: the reply never waits for the trace, nor does anything that ends the event loop
+    import threading
+    threading.Thread(target=save_event, daemon=True,
+                     args=(settings, "(emergency: message not kept)", lang, "emergency", f"emergency:{layer}",
+                           {"route": f"emergency:{layer}", "safety": safety, "consented": consented}, 0.0)).start()
 
 
 async def _trace_route(settings: Settings, text: str, lang: str, route: str, u, outs: list[Out],

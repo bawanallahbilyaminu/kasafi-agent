@@ -15,6 +15,8 @@ __pycache__/
 .pytest_cache/
 .claude/
 evals/
+# ... except the emergency cases (our own test sentences), for scripts/live_smoke.py --set emergency on the server
+!evals/emergency/cases.json
 tests/
 docs/
 scripts/

@@ -227,7 +227,16 @@ def _understanding_card(t: dict) -> str:
             f'{e(u.get("level", ""))} {e(u.get("name", ""))} · time {e(u.get("time", ""))} · '
             f'{float(u.get("seconds") or 0):.1f}s</div><div class="small">Restatement: {e(u.get("restatement", ""))}'
             f'</div>' + (f'<div class="small">Route: <b>{e(t["route"])}</b></div>' if t.get("route") else "")
-            + '</div>')
+            + _safety_line(u.get("safety") or {}, u) + '</div>')
+
+
+def _safety_line(safety: dict, u: dict) -> str:
+    """Both emergency layers: the fast path (phrase list, classifier) and the understanding step's 'urgent'."""
+    if not safety and "urgent" not in u:
+        return ""
+    return (f'<div class="small">Emergency check: phrase list <b>{e(str(safety.get("phrase", "-")))}</b> · '
+            f'classifier <b>{e(str(safety.get("classifier", "-")))}</b> · understanding urgent '
+            f'<b>{e(str(u.get("urgent", "-")))}</b> {e(u.get("urgent_reason", ""))}</div>')
 
 
 @router.post("/traces/{tid}/review")

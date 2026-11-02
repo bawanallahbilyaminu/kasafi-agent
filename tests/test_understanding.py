@@ -109,6 +109,11 @@ async def _none(*a, **k):
     return None
 
 
+async def _quiet_classifier(*a, **k):
+    """The emergency classifier saying no: the understanding step's 'urgent' is then the only net."""
+    return False
+
+
 def _setup(case):
     s = make_settings(database_url="postgresql://x:y@127.0.0.1:1/none", kasafi_understanding=True)
     store = UserStore(":memory:")
@@ -149,9 +154,16 @@ def test_each_conversation_reaches_the_capability_and_subject_it_means(case, mon
     monkeypatch.setattr(CV, "reply", conversational)
     monkeypatch.setattr(s.__class__, "has_database", property(lambda self: False))
     msg = {"from": SENDER, "id": f"w-{case['id']}", "type": "text", "text": {"body": case["message"]}}
+    async def no_facilities(*a, **k):
+        return []
     outs = asyncio.run(C.handle(msg, None, store=store, settings=s, answer_fn=answer, guard_fn=_ok, place_fn=_none,
-                                understand_fn=understand_fn))
+                                understand_fn=understand_fn, emergency_fn=no_facilities,
+                                classify_fn=_quiet_classifier))
     assert len(seen.get("history") or []) == len(case["turns"])            # the conversation reached the step
+    if reading(case["id"]).urgent:                          # an emergency now: the fast path, never an answer
+        assert case["expect"].get("urgent") and "understanding" not in seen
+        assert outs[0].text.startswith("🚨")
+        return
     if reading(case["id"]).capability == "conversation":    # about Kasafi or the conversation: never the documents
         assert "understanding" not in seen and seen["conversational"][0] == case["message"]
         assert outs and outs[-1].text == "HELLO"
@@ -487,3 +499,79 @@ def test_the_reading_chooses_the_facilities_and_the_words_only_without_one() -> 
     budget = U.parse({"kind": "new", "capability": "budget", "facility": {"care": "maternal"},
                       "restatement": "Maternal health budget 2026"})
     assert budget.care == ""                                           # facility filters only for facility readings
+
+
+# --- 2 Nov night: 'matata na naƙuda' reached neither the phrase list nor the classifier -----------------------------
+
+def test_a_message_about_someones_body_asks_the_classifier_even_with_no_phrase() -> None:
+    from app.guardrails import emergency as em
+    for text in ("Matata na naƙuda", "My wife's water broke and the pains are coming fast",
+                 "Yaro na yana ta zazzaɓi baya farkawa", "My husband cut his leg with a cutlass and it won't stop"):
+        d = em.detect(text)
+        assert not d.hit and d.health, text                       # off the phrase list, but the model is asked
+    for text in ("How many maternity centres are in Sokoto?", "Nawa aka ware wa lafiyar mata masu ciki a 2026?"):
+        assert not em.detect(text).health, text                   # a data question: no call
+
+
+def test_layer_one_records_what_each_check_said() -> None:
+    from app.guardrails import emergency as em
+
+    async def yes(*a, **k):
+        return True
+    why: dict = {}
+    d = asyncio.run(em.decide("Matata na naƙuda", make_settings(), True, yes, why=why))
+    assert d is not None and d.by == "classifier" and d.maternal and why == {"phrase": False, "classifier": True}
+
+
+def test_an_urgent_reading_fires_the_maternal_fast_path_when_both_checks_missed(monkeypatch) -> None:
+    """Layer 2: the classifier said no (or wasn't asked); the understanding step reads labour happening now."""
+    case = {"id": "x-urgent", "place": "pin", "turns": []}
+    s, store, key = _setup(case)
+    monkeypatch.setattr(s.__class__, "has_database", property(lambda self: False))
+    picked = []
+
+    async def facilities(settings, lat, lon, maternal, lga_pcode=""):
+        picked.append(maternal)
+        return []
+
+    async def urgent(*a, **k):
+        return U.Understanding(kind="new", capability="facility", care="maternal", urgent=True,
+                               urgent_reason="woman in labour now", restatement="My wife is in labour now")
+
+    async def answer(*a, **k):
+        raise AssertionError("an emergency never goes to an answer")
+    msg = {"from": SENDER, "id": "w-x-urgent", "type": "text", "text": {"body": "Matata na naƙuda"}}
+    real = C._emergency
+
+    async def emergency(key, lang, d, *a, **k):
+        picked.append((d.maternal, d.by))
+        return await real(key, lang, d, *a, **k)
+    monkeypatch.setattr(C, "_emergency", emergency)
+    outs = asyncio.run(C.handle(msg, None, store=store, settings=s, answer_fn=answer, guard_fn=_ok, place_fn=_none,
+                                understand_fn=urgent, emergency_fn=facilities, classify_fn=_quiet_classifier))
+    assert outs[0].text.startswith("🚨") and picked == [(True, "understanding")]     # maternal: EmONC picks first
+
+
+def test_the_reading_carries_urgent_and_its_reason() -> None:
+    u = U.parse({"kind": "new", "capability": "facility", "subject": {"level": "pin"}, "time": {"kind": "now"},
+                 "facility": {"care": "maternal", "level": "any", "ownership": "any"}, "urgent": True,
+                 "urgent_reason": "labour now", "restatement": "My wife is in labour now"})
+    assert u.urgent and u.urgent_reason == "labour now" and u.care == "maternal"
+    assert U.parse({"kind": "new", "capability": "budget", "urgent": "yes", "restatement": "x"}).urgent is False
+
+
+def test_a_sam_outline_over_20_ha_is_not_one_farm_and_the_size_is_asked_saying_why(monkeypatch) -> None:
+    from app.place import answer as PA
+    from app.place.outline import fallback
+    big = fallback(5.155, 13.045, "too_big")
+    big.drawn_ha = 46.9
+
+    async def outline(*a, **k):
+        return big
+    monkeypatch.setattr(PA, "plot_outline", outline)
+    monkeypatch.setattr(PA, "first_request", lambda *a, **k: False)
+    place = {"lat": 13.045, "lon": 5.155, "lga": "Wamakko", "lga_pcode": "NG034021"}
+    from datetime import date
+    a = asyncio.run(PA.place_answer(None, make_settings(), "Has my farm ever flooded?", "", "en", place,
+                                    date(2026, 11, 2), ask_size=True))
+    assert a.needs_size and "about 47 ha, more than one farm usually is" in a.text

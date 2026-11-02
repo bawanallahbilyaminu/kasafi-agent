@@ -128,7 +128,7 @@
   {"id": "c19", "place": "none", "lang": "ha", "turns": [], "message": "Yaya kake aiki?", "expect": {"capability": "conversation", "kind": "chitchat"}},
   {"id": "c20", "place": "lga", "lang": "en", "turns": [], "message": "But uduth is closer to me", "expect": {"capability": "facility", "level": "facility"}},
   {"id": "m01", "place": "pin", "lang": "en", "turns": [], "message": "Where can my wife deliver a baby?", "expect": {"capability": "facility", "care": "maternal"}},
-  {"id": "m02", "place": "pin", "lang": "ha", "turns": [], "message": "Matata na naƙuda, ina zan kai ta?", "expect": {"capability": "facility", "care": "maternal"}},
+  {"id": "m02", "place": "pin", "lang": "ha", "turns": [], "message": "Matata na naƙuda, ina zan kai ta?", "expect": {"capability": "facility", "care": "maternal", "urgent": true}},
   {"id": "m03", "place": "pin", "lang": "en", "turns": [], "message": "Nearest place for antenatal care", "expect": {"capability": "facility", "care": "maternal"}},
   {"id": "m04", "place": "pin", "lang": "ha", "turns": [], "message": "A ina matata za ta haihu?", "expect": {"capability": "facility", "care": "maternal"}},
   {"id": "m05", "place": "pin", "lang": "en", "turns": [], "message": "Is there anywhere I can deliver a baby around here?", "expect": {"capability": "facility", "care": "maternal"}},

@@ -42,7 +42,10 @@ log = logging.getLogger(__name__)
 CHIP_M = 1000.0              # the chip's side
 CHIP_PX = 100                # at 10 m
 UPSCALE = 8                  # 800 x 800 px to SAM
-MIN_HA, MAX_HA = 0.1, 50.0
+MIN_HA, MAX_HA = 0.1, 50.0     # a plot shape at all (the user's corner pins or size too)
+# above ~20 ha a SAM outline is rarely one farm (it joins neighbouring fields; 2 Nov live: 46.9 ha for one pin): the
+# farm's size is asked for instead, saying why. A size the farmer gives or their corner pins keep MAX_HA
+SAM_MAX_HA = 20.0
 DRY_MONTHS = (11, 12, 1, 2, 3, 4)
 MAX_CLOUD = 10.0
 LOOKBACK_DAYS = 550          # the last two dry seasons
@@ -74,6 +77,7 @@ class Outline:
     note: str = ""                   # why the circle: no_segment | too_small | too_big | no_pin | no_chip | sam_failed
     from_cache: bool = False
     corners: int = 0                 # how many corner pins made it (method 'corners')
+    drawn_ha: float = 0.0            # the segment's area when it was refused as too big (said in the size question)
 
     @property
     def is_plot(self) -> bool:
@@ -184,8 +188,10 @@ def mask_outline(mask: np.ndarray, chip: Chip, lon: float, lat: float) -> Outlin
         area = float(poly.area / abs(tr.a * tr.e)) * pixel_ha
         if area < MIN_HA:
             return fallback(lon, lat, "too_small", chip.scene)
-        if area > MAX_HA:
-            return fallback(lon, lat, "too_big", chip.scene)
+        if area > SAM_MAX_HA:
+            out = fallback(lon, lat, "too_big", chip.scene)
+            out.drawn_ha = round(area, 1)
+            return out
         simple = poly.simplify(abs(tr.a) * 0.6, preserve_topology=True)
         return Outline(json.loads(json.dumps(simple.__geo_interface__)), "sam", round(area, 2), chip.scene)
     return fallback(lon, lat, "no_segment", chip.scene)

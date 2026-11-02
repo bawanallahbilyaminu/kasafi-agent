@@ -177,3 +177,31 @@ Live smoke test: `scripts/live_smoke.py` sends conversations through the real we
 container, with real model calls and nothing sent to WhatsApp. `deploy/deploy.sh` runs the 3-message set after
 every deploy ("Who are you?", "Kai wanene?", a cold "But uduth is closer to me" with Wamakko on file), about $0.01.
 `deploy/deploy.sh --smoke full` runs the 8 conversations of this fix (about $0.15).
+
+### Emergencies in two layers (2 Nov, night)
+
+"Matata na naƙuda" (my wife is in labour) matched no emergency phrase and no word of the classifier's gate, so it
+went to a facility search instead of the maternal fast path.
+
+1. **The fast path's classifier is asked more widely** (`app/guardrails/emergency.py`). After consent, any message
+   about a person's body, illness, pregnancy, labour, bleeding, injury or a child's illness (`BODY`, `HEALTH`,
+   `MATERNAL`) goes to the classifier when the phrase list misses, unless it is a plain data question. A data
+   question naming a person ("my", "she is") is still checked. The gate only decides whether the model is asked;
+   the model decides whether it's an emergency. Before consent, only the phrase list runs, because no model may be
+   called yet.
+2. **The understanding step returns `urgent` and `urgent_reason`.** When it reads an emergency happening now and
+   the fast path didn't fire, the handler goes straight to the fast path (`Detection.by = "understanding"`), as the
+   maternal path when the reading's care is maternal. This net comes 2–4 s later than a phrase.
+
+Traces: a fired fast path writes an `emergency:<phrase|classifier|understanding>` row with what each layer said,
+in the background so the reply never waits. In keeping with the fast path's design, the row never holds the
+message, the reason or the place. Every other trace has `safety` (phrase, classifier) and `urgent` in its
+understanding reading (card 0 on the admin page).
+
+Eval (`evals/emergency`, live): 64/64 must fire and 64/64 quiet. The off-list set is 20/20 fired with 0/20 false
+alarms: 19 caught by the classifier and 1 ("Yarinyata ta sha maganin feshi na gona") only by the understanding step.
+The fast reply's median is 0.12 s. `deploy/deploy.sh --smoke emergency` runs the 40 off-list cases on the server.
+
+Place history: a SAM 3.1 outline over 20 ha (`SAM_MAX_HA`) is rarely one farm. The size is asked for instead, and
+the reply says why ("about 47 ha, more than one farm usually is"). A size the farmer gives, or their corner pins,
+keep the 50 ha limit.

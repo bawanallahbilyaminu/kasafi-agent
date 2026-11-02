@@ -38,6 +38,7 @@ COPY data/manifest.json data/official_outlooks.yaml ./data/
 COPY scripts/index_docs.py scripts/ocr_pages.py scripts/official_outlooks.py scripts/fetch_hazards.py ./scripts/
 # the live smoke test after every deploy (deploy/deploy.sh): the real webhook path with real model calls
 COPY scripts/live_smoke.py ./scripts/
+COPY evals/emergency/cases.json ./evals/emergency/
 # Migrations run on deploy (deploy/remote.sh) once DATABASE_URL is set on the server.
 COPY alembic.ini ./
 COPY migrations ./migrations
