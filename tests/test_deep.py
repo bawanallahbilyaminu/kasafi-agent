@@ -288,12 +288,46 @@ def test_a_national_surveys_figures_are_never_given_as_sokotos() -> None:
     plan = D.Reading("msp", "Sokoto MSP", 2020, [(6, "798 facilities")])
     assert not D.national_ok(survey, "Women age 15-49", "63% of women received ANC")
     assert not D.national_ok(survey, "Nigeria", "Sokoto ... 63%")
-    assert D.national_ok(state, "Sokoto", "Sokoto 26.4 13.0")
+    assert D.national_ok(state, "Sokoto", "Sokoto 26.4 13.0", "26.4")
     assert D.national_ok(plan, "Sokoto State", "798 facilities")
     assert not D.national_ok(plan, "Nigeria (national)", "")
 
 
+MICS_197 = """P a g e |182
+Table TC.1.3: Vaccinations by background characteristics (Valid dose coverage) (Continued)
+""" + ("Percentage of children age 12-23 months currently vaccinated against vaccine preventable childhood diseases "
+       "according to vaccination records (Valid dose coverageA,B), Nigeria MICS, 2021") + """
+BCG Polio ... Basic antigens All 1YL antigens No vaccinations
+Total 54.8 39.0 52.4 46.7 31.8 40.2 29.9 38.9 52.4 46.8 32.2 52.6 47.4 32.4 34.2 32.8 30.3 23.5 14.1 44.6 5,652
+Sokoto 14.8 4.5 13.5 9.1 5.8 6.8 5.6 4.9 13.6 7.8 5.1 13.6 9.1 5.8 5.4 4.0 3.6 3.7 0.0 85.2 141"""
+
+
+def test_a_survey_figure_is_bound_to_the_sokoto_row_and_carries_its_tables_basis() -> None:
+    """MICS 'no vaccinations' 85.2 is the Sokoto row's own column of Table TC.1.3 (valid dose, by vaccination
+    records); the crude table (card or mother's report) prints 50.7. A figure that isn't in the Sokoto row, e.g. a
+    value worked out from another column or the Total row's, never counts."""
+    mics = D.Reading("mics-2021", "Nigeria MICS 2021", 2021, [(197, MICS_197)], national=True)
+    assert D.national_ok(mics, "Sokoto", MICS_197, "85.2")
+    assert not D.national_ok(mics, "Sokoto", MICS_197, "44.6")           # the Total row's
+    assert not D.national_ok(mics, "Sokoto", MICS_197, "86.0")           # not printed in the row
+    assert D.table_basis(MICS_197) == ("Table TC.1.3: Vaccinations by background characteristics (Valid dose "
+                                       "coverage); according to vaccination records")
+    c = D.Claim("service coverage", "No vaccinations", "85.2", "%", "2021", "Sokoto", "mics-2021", "MICS", 197,
+                "cov_imm", "share", 2021, basis=D.table_basis(MICS_197))
+    assert "basis: Table TC.1.3" in D.claims_block([c], D.phc_checklist().dimensions)
+    assert "crude coverage" in " ".join(m.queries[0] for d in D.phc_checklist().dimensions for m in d.measures
+                                        if m.id == "cov_imm")
+
+
+def test_the_not_found_line_uses_hausa_measure_names_in_a_hausa_answer() -> None:
+    dims = D.phc_checklist().dimensions
+    ha = D.missing_line(D.coverage([], dims[3:4]), "ha", dims)
+    assert "allurar rigakafi" in ha and "EmONC" in ha and "immunisation" not in ha
+    assert "immunisation coverage" in D.missing_line(D.coverage([], dims[3:4]), "en", dims)
+
+
 def test_amounts_keep_their_space_and_house_style() -> None:
+    assert D.house_amounts("₦1 NGN") == "₦1"                               # never '₦₦1'
     assert D.house_amounts("15,000,000.00 NGN allocated to renovation") == "₦15 million allocated to renovation"
     assert D.house_amounts("a target of NGN4 billion NGN in 2023") == "a target of ₦4 billion in 2023"
     assert D.merge_refs("₦7.12 billion (Budget 2026, p. 18) (Budget 2026, p. 32)") == \
@@ -319,4 +353,11 @@ def test_the_agencys_money_comes_from_the_budget_and_bir_rows(conn) -> None:
     assert by[("money_actual", "trend", "2024")].doc_id == "bpr-2024-q4"          # the Q4 report's full year
     share = by[("money_alloc", "share", "2025")]
     assert share.calculated and share.value == "26.6%" and "calculated" in share.statement
-    assert by[("money_actual", "gap", "2025")].value == "11.3%"                 # the final budget's share spent
+    spent = by[("money_actual", "gap", "2025")]
+    assert spent.value == "11.3%" and spent.doc_id == "bir-2025-q4"           # the final budget's share spent,
+    assert "full year 2025 (Q1-Q4, from the Q4 2025 budget implementation report)" in spent.statement   # its period
+    swing = next(c for c in claims if c.statement.startswith("Kasafi's calculation"))
+    # 26.6% -> 5.9%: same agency code and HEALTH total both years; the Ministry of Health's capital explains it
+    assert "26.6% (2025) to 5.9% (2026)" in swing.statement and "code 052100300100" in swing.statement
+    assert "Ministry of Health capital" in swing.statement and swing.value == "92,523,418,285.85"
+    assert "own capital went from ₦11,920,018,880.00 to ₦5,797,000,000.00" in swing.statement

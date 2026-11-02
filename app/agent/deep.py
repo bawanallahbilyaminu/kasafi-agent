@@ -112,6 +112,7 @@ class Claim:
     doc_year: int | None = None
     calculated: bool = False     # computed in code from printed budget figures (a share, the share spent)
     from_rows: bool = False      # read from the budget and BIR rows in code (the money series over the years)
+    basis: str = ""              # a survey figure's table and basis ('... (Valid dose coverage); according to ...')
 
     @property
     def when(self) -> str:
@@ -170,7 +171,8 @@ def phc_checklist() -> Checklist:
             ("money_other", "other PHC funding and costs (BHCPF, partner funds, costed plans)",
              ["Basic Health Care Provision Fund", "cost of PHC revitalisation funding gap"], False)], money=True),
         _dim("service coverage", ["immunization antenatal care delivery coverage", "maternal health services"], [
-            ("cov_imm", "immunisation coverage", ["immunization coverage Sokoto", "children fully vaccinated"],
+            ("cov_imm", "immunisation coverage", ["vaccinations by background characteristics crude coverage",
+                                                  "children fully vaccinated"],
              False),
             ("cov_anc", "antenatal care coverage", ["antenatal care four or more visits Sokoto"], False),
             ("cov_sba", "skilled birth attendance and facility delivery",
@@ -488,6 +490,8 @@ def money_claims(conn: psycopg.Connection, cl: Checklist, dim_name: str) -> list
                             else "")
         said = "final budget" if what == "final" and "final" in c.column.lower() else \
             "revised budget" if what == "final" else label[what]
+        if what == "actual":
+            said, when = f"actual spending in the {period_of(c, year)}", str(year)
         out.append(Claim(dim_name, f"{name}: {said}, {when} (all spending: staff, running costs and "
                                    f"capital)", c.printed, "NGN", when, "Sokoto State", c.doc_id, c.title, c.page,
                          "money_actual" if what in ("actual", "so_far") else "money_alloc",
@@ -501,10 +505,73 @@ def money_claims(conn: psycopg.Connection, cl: Checklist, dim_name: str) -> list
                              c.doc_year, True, True))
         if what == "actual" and (f := agency.get((year, "final")) or agency.get((year, "approved"))) and f.amount:
             pct = c.amount / f.amount * 100
-            out.append(Claim(dim_name, f"{name}: share of its {year} final budget actually spent (₦{_naira(c.amount)}"
-                                       f" of ₦{_naira(f.amount)}, calculated)", f"{pct:.1f}%", "", str(year),
-                             "Sokoto State", c.doc_id, c.title, c.page, "money_actual", "gap", c.doc_year, True, True))
+            out.append(Claim(dim_name, f"{name}: share of its {year} final budget actually spent in the "
+                                       f"{period_of(c, year)} (₦{_naira(c.amount)} of ₦{_naira(f.amount)}, "
+                                       f"calculated)", f"{pct:.1f}%", "", str(year), "Sokoto State", c.doc_id,
+                             c.title, c.page, "money_actual", "gap", c.doc_year, True, True))
+    if swing := share_swing(conn, cl, agency, sector, dim_name):
+        out.append(swing)
     return out
+
+
+def period_of(c: MoneyCell, year: int) -> str:
+    """Which spending a full-year figure is: the Q4 report's year to date, or a later budget's actuals column."""
+    if re.search(r"Q1\s*-\s*Q4", c.column):
+        return f"full year {year} (Q1-Q4, from the Q4 {year} budget implementation report)"
+    return f"full year {year} (the {c.doc_year} budget's actuals column)"
+
+
+SWING_POINTS = 10.0           # a share that moves this much between two budgets is explained
+
+
+CAPITAL_SQL = r"""
+SELECT l.code, l.name, l.page, r.amount_naira, l.row_text, r.column_label
+FROM budget_lines l JOIN budget_rows r ON r.line_id = l.id
+WHERE l.doc_id = %(doc)s AND r.column_label = %(col)s AND l.spend_kind = 'capital'
+  AND l.classification = 'administrative' AND l.code LIKE %(prefix)s AND l.code NOT LIKE '%%00000000'"""
+
+
+def share_swing(conn: psycopg.Connection, cl: Checklist, agency: dict, sector: dict, dim_name: str) -> Claim | None:
+    """When the agency's share of its sector moves by SWING_POINTS or more between the last two approved budgets,
+    what moved: the sector's total, the line inside the sector whose capital grew or fell most (by its code), and
+    the agency's own capital. Both years use the same agency line and the same sector total (its code)."""
+    from app.retrieval.line_search import printed_cell
+    years = sorted(y for (y, w), c in agency.items() if w == "approved" and (y, "approved") in sector
+                   and sector[(y, "approved")].doc_id == c.doc_id)
+    if len(years) < 2:
+        return None
+    y1, y2 = years[-2:]
+    a1, a2, s1, s2 = agency[(y1, "approved")], agency[(y2, "approved")], sector[(y1, "approved")], \
+        sector[(y2, "approved")]
+    p1, p2 = a1.amount / s1.amount * 100, a2.amount / s2.amount * 100
+    if abs(p2 - p1) < SWING_POINTS:
+        return None
+    code = conn.execute("SELECT code FROM budget_lines WHERE doc_id = %s AND page = %s AND name ~* %s AND code <> '' "
+                        "LIMIT 1", (a2.doc_id, a2.page, cl.agency)).fetchone()
+    if not code or not code[0]:
+        return None
+    prefix = code[0][:4] + "%"                   # the sector's administrative codes: 0521... for health
+    lines = {}
+    for which, cell in ((1, a1), (2, a2)):
+        for c, name, page, amount, row_text, col in conn.execute(
+                CAPITAL_SQL, {"doc": cell.doc_id, "col": cell.column, "prefix": prefix}).fetchall():
+            lines.setdefault(c, {"name": name})[which] = (Decimal(amount), printed_cell(row_text, col) or
+                                                          f"{amount:,.2f}", page)
+    moved = [(c, x) for c, x in lines.items() if 1 in x and 2 in x]
+    if not moved:
+        return None
+    big_code, big = max(moved, key=lambda cx: abs(cx[1][2][0] - cx[1][1][0]))
+    own = lines.get(code[0], {})
+    name = re.sub(r"[\^$]", "", cl.agency).title()
+    said = (f"Kasafi's calculation from the budget lines (not a statement in the documents): {name}'s share of the "
+            f"{cl.sector.lower()} allocation moved from {p1:.1f}% ({y1}) to {p2:.1f}% ({y2}), with the same agency "
+            f"line (code {code[0]}) and the same {cl.sector} total both years, because "
+            f"the {cl.sector.lower()} total went from ₦{_naira(s1.amount)} to ₦{_naira(s2.amount)}, mostly "
+            f"{big['name']} capital (₦{_naira(big[1][0])} in {y1}, ₦{_naira(big[2][0])} in {y2})")
+    if code[0] != big_code and 1 in own and 2 in own:
+        said += f", while {name}'s own capital went from ₦{_naira(own[1][0])} to ₦{_naira(own[2][0])}"
+    return Claim(dim_name, said, big[2][1], "NGN", f"{y1}-{y2}", "Sokoto State", a2.doc_id, a2.title, big[2][2],
+                 "money_alloc", "gap", a2.doc_year, True, True)
 
 
 # --- 3. reading -------------------------------------------------------------------------------------------------
@@ -568,13 +635,32 @@ async def _chat_cached(client, messages: list[dict]) -> str:
 NATIONAL = re.compile(r"(?i)\b(?:nigeria|national(?:ly)?|nationwide|all\s+states|country)\b")
 
 
-def national_ok(r: Reading, entity: str, page_text: str) -> bool:
+def national_ok(r: Reading, entity: str, page_text: str, value: str = "") -> bool:
     """A figure for Nigeria is never given as Sokoto's: a national entity is dropped, and a national survey's
-    figure counts only for Sokoto on a page printing Sokoto."""
+    figure counts only for Sokoto and only when it is printed in the page's Sokoto row (never the Total row, never
+    worked out from another column: 85.2 'no vaccinations' must be that column's own figure)."""
     sokoto = "sokoto" in entity.lower()
     if NATIONAL.search(entity) and not sokoto:
         return False
-    return not r.national or (sokoto and "sokoto" in page_text.lower())
+    return not r.national or (sokoto and in_state_row(value, page_text))
+
+
+def in_state_row(value: str, page_text: str) -> bool:
+    from app.agent.answer import _NUMBER, _norm_number
+    nums = [_norm_number(n) for n in _NUMBER.findall(value or "")]
+    rows = [line for line in (page_text or "").splitlines() if re.match(r"\s*Sokoto\b(?!\s+(?:North|South))", line)]
+    printed = {_norm_number(n) for line in rows for n in _NUMBER.findall(line)}
+    return bool(nums) and all(n in printed for n in nums)
+
+
+def table_basis(page_text: str) -> str:
+    """A survey page's table and what its figures rest on: 'Table TC.1.3: Vaccinations by background
+    characteristics (Valid dose coverage); according to vaccination records'."""
+    head = (page_text or "")[:1500]
+    title = next((ln.strip() for ln in head.splitlines() if re.match(r"\s*Table\s+[A-Z]*\.?[\d.]+", ln)), "")
+    title = re.sub(r"\s*\(Continued\)\s*$", "", title, flags=re.I)
+    m = re.search(r"(?i)according to ((?:the\s+)?(?:vaccination|mother|card|record|report)[^,.(]{0,70})", head)
+    return "; ".join(x for x in (title, f"according to {m.group(1).strip()}" if m else "") if x)[:200]
 
 
 async def read_one(client, r: Reading, subject: str, dims: list[Dimension]) -> list[Claim]:
@@ -606,7 +692,7 @@ async def read_one(client, r: Reading, subject: str, dims: list[Dimension]) -> l
         if not verify_claim(c, pages):
             continue
         entity = str(c.get("entity") or "")
-        if not national_ok(r, entity, pages.get(c["page"], "")):
+        if not national_ok(r, entity, pages.get(c["page"], ""), str(c.get("value") or "")):
             continue
         measure = str(c.get("measure") or "").strip()
         measure = measure if measure in ids else ""
@@ -617,7 +703,8 @@ async def read_one(client, r: Reading, subject: str, dims: list[Dimension]) -> l
         out.append(Claim(dim, str(c.get("statement") or "")[:300], str(c.get("value"))[:40],
                          str(c.get("unit") or "")[:30], str(c.get("year") or "")[:30], str(c.get("entity") or "")[:80],
                          r.doc_id, r.title, c["page"] if c["page"] in pages else r.pages[0][0], measure,
-                         kind if kind in KINDS_READ else "", r.year))
+                         kind if kind in KINDS_READ else "", r.year,
+                         basis=table_basis(pages.get(c["page"], "")) if r.national else ""))
     return out[:12]
 
 
@@ -783,12 +870,17 @@ SYNTH_SYSTEM = (
     "both figures. Figures that measure different things (the government's health budget and total health "
     "spending including households; a plan's projection and a survey's count) are not a disagreement: if they "
     "could be confused, say in one sentence that they measure different things. Empty otherwise.\n"
+    "A survey figure with a basis says it in plain words (e.g. 'by vaccination card only' for 'according to "
+    "vaccination records', 'by card or the mother's report'; 'valid dose' or 'crude' coverage). A claim that "
+    "explains why a share moved goes in the funding section, said as a calculation from the budget lines (never "
+    "'the documents state').\n"
     "Compare like with like: required against available for the same cadre or item, an allocation against the "
     "spending of the same budget, a target against the current figure of the same indicator.\n"
     "Rules: figures only from the list, copied exactly; cite each as [C<n>]; give each figure's WHEN as listed (a "
     "year, or 'as of the 2020 report'); never write that a year is not stated and never add a year the list "
-    "doesn't give; figures marked calculated are said, once per message, to be calculated from the budget "
-    "documents; compare figures "
+    "doesn't give; only the figures marked calculated (shares) are said, once per message, to be calculated from "
+    "the budget documents (printed amounts are not); a spending figure says its period as its claim gives it (the "
+    "full year from the Q4 report, or so far, Q1-Q2); compare figures "
     "only with targets the documents themselves set; never use verdict words (poor, failing, good, weak, strong, "
     "adequate) or opinions on government performance; names and acronyms exactly as in the list. Reply with JSON "
     "only: {{\"summary\": \"...\", \"sections\": [{{\"dimension\": \"<name>\", \"text\": \"...\"}}], "
@@ -816,6 +908,8 @@ def claims_block(claims: list[Claim], dims: list[Dimension] | None = None) -> st
             if c.kind in KIND_NAME:
                 bits.append(f"kind: {KIND_NAME[c.kind]}")
             bits.append(f"when: {c.when or 'not printed'}")
+            if c.basis:
+                bits.append(f"basis: {c.basis}")
             if c.calculated:
                 bits.append("calculated")
             bits.append(f"{c.entity} | {source_ref(c, page=False)}")
@@ -871,7 +965,7 @@ def source_ref(c: Claim, page: bool = True) -> str:
 def house_amounts(text: str) -> str:
     """'15,000,000.00 NGN allocated' -> '₦15 million allocated' (the space after the amount kept)."""
     from app.agent.answer import readable_amounts
-    out = re.sub(r"\b(\d[\d,]*(?:\.\d+)?)\s*NGN(?:\s*(billion|million|trillion))?\b",
+    out = re.sub(r"(?<![₦\d.,])(\d[\d,]*(?:\.\d+)?)\s*NGN(?:\s*(billion|million|trillion))?\b",
                  lambda m: f"₦{m.group(1)}" + (f" {m.group(2)}" if m.group(2) else ""), text)
     out = readable_amounts(out, "en")
     out = re.sub(r"(₦[\d.,]+(?: (?:million|billion|trillion))?) ?NGN\b", r"\1", out)     # '₦4 billion NGN'
@@ -952,8 +1046,37 @@ def kinds_of(conn, readings: list[Reading], money: bool = False) -> str:
     return ", ".join(kinds[:5])
 
 
-def missing_line(cov: list[tuple[str, list[str], list[str]]]) -> str:
+# the checklist measures in Hausa, for the 'not found' line of a Hausa answer
+MEASURE_HA = {
+    "fac_count": "yawan cibiyoyin kiwon lafiya a matakin farko (PHC)",
+    "fac_need": "cibiyoyin da ake buƙata: waɗanda suka cika mizani, da za a gyara, da za a gina",
+    "staff_have": "ma'aikatan da ake da su, bisa rukuni (likitoci, ma'aikatan jinya da ungozoma, CHEWs)",
+    "staff_need": "ma'aikatan da ake buƙata, bisa rukuni",
+    "money_alloc": "kasafin kuɗin PHC da kasonsa a kasafin lafiya, a kowace shekara",
+    "money_actual": "kuɗin da aka kashe a zahiri a PHC, a kowace shekara",
+    "money_other": "sauran kuɗaɗen PHC (BHCPF, abokan haɗin gwiwa, tsare-tsaren da aka ƙiyasta kuɗinsu)",
+    "cov_imm": "yawan yaran da aka yi wa allurar rigakafi",
+    "cov_anc": "kulawar mata masu ciki (ANC)",
+    "cov_sba": "haihuwa a hannun ƙwararru ko a cibiyar lafiya",
+    "emonc": "cibiyoyin da ke ba da kulawar gaggawa ta haihuwa (EmONC), waɗanda ake buƙata da waɗanda ake da su",
+    "plan_targets": "manufofin tsare-tsare da shekarunsu",
+    "plan_proposals": "ayyukan da aka gabatar da kuɗinsu",
+    "sch_count": "yawan makarantu bisa mataki da mallaka",
+    "sch_need": "ajujuwan da ake buƙata, da za a gyara ko a gina",
+    "tch_have": "malaman da ake da su da ƙwararru, da yawan ɗalibai ga malami",
+    "tch_need": "malaman da ake buƙata",
+    "enrol": "yawan shiga makaranta da halarta",
+    "oos": "yaran da ba sa zuwa makaranta",
+}
+
+
+def missing_line(cov: list[tuple[str, list[str], list[str]]], lang: str = "en",
+                 dims: list[Dimension] | None = None) -> str:
+    """The checklist measures not found, in the answer's language (a planned measure has only its English name)."""
+    ids = {m.name: m.id for d in dims or [] for m in d.measures}
     gone = [m for _, _, missing in cov for m in missing]
+    if lang == "ha":
+        gone = [MEASURE_HA.get(ids.get(m, ""), m) for m in gone]
     return "; ".join(gone[:6])
 
 
@@ -1012,7 +1135,7 @@ async def deep_answer(conn: psycopg.Connection, question: str, english: str, lan
     sections = [(n, t) for n, t in sections if t]
     differ = cite(keep_verified(VERDICT.sub("", str(d.get("differ") or "")).strip(), chosen), chosen)
     return DeepResult(cite(keep_verified(str(d.get("summary") or ""), chosen), chosen), sections, differ,
-                      missing_line(cov), chosen, list(dict.fromkeys(r.doc_id for r in readings)),
+                      missing_line(cov, lang, dims), chosen, list(dict.fromkeys(r.doc_id for r in readings)),
                       usage.total_dollars(settings) - start_cost, time.perf_counter() - t0, stopped, cov)
 
 
@@ -1057,6 +1180,7 @@ def brief_pdf(question: str, r: DeepResult) -> bytes:
     for c in r.claims:
         when = f" ({c.when})" if c.when else ""
         calc = " Calculated from the budget documents." if c.calculated else ""
+        calc += f" Basis: {c.basis}." if c.basis else ""
         lines += [("p", f"• {c.statement}: {house_amounts(c.value + (' ' + c.unit if c.unit == 'NGN' else ''))}"
                         f"{when}.{calc} {source_ref(c)}")]
     rows = []
