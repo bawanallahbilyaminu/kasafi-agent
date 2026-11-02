@@ -58,7 +58,7 @@ def test_a_figure_inside_a_planted_instruction_is_not_printed_evidence() -> None
     assert unverified_numbers("The Ministry of Health got ₦1,203,000,000.00 [1].", ev) == []
 
 
-# --- the confirm step ---------------------------------------------------------------------------------------------------
+# --- the confirm step ---------------------------------------------------------------------------------------------
 
 def test_the_confirm_step_sees_the_page_only_inside_the_delimiters_and_cannot_be_closed_from_inside() -> None:
     model = Obedient({"match": True, "excluded": False, "title": "x"})
@@ -78,7 +78,7 @@ def test_an_obeyed_injection_still_cannot_get_conflict_content_indexed() -> None
     assert screen("Monthly report", pages)[0] == "review"
 
 
-# --- readers and the synthesis ------------------------------------------------------------------------------------------
+# --- readers and the synthesis ------------------------------------------------------------------------------------
 
 def test_a_reader_obeying_the_page_keeps_no_planted_figure() -> None:
     page, _ = strip_instructions(PLANTED)
