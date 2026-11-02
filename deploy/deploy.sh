@@ -76,7 +76,8 @@ else C_RED="" C_GREEN="" C_CYAN="" C_DIM="" C_OFF=""; fi
 log() { printf '%s\n' "$*" >> "$LOGFILE"; }
 say() { printf '%s\n' "$*"; log "$*"; }
 took() { local s=$((SECONDS - START)); if ((s < 60)); then echo "${s}s"; else printf '%dm %02ds' $((s / 60)) $((s % 60)); fi; }
-commas() { sed -E ':a;s/\b([0-9]+)([0-9]{3})\b/\1,\2/;ta'; }   # whole numbers only: a commit hash stays
+# whole numbers only; the commit after 'live: ' / 'running ' stays as it is, even all digits ('9912743')
+commas() { sed -E 's/(live: |running )([0-9a-f]{7})\b/\1#\2/; :a; s/(^|[^#0-9])([0-9]+)([0-9]{3})\b/\1\2,\3/; ta; s/#//'; }
 steps() { TOTAL=$1; }
 step() { STEP=$((STEP + 1)); printf '%s[%d/%d]%s %s\n' "$C_CYAN" "$STEP" "$TOTAL" "$C_OFF" "$*"; log "[$STEP/$TOTAL] $*"; }
 tmpfile() { local f; f=$(mktemp "deploy/logs/tmp/$1.XXXXXX"); TMPS+=("$f"); echo "$f"; }
