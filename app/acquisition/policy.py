@@ -34,7 +34,11 @@ BASE_ALLOWLIST = (
 # ... plus every verified publisher domain in data/source_registry.yaml, loaded at startup (unverified ones stay
 # off until a probe and a person confirm them: scripts/probe_registry.py)
 ALLOWLIST = tuple(dict.fromkeys(BASE_ALLOWLIST + tuple(registry().domains())))
-BLOCKED = tuple(registry().blocked())          # probed unreachable or disallowed: never fetched
+# defence, military, intelligence and police publishers: their documents are security operations, which Kasafi
+# doesn't index (CLAUDE.md rule 5; audit F1). Never fetched, even under a trusted suffix (*.gov.ng, *.int).
+SECURITY_DENY = ("mil.ng", "defence.gov.ng", "nsa.gov.ng", "onsa.gov.ng", "dss.gov.ng", "npf.gov.ng",
+                 "police.gov.ng", "nscdc.gov.ng", "nia.gov.ng", "nato.int", "peacekeeping.un.org")
+BLOCKED = tuple(registry().blocked()) + SECURITY_DENY   # probed unreachable or disallowed, or security: never fetched
 
 # Open-web results (docs/question-planning.md §5) are fetched without review only from these patterns: Nigerian
 # government (*.gov.ng), treaty organisations (*.int: who.int, iom.int, reliefweb.int ...), the UN system's own

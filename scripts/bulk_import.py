@@ -101,7 +101,8 @@ async def ingest(state: Path, max_usd: float, limit: int | None, retry: bool = F
                 it.doc_id = got.doc_id or it.doc_id
                 it.detail = got.detail
                 it.status = {"indexed": "indexed", "known": "duplicate", "skipped": "flagged" if flagged else
-                             "duplicate"}.get(got.status, "excluded" if "excluded content" in got.detail else "failed")
+                             "duplicate"}.get(got.status, "excluded" if "excluded content" in got.detail else
+                                              "flagged" if got.detail.startswith("held for review") else "failed")
                 if got.status == "known" and conn.execute(          # this import's own earlier, interrupted run
                         "SELECT 1 FROM documents WHERE id = %s AND acquisition = 'imported' AND source_url = %s",
                         (got.doc_id, it.url)).fetchone():
