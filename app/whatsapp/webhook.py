@@ -116,7 +116,13 @@ async def deliver(client, to: str, out) -> None:
     """One message, split rather than cut: text over WhatsApp's 4,096 characters goes in several messages; a
     caption, a buttons body or a location request over 1,024 sends its text first and keeps a whole last part."""
     from app.whatsapp.client import SHORT_LIMIT, split_text
-    if getattr(out, "image", None):
+    if getattr(out, "document", None):           # a PDF brief: its caption with it, any rest as text after
+        data, filename = out.document
+        parts = split_text(out.text, SHORT_LIMIT)
+        await client.send_document(to, data, filename, parts[0])
+        for part in split_text("\n\n".join(parts[1:])) if len(parts) > 1 else []:
+            await client.send_text(to, part)
+    elif getattr(out, "image", None):
         parts = split_text(out.text, SHORT_LIMIT)
         await client.send_image(to, out.image, parts[0])
         for part in split_text("\n\n".join(parts[1:])) if len(parts) > 1 else []:

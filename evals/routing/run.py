@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT))
 sys.stdout.reconfigure(encoding="utf-8")
 
 ROUTES = ("emergency", "guard", "alert", "map", "facility_count", "facility_named", "facility_nearest",
-          "place_area", "place_pin", "outbreak", "outlook", "hazard", "planner")
+          "place_area", "place_pin", "outbreak", "outlook", "hazard", "deep", "planner")
 
 
 def route_for(question: str, settings, conn=None, place: dict | None = None) -> str:
@@ -50,6 +50,10 @@ def route_for(question: str, settings, conn=None, place: dict | None = None) -> 
     if MAP_ONLY.match(q):
         return "map"
     doc = document_question(q)
+    from app.agent.deep import deep_question
+    if deep_question(q) and not (area_route(q, "", place) or place_route(q)) and not official.route(q, []) \
+            and not (layers_asked(q, []) and not MONEY_WORDS.search(q)):
+        return "deep"                                         # a broad question: the deep analysis, never a shortcut
     if settings.kasafi_shortcut_facilities and not doc and not (other_subject(q) and not is_facility_query(q)):
         if is_count(q):
             return "facility_count"

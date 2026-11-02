@@ -81,6 +81,10 @@ class FakeWA:
         FakeWA.sent.append(("image", to, caption))
         return {}
 
+    async def send_document(self, to, data, filename, caption=""):
+        FakeWA.sent.append(("document", to, {"filename": filename, "pdf": data[:4], "caption": caption}))
+        return {}
+
     async def send_template(self, to, name, lang, values):
         FakeWA.sent.append(("template", to, name))
         return {}
@@ -105,6 +109,8 @@ class Stub:
     maps: list = field(default_factory=list)
     clarify: Any = None
     offer: Any = None
+    parts: list = field(default_factory=list)
+    deep: Any = None
 
 
 PLACE_TEXT = "*What the satellite record shows for this spot ({lga} LGA)*\n\nThis rainy season (2026) the plot was about as green as in normal years.\n\n{shape}"
@@ -116,6 +122,15 @@ VOICE_Q = SpeechResult(transcript="Nawa aka ware wa noma a 2026?", english="How 
 async def recorded_answer(question: str, lang: str, *, settings, notify=None, history=None, place=None):
     """The model-backed answer, replaced by recorded replies keyed on the question's words."""
     q = question.lower()
+    from app.agent.deep import deep_answer, deep_question, render
+    if deep_question(question):              # the real deep analysis on the dev library, models stubbed
+        import psycopg
+        from tests.test_deep import StubModel
+        with psycopg.connect(DEV_DB) as c:
+            r = await deep_answer(c, question, question, lang, client=StubModel(), open_client=StubModel(),
+                                  settings=settings, notify=notify)
+        summary, parts = render(r, lang)
+        return Stub(summary, bool(r.claims), parts=parts, deep=r)
     from app.place import planner as P
     if (r := P.area_route(question, "", place)):             # a ward / LGA / state question: the real code path
         import psycopg
@@ -443,3 +458,22 @@ def test_a_voice_note_is_transcribed_and_answered(harness):
     consented(h, me, "ha")
     sends = h.turn(audio(me), lambda s: len(s) >= 2 and s[0][2].startswith("🎧"), "voice note")
     assert "₦12.50" in sends[-1][2] and any("Nawa aka ware wa noma" in str(p) for _, _, p in sends)
+
+
+def test_a_broad_question_gets_a_deep_analysis_in_several_messages_and_the_brief_as_a_pdf(harness):
+    """'Whats the state of PHCs' (00:59) got the registry's one-line count; now: progress per stage, a summary,
+    a message per dimension, the differences and gaps, and the full brief as a PDF on request."""
+    h, me = harness, "2348000000911"
+    consented(h, me, "en")
+    store = h.store()
+    before = store.usage(h.key(me))[1]
+    sends = h.turn(text("Whats the state of PHCs in sokoto state", me),
+                   lambda s: len([x for x in s if x[0] == "text"]) >= 5, "deep question")
+    bodies = [p for k, _, p in sends if k == "text"]
+    assert any(b.startswith("📚 Reading") for b in bodies) and any(b.startswith("*facilities") for b in bodies)
+    assert not any("health facilities" in b and b.strip().endswith(".") and len(b) < 80 for b in bodies[:2])
+    assert any("full brief" in b for b in bodies)
+    assert store.usage(h.key(me))[1] - before == 2                     # a deep answer counts double
+    sends = h.turn(text("full brief", me), 1, "full brief")
+    kind, _, doc = sends[0]
+    assert kind == "document" and doc["filename"] == "kasafi-brief.pdf" and doc["pdf"] == b"%PDF"

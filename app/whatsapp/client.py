@@ -211,6 +211,23 @@ class WhatsAppClient:
             resp.raise_for_status()
         return str(resp.json()["id"])
 
+    async def send_document(self, to: str, data: bytes, filename: str, caption: str = "",
+                            mime: str = "application/pdf") -> dict:
+        """A document message (a deep analysis's full brief as a PDF): uploaded, then sent by its media id."""
+        media_id = await self.upload_media(data, mime=mime, filename=filename)
+        resp = await self._http.post(f"/{self.phone_number_id}/messages", json={
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": to,
+            "type": "document",
+            "document": {"id": media_id, "filename": filename, "caption": caption[:1024]},
+        })
+        if not resp.is_success:
+            log.warning("WhatsApp document to %s failed: HTTP %s, Graph error code %s",
+                        mask_phone(to), resp.status_code, _graph_code(resp))
+            resp.raise_for_status()
+        return resp.json()
+
     async def send_image(self, to: str, jpeg: bytes, caption: str = "") -> dict:
         media_id = await self.upload_media(jpeg)
         resp = await self._http.post(f"/{self.phone_number_id}/messages", json={

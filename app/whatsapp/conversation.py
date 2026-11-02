@@ -73,6 +73,16 @@ SLOW_ANSWER_S = 12.0        # after this, a "still checking" note (unless a fetc
 SHOW_QUOTES = {"quotes", "quote", "show quotes", "show the quotes", "/quotes", "nuna rubutun", "nuna min rubutun",
                "rubutun", "nuna rubutu", "/rubutu"}
 QUOTES_NONE = {"en": "That answer quoted no document text.", "ha": "Wannan amsar ba ta ambaci rubutun takarda ba."}
+FULL_BRIEF = {"full brief", "the full brief", "brief", "full report", "pdf", "cikakken rahoto", "cikakken bayani a pdf",
+              "rahoto pdf"}
+BRIEF_TTL_S = 3600
+BRIEF_WORDS = {"en": {"caption": "📄 The full brief: every section with its sources and pages.",
+                      "none": "There is no recent analysis to send as a brief. Ask a broad question first, e.g. "
+                              "'What's the state of PHCs in Sokoto?'"},
+               "ha": {"caption": "📄 Cikakken rahoton: dukkan sassan da madogararsu da shafuka.",
+                      "none": "Babu wani bincike na kwanan nan da zan aika a matsayin rahoto. Ka fara da tambaya mai "
+                              "fadi, misali 'Yaya yanayin cibiyoyin kiwon lafiya na Sokoto?'"}}
+_briefs: dict[str, tuple[float, str, object]] = {}     # user key -> (when, question, deep result): memory only, 1 h
 SHOW_WORKING = {"nuna lissafi", "nuna min lissafi", "nuna lissafin", "yadda aka lissafa", "lissafi",
                 "show working", "show the working", "show me the working", "show calculation", "working", "/lissafi",
                 "/working"}
@@ -87,6 +97,7 @@ class Out:
     location_request: bool = False     # sent as WhatsApp's location request message ("Share location" button)
     location: dict | None = None       # sent as a location message (a facility's pin): latitude, longitude, name...
     image: bytes | None = None         # a map (JPEG), sent with `text` as its caption
+    document: tuple[bytes, str] | None = None   # a PDF (bytes, file name), sent with `text` as its caption
 
     def __post_init__(self) -> None:   # every message: no look-alike letters from other scripts ('ҳ' for 'ƴ')
         self.text = normalize_letters(self.text, self.lang)
@@ -265,6 +276,14 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         turns = store.recent_turns(key)
         working = turns[-1].get("working", "") if turns else ""
         return [Out(working or t("no_working", lang))]
+    if text and _norm(text) in FULL_BRIEF:                          # the last deep analysis as a PDF, no model
+        brief = _briefs.get(key)
+        if not brief or time.time() - brief[0] > BRIEF_TTL_S:
+            return [Out(BRIEF_WORDS.get(lang, BRIEF_WORDS["en"])["none"], lang=lang)]
+        from app.agent.deep import brief_pdf
+        pdf = await asyncio.to_thread(brief_pdf, brief[1], brief[2])
+        return [Out(BRIEF_WORDS.get(lang, BRIEF_WORDS["en"])["caption"], lang=lang,
+                    document=(pdf, "kasafi-brief.pdf"))]
     exempt = "".join(ch for ch in sender if ch.isdigit()) in settings.exempt_numbers
     voice_used, questions_used = store.usage(key)
     pending = store.get_pending(key, settings.kasafi_pending_ttl_minutes)
@@ -316,12 +335,15 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                 place["ask_size"] = True
             try:
                 # every long job ends in an answer or an apology within the limit, never silence
+                from app.agent.deep import TIME_BUDGET_S, deep_question
+                limit = max(settings.kasafi_answer_timeout_s, TIME_BUDGET_S + 10) if deep_question(question) \
+                    else settings.kasafi_answer_timeout_s                    # a deep analysis: 180 s
                 result = await asyncio.wait_for(
                     # an exact location typed or spoken into the question never reaches a model (app/privacy.py);
                     # the history is read back from the store, where it was removed before writing
                     answer(strip_location(question), lang, settings=settings, notify=send_now,
                            history=store.recent_turns(key),
-                           **({"place": place} if place else {})), timeout=settings.kasafi_answer_timeout_s)
+                           **({"place": place} if place else {})), timeout=limit)
             finally:
                 slow.cancel()
             body = result if isinstance(result, str) else result.text
@@ -356,6 +378,11 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         crops = (plan_crops(result, settings.kasafi_max_images)
                  if result is not None and settings.kasafi_evidence_images and store.images_on(key) else None)
         outs = [Out(text_out, CALC_BUTTONS.get(lang, CALC_BUTTONS["en"]) if offer else None, crops or None, lang)]
+        if (deep := getattr(result, "deep", None)) is not None:     # one short message per dimension; the brief kept
+            outs += [Out(p, lang=lang) for p in getattr(result, "parts", []) or []]
+            _briefs[key] = (time.time(), question, deep)
+            for k in [k for k, v in _briefs.items() if time.time() - v[0] > BRIEF_TTL_S]:
+                _briefs.pop(k, None)
         if (specs := getattr(result, "maps", None)) and store.images_on(key) and settings.has_database:
             from app.agent.answer import lagos_today           # 'tomorrow' on tomorrow's map, not 'today'
             # the checked text goes now; the maps follow under their own deadline (follow-up review, finding 5).
@@ -516,6 +543,9 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         if not exempt and questions_used >= settings.kasafi_questions_per_day:
             return [Out(t("question_limit", lang, n=settings.kasafi_questions_per_day))]
         store.count(key, "questions")
+        from app.agent.deep import deep_question
+        if deep_question(text):                   # a deep analysis counts double against the daily limit
+            store.count(key, "questions")
         if pending:                               # a typed correction, or a new question
             if over_cap(settings.kasafi_cost_per_question_usd):
                 return [Out(t("busy", lang))]
@@ -759,6 +789,9 @@ async def _facilities(text: str, key: str, lang: str, store: UserStore, settings
                                        key)
     if document_question(text):          # a publisher, survey or report named: the document path answers
         return None                      # (the planner may add registry data as a supplement; app/agent/routing.py)
+    from app.agent.deep import deep_question
+    if deep_question(text):              # 'the state of PHCs': a deep analysis, never the registry's one-line count
+        return None
     if other_subject(text) and not is_facility_query(text):   # staff, equipment, services, money AT facilities
         return None                      # are the planner's (the nearest-facility search still takes 'nearest')
     if is_count(text):                   # 'how many PHCs in Sokoto?': the registry's count

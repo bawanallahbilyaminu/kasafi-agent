@@ -395,6 +395,69 @@
    "question": "Asibitoci nawa ne a Kebbe?",
    "expected": "facility_count",
    "note": "control, Hausa"
+  },
+  {
+   "id": "r65",
+   "lang": "en",
+   "question": "Whats the state of PHCs in sokoto state",
+   "expected": "deep",
+   "note": "live 00:59: got a one-line facility count"
+  },
+  {
+   "id": "r66",
+   "lang": "en",
+   "question": "Give me an overview of primary health care in Sokoto",
+   "expected": "deep"
+  },
+  {
+   "id": "r67",
+   "lang": "en",
+   "question": "How is basic education doing in Sokoto State?",
+   "expected": "deep"
+  },
+  {
+   "id": "r68",
+   "lang": "en",
+   "question": "Analyse the health facilities in Wamakko",
+   "expected": "deep"
+  },
+  {
+   "id": "r69",
+   "lang": "en",
+   "question": "What are the main challenges facing primary health centres in Sokoto?",
+   "expected": "deep"
+  },
+  {
+   "id": "r70",
+   "lang": "en",
+   "question": "Tell me everything about nomadic education in Sokoto",
+   "expected": "deep"
+  },
+  {
+   "id": "r71",
+   "lang": "ha",
+   "question": "Yaya yanayin cibiyoyin kiwon lafiya a Sokoto?",
+   "expected": "deep"
+  },
+  {
+   "id": "r72",
+   "lang": "ha",
+   "question": "Wane hali asibitocin Sokoto ke ciki? Ina son bayani dalla-dalla",
+   "expected": "deep"
+  },
+  {
+   "id": "r73",
+   "lang": "en",
+   "question": "What's the situation of flooding in Wamakko this week?",
+   "expected": "hazard",
+   "note": "control: a hazard situation keeps the hazard layers"
+  },
+  {
+   "id": "r74",
+   "lang": "en",
+   "question": "How many PHCs are in Sokoto State?",
+   "expected": "facility_count",
+   "note": "control: a plain count"
   }
  ]
 }

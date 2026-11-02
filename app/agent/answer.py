@@ -54,6 +54,7 @@ from app.hazards.answer import MEASURE_LAYERS, days_asked, hazard_answer, layers
 from app.hazards.summary import hazard_summary
 from app.place.answer import place_answer, place_route
 from app.place.planner import area_answer, area_route
+from app.agent.deep import deep_question
 from app.agent.routing import document_question, other_subject, own_source
 from app.agent.topics import note_of as topic_note
 from app.agent.topics import local_documents as topics_local
@@ -499,6 +500,8 @@ class Answer:
     # calculation checked | unsupported; `verified` stays the one-word summary (False only for unsupported)
     verification: str = ""
     attribution: list[str] = field(default_factory=list)   # the binding problems found, for show working and the trace
+    parts: list[str] = field(default_factory=list)          # further messages after the text (a deep answer's sections)
+    deep: object | None = None                              # a deep analysis (app/agent/deep.py): its brief on request
 
 
 CONVERTED: dict[str, str] = {}       # doc id -> original format, for documents converted from Word-type files
@@ -1714,19 +1717,48 @@ def place_question(question: str, english: str = "", place: dict | None = None) 
     return bool(place_route(question, english) or area_route(question, english, place))
 
 
+async def deep_path(conn, plan: Plan, question: str, lang: str, client, second, settings: Settings, notify,
+                    t: dict) -> Answer:
+    """The deep analysis as an Answer: the summary first, a message per dimension after it, the claims cited
+    (their pages are the evidence), the brief kept for 'full brief'. Its measured cost and time are traced."""
+    from app.agent.deep import deep_answer, render
+    t0 = time.perf_counter()
+    r = await deep_answer(conn, question, plan.english_question, lang, client=client, open_client=second,
+                          settings=settings, notify=notify)
+    t["deep"] = time.perf_counter() - t0
+    t["deep_cost"] = round(r.cost, 4)
+    t["deep_docs"] = float(len(r.documents))
+    t["deep_claims"] = float(len(r.claims))
+    summary, parts = render(r, lang)
+    cited, seen = [], set()
+    for c in r.claims:
+        if (c.doc_id, c.page) not in seen and not c.doc_id.startswith("registry:"):
+            seen.add((c.doc_id, c.page))
+            cited.append(Evidence(len(cited) + 1, c.doc_id, c.title, None, c.page, "text",
+                                  f"{c.statement} {c.value}"))
+    log.info("deep answer: %d documents, %d claims, $%.3f, %.0f s%s", len(r.documents), len(r.claims), r.cost,
+             r.seconds, f", stopped: {r.stopped}" if r.stopped else "")
+    exact = "\n".join([r.summary] + [f"{n}: {x}" for n, x in r.sections])
+    return Answer(summary, bool(r.claims), True, cited, plan, t, exact=exact, parts=parts, deep=r,
+                  verification="figures checked" if r.claims else "unsupported",
+                  partial=bool(r.stopped), sources=[{"doc_id": e.doc_id, "page": e.page} for e in cited])
+
+
 async def answer_question(question: str, lang: str, conn: psycopg.Connection, **kw) -> Answer:
     """The loop around the paths: never crash on a malformed model reply (after one retry, ask the user to
     rephrase); keep a structured partial answer when the text paths do no better; say where a figure exists
     when nothing answers at the asked level; stop at the time budget with whatever was verified."""
     box: dict = {}
+    from app.agent.deep import TIME_BUDGET_S, deep_question
+    budget = TIME_BUDGET_S if deep_question(question) else LOOP_BUDGET_S     # a deep analysis: 180 s
     try:
-        a = await asyncio.wait_for(_answer_question(question, lang, conn, box=box, **kw), timeout=LOOP_BUDGET_S)
+        a = await asyncio.wait_for(_answer_question(question, lang, conn, box=box, **kw), timeout=budget)
     except ReplyError:
         log.warning("no usable model reply for a question; asked to rephrase")
         return Answer(REPHRASE.get(lang, REPHRASE["en"]), False, True)
     except asyncio.TimeoutError:
         plan = box.get("plan")
-        log.warning("the answer loop ran out of its %.0f s budget", LOOP_BUDGET_S)
+        log.warning("the answer loop ran out of its %.0f s budget", budget)
         if plan is not None and plan.held is not None:
             return plan.held
         return Answer(TIMED_OUT.get(lang, TIMED_OUT["en"]), False, True, plan=plan)
@@ -1772,6 +1804,13 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         await settle_by_words(plan, question, planned_q, catalog, names, second, settings, today, history, lang, t)
         if box is not None:
             box["plan"] = plan            # the loop's budget can stop us; it keeps what was verified
+        # a broad question ('the state of PHCs', 'yaya yanayin ...'): a deep analysis across the library, never a
+        # count or lookup shortcut, never a clarifying question (app/agent/deep.py)
+        if conn is not None and not place and deep_question(question, plan.english_question) \
+                and not place_question(question, plan.english_question, place) and not hazard_route(question, plan) \
+                and not official.route(f"{question} {plan.english_question}",
+                                       list(plan.need.measures) if plan.need else []):
+            return await deep_path(conn, plan, question, lang, client, second, settings, notify, t)
         # two readings, both can't be shown: ask; never for a place-history question (the planner may ask "where is
         # your farm?" without knowing the pin travels with the question: the place path asks for one itself)
         # … nor for "what does the <report> say about X": the report's own wording answers, whichever reading

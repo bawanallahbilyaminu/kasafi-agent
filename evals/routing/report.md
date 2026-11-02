@@ -1,6 +1,6 @@
 # Routing eval (in code), 2026-11-02
 
-64 cases, **0 wrong**, 0 skipped (no facility registry).
+74 cases, **0 wrong**, 0 skipped (no facility registry).
 
 | id | lang | expected | got | question |
 |---|---|---|---|---|
@@ -68,3 +68,13 @@
 | r62 | ha | planner | planner | Ma'aikatan lafiya nawa ake bukata a cibiyoyin kiwon lafiya na Dange Shuni? |
 | r63 | en | facility_count | facility_count | How many primary health centres are there in Wamakko? |
 | r64 | ha | facility_count | facility_count | Asibitoci nawa ne a Kebbe? |
+| r65 | en | deep | deep | Whats the state of PHCs in sokoto state |
+| r66 | en | deep | deep | Give me an overview of primary health care in Sokoto |
+| r67 | en | deep | deep | How is basic education doing in Sokoto State? |
+| r68 | en | deep | deep | Analyse the health facilities in Wamakko |
+| r69 | en | deep | deep | What are the main challenges facing primary health centres in Sokoto? |
+| r70 | en | deep | deep | Tell me everything about nomadic education in Sokoto |
+| r71 | ha | deep | deep | Yaya yanayin cibiyoyin kiwon lafiya a Sokoto? |
+| r72 | ha | deep | deep | Wane hali asibitocin Sokoto ke ciki? Ina son bayani dalla-dalla |
+| r73 | en | hazard | hazard | What's the situation of flooding in Wamakko this week? |
+| r74 | en | facility_count | facility_count | How many PHCs are in Sokoto State? |
