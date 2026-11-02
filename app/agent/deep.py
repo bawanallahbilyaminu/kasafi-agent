@@ -113,6 +113,7 @@ class Claim:
     calculated: bool = False     # computed in code from printed budget figures (a share, the share spent)
     from_rows: bool = False      # read from the budget and BIR rows in code (the money series over the years)
     basis: str = ""              # a survey figure's table and basis ('... (Valid dose coverage); according to ...')
+    refs: list = field(default_factory=list)    # more (title, page) sources a calculation rests on, cited after its own
 
     @property
     def when(self) -> str:
@@ -572,8 +573,10 @@ def share_swing(conn: psycopg.Connection, cl: Checklist, agency: dict, sector: d
         said += f", while {name}'s own capital went from ₦{_naira(own[1][0])} to ₦{_naira(own[2][0])}"
     # the value is the y2 figure; each figure in the label carries its own year ('92.52 billion in 2025-2026' was
     # written from a combined year)
+    # cited with both budgets: the earlier share's own page (2025 budget, p. 19) and the later total's
     return Claim(dim_name, said, big[2][1], "NGN", str(y2), "Sokoto State", a2.doc_id, a2.title, big[2][2],
-                 "money_alloc", "gap", a2.doc_year, True, True)
+                 "money_alloc", "gap", a2.doc_year, True, True,
+                 refs=[(s1.title, s1.page)] + ([(s2.title, s2.page)] if s2.page != big[2][2] else []))
 
 
 # --- 3. reading -------------------------------------------------------------------------------------------------
@@ -808,6 +811,7 @@ def informativeness(c: Claim, measures: set[str], pairs: set[int] = frozenset())
     s = KIND_WEIGHT.get(c.kind, 2.0)
     s += 2.0 if c.measure in measures else 0.0
     s += 2.5 if id(c) in pairs else 0.0
+    s += 1.0 if c.basis and FULLER_BASIS.search(c.basis) else 0.0     # crude card-or-recall before card only
     s += 1.0 if re.search(r"%|₦|\bN\d|NGN|naira", f"{c.value} {c.unit}", re.I) or "," in c.value else 0.0
     s += 0.5 if STATEWIDE.search(f"{c.statement} {c.entity}") else 0.0
     s += 0.5 if c.year.strip() else 0.0
@@ -816,7 +820,28 @@ def informativeness(c: Claim, measures: set[str], pairs: set[int] = frozenset())
 
 
 def _value_key(c: Claim) -> str:
-    return re.sub(r"[^\d.%]", "", c.value).rstrip("0").rstrip(".") + c.measure
+    """The same figure on the same page once ('26 PHCs out of 84 met the minimum' and '26 facilities to build' are
+    two figures: the 3 Nov live run lost the first to the second)."""
+    return f"{re.sub(r'[^\d.%]', '', c.value).rstrip('0').rstrip('.')}|{c.measure}|{c.doc_id}|{c.page}"
+
+
+ZERO = re.compile(r"^\s*0+(?:\.0+)?\s*%?\s*$")
+FULLER_BASIS = re.compile(r"(?i)crude|mother|recall|report")
+
+
+def zero_beside_figure(c: Claim, claims: list[Claim]) -> bool:
+    """A 0.0% coverage figure when the same measure has a non-zero figure ('all 1YL antigens 0.0' beside 'basic
+    antigens 3.7'): the zero says little and reads as a finding."""
+    return bool(ZERO.match(c.value)) and any(o is not c and o.measure == c.measure and o.measure and
+                                             not ZERO.match(o.value) for o in claims)
+
+
+def inside_another(c: Claim, chosen: list[Claim]) -> bool:
+    """A figure already said inside a chosen claim from the same page ('84' in '26 PHCs out of 84 assessed')."""
+    num = re.sub(r"[^\d.]", "", c.value)
+    return bool(num) and any(o.doc_id == c.doc_id and o.page == c.page and o.value != c.value and
+                             re.search(rf"(?<![\d.,]){re.escape(c.value.strip())}(?![\d.,])", o.statement)
+                             for o in chosen)
 
 
 def select_claims(claims: list[Claim], dims: list[Dimension], question: str = "",
@@ -825,6 +850,7 @@ def select_claims(claims: list[Claim], dims: list[Dimension], question: str = ""
     measure and `per_dimension` in all; the same figure once. Dimension order, best first."""
     measures = {m.id for d in dims for m in d.measures}
     kept = [c for c in claims if not junk(c, question)]
+    kept = [c for c in kept if not zero_beside_figure(c, kept)]
     out: list[Claim] = []
     for d in dims:
         mine = [c for c in kept if c.dimension == d.name]
@@ -842,6 +868,8 @@ def select_claims(claims: list[Claim], dims: list[Dimension], question: str = ""
             # trivia (a single item or background outside the checklist: 'the blueprint has 18 objectives') only
             # fills a dimension that has little else
             if not c.measure and c.kind in ("detail", "") and len(chosen) >= 2:
+                continue
+            if inside_another(c, chosen):
                 continue
             seen.add(k)
             per_m[c.measure] = per_m.get(c.measure, 0) + 1
@@ -974,7 +1002,8 @@ def source_ref(c: Claim, page: bool = True) -> str:
     """'Title, p. 12'; the registry by its name and date, never 'p. 0'."""
     if c.doc_id.startswith("registry:"):
         return REGISTRY_REF
-    return f"{short_title(c.title)}, p. {c.page}" if page and c.page else short_title(c.title)
+    own = f"{short_title(c.title)}, p. {c.page}" if page and c.page else short_title(c.title)
+    return "; ".join([own] + [f"{short_title(t)}, p. {pg}" for t, pg in c.refs]) if page and c.refs else own
 
 
 def house_amounts(text: str) -> str:
@@ -984,7 +1013,20 @@ def house_amounts(text: str) -> str:
                  lambda m: f"₦{m.group(1)}" + (f" {m.group(2)}" if m.group(2) else ""), text)
     out = readable_amounts(out, "en")
     out = re.sub(r"(₦[\d.,]+(?: (?:million|billion|trillion))?) ?NGN\b", r"\1", out)     # '₦4 billion NGN'
-    return re.sub(r"(₦\d+)\.00 (million|billion|trillion)\b", r"\1 \2", out)
+    out = re.sub(r"(₦\d+)\.00 (million|billion|trillion)\b", r"\1 \2", out)
+    return thousands(out)
+
+
+def thousands(text: str) -> str:
+    """Large counts in Kasafi's wording with separators ('11202 personnel' -> '11,202'); years (1900-2099), page
+    numbers, codes (10+ digits) and decimals stay as they are."""
+    def sub(m: re.Match) -> str:
+        n = m.group(1)
+        before = text[max(0, m.start() - 6):m.start()].lower()
+        if (len(n) == 4 and 1900 <= int(n) <= 2099) or re.search(r"(?:pp?\.|page|code|no\.)\s*$", before):
+            return n
+        return f"{int(n):,}"
+    return re.sub(r"(?<![\d.,/\w-])(\d{4,9})(?![\d/\w]|[.,]\d)", sub, text)
 
 
 def cite(text: str, claims: list[Claim]) -> str:

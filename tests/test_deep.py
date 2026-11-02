@@ -341,6 +341,48 @@ def test_the_not_found_line_uses_hausa_measure_names_in_a_hausa_answer() -> None
     assert "immunisation coverage" in D.missing_line(D.coverage([], dims[3:4]), "en", dims)
 
 
+def test_the_same_number_from_two_findings_on_a_page_is_two_claims_and_a_denominator_isnt_repeated() -> None:
+    """3 Nov live run: '26 PHCs out of 84 met the minimum human resources requirements' (ROP p. 9) was lost to
+    '26 facilities to build' (MSP p. 7) by a value-only dedupe, and '84 PHCs assessed' was said instead."""
+    dims = [D.phc_checklist().dimensions[0]]
+    build = C("facilities and infrastructure", "26 facilities need to be constructed", "26", "gap", "fac_need", page=7)
+    met = D.Claim("facilities and infrastructure", "26 PHCs out of 84 PHCs assessed met the minimum human resources "
+                  "requirements", "26", "PHCs", "", "Sokoto State", "rop", "ROP", 9, "fac_need", "gap", 2023)
+    assessed = D.Claim("facilities and infrastructure", "84 PHCs were assessed for DRF readiness", "84", "PHCs", "",
+                       "Sokoto State", "rop", "ROP", 9, "fac_count", "detail", 2023)
+    got = D.select_claims([build, met, assessed], dims)
+    assert met in got and build in got and assessed not in got
+
+
+def test_a_zero_coverage_figure_beside_a_non_zero_one_is_dropped_and_crude_coverage_leads() -> None:
+    dims = [D.phc_checklist().dimensions[3]]
+    valid = D.Claim("service coverage", "basic antigens, valid dose", "3.7", "%", "2021", "Sokoto", "mics", "MICS",
+                    197, "cov_imm", "share", 2021, basis="Table TC.1.3 (Valid dose coverage); according to vaccination "
+                    "records")
+    zero = D.Claim("service coverage", "all 1YL antigens", "0.0", "%", "2021", "Sokoto", "mics", "MICS", 197,
+                   "cov_imm", "share", 2021, basis=valid.basis)
+    crude = D.Claim("service coverage", "basic antigens, crude", "7.2", "%", "2021", "Sokoto", "mics", "MICS", 190,
+                    "cov_imm", "share", 2021, basis="Table TC.1.2 (Crude coverage); according to vaccination card or "
+                    "mother's report")
+    got = D.select_claims([valid, zero, crude], dims)
+    assert zero not in got and got[0] is crude
+    alone = D.select_claims([zero], dims)                                  # a zero with nothing beside it stays
+    assert alone == [zero]
+
+
+def test_kasafis_own_wording_prints_large_counts_with_separators() -> None:
+    assert D.thousands("within a total of 11202 personnel in 2020 (MSP, p. 1234)") == \
+        "within a total of 11,202 personnel in 2020 (MSP, p. 1234)"
+    assert D.thousands("3395 staff, code 052100300100, ₦1,221,243,045.30, 14.8%") == \
+        "3,395 staff, code 052100300100, ₦1,221,243,045.30, 14.8%"
+
+
+def test_the_share_swing_is_cited_with_both_budgets() -> None:
+    c = D.Claim("funding", "share moved", "92,523,418,285.85", "NGN", "2026", "Sokoto State", "budget-2026-approved",
+                "Sokoto State FY 2026 Budget", 27, refs=[("Sokoto State Government 2025 Approved Budget", 19)])
+    assert D.source_ref(c) == "Sokoto State FY 2026 Budget, p. 27; Sokoto State Government 2025 Approved Budget, p. 19"
+
+
 def test_amounts_keep_their_space_and_house_style() -> None:
     assert D.house_amounts("₦1 NGN") == "₦1"                               # never '₦₦1'
     assert D.house_amounts("15,000,000.00 NGN allocated to renovation") == "₦15 million allocated to renovation"
@@ -376,3 +418,4 @@ def test_the_agencys_money_comes_from_the_budget_and_bir_rows(conn) -> None:
     assert "26.6% (2025) to 5.9% (2026)" in swing.statement and "code 052100300100" in swing.statement
     assert "Ministry of Health capital" in swing.statement and swing.value == "92,523,418,285.85"
     assert "own capital went from ₦11,920,018,880.00 to ₦5,797,000,000.00" in swing.statement
+    assert swing.refs[0][1] == 19 and "2025" in swing.refs[0][0]           # the 2025 share's own page
