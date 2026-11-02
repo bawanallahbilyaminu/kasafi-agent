@@ -60,7 +60,7 @@ def test_the_plan_dedupes_known_urls_site_copies_and_same_editions_and_orders_by
     items = [bulk.Item(U + "q3.pdf", "Sokoto State 2025 Q3 BIR", "pdf"),
              bulk.Item(U + "laws.pdf", "Fiscal responsibility law", "pdf", size=1000),
              bulk.Item(U + "laws-1.pdf", "Fiscal responsibility law", "pdf", size=1000),
-             bulk.Item(U + "law26.pdf", "Sokoto State 2026 Appropriation Law", "pdf"),
+             bulk.Item(U + "law26.pdf", "Sokoto State 2026 Approved Budget", "pdf"),
              bulk.Item(U + "q3-26.pdf", "Sokoto State 2026 Q3 BIR", "pdf", date="2026-10-27"),
              bulk.Item(U + "bandits.pdf", "Bandit attacks report", "pdf")]
     out = bulk.plan(conn, items)
