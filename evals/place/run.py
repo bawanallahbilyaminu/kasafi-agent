@@ -77,16 +77,26 @@ def main() -> None:
     ap.add_argument("--full", action="store_true", help="through answer_question (model planner; eval spend)")
     ap.add_argument("--only", default="", help="a family or an id")
     ap.add_argument("--file", default=str(ROOT / "evals/place/cases.json"))
+    ap.add_argument("--start", default="", help="resume at this id (the cases before it are skipped)")
     a = ap.parse_args()
     cases = json.loads(Path(a.file).read_text(encoding="utf-8"))["cases"]
     if a.only:
         cases = [c for c in cases if c["family"] == a.only or c["id"] == a.only]
+    if a.start:
+        cases = cases[next(i for i, c in enumerate(cases) if c["id"] == a.start):]
     lines, wrong_n, times = [], 0, []
     with psycopg.connect(get_settings().db_url()) as conn:
         for c in cases:
             t0 = time.perf_counter()
             if a.full:
-                text, working, level, unit = asyncio.run(run_full(c, conn))
+                try:                       # a network failure is that case's error, never the end of the run
+                    text, working, level, unit = asyncio.run(run_full(c, conn))
+                except Exception as e:     # noqa: BLE001
+                    conn.rollback()
+                    print(c["id"], c["family"], c["lang"], [f"ERROR {type(e).__name__}"])
+                    lines.append(f"| {c['id']} | {c['family']} | {c['lang']} | {c['year']} | - | ERROR {type(e).__name__} |")
+                    wrong_n += 1
+                    continue
             else:
                 r = P.area_route(c["question"], "", c.get("place"))
                 if r is None:
