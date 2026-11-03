@@ -70,9 +70,10 @@ count the same thing twice as not added). Never ask for a total or suggest one i
 figures up yourself: name the missing parts only.
 - unsupported: compare every figure with the EVIDENCE. Rounding is fine (₦1.94 billion for 1,940,000,000). Figures \
 the CODE CHECK says were computed in code are supported.
-- ROUND 1: anything missing, a mismatch or a contradiction is "revise" (another search can find it). ROUND 2: a \
-draft that answers about the right subject with supported figures and says plainly what the documents don't give \
-is "pass" (an honest partial answer passes); otherwise "fail".
+- A draft that answers about the right subject with supported figures and says plainly, for each missing thing, \
+that the documents don't give it is "pass" (an honest partial answer), in either round. ROUND 1: something \
+missing that the draft leaves out without saying so, a mismatch or a contradiction is "revise" (another search \
+can find it). ROUND 2: otherwise "fail".
 - "fail" when the draft is wrong and more searching won't fix it (a figure the evidence contradicts, the wrong \
 subject with no evidence for the right one).
 - "pass" when it answers the question asked, about the right subject, with supported figures and no contradiction.
@@ -256,13 +257,20 @@ async def check(message: str, a, u, history: list[dict] | None, conn, settings, 
     if v is None:
         v = Verdict("skipped", round=round_, why=why)
     v.rules = rules
+    if computed_in_code(a) and v.verdict in ("revise", "fail") and not rules and not v.wrong_subject:
+        # an answer written in code from the data (place history, hazards, budget tools): its figures and wording
+        # are tested in code and the check sees only part of what code read, so it judges the subject alone (3 Nov:
+        # a ward greenness answer's budget lines were called unsupported and the answer rewritten)
+        v.why = f"computed in code, subject matches (model said {v.verdict})"
+        v.verdict = "pass"
     if rules and v.verdict in ("pass", "skipped"):
         v.verdict = "revise" if round_ == 1 else "fail"
         v.feedback = (v.feedback + " " if v.feedback else "") + "; ".join(rules)
-    elif round_ == 2 and v.verdict in ("revise", "fail") and honest_partial(v):
-        # the second draft is about the right subject, every figure supported, and it says plainly what the
-        # documents don't give: an honest partial answer passes, whatever the model's verdict (3 Nov: 'IQS isn't
-        # printed by LGA' was failed twice and the right 173 total lost)
+    elif v.verdict in ("revise", "fail") and honest_partial(v):
+        # the draft is about the right subject, every figure supported, and it says plainly what the documents don't
+        # give: an honest partial answer passes, whatever the model's verdict, in either round (3 Nov: 'IQS isn't
+        # printed by LGA' was failed twice and the right total lost; on the right answers replayed, every false
+        # 'revise' was a stated gap, while every live bad draft left its gap out, contradicted itself or broke a rule)
         v.why = f"honest partial (model said {v.verdict})"
         v.verdict = "pass"
     v.seconds = time.perf_counter() - t0
@@ -270,6 +278,12 @@ async def check(message: str, a, u, history: list[dict] | None, conn, settings, 
     log.info("answer check round %d: %s in %.1fs (%s)%s", round_, v.verdict, v.seconds, v.provider,
              f": {v.feedback[:200]}" if v.verdict != "pass" else "")
     return v
+
+
+def computed_in_code(a) -> bool:
+    """Written in code from data, not composed by a model from pages: the place, hazard and structured paths
+    ('calculation checked', or an answer with code's exact text and no cited pages)."""
+    return a.found and (a.verification == "calculation checked" or (bool(a.exact) and not a.cited))
 
 
 def honest_partial(v: Verdict) -> bool:

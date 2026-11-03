@@ -2170,7 +2170,10 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
             t["facilities"] = 0.0
             return Answer(fac, True, True, plan=plan, timings=t, exact=fac)
         # place history for a ward, an LGA or the state (docs/place-history.md §5): the precomputed measures
-        shortcut = not document_question(question)                   # a source named: the document path (routing.py)
+        # a source named: the document path (routing.py), unless the reading says place history: it already weighed
+        # the source (3 Nov: 'according to JRC', a satellite dataset, in the restatement had sent ward water
+        # questions to a web search)
+        shortcut = not document_question(question) or (u is not None and u.capability == "place_history")
         place_on = shortcut and settings.kasafi_shortcut_place and allow("place_history")  # switches: docs/routing.md
         if conn is not None and place_on and (ar := area_route(question, plan.english_question, place)):
             t0 = time.perf_counter()
@@ -2847,7 +2850,9 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
         values = {p.value for p in checked_parts(d, by_n, [])}
 
         def repeats(item: str) -> bool:
-            nums = re.findall(r"\d[\d,]*(?:\.\d+)?", re.sub(r"(?i)\b(?:page|shafi|p\.)\s*[\d, ]+|\[\d+\]", " ", item))
+            body = re.sub(r"(?i)\b(?:page|shafi|p\.)\s*[\d, ]+|\[\d+\]|\b(?:19|20)\d\d(?:\s*/\s*(?:19|20)?\d\d)?\b",
+                          " ", item)                        # page refs, citations and years aren't the figures
+            nums = re.findall(r"\d[\d,]*(?:\.\d+)?", body)
             return bool(nums) and set(nums) <= values
         items = [i for i in items if not repeats(i)]
     shown = {**d, "summary": drop_verdicts(str(d.get("summary") or d.get("answer") or ""), q_all), "items": items}

@@ -57,6 +57,24 @@ def test_a_code_rule_turns_a_model_pass_into_revise_then_fail() -> None:
     assert v1.verdict == "revise" and v2.verdict == "fail" and v1.wrong_subject
 
 
+def test_an_answer_computed_in_code_is_judged_on_its_subject_only() -> None:
+    class Says:
+        provider = "fake"
+
+        def __init__(self, reply):
+            self.reply = reply
+
+        async def chat(self, messages, **kw):
+            return N(content=self.reply)
+    place = ans.Answer("Greenest wards of Gwadabawa: Huchi 0.69 … Agriculture: ₦23,674,744,186 across 58 lines.",
+                       True, True, exact="Greenest wards …", verification="calculation checked")
+    s = N(kasafi_check_timeout_s=10)
+    unsupported = '{"verdict": "revise", "subject": {"place": true, "topic": true}, "unsupported": ["Agriculture"]}'
+    assert asyncio.run(ck.check("q", place, None, [], None, s, Says(unsupported))).verdict == "pass"
+    off = '{"verdict": "revise", "subject": {"place": true, "topic": false, "note": "asked about people"}}'
+    assert asyncio.run(ck.check("q", place, None, [], None, s, Says(off))).verdict == "revise"   # wrong subject
+
+
 def test_a_check_that_cannot_run_never_blocks_the_answer() -> None:
     class Broken:
         provider = "fake"
