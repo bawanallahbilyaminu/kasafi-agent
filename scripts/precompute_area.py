@@ -25,7 +25,7 @@ import psycopg  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.place import area, gfm  # noqa: E402
 
-LAYERS = ["cropland", "jrc", "unosat", "rain", "modis", "season", "s1", "bsi"]      # 'gfm' on request (--layers gfm)
+LAYERS = ["cropland", "jrc", "unosat", "rain", "modis", "season", "s1", "bsi"]      # 'gfm', 'change' on request
 FIRST = {"modis": 2001, "s1": 2017, "bsi": 2017, "rain": 2001}
 
 
@@ -93,6 +93,11 @@ def main() -> None:
                 area.save(conn, rows, today)
                 logging.info("gfm %d: %.0fs (%d rows)", year, time.perf_counter() - t0, len(rows))
             logging.info("gfm total: %.0f min", (time.perf_counter() - t_layer) / 60)
+        if "change" in layers:                 # the change maps' rows, from the rows above (app/place/change.py)
+            from app.place import change
+            rows = change.derived_rows(conn, today)
+            area.save(conn, rows, today)
+            logging.info("change: %d rows", len(rows))
         if "unosat" in layers and (a.force or not area.have(conn, "unosat_share")):
             t0 = time.perf_counter()
             for year, shares_y in area.unosat_shares(grid, units, crop).items():

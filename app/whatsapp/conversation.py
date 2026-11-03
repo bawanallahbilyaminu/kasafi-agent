@@ -261,6 +261,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     # the menu's rows and the buttons under answers (app/whatsapp/menu.py): shortcuts into the same pipeline. A row
     # or a button gives a reading (no understanding call) and its restatement as the message, or a reply of its own
     preset = None
+    if (crow := menu.change_row(msg)) is not None:          # the change map's lists: a measure, then an area
+        outs = await _change_row(crow, key, lang, store, settings)
+        await _trace_route(settings, f"[{crow}]", lang, f"menu:{crow}", None, outs, 0.0)
+        return outs
     if (row := menu.row_of(msg)) is not None or button in ANSWER_BUTTONS:
         outs, preset, typed_as, lang = (await _menu_row(row, key, lang, settings) if row is not None else
                                         await _answer_button(button, key, lang, store))
@@ -292,13 +296,18 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             before += after
             if q.startswith(PLACE_BUDGET_WAIT):                    # 'what does the budget give my area?'
                 resume, resume_reading = q[len(PLACE_BUDGET_WAIT):], place_budget_reading(q)
+            elif q.startswith(CHANGE_WAIT):                        # a change map that waited for the place
+                measure, _, area = q[len(CHANGE_WAIT):].partition(":")
+                before += await _change_draw(measure, area, {"lat": spot.lat, "lon": spot.lon, "lga_pcode": spot.lga_pcode,
+                                                             "wardcode": spot.wardcode}, lang, settings)
             elif q.startswith(READING_WAIT):                       # a menu row or 'Send location' that waited
                 r = reading_from_wait(q)
                 if r.capability == "facility":
                     before += await _facility_reading(r.restatement, r, key, lang, settings, facility_fn, spot) or []
                 else:
                     resume, resume_reading = r.restatement, r
-            elif not q.startswith((FACILITY_WAIT, CLAIM_WAIT, SIZE_WAIT)) and not after and not is_facility_query(q):
+            elif not q.startswith((FACILITY_WAIT, CLAIM_WAIT, SIZE_WAIT, CHANGE_WAIT)) and not after and \
+                    not is_facility_query(q):
                 resume = q                                         # any other question that waited for a place
         if not resume:
             return before
@@ -855,6 +864,8 @@ def _coming(waiting: str | None) -> str:
         return {"place_budget": "budget", "facility": "facility", "place_history": "satellite"}.get(r.capability, "question")
     if waiting.startswith(PLACE_BUDGET_WAIT):
         return "budget"
+    if waiting.startswith(CHANGE_WAIT):
+        return "map"
     if waiting.startswith(CLAIM_WAIT):
         return "claim"
     if waiting.startswith(FACILITY_WAIT) or is_facility_query(waiting):
@@ -1109,6 +1120,80 @@ def menu_out(lang: str) -> Out:
     return Out(p["body"], lang=lang, menu={"button": p["button"], "sections": p["sections"]})
 
 
+CHANGE_WAIT = "change-map:"        # a change map waiting for the location: '<measure>:<area>' follows
+
+
+def _change_checks(settings: Settings) -> list[str]:
+    """The change-map measures whose data check passes (app/place/change.py: checks)."""
+    import psycopg
+    from app.place import change
+    with psycopg.connect(settings.db_url(), connect_timeout=5) as conn:
+        ok = change.checks(conn)
+    return [m for m in change.MEASURES if ok.get(m)]
+
+
+async def _change_measures(lang: str, settings: Settings) -> Out:
+    w = menu.change_words(lang)
+    try:
+        available = await asyncio.to_thread(_change_checks, settings) if settings.has_database else []
+    except Exception as e:                       # noqa: BLE001 - no database: say so, never a broken list
+        log.warning("change map checks failed: %s", type(e).__name__)
+        available = []
+    if not available:
+        return Out(w["none"], lang=lang)
+    p = menu.change_measures(lang, available)
+    return Out(p["body"], lang=lang, menu={"button": p["button"], "sections": p["sections"]})
+
+
+async def _change_row(rid: str, key: str, lang: str, store: UserStore, settings: Settings) -> list[Out]:
+    """A measure picked: the areas it has data for. An area picked: the map, from the place on file; an area that
+    needs a place with none on file asks for the location and draws the map when it comes."""
+    from app.place import change
+    w = menu.change_words(lang)
+    if rid.startswith(menu.CHANGE_MEASURE):
+        measure = rid[len(menu.CHANGE_MEASURE):]
+        if measure not in change.MEASURES:
+            return [await _change_measures(lang, settings)]
+        p = menu.change_areas(lang, measure, change.areas_for(measure, _change_place(key, store)))
+        return [Out(p["body"], lang=lang, menu={"button": p["button"], "sections": p["sections"]})]
+    measure, _, area = rid[len(menu.CHANGE_AREA):].partition("_")
+    if measure not in change.MEASURES or area not in change.OFFER[measure]:
+        return [await _change_measures(lang, settings)]
+    place = _change_place(key, store)
+    needs_pin = area in ("spot", "5km", "ward") or (area == "lga" and not place.get("lga_pcode"))
+    if needs_pin and place.get("lat") is None:
+        location_memory.wait_for_location(key, f"{CHANGE_WAIT}{measure}:{area}")
+        return [Out(w["need_place"], lang=lang, location_request=True)]
+    return await _change_draw(measure, area, place, lang, settings)
+
+
+def _change_place(key: str, store: UserStore) -> dict:
+    spot = location_memory.recall(key)
+    if spot is not None:
+        return {"lat": spot.lat, "lon": spot.lon, "lga_pcode": spot.lga_pcode, "wardcode": spot.wardcode}
+    last = store.get_last_lga(key)
+    return {"lga_pcode": last} if last else {}
+
+
+async def _change_draw(measure: str, area: str, place: dict, lang: str, settings: Settings) -> list[Out]:
+    from app.place import change
+
+    def draw() -> list:
+        import psycopg
+        with psycopg.connect(settings.db_url(), connect_timeout=5) as conn:
+            spec = change.spec_for(conn, measure, area, place)
+        return render_specs(settings, [spec], lang, lagos_today()) if spec else []
+    try:
+        maps = await asyncio.wait_for(asyncio.to_thread(draw), 60)
+    except Exception as e:                       # noqa: BLE001 - a map that can't be drawn is said, never silence
+        log.warning("change map failed: %s", type(e).__name__)
+        maps = []
+    log.info("change map: %s, %s: %s", measure, area, "drawn" if maps else "not drawn")
+    if not maps:
+        return [Out(menu.change_words(lang)["no_map"], lang=lang)]
+    return [Out(m.caption, lang=lang, image=m.jpeg) for m in maps]
+
+
 def _wait_with_reading(key: str, u) -> None:
     location_memory.wait_for_location(key, READING_WAIT + json.dumps(
         {k: v for k, v in u.to_dict().items() if k not in ("safety", "seconds")}))
@@ -1166,6 +1251,8 @@ async def _menu_row(row: str, key: str, lang: str, settings: Settings) -> tuple:
     if row == "menu_about":
         u = Understanding(kind="chitchat", capability="conversation", restatement=w["about"])
         return None, u, w["about"], lang
+    if row == "menu_change":
+        return [await _change_measures(lang, settings)], None, "", lang
     u = menu.reading_for(row)
     if location_memory.recall(key) is None:
         if u.capability == "facility":
@@ -1485,7 +1572,7 @@ async def _after_location(question: str, key: str, lang: str, settings: Settings
                           spot: Spot) -> list[Out]:
     """The question that asked for a location, answered now that there is one: a nearest-facility search, a route
     to a named facility, 'how far is it' for the facility last shown, or a facility claim ('UDUTH is closer')."""
-    if question.startswith(READING_WAIT):          # a menu row's or a button's reading: resumed by the caller
+    if question.startswith((READING_WAIT, CHANGE_WAIT)):   # a menu row's reading or a change map: the caller's
         return []
     if question.startswith(CLAIM_WAIT):
         name = question[len(CLAIM_WAIT):]

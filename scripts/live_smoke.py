@@ -66,6 +66,10 @@ def asks_location(r: str) -> str:
     return "" if "[location request]" in r else "no location request"
 
 
+def a_map(r: str) -> str:
+    return "" if "[image]" in r else "no map"
+
+
 def pin_answers(r: str) -> str:
     """A pin that something waited for: the acknowledgement never asks, and the waiting request is answered."""
     if any(w in r for w in ("What would you like to know", "Me kuke so ku sani")):
@@ -94,6 +98,8 @@ FULL = DEPLOY + [
     ("menu, budget row, pin", "en", None, [("menu", a_list), ("[row:menu_budget]", asks_location),
                                            ("[pin]", pin_answers)]),
     ("menu, outlook row, pin", "en", None, [("[row:menu_outlook]", asks_location), ("[pin]", pin_answers)]),
+    ("change map: measures, drought for the state", "en", None, [("[row:menu_change]", a_list),
+                                                                 ("[row:chg_a_drought_state]", a_map)]),
     ("menu in Hausa", "ha", None, [("zaɓi", a_list)]),
 ]
 

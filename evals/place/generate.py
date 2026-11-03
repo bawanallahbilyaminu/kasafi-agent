@@ -75,7 +75,7 @@ def main() -> None:
         picked = rnd.sample(lgas, min(a.lgas, len(lgas)))
         n = 0
         for key, spec in P.MEASURES.items():
-            if key == "gfm":
+            if key not in QUESTIONS:                  # gfm and the change-map measures are drawn, never asked here
                 continue
             spec = flood_spec(key, spec)
             years = P.years_loaded(conn, spec["measure"], "ward")

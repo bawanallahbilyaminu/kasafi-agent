@@ -453,6 +453,9 @@ def draw(conn, s: dict, lang: str, today: date | None = None) -> MapImage | None
     if s["kind"] == "area_map":                             # a ward or LGA choropleth (planner answers)
         from app.place.images import area_map
         return area_map(conn, s, lang, today)
+    if s["kind"] == "change_spot":                          # flood seasons around a pin (app/place/change.py)
+        from app.place.change import spot_map
+        return spot_map(conn, s, lang)
     day = date.fromisoformat(s["day"])
     if s["kind"] == "hazard":
         return hazard_map(conn, s["layer"], day, lang, s.get("highlight", ""), today, s.get("zoom", ""))

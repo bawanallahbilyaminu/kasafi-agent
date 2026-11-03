@@ -585,7 +585,7 @@ def test_menu_then_budget_for_my_area_then_the_pin_answers(harness, monkeypatch)
     consented(h, me, "en")
     FakeWA.typing = []
     sends = h.turn(text("menu", me), 1, "menu")
-    assert sends[0][0] == "list" and len(sends[0][2]["sections"][0]["rows"]) == 8
+    assert sends[0][0] == "list" and len(sends[0][2]["sections"][0]["rows"]) == 9        # with the change map
     assert FakeWA.typing                                            # the typing indicator went on the message
     sends = h.turn(row("menu_budget", me), 1, "budget row")
     assert sends[0][0] == "location_request"

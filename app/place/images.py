@@ -271,9 +271,17 @@ AREA_RAMP = ("#eef3ea", "#c7dcc0", "#8fbb8a", "#4f8f5c", "#1f5a40")        # one
 FLOOD_RAMP = ("#eceff4", "#bcd0e6", "#86aad3", "#4b7fb8", "#1f4e8c")       # one hue, light -> dark (water, floods)
 BARE_RAMP = ("#f4efe6", "#e4cfae", "#d0a870", "#b07c3c", "#7a4f1d")        # one hue (bare soil)
 RAIN_RAMP = FLOOD_RAMP
+# change maps: two hues and a neutral middle ('about usual'); ColorBrewer BrBG / BrBu steps
+GREEN_DIVERGING = ("#8c510a", "#d8b365", "#f2f1ee", "#7fbf7b", "#1b7837")
+RAIN_DIVERGING = ("#a6611a", "#dfc27d", "#f2f1ee", "#80b1d3", "#2166ac")
+USUAL = {"en": "about usual", "ha": "kamar yadda aka saba"}
 A = {
     "en": {"title": "{short}, {area}, {year}", "title_noyear": "{short}, {area}",
            "legend": "Colour: {what} per {unit}, five equal-count classes. Grey hatched: no cropland, low data or no data.",
+           "legend_change": "Colour: {what} per {unit}; the middle class is about usual. Grey hatched: no data.",
+           "darkest": "darkest = highest",
+           "diverging": {"green_change": "brown = less green than usual, green = greener",
+                         "rain_change": "brown = drier than usual, blue = wetter"},
            "caption": "{short} by {unit} in {area}{year}: {lo} to {hi} across {valued} of {total} {units}; darkest = highest.{missing}",
            "missing": " Hatched: {parts}.", "no_crop": "{n} with no cropland in the 2021 land-cover map",
            "low_data": "{n} with low data", "no_data": "{n} with no data that year", "mine": "Your ward: {ward}",
@@ -282,6 +290,10 @@ A = {
            "src": "{source}; boundaries GRID3 wards, OCHA COD-AB LGAs."},
     "ha": {"title": "{short}, {area}, {year}", "title_noyear": "{short}, {area}",
            "legend": "Launi: {what} a kowace {unit}, aji biyar masu yawan daidai. Toka mai layuka: babu gona, ƙarancin bayanai ko babu bayanai.",
+           "legend_change": "Launi: {what} a kowace {unit}; ajin tsakiya kamar yadda aka saba ne. Toka mai layuka: babu bayanai.",
+           "darkest": "mafi duhu = mafi girma",
+           "diverging": {"green_change": "ruwan ƙasa = ƙasa da koriyar da aka saba, kore = ta fi koriya",
+                         "rain_change": "ruwan ƙasa = ya fi bushewa, shuɗi = ya fi ruwa"},
            "caption": "{short} a kowace {unit} a {area}{year}: daga {lo} zuwa {hi} a {units} {valued} cikin {total}; mafi duhu = mafi girma.{missing}",
            "missing": " Masu layuka: {parts}.", "no_crop": "{n} ba su da gona a taswirar yanayin ƙasa ta 2021",
            "low_data": "{n} masu ƙarancin bayanai", "no_data": "{n} ba su da bayanai na shekarar", "mine": "Gundumarku: {ward}",
@@ -320,11 +332,15 @@ def area_map(conn, s: dict, lang: str, today: date | None = None) -> MapImage | 
     gdf = gpd.GeoDataFrame({"code": [r[0] for r in recs], "name": [r[1] for r in recs]},
                            geometry=[wkb.loads(bytes(r[2])) for r in recs], crs="EPSG:4326")
     ramp = {"greenness": AREA_RAMP, "flood": FLOOD_RAMP, "gfm": FLOOD_RAMP, "flood_map": FLOOD_RAMP, "water": FLOOD_RAMP,
-            "bare": BARE_RAMP, "rain": RAIN_RAMP}[key]
+            "bare": BARE_RAMP, "rain": RAIN_RAMP, "gfm_seasons": FLOOD_RAMP, "green_change": GREEN_DIVERGING,
+            "rain_change": RAIN_DIVERGING}[key]
     have = sorted(v for c, v in vals.items() if c in set(gdf["code"]))
     if not have:
         return None
-    breaks = [have[min(len(have) - 1, int(len(have) * q))] for q in (0.2, 0.4, 0.6, 0.8)]
+    if (near := spec.get("diverging")):         # a change: the middle class is 'about usual' (±near), grey
+        breaks = [-3 * near, -near, near, 3 * near]
+    else:
+        breaks = [have[min(len(have) - 1, int(len(have) * q))] for q in (0.2, 0.4, 0.6, 0.8)]
 
     def cls(v):
         return sum(1 for b in breaks if v > b)
@@ -372,6 +388,11 @@ def area_map(conn, s: dict, lang: str, today: date | None = None) -> MapImage | 
     for i in range(5):
         lo, hi = spec["fmt"].format(lo_edges[i]), spec["fmt"].format(hi_edges[i])
         labels.append(lo if lo == hi else f"{lo} – {hi}")
+    if spec.get("diverging"):                                # fixed classes around 'about usual'
+        f = spec["fmt"].format
+        labels = [f"< {f(breaks[0])}", f"{f(breaks[0])} – {f(breaks[1])}",
+                  f"{USUAL['ha' if lang == 'ha' else 'en']} ({f(breaks[1])} – {f(breaks[2])})",
+                  f"{f(breaks[2])} – {f(breaks[3])}", f"> {f(breaks[3])}"]
     handles = [Patch(facecolor=ramp[i], edgecolor="#ffffff", label=labels[i]) for i in range(5)]
     handles.append(Patch(facecolor="#e6e4df", edgecolor="#9a9890", hatch="///", label=t["low"]))
     if mine is not None and len(mine):
@@ -383,7 +404,8 @@ def area_map(conn, s: dict, lang: str, today: date | None = None) -> MapImage | 
     title = (t["title"] if year else t["title_noyear"]).format(short=short[0].upper() + short[1:], area=area, year=year)
     source = conn.execute("SELECT source FROM ward_history WHERE measure = %s LIMIT 1", (measure,)).fetchone()[0]
     unit_word = t[level]
-    jpeg = _finish(fig, ax, title, t["legend"].format(what=short, unit=unit_word), t["src"].format(source=source))
+    jpeg = _finish(fig, ax, title, t["legend_change" if spec.get("diverging") else "legend"].format(what=short, unit=unit_word),
+                   t["src"].format(source=source))
     cov = coverage(conn, level, within, rows, cut)
     parts = ([t["no_crop"].format(n=cov["no_crop"])] if cov["no_crop"] else []) + \
             ([t["low_data"].format(n=cov["low"])] if cov["low"] else []) + \
@@ -393,6 +415,8 @@ def area_map(conn, s: dict, lang: str, today: date | None = None) -> MapImage | 
                                   hi=spec["fmt"].format(have[-1]), valued=len(have), total=cov["total"],
                                   units=t["wards" if level == "ward" else "lgas"],
                                   missing=t["missing"].format(parts="; ".join(parts)) if parts else "")
+    if spec.get("diverging"):                                # a change: which colour means which way
+        caption = caption.replace(t["darkest"], t["diverging"][key])
     return MapImage(jpeg, caption)
 
 

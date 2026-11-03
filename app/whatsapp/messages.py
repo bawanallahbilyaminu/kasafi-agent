@@ -298,14 +298,16 @@ COMING = {             # what a request waiting for a place gets now (location_g
            "facility": "Finding the health facilities nearest to you…",
            "claim": "Checking which facility is closer to you…",
            "satellite": "Checking the satellite records for this place…",
-           "question": "Answering your question for this place…"},
+           "question": "Answering your question for this place…",
+           "map": "Drawing the map…"},
     "ha": {"outlook": "Ina duba hasashen ruwan sama da ambaliya na yankinku…",
            "forecast": "Ina duba sabbin hasashen yanayi na yankinku…",
            "budget": "Ina duba abin da kasafin kuɗi ya ware wa yankinku…",
            "facility": "Ina neman cibiyoyin lafiya mafi kusa da ku…",
            "claim": "Ina duba wace cibiya ce ta fi kusa da ku…",
            "satellite": "Ina duba bayanan tauraron ɗan adam na wannan wuri…",
-           "question": "Ina amsa tambayarku game da wannan wuri…"},
+           "question": "Ina amsa tambayarku game da wannan wuri…",
+           "map": "Ina zana muku taswirar…"},
 }
 
 

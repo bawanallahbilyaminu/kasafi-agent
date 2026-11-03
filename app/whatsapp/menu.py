@@ -31,6 +31,7 @@ ROWS: list[tuple[str, bool, Understanding | None]] = [
     ("menu_outlook", True, Understanding(kind="new", capability="hazard", level="lga", time="forecast",
                                          measure="rain and flood",
                                          restatement="What is the rainfall and flood outlook for my LGA?")),
+    ("menu_change", False, None),           # the change-map lists (app/place/change.py): measure, then area
     ("menu_docs", False, None),
     ("menu_lang", False, None),
     ("menu_privacy", False, None),
@@ -49,6 +50,7 @@ WORDS = {
             "menu_facility": ("Nearest health facility", "The closest clinics and hospitals, by road time"),
             "menu_place": ("Farm or place history", "Satellite record of your spot: floods, greenness"),
             "menu_outlook": ("Rain and flood outlook", "Official seasonal rainfall and flood outlooks"),
+            "menu_change": ("Change map", "Maps of floods, crops and drought over the years"),
             "menu_docs": ("Ask about a document", "Budgets, reports and surveys, with the page as proof"),
             "menu_lang": ("Change language", "Hausa or English"),
             "menu_privacy": ("My data and privacy", "What Kasafi keeps and how to delete it"),
@@ -91,6 +93,7 @@ WORDS = {
             "menu_facility": ("Asibiti mafi kusa", "Asibitoci da cibiyoyin lafiya mafi kusa ta hanya"),
             "menu_place": ("Tarihin gona ko wuri", "Abin da tauraron ɗan adam ya gani: ambaliya, kore"),
             "menu_outlook": ("Hasashen ruwa, ambaliya", "Hasashen damina da ambaliya na hukuma"),
+            "menu_change": ("Taswirar canji", "Taswirorin ambaliya, amfanin gona da fari a shekaru"),
             "menu_docs": ("Tambaya game da takarda", "Kasafi, rahotanni da bincike, tare da shafin shaida"),
             "menu_lang": ("Sauya harshe", "Hausa ko Turanci"),
             "menu_privacy": ("Bayanaina da sirri", "Abin da Kasafi ke ajiyewa da yadda ake goge shi"),
@@ -133,6 +136,69 @@ BTN_WORKING, BTN_BRIEF, BTN_LANG, BTN_LOCATION, BTN_MENU = "btn_working", "btn_b
 
 def words(lang: str) -> dict:
     return WORDS.get(lang, WORDS["ha"])
+
+
+# --- the change map: a list of measures, then a list of areas; the choice travels in the row id ----------------------
+
+CHANGE_MEASURE, CHANGE_AREA = "chg_m_", "chg_a_"
+CHANGE = {
+    "en": {"button": "Choose", "measure_body": "Which change would you like to see on a map?",
+           "area_body": "For which area?", "none": "The change maps aren't available right now. Please try again later.",
+           "not_offered": "Land cover and tree loss aren't offered: the data available for Sokoto isn't reliable "
+                          "enough for a change map.",
+           "measures": {"flood": ("Flood", "Seasons with floodwater since 2015"),
+                        "green": ("Crops/greenness", "This season's greenness against usual"),
+                        "drought": ("Drought", "This season's rain against usual")},
+           "areas": {"spot": ("This spot", "About 1 km around your location"),
+                     "5km": ("5 km around me", "Within 5 km of your location"),
+                     "ward": ("My ward", "Your ward among the wards of your LGA"),
+                     "lga": ("My LGA", "The wards of your LGA (drought: the LGAs)"),
+                     "state": ("Sokoto State", "All 23 LGAs")},
+           "need_place": "Send your location and I'll draw the map.",
+           "no_map": "That map couldn't be drawn this time. Please try again in a few minutes."},
+    "ha": {"button": "Zaɓi", "measure_body": "Wane canji kuke so ku gani a taswira?",
+           "area_body": "Na wane yanki?", "none": "Taswirorin canji ba sa samuwa a yanzu. Don Allah ku sake gwadawa nan gaba.",
+           "not_offered": "Ba a bayar da canjin yanayin ƙasa da asarar bishiyoyi ba: bayanan da ake da su na Sokoto ba "
+                          "su da isasshen inganci don taswirar canji.",
+           "measures": {"flood": ("Ambaliya", "Daminun da aka ga ruwan ambaliya tun 2015"),
+                        "green": ("Amfanin gona/koriya", "Koriyar daminar nan idan aka kwatanta da yadda aka saba"),
+                        "drought": ("Fari", "Ruwan saman daminar nan idan aka kwatanta da yadda aka saba")},
+           "areas": {"spot": ("Wannan wuri", "Kusan kilomita 1 a kewayen wurinku"),
+                     "5km": ("Kilomita 5 a kewaye", "Cikin kilomita 5 daga wurinku"),
+                     "ward": ("Gundumata", "Gundumarku a cikin gundumomin ƙaramar hukumarku"),
+                     "lga": ("Ƙaramar hukumata", "Gundumomin ƙaramar hukumarku (fari: ƙananan hukumomi)"),
+                     "state": ("Jihar Sokoto", "Dukkan ƙananan hukumomi 23")},
+           "need_place": "Ku aiko da wurinku, in zana muku taswirar.",
+           "no_map": "Ba a iya zana wannan taswira a yanzu ba. Don Allah ku sake gwadawa nan da 'yan mintoci."},
+}
+
+
+def change_words(lang: str) -> dict:
+    return CHANGE["en" if lang == "en" else "ha"]
+
+
+def change_row(msg: dict) -> str | None:
+    """A change-map list reply ('chg_m_flood', 'chg_a_flood_spot'), or None."""
+    inter = msg.get("interactive") or {}
+    if inter.get("type") != "list_reply":
+        return None
+    rid = (inter.get("list_reply") or {}).get("id") or ""
+    return rid if rid.startswith((CHANGE_MEASURE, CHANGE_AREA)) else None
+
+
+def change_measures(lang: str, available: list[str]) -> dict:
+    w = change_words(lang)
+    rows = [{"id": CHANGE_MEASURE + m, "title": w["measures"][m][0], "description": w["measures"][m][1]} for m in available]
+    return {"body": f"{w['measure_body']}\n\n{w['not_offered']}", "button": w["button"],
+            "sections": [{"title": "Kasafi", "rows": rows}]}
+
+
+def change_areas(lang: str, measure: str, areas: list[str]) -> dict:
+    w = change_words(lang)
+    rows = [{"id": f"{CHANGE_AREA}{measure}_{a}", "title": w["areas"][a][0], "description": w["areas"][a][1]}
+            for a in areas]
+    return {"body": f"{w['measures'][measure][0]}: {w['area_body']}", "button": w["button"],
+            "sections": [{"title": "Kasafi", "rows": rows}]}
 
 
 def menu_payload(lang: str) -> dict:

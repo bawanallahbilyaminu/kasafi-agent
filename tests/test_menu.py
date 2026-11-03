@@ -92,7 +92,7 @@ def test_the_client_refuses_a_list_over_the_limits_and_sends_one_within_them() -
     client = WhatsAppClient(s, transport=httpx.MockTransport(handler))
     p = M.menu_payload("ha")
     asyncio.run(client.send_list("234", p["body"], p["button"], p["sections"]))
-    assert sent[0]["interactive"]["type"] == "list" and len(sent[0]["interactive"]["action"]["sections"][0]["rows"]) == 8
+    assert sent[0]["interactive"]["type"] == "list" and len(sent[0]["interactive"]["action"]["sections"][0]["rows"]) == 9
     bad = [{"title": "x", "rows": [{"id": "a", "title": "x" * 25}]}]
     with pytest.raises(ValueError):
         asyncio.run(client.send_list("234", "b", "menu", bad))
