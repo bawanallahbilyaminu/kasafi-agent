@@ -257,6 +257,10 @@ async def check(message: str, a, u, history: list[dict] | None, conn, settings, 
     if v is None:
         v = Verdict("skipped", round=round_, why=why)
     v.rules = rules
+    if computed_in_code(a) and (v.subject or {}).get("level") is False:
+        # code chose the level from the reading, and a short code answer keeps its full ranking in show working
+        # (3 Nov: 'which wards flooded most' was judged 'not ward-level' and rewritten, its map lost)
+        v.subject["level"] = None
     if computed_in_code(a) and v.verdict in ("revise", "fail") and not rules and not v.wrong_subject:
         # an answer written in code from the data (place history, hazards, budget tools): its figures and wording
         # are tested in code and the check sees only part of what code read, so it judges the subject alone (3 Nov:
@@ -311,9 +315,10 @@ def should_check(a) -> bool:
 
 PARTIAL_HEAD = {"en": "Here is what I could check:", "ha": "Ga abin da na iya tabbatarwa:"}
 NOTHING = {
-    "en": "I couldn't give a checked answer to that: {missing}. The documents I read were {docs}.",
-    "ha": "Ban iya ba da amsar da aka tabbatar ba: {missing}. Takardun da na karanta: {docs}.",
+    "en": "I couldn't give a checked answer to that: {missing}.{docs}",
+    "ha": "Ban iya ba da amsar da aka tabbatar ba: {missing}.{docs}",
 }
+NOTHING_DOCS = {"en": " The documents I read were {docs}.", "ha": " Takardun da na karanta: {docs}."}
 
 
 MISSING = {"en": "Not found in the documents I read: {missing}.",
@@ -394,8 +399,8 @@ def safe_answer(a, v: Verdict, lang: str) -> tuple[str, bool]:
     if not text:
         docs = list(dict.fromkeys(e.title for e in (a.cited or [])))[:3]
         missing = "; ".join(v.missing[:3]) or v.feedback or "-"
-        return NOTHING.get(lang, NOTHING["en"]).format(missing=missing.rstrip("."),
-                                                       docs="; ".join(docs) or "-"), False
+        read = NOTHING_DOCS.get(lang, NOTHING_DOCS["en"]).format(docs="; ".join(docs)) if docs else ""
+        return NOTHING.get(lang, NOTHING["en"]).format(missing=missing.rstrip("."), docs=read), False
     tail = sources_line(a.cited, lang) if a.cited else ""
     return f"{text}\n\n{tail}".strip(), True
 

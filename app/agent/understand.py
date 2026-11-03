@@ -64,7 +64,9 @@ Capabilities:
 - deep: a broad overview of a subject ("the state of PHCs", "tell me about health in Sokoto", "what's happening \
 in my area" with no other cue).
 - hazard: weather, heat, rain, air, rivers, fires or floods NOW or in a FORECAST or outlook, and official advisories.
-- place_history: what satellites show for a place in PAST years: was it flooded, green, bare; "ever", "before".
+- place_history: what satellites show for a place in PAST years: was it flooded, green, bare, how much rain fell \
+in a past season ("which wards got the most June-October rain in 2024", "ruwan sama nawa ya sauka a 2023"); \
+"ever", "before". Rain now or coming is hazard.
 - facility: the nearest health facility, a route or distance to one, a named facility's details, facility counts.
 - alerts: signing up for or stopping hazard alerts.
 - conversation: a message about Kasafi or the conversation itself, not a request for information: greetings, \
