@@ -141,12 +141,17 @@ SIZE_WAIT = "__size__:"                           # a place-history question wai
 ROAD_WAIT_S = 8.0                                 # how long the emergency follow-up waits for ORS road distances
 
 
-def searching_key(question: str) -> str:
-    """The 'working on it' line: forecasts for a hazard question (heat, dust, rain, rivers, fires; not one about
-    money for them), documents otherwise. Words only: the planner hasn't run yet."""
+def searching_key(question: str, understanding=None) -> str:
+    """The 'working on it' line, for the capability the answer will use: the reading's when there is one (the
+    routes obey it: 3 Nov, 'Was Wamakko affected by floods in 2025, according to NEMA?' said 'Checking the latest
+    forecasts…' and was answered from the documents); else the words: forecasts for a hazard question (heat, dust,
+    rain, rivers, fires; not one about money for them), satellite for a place's record, documents otherwise."""
     from app.agent.answer import MONEY_WORDS
     from app.hazards.answer import layers_asked
     from app.place.answer import place_route
+    if understanding is not None and understanding.capability not in ("other", "conversation", ""):
+        return {"hazard": "searching_forecasts", "place_history": "searching_satellite"}.get(understanding.capability,
+                                                                                           "searching")
     if place_route(question):
         return "searching_satellite"
     return "searching_forecasts" if layers_asked(question) and not MONEY_WORDS.search(question or "") else "searching"
@@ -452,7 +457,8 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         store.add_spend(settings.kasafi_cost_per_question_usd)
         # one progress line per request: a place-history question sends its own ("checking about N years of
         # satellite images…", app/place/answer.py) on a first request and answers from the cache in seconds otherwise
-        satellite = bool(place_route(question))
+        satellite = understanding.capability == "place_history" if understanding is not None and \
+            understanding.capability not in ("other", "conversation", "") else bool(place_route(question))
         sent: list[str] = []
         closed = False                            # set when the answer timed out: nothing of it is sent after that
 
@@ -461,7 +467,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             # PROGRESS_AFTER_S, and a slow one (a second search, a fallback) gets one more word later
             await asyncio.sleep(PROGRESS_AFTER_S)
             if not sent and not satellite and not announced:
-                await notify(Out(t(searching_key(question), lang)))
+                await notify(Out(t(searching_key(question, understanding), lang)))
             await asyncio.sleep(SLOW_ANSWER_S - PROGRESS_AFTER_S)
             if not sent and not satellite:
                 await notify(Out(t("still_working", lang)))

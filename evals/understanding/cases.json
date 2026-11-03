@@ -145,6 +145,40 @@
   {"id": "k02", "place": "pin", "lang": "ha", "turns": [], "message": "zaɓi", "expect": {"capability": "conversation", "kind": "menu"}},
   {"id": "k03", "place": "none", "lang": "ha", "turns": [
      {"user": "Nawa aka ware wa lafiya a 2026?", "kasafi": "A 2026, an ware wa lafiya N124.41 biliyan."}],
-   "message": "Nuna min zaɓuɓɓuka", "expect": {"capability": "conversation", "kind": "menu"}}
+   "message": "Nuna min zaɓuɓɓuka", "expect": {"capability": "conversation", "kind": "menu"}},
+  {"id": "n01", "place": "none", "turns": [],
+   "message": "How many people were affected by floods in Sokoto State in October 2024?", "expect": {"capability": "statistics", "satellite_context": false}},
+  {"id": "n02", "place": "none", "turns": [],
+   "message": "How many people were displaced by the 2024 floods in Sokoto?", "expect": {"capability": "statistics"}},
+  {"id": "n03", "place": "none", "turns": [],
+   "message": "How many houses were destroyed by flooding in Sokoto in 2025?", "expect": {"capability": "statistics"}},
+  {"id": "n04", "place": "lga", "turns": [],
+   "message": "Was Wamakko LGA affected by floods in 2025, according to NEMA?", "expect": {"capability": "statistics"}},
+  {"id": "n05", "place": "none", "turns": [],
+   "message": "Which LGAs in Sokoto State were affected by floods in 2025, according to NEMA?", "expect": {"capability": "statistics"}},
+  {"id": "n06", "place": "none", "lang": "ha", "turns": [],
+   "message": "Mutane nawa ambaliyar ruwa ta shafa a Jihar Sokoto a 2025, a cewar NEMA?", "expect": {"capability": "statistics"}},
+  {"id": "n07", "place": "none", "lang": "ha", "turns": [],
+   "message": "Mutane nawa suka rasa matsugunansu saboda ambaliya a Sokoto a 2024?", "expect": {"capability": "statistics"}},
+  {"id": "n08", "place": "none", "lang": "ha", "turns": [],
+   "message": "Gidaje nawa ambaliya ta rushe a Sokoto a 2024?", "expect": {"capability": "statistics"}},
+  {"id": "n09", "place": "none", "turns": [],
+   "message": "How bad were the 2024 floods in Sokoto?", "expect": {"capability": "statistics", "satellite_context": true}},
+  {"id": "n10", "place": "none", "lang": "ha", "turns": [],
+   "message": "Yaya girman ambaliyar 2024 a Jihar Sokoto?", "expect": {"capability": "statistics", "satellite_context": true}},
+  {"id": "n11", "place": "none", "turns": [],
+   "message": "How many people died in floods in Sokoto in 2024?", "expect": {"capability": "statistics", "urgent": false}},
+  {"id": "n12", "place": "pin", "turns": [
+     {"user": "(location pin shared)", "kasafi": "Got it: your pin is in Kalambaina ward (likely), Wamakko LGA."}],
+   "message": "How much of my ward was under water in 2024?", "expect": {"capability": "place_history", "satellite_context": false}},
+  {"id": "n13", "place": "none", "turns": [],
+   "message": "Which wards of Wamakko flooded most in 2022?", "expect": {"capability": "place_history"}},
+  {"id": "n14", "place": "pin", "lang": "ha", "turns": [
+     {"user": "(location pin shared)", "kasafi": "Got it: your pin is in Kalambaina ward (likely), Wamakko LGA."}],
+   "message": "Ruwa ya taɓa rufe gonata?", "expect": {"capability": "place_history", "level": "pin"}},
+  {"id": "n15", "place": "none", "turns": [],
+   "message": "What does the MICS report say about birth registration in Sokoto?", "expect": {"capability": "statistics"}},
+  {"id": "n16", "place": "lga", "turns": [],
+   "message": "According to NiMet, when will the rains end in my LGA this year?", "expect": {"capability": "hazard"}}
  ]
 }

@@ -283,6 +283,14 @@ ANSWER_SYSTEM = (
     "never give a number for it; you may say which category is largest or smallest, saying it is read from the "
     "chart's shape. When a chart and the text or a table of the same document disagree, give the text's or "
     "table's figure and say the chart shows a different value.\n"
+    "6m. A '[Table printed on page N]' line is a dashboard or summary page read as a table: each line is "
+    "'place: measure value (printed on the page)' with the page's date. Give these figures with the place, the "
+    "measure and the date exactly as printed (e.g. 'Sokoto: 102K persons affected, as of 21 October 2024').\n"
+    "6n. When the question names an LGA, ward or town and the evidence gives figures only for the state (or for "
+    "other places), never reply that nothing was found: say the documents give no figure for that place, give the "
+    "state's figures with their date and source, and name any places in the state the evidence does list (e.g. "
+    "'NEMA's reports give no figure for Wamakko; for Sokoto State they list 4,278 persons affected in 4 LGAs, "
+    "which they don't name, as of 12 September 2025'). found is \"partial\".\n"
     "6k. Copy organisation names and acronyms exactly as the evidence prints them (e.g. 'NPHCDA, SOCHEMA and "
     "SOSMEA'): never correct, expand, update or respell them.\n"
     "6l. Each answer stands alone: never refer to 'the previous answer', 'my earlier reply' or 'as I said'.\n"
@@ -1783,6 +1791,17 @@ async def answer_question(question: str, lang: str, conn: psycopg.Connection, **
     if not a.found and not a.clarify and plan is not None and (gap := level_gap(plan.need, lang)):   # working keeps it
         a.text = f"{a.text}\n\n{gap}"
     settle_verification(a, lang)          # the verification state, in show working and the trace
+    u = kw.get("understanding")
+    if u is not None and getattr(u, "satellite_context", False) and a.found and conn is not None:
+        # 'how bad were the 2024 floods?': the reports answered; one sentence of satellite context follows
+        try:
+            from app.place.flood_record import context_sentence
+            place = kw.get("place") or {}
+            lga = place.get("lga_pcode") if u.level in ("lga", "ward", "pin") else None
+            if (line := context_sentence(conn, lang, lga, u.years[0] if u.years else None, kw.get("today") or date.today())):
+                a.text = f"{a.text.rstrip()}\n\n{line}"
+        except Exception as e:             # noqa: BLE001 - context is extra; the answer stands without it
+            log.warning("satellite context failed: %s", type(e).__name__)
     return a
 
 

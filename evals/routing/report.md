@@ -1,6 +1,6 @@
 # Routing eval (in code), 2026-11-03
 
-74 cases, **0 wrong**, 0 skipped (no facility registry).
+82 cases, **0 wrong**, 0 skipped (no facility registry).
 
 | id | lang | expected | got | question |
 |---|---|---|---|---|
@@ -78,3 +78,11 @@
 | r72 | ha | deep | deep | Wane hali asibitocin Sokoto ke ciki? Ina son bayani dalla-dalla |
 | r73 | en | hazard | hazard | What's the situation of flooding in Wamakko this week? |
 | r74 | en | facility_count | facility_count | How many PHCs are in Sokoto State? |
+| r75 | en | planner | planner | How many people were affected by floods in Sokoto State in October 2024? |
+| r76 | en | planner | planner | Was Wamakko LGA affected by floods in 2025, according to NEMA? |
+| r77 | ha | planner | planner | Mutane nawa ambaliyar ruwa ta shafa a Jihar Sokoto a 2025, a cewar NEMA? |
+| r78 | ha | planner | planner | Gidaje nawa ambaliya ta rushe a Sokoto a 2024? |
+| r79 | en | planner | planner | How bad were the 2024 floods in Sokoto? |
+| r80 | en | place_area | place_area | Which wards of Wamakko flooded most in 2022? |
+| r81 | ha | place_area | place_area | Waɗanne gundumomin Ƙaramar Hukumar Wamakko ne ambaliya ta fi rufewa a 2022? |
+| r82 | en | hazard | hazard | According to NiMet, when will the rains end in Sokoto this year? |

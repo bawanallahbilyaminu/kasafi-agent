@@ -48,6 +48,7 @@ only:
  "time": {"kind": "past|now|forecast|year|span|none", "years": [<years named>]},
  "measure": "<what is asked: amount, spent, count, nearest, flooded, greenness, rain, coverage...>",
  "facility": {"care": "maternal|children|general", "level": "hospital|primary|any", "ownership": "public|private|any"},
+ "satellite_context": true|false,
  "urgent": true|false,
  "urgent_reason": "<one short line: why it is or isn't an emergency now>",
  "restatement": "<the full question in one English line, standalone, using these place words: 'my farm (the pin)' \
@@ -80,7 +81,18 @@ with no list before it.
 - "this land", "here", "my farm", "this place" with a pin = level "pin"; "this area", "my ward", "my community" = \
 "ward"; "my LGA", "my local government" = "lga". No place words and no pin: level "state" or "none".
 - "ever", "before", "in the past", "last year" = past; "will", "expected", "this season", "tomorrow" = forecast.
-- A flood question about the past is place_history; about the future or now is hazard.
+- A flood question about the past is place_history only when it asks about land, water or area (was it flooded, \
+how much land was under water, where); about the future or now is hazard.
+- A question about people or human impact (people affected, households, deaths, injuries, displaced people, \
+houses or farms destroyed, needs, relief) is statistics: it is answered from reports such as NEMA or SEMA \
+situation reports, never place_history, past or present ("How many people were affected by floods in Sokoto in \
+2024?", "Mutane nawa ambaliya ta shafa?", "gidaje nawa suka rushe?").
+- A question that names a publisher or a document as its source ("according to NEMA", "NEMA says", "a cewar \
+NEMA", "in the MICS report", "SEMA's report") is answered from the documents: statistics (or budget or deep as \
+fits), never place_history. An official forecast or outlook from NiMet or NIHSA stays hazard.
+- "satellite_context" is true only when the question asks how bad or how big a past flood was overall ("how bad \
+were the 2024 floods in Sokoto?", "yaya girman ambaliyar 2024?"): capability statistics (the reports first), \
+with one sentence of satellite context after. False otherwise.
 - Staff, equipment or money at health facilities is statistics or budget, not facility.
 - A report, survey or plan the user names ("the MICS", "the health MTSS") is the subject: level "document".
 - A short abbreviation can be a facility the previous answer listed or a well-known one (UDUTH = Usmanu \
@@ -119,6 +131,7 @@ class Understanding:
     care: str = ""              # maternal | children | general
     facility_level: str = ""    # hospital | primary | any
     ownership: str = ""         # public | private | any
+    satellite_context: bool = False   # 'how bad were the floods': the reports answer, one satellite sentence follows
     urgent: bool = False        # an emergency happening now: the fast path's net when its phrases and classifier miss
     urgent_reason: str = ""
     safety: dict = field(default_factory=dict)   # what the fast path's layers said (phrase, classifier), for the trace
@@ -145,6 +158,7 @@ def parse(d: dict) -> Understanding | None:
         measure=str(d.get("measure") or "").strip()[:80],
         restatement=str(d.get("restatement") or "").strip()[:400])
     u.urgent = d.get("urgent") is True
+    u.satellite_context = d.get("satellite_context") is True and u.capability in ("statistics", "deep")
     u.urgent_reason = str(d.get("urgent_reason") or "").strip()[:200]
     fac = d.get("facility") if isinstance(d.get("facility"), dict) else {}
     if (u.capability == "facility" or u.urgent) and fac:

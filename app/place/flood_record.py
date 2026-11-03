@@ -42,6 +42,21 @@ T = {
         "where_crop": "{ha} on farmland", "where_plain": "{ha} in the river floodplain", "where_other": "{ha} on other land",
         "compare": "In {year}, {g}; UNOSAT's event map of {period}, built from several days and sensors, shows {u}. "
                    "UNOSAT's map covers several days, so it catches more of the flood than single passes.",
+        "compare_short": "In {year}, {g}; UNOSAT's event map of {period}, built over several days, shows {u} and "
+                         "catches more of the flood than single passes.",
+        "compare_only": "UNOSAT's event map of {period}, built over several days, shows {u} and catches more of the "
+                        "flood than single radar passes.",
+        "some_short": "Satellite radar saw floodwater in {name} in {k} of the {n} rainy seasons {first}–{last}; the "
+                      "largest was {big}, with {union} under water at some point ({where}).",
+        "every_short": "Satellite radar saw floodwater in {name} in every rainy season {first}–{last}; the largest "
+                       "was {big}, with {union} under water at some point ({where}).",
+        "year_short": "In {year}, radar saw {union} of {name} under water at some point ({where}).",
+        "excluded_short": "Radar can't judge {pct} of {name} (built-up land, dense trees, dry sand); there, flood "
+                          "reports are the source.",
+        "source_short": "Sources: Copernicus GFM radar, UNOSAT, JRC; details in show working. Information only, not "
+                        "an official flood warning.",
+        "context": "Satellite radar (Copernicus GFM) saw {union} of {name} under water at some point in {year}{unosat}.",
+        "context_unosat": "; UNOSAT's event map, built over several days, shows {u}",
         "g_none": "radar passes saw no floodwater", "g_some": "radar passes saw {ha} under water at some point",
         "g_nodata": "no radar passes are on file", "u_none": "no floodwater",
         "every": "Satellite radar saw floodwater in {name} in every rainy season {first}–{last} ({n} seasons). The "
@@ -95,6 +110,22 @@ T = {
         "compare": "A {year}, {g}; taswirar UNOSAT ta {period}, wadda aka haɗa daga kwanaki da na'urori da dama, ta "
                    "nuna {u}. Taswirar UNOSAT ta haɗa kwanaki da dama, don haka tana kama yawancin ambaliyar fiye da "
                    "hotunan radar ɗaya-ɗaya.",
+        "compare_short": "A {year}, {g}; taswirar UNOSAT ta {period}, da aka haɗa daga kwanaki da dama, ta nuna {u}, "
+                         "kuma tana kama yawancin ambaliyar fiye da hotunan radar ɗaya-ɗaya.",
+        "compare_only": "Taswirar UNOSAT ta {period}, da aka haɗa daga kwanaki da dama, ta nuna {u}, kuma tana kama "
+                        "yawancin ambaliyar fiye da hotunan radar ɗaya-ɗaya.",
+        "some_short": "Radar ta tauraron ɗan adam ta ga ruwan ambaliya a {name} a damina {k} cikin {n} na "
+                      "{first}–{last}; mafi girma ita ce ta {big}, da {union} ƙarƙashin ruwa a wani lokaci ({where}).",
+        "every_short": "Radar ta tauraron ɗan adam ta ga ruwan ambaliya a {name} a kowace damina ta {first}–{last}; "
+                       "mafi girma ita ce ta {big}, da {union} ƙarƙashin ruwa a wani lokaci ({where}).",
+        "year_short": "A {year}, radar ta ga {union} na {name} ƙarƙashin ruwa a wani lokaci ({where}).",
+        "excluded_short": "Radar ba za ta iya tantance kashi {pct} na {name} ba (gine-gine, bishiyoyi masu yawa, "
+                          "busasshen yashi); a can, rahotannin ambaliya ne madogara.",
+        "source_short": "Madogara: radar ta Copernicus GFM, UNOSAT, JRC; cikakken bayani a nuna lissafi. Bayani ne "
+                        "kawai, ba gargaɗin ambaliya na hukuma ba.",
+        "context": "Radar ta tauraron ɗan adam (Copernicus GFM) ta ga {union} na {name} ƙarƙashin ruwa a wani lokaci a "
+                   "{year}{unosat}.",
+        "context_unosat": "; taswirar UNOSAT, da aka haɗa daga kwanaki da dama, ta nuna {u}",
         "g_none": "hotunan radar ba su ga ruwan ambaliya ba", "g_some": "hotunan radar sun ga {ha} ƙarƙashin ruwa a wani lokaci",
         "g_nodata": "babu hotunan radar a cikin bayanai", "u_none": "babu ruwan ambaliya",
         "every": "Radar ta tauraron ɗan adam ta ga ruwan ambaliya a {name} a kowace damina ta {first}–{last} (damina {n}). "
@@ -329,8 +360,8 @@ def attribution_years(rec: dict) -> list[int]:
 
 
 def unit_lines(conn, rec: dict, st: dict, name: str, lang: str, today: date, year: int | None) -> list[str]:
-    """The record (or the year asked), the radar/UNOSAT comparison, the share radar can't judge, the floodplain and
-    our radar check, in that order."""
+    """Every line, long form (show working): the record (or the year asked), the radar/UNOSAT comparison with the
+    reason, the share radar can't judge, the floodplain and our radar check."""
     lines = [year_line(rec, name, year, lang)] if year else []
     lines.append(record_line(rec, name, lang, today))
     lines += compare_lines(rec, lang, [year] if year else None)
@@ -340,6 +371,70 @@ def unit_lines(conn, rec: dict, st: dict, name: str, lang: str, today: date, yea
     return [x for x in lines if x]
 
 
+def short_lines(rec: dict, name: str, lang: str, today: date, year: int | None) -> list[str]:
+    """The main answer, 3–5 sentences for WhatsApp (3 Nov): the year asked, the record (the largest season), the
+    latest season when it is neither, radar and UNOSAT in one sentence for the year that matters, and the share
+    radar can't judge. No figure is said twice."""
+    from app.place.planner import map_period
+    t = _t(lang)
+    ys, wet = seasons(rec), flooded(rec)
+    big = max(wet, key=lambda y: _v(rec[y], "gfm_union_ha")) if wet else None
+
+    def year_s(y: int) -> str:                   # one season, short: the land under water and where
+        if y not in ys or _v(rec[y], "gfm_union_ha") < MIN_HA:
+            return year_line(rec, name, y, lang)
+        return t["year_short"].format(year=y, union=ha_text(_v(rec[y], "gfm_union_ha"), lang), name=name,
+                                      where=where_text(rec[y], lang))
+    lines = [year_s(year)] if year else []
+    said = {year} if year else set()
+    if not wet:
+        lines.append(record_line(rec, name, lang, today))
+        said |= set(ys)                          # 'none in 2015–2026' already covers the latest season
+    else:
+        first, last = ys[0], ys[-1]
+        key = "every_short" if len(wet) == len(ys) and len(ys) >= 3 else "some_short"
+        lines.append(t[key].format(name=name, k=len(wet), n=len(ys), first=first, last=last, big=big,
+                                   union=ha_text(_v(rec[big], "gfm_union_ha"), lang), where=where_text(rec[big], lang))
+                     + ("" if complete(last, today) else t["so_far"].format(year=last)))
+        said.add(big)
+    latest = next((y for y in reversed(ys) if complete(y, today)), ys[-1] if ys else None)
+    if latest is not None and latest not in said:
+        lines.append(year_s(latest))
+        said.add(latest)
+    maps = [y for y in sorted(rec) if (rec[y].get("unosat_ha") or (None, None))[0] is not None and
+            (_v(rec[y], "unosat_ha") >= MIN_HA or _v(rec[y], "gfm_union_ha") >= MIN_HA)]
+    m = year if year in maps else (maps[-1] if maps else None)
+    if m is not None:
+        u = _v(rec[m], "unosat_ha")
+        ut = t["u_none"] if u < MIN_HA else ha_text(u, lang)
+        if m in said and m in ys:                # its radar figure is already said: UNOSAT's alone, never twice
+            lines.append(t["compare_only"].format(period=map_period(m, lang), u=ut))
+        else:
+            g = _v(rec[m], "gfm_union_ha")
+            gt = t["g_nodata"] if m not in ys else t["g_none"] if g < MIN_HA else t["g_some"].format(ha=ha_text(g, lang))
+            lines.append(t["compare_short"].format(year=m, g=gt, period=map_period(m, lang), u=ut))
+    if ys and (share := _v(rec[ys[-1]], "gfm_excluded_share")) >= 0.01:
+        lines.append(t["excluded_short"].format(pct=f"{share:.0%}", name=name))
+    return [x for x in lines if x]
+
+
+def context_sentence(conn, lang: str, lga_pcode: str | None, year: int | None, today: date) -> str:
+    """One sentence of satellite context after a report's answer ('how bad were the 2024 floods?'): the land under
+    water that season (the year asked, else the latest complete one) and UNOSAT's figure when it has one."""
+    from app.sources.lga_names import name_of
+    t = _t(lang)
+    level, code = ("lga", lga_pcode) if lga_pcode else ("state", STATE)
+    rec = record(conn, level, code)
+    ys = seasons(rec)
+    y = year if year in ys else next((x for x in reversed(ys) if complete(x, today)), None)
+    if y is None:
+        return ""
+    name = t["lga"].format(lga=name_of(code)) if level == "lga" else t["state"]
+    u = (rec[y].get("unosat_ha") or (None, None))[0]
+    unosat = t["context_unosat"].format(u=ha_text(u, lang)) if u is not None and u >= MIN_HA else ""
+    return t["context"].format(union=ha_text(_v(rec[y], "gfm_union_ha"), lang), name=name, year=y, unosat=unosat)
+
+
 def ward_flood_answer(conn, lang: str, wardcode: str, ward: str, lga_pcode: str, lga: str, likely: str,
                       today: date, year: int | None, budget: str):
     """(text, working, specs, year shown on the map) for 'my ward' flood questions."""
@@ -347,16 +442,18 @@ def ward_flood_answer(conn, lang: str, wardcode: str, ward: str, lga_pcode: str,
     t = _t(lang)
     rec = record(conn, "ward", wardcode)
     st = static(conn, "ward", wardcode)
-    lines = [t["head_ward"].format(ward=ward, likely=likely, lga=lga), t["scope"].format(ward=ward, likely=likely, lga=lga)]
-    lines += unit_lines(conn, rec, st, ward, lang, today, year)
-    lines.append(context_line(conn, lga_pcode, lga, lang))
     my = map_year(record(conn, "lga", lga_pcode), year, today)
+    # the main answer: head, scope, 3–5 sentences, one source line; the rest is in show working
+    lines = [t["head_ward"].format(ward=ward, likely=likely, lga=lga), t["scope"].format(ward=ward, likely=likely, lga=lga),
+             " ".join(short_lines(rec, ward, lang, today, year)), t["source_short"]]
+    work = unit_lines(conn, rec, st, ward, lang, today, year) + [context_line(conn, lga_pcode, lga, lang)]
     if my:
-        lines.append(t["map_note"].format(year=my, unit=t["unit"]["ward"]))
-    lines += [budget, t["neutral"], t["sources"].format(attribution=attribution(attribution_years(rec)))]
+        work.append(t["map_note"].format(year=my, unit=t["unit"]["ward"]))
+    work += [budget, t["neutral"], t["sources"].format(attribution=attribution(attribution_years(rec)))]
+    work += working(rec, ward, lang)
     specs = [{"kind": "area_map", "measure": "gfm_union_share", "key": "gfm", "year": my, "level": "ward",
               "unit": lga_pcode, "highlight": wardcode}] if my else []
-    return "\n\n".join(x for x in lines if x), "\n".join(working(rec, ward, lang)), specs, my or 0
+    return "\n\n".join(x for x in lines if x), "\n\n".join(x for x in work if x), specs, my or 0
 
 
 def area_flood_lines(conn, lang: str, level: str, unit: str, today: date, year: int | None) -> tuple[list[str], list[str], int | None]:
@@ -368,4 +465,5 @@ def area_flood_lines(conn, lang: str, level: str, unit: str, today: date, year: 
     name = t["lga"].format(lga=name_of(unit)) if level == "lga" else t["state"]
     rec = record(conn, lvl, code)
     st = static(conn, lvl, code)
-    return unit_lines(conn, rec, st, name, lang, today, year), working(rec, name, lang), map_year(rec, year, today)
+    return (short_lines(rec, name, lang, today, year), unit_lines(conn, rec, st, name, lang, today, year) +
+            working(rec, name, lang), map_year(rec, year, today))

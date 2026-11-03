@@ -45,7 +45,7 @@ def score(reading: dict | None, expect: dict) -> list[str]:
     # path still gives the nearest suitable facility, so either reading is acceptable
     if expect.get("urgent") != "either" and bool(reading.get("urgent")) != bool(expect.get("urgent")):
         wrong.append(f"urgent {reading.get('urgent')} (want {bool(expect.get('urgent'))})")
-    for k in ("level", "time", "kind", "care", "facility_level", "ownership"):
+    for k in ("level", "time", "kind", "care", "facility_level", "ownership", "satellite_context"):
         want = expect.get(k)
         if want is not None and reading.get(k) not in (want if isinstance(want, list) else [want]):
             wrong.append(f"{k} {reading.get(k)} (want {want})")
@@ -55,6 +55,8 @@ def score(reading: dict | None, expect: dict) -> list[str]:
 async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--provider", default="meta", choices=("meta", "open"))
+    ap.add_argument("--record", action="store_true", help="write recorded.json from this run whatever the provider "
+                                                          "(the deploy gate replays it)")
     ap.add_argument("--only", default="", help="comma-separated case ids: re-read only these (e.g. after a network "
                                                "drop); the other recorded readings are kept")
     a = ap.parse_args()
@@ -102,7 +104,7 @@ async def main() -> int:
                      f"| {str(r.get('restatement', '')).replace('|', '/')} | {'; '.join(wrong) or '✅'} |")
     (HERE / f"report{'' if a.provider == 'meta' else '-open'}.md").write_text("\n".join(lines) + "\n",
                                                                             encoding="utf-8")
-    if a.provider == "meta":
+    if a.provider == "meta" or a.record:
         (HERE / "recorded.json").write_text(json.dumps(recorded, indent=1, ensure_ascii=False), encoding="utf-8")
     print(lines[2])
     sys.stdout.flush()

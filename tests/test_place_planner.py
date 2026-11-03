@@ -3,6 +3,7 @@ ward_history rows; skipped without them)."""
 
 from __future__ import annotations
 
+import re
 from datetime import date
 
 import pytest
@@ -125,12 +126,17 @@ def test_flood_answers_lead_with_gfm_over_the_record_and_quote_unosat_beside_it(
     assert a.found and a.level == "lga" and a.year == 2022 and a.measure == "gfm_union_share"
     assert a.text.startswith("*Flooding: Sokoto State* — experimental")
     parts = a.text.split("\n\n")
-    assert parts[1].startswith("In 2022, radar saw about") or parts[1].startswith("No floodwater was seen on Sokoto State")
-    assert "In 2022, radar passes saw" in a.text and "UNOSAT's event map of 1–25 October 2022" in a.text
-    assert "UNOSAT's map covers several days, so it catches more of the flood than single passes." in a.text
-    assert "Radar can't judge" in a.text and "Kasafi's own radar check" in a.text
-    assert "Contains modified Copernicus Emergency Management Service information [2015–" in a.text
-    assert "not an official flood warning" in a.text and "against its usual" not in a.text
+    # the main answer (3 Nov): head, 3–5 sentences, one source line; the details are in show working
+    assert len(parts) == 3 and parts[1].startswith("In 2022, radar saw ") and parts[2].startswith("Sources: ")
+    sentences = re.split(r"(?<=[.)])\s+(?=[A-Z])", parts[1])
+    assert 3 <= len(sentences) <= 5, sentences
+    assert "UNOSAT's event map of 1–25 October 2022" in a.text and "catches more of the flood" in a.text
+    assert "Radar can't judge" in a.text and "not an official flood warning" in a.text
+    assert "*Ranking" not in a.text and "Kasafi's own radar check" not in a.text and "against its usual" not in a.text
+    radar_2022 = re.search(r"In 2022, radar saw ([\d,]+ ha)", a.text).group(1)
+    assert a.text.count(radar_2022) == 1                          # never said twice
+    assert "Kasafi's own radar check" in a.working and "*Ranking" in a.working
+    assert "Contains modified Copernicus Emergency Management Service information [2015–" in a.working
     assert [s["key"] for s in a.specs] == ["gfm"]
     c = P.area_answer(conn, "Which LGAs flood most?", "", "en", "state", "NG034", TODAY)
     assert c.specs and c.specs[0]["key"] == "gfm" and "too few clear images" not in c.text

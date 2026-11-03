@@ -24,10 +24,12 @@ ROUTES = ("emergency", "guard", "alert", "map", "facility_count", "facility_name
           "place_area", "place_pin", "outbreak", "outlook", "hazard", "deep", "planner")
 
 
-def route_for(question: str, settings, conn=None, place: dict | None = None) -> str:
+def route_for(question: str, settings, conn=None, place: dict | None = None, reading: str | None = None) -> str:
     """The shortcut that answers `question` before the planner's document path, or 'planner'. Mirrors
     app/whatsapp/conversation.py (handle) then app/agent/answer.py (_answer_question) in their order; the
-    structured budget tools and the topic path are the planner's own and count as 'planner'."""
+    structured budget tools and the topic path are the planner's own and count as 'planner'. `reading`: the
+    understanding step's capability for the case; a shortcut answers only when it names that capability (allow()
+    in _answer_question), as live."""
     from app.agent.answer import MONEY_WORDS
     from app.agent.routing import document_question, facility_intent, other_subject, own_source
     from app.alerts.signup import INTENT, MENU, STOP
@@ -41,6 +43,9 @@ def route_for(question: str, settings, conn=None, place: dict | None = None) -> 
     from app.place.planner import area_route
     from app.whatsapp.conversation import FACILITY_WORD, MAP_ONLY, _norm
     q = question or ""
+
+    def allow(*caps: str) -> bool:
+        return reading is None or reading in caps
     if em.detect(q).hit:
         return "emergency"
     if keyword_check([q]):
@@ -51,10 +56,12 @@ def route_for(question: str, settings, conn=None, place: dict | None = None) -> 
         return "map"
     doc = document_question(q)
     from app.agent.deep import deep_question
-    if deep_question(q) and not (area_route(q, "", place) or place_route(q)) and not official.route(q, []) \
+    if reading == "deep" or allow("deep") and reading is None and deep_question(q) and \
+            not (area_route(q, "", place) or place_route(q)) and not official.route(q, []) \
             and not (layers_asked(q, []) and not MONEY_WORDS.search(q)):
         return "deep"                                         # a broad question: the deep analysis, never a shortcut
-    if settings.kasafi_shortcut_facilities and not doc and not (other_subject(q) and not is_facility_query(q)):
+    if settings.kasafi_shortcut_facilities and allow("facility") and not doc and \
+            not (other_subject(q) and not is_facility_query(q)):
         if is_count(q):
             return "facility_count"
         if (FACILITY_WORD.search(q) or ROUTE_TO.search(q)) and (facility_intent(q) or ROUTE_TO.search(q)) \
@@ -67,12 +74,12 @@ def route_for(question: str, settings, conn=None, place: dict | None = None) -> 
         if is_facility_query(q):
             return "facility_nearest"
     # after the plan (the planner's measures are not known here: the words alone)
-    if settings.kasafi_shortcut_place and not doc:
+    if settings.kasafi_shortcut_place and allow("place_history") and not doc:
         if area_route(q, "", place):
             return "place_area"
         if place_route(q):
             return "place_pin"
-    if settings.kasafi_shortcut_hazards and (not doc or own_source(q, ("NCDC", "NiMet", "NIHSA"))):
+    if settings.kasafi_shortcut_hazards and allow("hazard") and (not doc or own_source(q, ("NCDC", "NiMet", "NIHSA"))):
         kind = official.route(q, [])
         if kind == "outbreaks":
             return "outbreak"
@@ -101,7 +108,7 @@ def main() -> None:
     cases = json.loads(Path(a.file).read_text(encoding="utf-8"))["cases"]
     rows, wrong, skipped = [], 0, 0
     for c in cases:
-        got = route_for(c["question"], s, conn, c.get("place"))
+        got = route_for(c["question"], s, conn, c.get("place"), c.get("reading"))
         if got.endswith("?"):
             skipped += 1
             rows.append(f"| {c['id']} | {c['lang']} | {c['expected']} | skipped (no registry) | {c['question']} |")

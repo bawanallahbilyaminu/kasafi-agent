@@ -41,7 +41,7 @@ def store_chart(conn: psycopg.Connection, doc_id: str, region: dict, d: ChartDat
     """The chart's row, and its text added to the page (chunks, page text) and to the section card. Returns the
     text added ('' for a region that isn't a chart or has no values)."""
     from app.retrieval.line_meaning import embed_texts
-    text = chart_text(region.get("label", ""), region["page"], d) if d.is_chart and d.values else ""
+    text = chart_text(region.get("label", ""), region["page"], d, region.get("kind", "")) if d.is_chart and d.values else ""
     with conn.transaction():
         conn.execute("INSERT INTO charts (doc_id, page, box, region_kind, label, caption, is_chart, chart_type, data, "
                      "value_source, text, crop, model) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
@@ -130,6 +130,8 @@ async def build_charts_later(doc_id: str, settings: Settings | None = None) -> N
     try:
         with psycopg.connect(s.db_url(), autocommit=True) as conn:
             log.info("%s: charts %s", doc_id, await build_charts(conn, doc_id, s))
+            from app.retrieval.dashboards import build_dashboards       # pages that are dashboards or number grids
+            log.info("%s: dashboard pages %s", doc_id, await build_dashboards(conn, doc_id, s))
     except Exception as e:          # noqa: BLE001
         log.warning("%s: chart build failed: %s", doc_id, e)
     from app.retrieval.cards import build_card_later

@@ -832,23 +832,23 @@ def area_flood_answer(conn, lang: str, level: str, unit: str, compare: str, with
     from app.sources.lga_names import name_of
     t, ft = _t(lang), flood_record._t(lang)
     head = ft["head_area"].format(area=ft["area_lga"].format(lga=name_of(unit)) if level == "lga" else ft["area_state"])
-    lines, working, y = flood_record.area_flood_lines(conn, lang, level, unit, today, year)
-    lines = [head] + lines
+    short, long, y = flood_record.area_flood_lines(conn, lang, level, unit, today, year)
+    # the main answer: head, 3–5 sentences, one source line, the map; the ranking, budget lines, methods and full
+    # sources are in show working (3 Nov: the answer was too long for WhatsApp)
+    lines = [head, " ".join(short), ft["source_short"]]
+    work = list(long)
     specs: list[dict] = []
     b = block_for(conn, "gfm", compare, within, y, with_usual=False) if y else None
     if b is not None and b.ranked:
-        lines += summary_lines(b, lang, area, what)
-        lines.append(ranking_lines(b, lang, what))
-        working += working_lines(b, lang, what, str(y))
+        work += summary_lines(b, lang, area, what) + [ranking_lines(b, lang, what)] + working_lines(b, lang, what, str(y))
         specs.append({"kind": "area_map", "measure": "gfm_union_share", "key": "gfm", "year": y, "level": compare,
                       "unit": unit})
-        lines.append(ft["map_note"].format(year=y, unit=ft["unit"][compare]))
-    lines += [budget_block(conn, lang, level, unit, today), ft["neutral"]]
+        work.append(ft["map_note"].format(year=y, unit=ft["unit"][compare]))
     years = [int(r[0]) for r in conn.execute("SELECT DISTINCT year FROM ward_history WHERE measure = 'gfm_union_ha' AND "
                                              "value IS NOT NULL ORDER BY year").fetchall()]
-    lines.append(ft["sources"].format(attribution=attribution(years)))
-    return AreaAnswer("\n\n".join(x for x in lines if x), True, "\n".join(working), specs=specs, level=compare, unit=unit,
-                      measure="gfm_union_share", year=y or 0)
+    work += [budget_block(conn, lang, level, unit, today), ft["neutral"], ft["sources"].format(attribution=attribution(years))]
+    return AreaAnswer("\n\n".join(x for x in lines if x), True, "\n\n".join(x for x in work if x), specs=specs,
+                      level=compare, unit=unit, measure="gfm_union_share", year=y or 0)
 
 
 def skipped_line(t: dict, lang: str, y: int, thin: list[int], unfinished: list[tuple[int, int]]) -> str:

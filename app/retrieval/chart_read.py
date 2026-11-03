@@ -161,8 +161,14 @@ def _distance(a: str, b: str) -> int:
     return prev[-1]
 
 
-def chart_text(label: str, page: int, d: ChartData) -> str:
-    """The chart's searchable text, added to its page: only printed values carry numbers."""
+def chart_text(label: str, page: int, d: ChartData, kind: str = "") -> str:
+    """The chart's searchable text, added to its page: only printed values carry numbers. A dashboard page
+    (app/retrieval/dashboards.py) is said to be the page's printed table."""
+    if kind == "dashboard":
+        head = f"[Table printed on page {page}: {d.title}]".replace(": ]", "]")
+        meta = f"as of {d.period}" if d.period else ""
+        rows = [f"{v['category']}: {v['series'] or 'value'} {v['value']} (printed on the page)" for v in d.printed]
+        return "\n".join([head] + ([meta] if meta else []) + rows)
     head = f"[Chart: {label or d.title} (page {page}) {d.title}".strip() + "]"
     meta = "; ".join(x for x in (f"type {d.chart_type}" if d.chart_type else "", f"units {d.units}" if d.units else "",
                                  f"period {d.period}" if d.period else "", f"place {d.place}" if d.place else "") if x)

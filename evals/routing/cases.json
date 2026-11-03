@@ -458,6 +458,70 @@
    "question": "How many PHCs are in Sokoto State?",
    "expected": "facility_count",
    "note": "control: a plain count"
+  },
+  {
+   "id": "r75",
+   "lang": "en",
+   "question": "How many people were affected by floods in Sokoto State in October 2024?",
+   "reading": "statistics",
+   "expected": "planner",
+   "note": "3 Nov live: human impact goes to the documents (NEMA sitreps), never the satellite area answer"
+  },
+  {
+   "id": "r76",
+   "lang": "en",
+   "question": "Was Wamakko LGA affected by floods in 2025, according to NEMA?",
+   "reading": "statistics",
+   "expected": "planner",
+   "note": "3 Nov phone: a named publisher goes to the documents"
+  },
+  {
+   "id": "r77",
+   "lang": "ha",
+   "question": "Mutane nawa ambaliyar ruwa ta shafa a Jihar Sokoto a 2025, a cewar NEMA?",
+   "reading": "statistics",
+   "expected": "planner",
+   "note": "Hausa: a cewar NEMA"
+  },
+  {
+   "id": "r78",
+   "lang": "ha",
+   "question": "Gidaje nawa ambaliya ta rushe a Sokoto a 2024?",
+   "reading": "statistics",
+   "expected": "planner",
+   "note": "Hausa: houses destroyed is human impact"
+  },
+  {
+   "id": "r79",
+   "lang": "en",
+   "question": "How bad were the 2024 floods in Sokoto?",
+   "reading": "statistics",
+   "expected": "planner",
+   "note": "both: the reports first (satellite_context adds one sentence after)"
+  },
+  {
+   "id": "r80",
+   "lang": "en",
+   "question": "Which wards of Wamakko flooded most in 2022?",
+   "reading": "place_history",
+   "expected": "place_area",
+   "note": "control: land under water stays with the satellite record"
+  },
+  {
+   "id": "r81",
+   "lang": "ha",
+   "question": "Waɗanne gundumomin Ƙaramar Hukumar Wamakko ne ambaliya ta fi rufewa a 2022?",
+   "reading": "place_history",
+   "expected": "place_area",
+   "note": "control, Hausa: land under water stays with the satellite record"
+  },
+  {
+   "id": "r82",
+   "lang": "en",
+   "question": "According to NiMet, when will the rains end in Sokoto this year?",
+   "reading": "hazard",
+   "expected": "hazard",
+   "note": "control: a forecast named by its publisher stays on the hazard routes (it takes the forecast layers; NiMet's cessation dates aren't matched by the outlook route: an open gap, 3 Nov)"
   }
  ]
 }
