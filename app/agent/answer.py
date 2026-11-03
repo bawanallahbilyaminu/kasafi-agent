@@ -291,6 +291,18 @@ ANSWER_SYSTEM = (
     "state's figures with their date and source, and name any places in the state the evidence does list (e.g. "
     "'NEMA's reports give no figure for Wamakko; for Sokoto State they list 4,278 persons affected in 4 LGAs, "
     "which they don't name, as of 12 September 2025'). found is \"partial\".\n"
+    "6o. When the question asks for a total, or for every level, type or group of something ('how many schools' "
+    "means every level: primary, junior and senior secondary, public and private, Islamiyya/IQS), answer the broad "
+    "reading with a breakdown, never only the narrowest part. Put each part the evidence prints for the place "
+    "asked in \"parts\": {\"label\": \"<what it is, e.g. public junior secondary schools>\", \"value\": \"<copied "
+    "exactly from that place's row>\", \"cited\": <evidence number>}, and say in \"total_of\" what they add up "
+    "to (e.g. 'schools in Dange Shuni LGA: primary, junior and senior secondary, public and private'). Never write "
+    "the total yourself: code adds the parts and shows the sum. Don't list the parts again in items. Never count "
+    "a thing twice: a table that combines levels is not another part, and pre-primary (ECCD, kindergarten, "
+    "nursery) is not a part either, because school censuses count pre-primary with primary ('Pre-Primary and "
+    "Primary' schools): give the pre-primary figures in the summary, saying they are counted with primary. A level the documents give only for the state: say so in the "
+    "summary with the state figure, and that no figure for the place is printed; it is not a part. Leave parts "
+    "empty when nothing is added up.\n"
     "6k. Copy organisation names and acronyms exactly as the evidence prints them (e.g. 'NPHCDA, SOCHEMA and "
     "SOSMEA'): never correct, expand, update or respell them.\n"
     "6l. Each answer stands alone: never refer to 'the previous answer', 'my earlier reply' or 'as I said'.\n"
@@ -329,6 +341,7 @@ ANSWER_SYSTEM = (
     "and that a state figure comes from a sample.\n"
     "Reply with JSON only: {\"summary\": \"<one line, in the requested language>\", \"items\": [\"<...>\"], "
     "\"found\": \"full\"|\"partial\"|\"none\", \"cited\": [<evidence numbers used>], "
+    "\"parts\": [{\"label\": \"<...>\", \"value\": \"<...>\", \"cited\": <n>}], \"total_of\": \"<...>\", "
     "\"calculation\": null or {\"description\": \"<what it is, e.g. Sokoto year-on-year All Items inflation, "
     "September 2026>\", \"formula\": \"<arithmetic over the input names only: a growth rate is (new / old - 1) * 100, e.g. "
     "(sep26 / sep25 - 1) * 100; a share is part / whole * 100, with no - 1; a ratio is a / b>\", "
@@ -891,6 +904,112 @@ def count_table_pages(conn: psycopg.Connection, scope: list[str] | None, text: s
     return [s[2] for s in scored[:most]]
 
 
+WIDE_DOCS = 3                 # read wide: the best documents that print the place
+WIDE_CHARS = 60_000           # ~15k tokens of the place's rows with their tables' titles and headers
+WIDE_HEAD_LINES = 10          # a table page's title and column headers
+WIDE_PAGE_CHARS = 1_800
+TABLE_TITLE = re.compile(r"(?im)^\s*(?:table|tebur)\s*[A-Z]?\d")
+TOTAL_ROW = re.compile(r"(?i)^\s*(?:total|grand\s+total|state\s+total|sokoto(?:\s+state)?\s+total|jimilla)\b")
+_WIDE_STOP = {"how", "many", "much", "what", "which", "the", "are", "is", "in", "of", "and", "there", "with", "at",
+              "each", "all", "level", "levels", "number", "lga", "ward", "state", "sokoto", "for", "by", "total"}
+
+
+def place_excerpt(text: str, pats: list[re.Pattern]) -> str:
+    """A page as the place's rows: its first lines (the table's title and column headers), every line naming the
+    place, and the total rows; a running-text line naming it is cut around the name."""
+    lines = (text or "").splitlines()
+    head = lines[:WIDE_HEAD_LINES]
+    rows = []
+    for ln in lines[WIDE_HEAD_LINES:]:
+        if (m := next((m for p in pats if (m := p.search(ln))), None)) is not None:
+            rows.append(ln if len(ln) <= 400 else ln[max(0, m.start() - 200):m.end() + 300])
+        elif TOTAL_ROW.match(ln):
+            rows.append(ln)
+    if not rows and not any(p.search("\n".join(head)) for p in pats):
+        return ""
+    return "\n".join(head + (["…"] + rows if rows else []))[:WIDE_PAGE_CHARS]
+
+
+def place_names(plan: Plan, asked: str) -> list[str]:
+    """The LGAs, wards or towns the question names (the planner's entities, else an LGA in the words)."""
+    names = [e.resolved or e.name for e in (plan.need.entities if plan.need else [])
+             if e.type in ("lga", "ward", "town", "community") and (e.resolved or e.name)]
+    if not names and (lga := lga_in(asked)):
+        names = [lga]
+    return list(dict.fromkeys(n for n in names if len(n) > 2))[:3]
+
+
+def place_pattern(name: str) -> re.Pattern:
+    """A place as documents print it: any case, words joined by a space, hyphen or slash, a doubled letter
+    printed once or twice ('Illela' / 'ILELA', 'Dange Shuni' / 'DANGE-SHUNI')."""
+    words = []
+    for w in re.split(r"[\s/-]+", name.strip()):
+        words.append("".join(f"{re.escape(c)}{{1,2}}" if i and c == w[i - 1] else
+                             ("" if i + 1 < len(w) and w[i + 1] == c else re.escape(c))
+                             for i, c in enumerate(w)))
+    return re.compile(r"(?i)(?<![^\W\d_])" + r"[\s/-]*".join(words) + r"(?![^\W\d_])")
+
+
+def place_pages(conn: psycopg.Connection, plan: Plan, evidence: list[Evidence], asked: str) -> list[Evidence]:
+    """Read wide (3 Nov 2026): a figure question naming a place reads every page of the 1-3 best documents that
+    prints that place (all of the school census's per-LGA tables for Dange Shuni), each with its table's header
+    page when the place's row sits on a continuation page, up to WIDE_CHARS. The top few chunks had given only the
+    public primary schools when the census prints every level."""
+    names = place_names(plan, asked)
+    if not names or not evidence:
+        return []
+    pats = [place_pattern(n) for n in names]
+    place_words = {w.lower() for n in names for w in re.split(r"[\s/-]+", n)}
+    measure = {w for w in re.findall(r"[a-z]{3,}", f"{plan.english_question} {asked}".lower())
+               if w not in _WIDE_STOP and w not in place_words}
+    measure |= {w[:-1] for w in measure if w.endswith("s")}          # 'schools' -> 'school'
+    have = {(e.doc_id, e.page) for e in evidence}
+    used = 0
+    out: list[Evidence] = []
+    docs = 0
+    for doc in dict.fromkeys(e.doc_id for e in evidence):           # the evidence's order is the ranking
+        if docs >= WIDE_DOCS or used >= WIDE_CHARS:
+            break
+        # a cheap filter in SQL (the end of the longest word survives a doubled letter: 'ela' in ILELA), exact in Python
+        first = max(re.split(r"[\s/-]+", names[0]), key=len)[-3:]
+        rows = conn.execute(
+            "SELECT p.page, p.text, p.source, d.title, d.year FROM pages p JOIN documents d ON d.id = p.doc_id "
+            "WHERE p.doc_id = %s AND p.text ILIKE %s AND NOT EXISTS (SELECT 1 FROM withheld_pages w WHERE "
+            "w.doc_id = p.doc_id AND w.page = p.page) ORDER BY p.page", (doc, f"%{first}%")).fetchall()
+        rows = [r for r in rows if any(p.search(r[1] or "") for p in pats)]
+        if not rows:
+            continue
+        docs += 1
+        pages = {r[0]: r for r in rows}
+
+        def score(r) -> int:              # pages whose title and headers name the measure asked come first
+            head = " ".join((r[1] or "").splitlines()[:WIDE_HEAD_LINES]).lower()
+            return sum(1 for w in measure if w in head)
+        picked = []
+        for page, text, source, title, year in sorted(rows, key=lambda r: (-score(r), r[0])):
+            if used >= WIDE_CHARS:
+                break
+            if (doc, page) in have or not (excerpt := place_excerpt(text, pats)):
+                continue
+            # a continuation page (no table title before the place's row): its table's title and headers first
+            at = min(m.start() for p in pats if (m := p.search(text)))
+            if not TABLE_TITLE.search(text[:at]) and (doc, page - 1) not in have and page - 1 not in pages:
+                prev = conn.execute("SELECT text, source FROM pages WHERE doc_id = %s AND page = %s",
+                                    (doc, page - 1)).fetchone()
+                if prev and TABLE_TITLE.search(prev[0] or ""):
+                    head = "\n".join((prev[0] or "").splitlines()[:WIDE_HEAD_LINES])
+                    picked.append(Evidence(0, doc, title, year, page - 1, prev[1] or "text", head))
+                    have.add((doc, page - 1))
+                    used += len(head)
+            picked.append(Evidence(0, doc, title, year, page, source or "text", excerpt))
+            have.add((doc, page))
+            used += len(excerpt)
+        out += sorted(picked, key=lambda e: e.page)
+    if out:
+        log.info("read wide: %d more page(s) printing %s from %d document(s)", len(out), ", ".join(names), docs)
+    return out
+
+
 def statistics_scope(conn: psycopg.Connection, scope: list[str] | None) -> bool:
     """Every planned document is a statistics report (a survey, a census): their pages are read whole."""
     if not scope:
@@ -1062,7 +1181,8 @@ def checked_absence(conn: psycopg.Connection, plan: "Plan", evidence: list, cite
     # an answer that answered (it still gives figures) loses the unverified 'doesn't print' sentence and gets no
     # note: 'I didn't find this' under a full answer reads as if the question wasn't answered (2 Nov). The note
     # goes once, after the bullets, only when the absence was the answer.
-    if ANSWER_FIGURE.search(out):
+    # a count is an answer too: '91 public primary schools' (3 Nov: 'I didn't find this' went under a count)
+    if ANSWER_FIGURE.search(out) or answer_check.figures_in(re.sub(r"(?i)\b(?:page|shafi|p\.)\s*[\d, ]+", " ", out)):
         return out, True
     return f"{out}\n\n{NOT_READ.get(lang, NOT_READ['en'])}".strip(), True
 
@@ -1263,6 +1383,7 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
     evidence = [Evidence(i, h.doc_id, h.title, h.year, h.page, sources.get((h.doc_id, h.page), "text"),
                          survey_excerpt(h.title, texts[(h.doc_id, h.page)])) for i, h in enumerate(ranked, start=1)]
     extra = state_row_pages(conn, evidence) if not money else []        # the Sokoto rows of a national table
+    extra += place_pages(conn, plan, evidence + extra, asked) if not money else []   # read wide for a named place
     extra += line_evidence(conn, plan, evidence) if money or not plan.statistics else []
     for i, e in enumerate(extra, start=len(evidence) + 1):
         e.n = i
@@ -1844,6 +1965,9 @@ async def checked_answer(a: Answer, question: str, lang: str, conn, kw: dict, t_
             except asyncio.TimeoutError:
                 a2 = None
                 log.info("check: the second round ran out of time")
+            except Exception as e:           # noqa: BLE001 - a failed second round: the first draft's verdict decides
+                a2 = None
+                log.warning("check: the second round failed (%s)", type(e).__name__)
             if a2 is not None and answer_check.should_check(a2):
                 v2 = await answer_check.check(question, a2, u2, history, conn, settings, client, round_=2)
                 a2.checks = a.checks + [answer_check.trace_entry(v2)]
@@ -1853,8 +1977,14 @@ async def checked_answer(a: Answer, question: str, lang: str, conn, kw: dict, t_
                 if v2.safe_answer.strip() or not v.safe_answer.strip():
                     best, best_v = a2, v2
                 best.checks = a2.checks
+            elif a2 is not None and not a2.found and not a.found:
+                # nothing found either time: the second round's own 'not found' is the honest reply
+                a2.checks = a.checks + [{"verdict": "not found again", "round": 2}]
+                return a2
             else:
                 a.checks.append({"verdict": "no second answer", "round": 2})
+        if not best.found:                   # a 'not found' that couldn't be retried: it stands as it is
+            return best
         # still not passing: only what the evidence supports, never the draft
         text, supported = answer_check.safe_answer(best, best_v, lang)
         note = answer_check.NOTE.get(lang, answer_check.NOTE["en"]).format(
@@ -2662,13 +2792,23 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
     shown = {**d, "summary": drop_verdicts(str(d.get("summary") or d.get("answer") or ""), q_all),
              "items": [drop_verdicts(str(i), q_all) for i in (d.get("items") or [])[:TOP_ROWS]]}
     rendered = no_back_reference(plain(render_answer(shown, lang)))
+    # a total across levels or categories: each part from its own row, added up in code (3 Nov 2026)
+    parts_text, parts_working, parts_plain = parts_block(d, by_n, place_names(plan, q_all), lang) \
+        if budget is None else ("", "", "")
+    if parts_text:
+        head, _, rest = rendered.partition("\n\n")
+        rendered = f"{head}\n\n{parts_text}" + (f"\n\n{rest}" if rest else "")
+        cited = list({e.n: e for e in cited + [ev for _, _, ev, _ in checked_parts(d, by_n, [])
+                                               if ev is not None]}.values())
+        cited.sort(key=lambda e: e.n)
+        sources = cited_sources(conn, cited)
     if budget is None:          # 'doesn't print X' only after the whole document was searched for X
         rendered, softened = checked_absence(conn, plan, evidence, cited, rendered, lang)
         if softened:
             log.info("absence claim softened: other pages of the cited documents may cover it")
     body = added + (f"_{note}_\n\n" if note else "") + rendered
-    exact = answer_text(d)
-    working = ""
+    exact = answer_text(d) + (f"\n{parts_plain}" if parts_plain else "")
+    working = parts_working
     if budget is not None:
         working = readable_amounts(render_working(budget, nmap, lang), lang)
         exact += "\n" + render_working(budget, nmap, lang)
@@ -2698,6 +2838,80 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
     return Answer(f"{body}\n\n{tail}", True, True, cited, plan, t,
                   partial=found == "partial" or partly, exact=exact, acquired=acq, latest=latest, sources=sources,
                   offer=offer, budget=budget, working=working, verification=state, attribution=problems)
+
+
+PARTS_WORDS = {
+    "en": {"total": "Total ({what}): *{total}*, added up by Kasafi from the {n} parts above.",
+           "unchecked": "No total: {labels} could not be found in the cited row, so the parts aren't added up.",
+           "working": "Total, calculated in code: {sum} = {total}"},
+    "ha": {"total": "Jimilla ({what}): *{total}*, Kasafi ya haɗa daga sassa {n} da ke sama.",
+           "unchecked": "Babu jimilla: ba a samu {labels} a layin da aka ambata ba, don haka ba a haɗa sassan ba.",
+           "working": "Jimilla, an lissafa a lambar shirin: {sum} = {total}"},
+}
+
+
+# pre-primary is counted with primary in school censuses ('Pre-Primary and Primary' schools; Dange Shuni's 28 private
+# pre-primary are its 28 private primary): shown, never added (3 Nov: the writer added them anyway, 221 for 173)
+NOT_ADDED = re.compile(r"(?i)pre[\s-]*primary|\beccd\b|\becce\b|kindergarten|nursery|early\s+child|"
+                       r"kafin\s+firamare|reno")
+NOT_ADDED_WORDS = {"en": "counted with primary: not added", "ha": "an ƙidaya su tare da firamare: ba a haɗa ba"}
+
+
+def _as_number(value: str) -> float | None:
+    v = str(value).strip().replace(",", "")
+    return float(v) if re.fullmatch(r"\d+(?:\.\d+)?", v) else None
+
+
+def checked_parts(d: dict, by_n: dict, names: list[str]) -> list[tuple[str, str, Evidence | None, bool]]:
+    """Each part the writer listed: (label, value, its page, printed there). Printed means the value is a whole
+    number on that page, in a line naming the place when the question names one (the place's own row)."""
+    pats = [place_pattern(n) for n in names]
+    out = []
+    for p in (d.get("parts") or [])[:12]:
+        if not isinstance(p, dict) or not str(p.get("value") or "").strip():
+            continue
+        label, value = str(p.get("label") or "").strip()[:80], str(p.get("value")).strip()
+        try:
+            ev = by_n.get(int(p.get("cited")))
+        except (TypeError, ValueError):
+            ev = None
+        ok = False
+        if ev is not None and _as_number(value) is not None:
+            num = re.compile(rf"(?<![\d.,]){re.escape(value)}(?![\d]|[.,]\d)")
+            lines = (ev.text or "").splitlines()
+            ok = any(num.search(ln) and (not pats or any(pt.search(ln) for pt in pats)) for ln in lines)
+        out.append((label, value, ev, ok))
+    return out
+
+
+def parts_block(d: dict, by_n: dict, names: list[str], lang: str) -> tuple[str, str, str]:
+    """The parts as bullets and their total, added up in code (3 Nov 2026: never by the model), with the sum for
+    show working; ('', '', '') when the writer listed fewer than two parts. Third value: the parts as plain text
+    for the checks."""
+    parts = checked_parts(d, by_n, names)
+    if len(parts) < 2:
+        return "", "", ""
+    w = PARTS_WORDS.get(lang, PARTS_WORDS["en"])
+    page = PAGE_WORD.get(lang, "page")
+    aside = NOT_ADDED_WORDS.get(lang, NOT_ADDED_WORDS["en"])
+    shown_only = {i for i, (label, _, _, _) in enumerate(parts) if NOT_ADDED.search(label)}
+    bullets = [f"• {label}: {value}" + (f" ({page} {ev.page})" if ev is not None else "")
+               + (f" – {aside}" if i in shown_only else "") for i, (label, value, ev, _) in enumerate(parts)]
+    plain_parts = "; ".join(f"{label}: {value}" for label, value, _, _ in parts)
+    added = [p for i, p in enumerate(parts) if i not in shown_only]
+    bad = [label for label, _, _, ok in added if not ok]
+    if bad:
+        return "\n".join(bullets) + "\n\n" + w["unchecked"].format(labels=", ".join(bad)), "", plain_parts
+    if len(added) < 2:
+        return "\n".join(bullets), "", plain_parts
+    parts = added
+    nums = [_as_number(v) for _, v, _, _ in parts]
+    total = sum(nums)
+    shown = f"{total:,.0f}" if all(n == int(n) for n in nums) else f"{total:,.2f}"
+    what = str(d.get("total_of") or "").strip()[:160] or "-"
+    working = w["working"].format(sum=" + ".join(v for _, v, _, _ in parts), total=shown)
+    return ("\n".join(bullets) + "\n\n" + w["total"].format(what=what, total=shown, n=len(parts)), working,
+            f"{plain_parts}; total {shown}")
 
 
 ACRONYM = re.compile(r"(?<![\w-])[A-Z][A-Z0-9]*[A-Z](?:[&/-][A-Z0-9]+)*(?:['’]?s)?(?![\w-])")
@@ -2780,6 +2994,9 @@ def settle_verification(a: "Answer", lang: str) -> None:
             a.verification = "calculation checked" if a.found else "unsupported"
     if a.found and a.verification:
         n = len([b for b in attribution.claims_from(a.exact or a.text)]) if a.verification != "calculation checked" else 0
+        if a.verification == "figures checked":        # the figures actually found in the cited pages (3 Nov: '0
+            figs, found = answer_check.found_count(a)  # figure(s) found' was shown under a correct figure)
+            n = found if figs else n
         line = attribution.state_line(a.verification, lang, n, a.attribution)
         a.working = f"{a.working}\n\n{line}" if a.working else line
     titles = list(dict.fromkeys(e.title for e in (a.cited or []) if e.doc_id in CONVERTED))
@@ -2990,6 +3207,12 @@ def topic_route(question: str, plan: Plan) -> str:
     the live MICS question got '51.5% live-born child dried after birth' from the topic path)."""
     text = f"{question} {plan.english_question}"
     if GAPS_Q.search(question) or FINDINGS_Q.search(question):
+        return ""
+    # a place's figures (an LGA, ward or town named): that place's rows across the best documents, read wide on the
+    # page path, not one card from each publisher (3 Nov: 'how many schools in Dange Shuni' got only the public
+    # primary card); a comparison or change across sources keeps the sweep
+    from app.agent.topics import across_sources
+    if place_names(plan, text) and not across_sources(text):
         return ""
     # budget money asked about: the budget tools answer. The planner sometimes adds them to a statistics
     # question ("How many IDPs according to IOM?" got line_search): without money words, the topic path wins

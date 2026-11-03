@@ -44,7 +44,9 @@ yourself. Reply with JSON only:
  "feedback": "<one or two lines for the next round: what to find or fix, naming the place, time and measure>",
  "safe_answer": "<only when the verdict is not pass: the answer rewritten with ONLY what the evidence supports, in \
 the draft's language: what was found (figures exactly as in the draft or the evidence, with document and page), \
-what wasn't found, and where it might be. '' when the evidence supports nothing about the subject asked>"}
+what wasn't found, and where it might be; one bullet ('• ') per figure, each on its own line. Never add up, \
+subtract or compute anything: a total may be copied only from COMPUTED OR WRITTEN IN CODE. '' when the evidence \
+supports nothing about the subject asked>"}
 
 How to judge:
 - The subject is what the USER asked about (the restatement says it in full): the place, the time, the topic and \
@@ -253,10 +255,14 @@ async def check(message: str, a, u, history: list[dict] | None, conn, settings, 
 
 def should_check(a) -> bool:
     """Every answer the document or place paths give, except questions back to the user (which reading, where is
-    the farm, its size), deep analyses (each claim is already checked there) and not-found replies (nothing to
-    check)."""
-    return bool(a is not None and a.found and not a.clarify and not a.needs_pin and not a.needs_size
-                and getattr(a, "deep", None) is None and (a.text or "").strip())
+    the farm, its size) and deep analyses (each claim is already checked there). A document path's 'not found' is
+    checked too (3 Nov: the schools follow-up got 'not found' and a budget note while the census had the figures):
+    the check says what was asked, and a second round looks for it."""
+    if a is None or a.clarify or a.needs_pin or a.needs_size or getattr(a, "deep", None) is not None or \
+            not (a.text or "").strip():
+        return False
+    return bool(a.found or (a.plan is not None and not a.timings.get("place_area") and "place" not in a.timings
+                            and "hazard" not in a.timings))
 
 
 # --- the honest partial answer -----------------------------------------------------------------------------------
@@ -266,6 +272,35 @@ NOTHING = {
     "en": "I couldn't give a checked answer to that: {missing}. The documents I read were {docs}.",
     "ha": "Ban iya ba da amsar da aka tabbatar ba: {missing}. Takardun da na karanta: {docs}.",
 }
+
+
+MISSING = {"en": "Not found in the documents I read: {missing}.",
+           "ha": "Ban samu waɗannan a takardun da na karanta ba: {missing}."}
+
+
+def supported(text: str, a, keep_lines: bool = False) -> str:
+    """The sentences (or, with keep_lines, the lines: bullets and totals keep their layout) whose figures are
+    printed in the answer's cited pages or were computed in code (its working); never checked against the draft
+    itself, whose figures are what is in doubt. An answer computed in code (no page text) keeps everything."""
+    from app.agent.answer import unverified_numbers
+    text = (text or "").strip()
+    if not text or not (a.cited and any((e.text or "").strip() for e in a.cited)) or \
+            a.verification == "calculation checked":
+        return text
+    code = [a.working] if a.working else []
+
+    def ok(s: str) -> bool:
+        return not s.strip() or not unverified_numbers(s, a.cited, code)
+    sentence = r"(?<!\bp\.)(?<=[.!?])\s+"
+    if not keep_lines:
+        return " ".join(s.strip() for s in re.split(sentence + r"|\n+", text) if s.strip() and ok(s)).strip()
+    out = []
+    for line in text.split("\n"):           # a bullet is kept or dropped whole; a paragraph sentence by sentence
+        if line.lstrip().startswith("•"):
+            out.append(line if ok(line) else None)
+        else:
+            out.append(" ".join(s for s in re.split(sentence, line) if ok(s)))
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(x for x in out if x is not None)).strip()
 
 
 NOTE = {"en": "Answer check: the first answer wasn't sent ({why}); this one keeps only what the cited pages support.",
@@ -278,15 +313,18 @@ def safe_answer(a, v: Verdict, lang: str) -> tuple[str, bool]:
     check's safe answer with every figure checked in code against the cited pages (a sentence with a figure that
     isn't printed there is dropped), and the sources; when nothing is left, what wasn't found and which documents
     were read."""
-    from app.agent.answer import sources_line, unverified_numbers
-    text = (v.safe_answer or "").strip()
-    if text and a.cited and any((e.text or "").strip() for e in a.cited) and a.verification != "calculation checked":
-        keep = []
-        # never against the draft itself (its figures are what is in doubt); 'p. 19' doesn't end a sentence
-        for s in re.split(r"(?<!\bp\.)(?<=[.!?])\s+|\n+", text):
-            if s.strip() and not unverified_numbers(s, a.cited):
-                keep.append(s.strip())
-        text = " ".join(keep)
+    from app.agent.answer import NOT_READ, sources_line
+    text = supported(re.sub(r"\s+•\s+", "\n• ", v.safe_answer or ""), a, keep_lines=True)
+    from_draft = False
+    if not text and not v.wrong_subject and not v.contradictions:
+        # no rewrite came back: the draft's own lines whose figures are printed in its cited pages (or computed in
+        # code), never a line about another subject (3 Nov: a right 173-school total was lost to 'couldn't give')
+        draft = "\n".join(ln for ln in (a.text or "").splitlines()
+                          if not ln.startswith(("📄", "_Reply")) and ln.strip() not in NOT_READ.values())
+        text = supported(draft, a, keep_lines=True)
+        from_draft = bool(text)
+        if from_draft and v.missing:
+            text += "\n\n" + MISSING.get(lang, MISSING["en"]).format(missing="; ".join(v.missing[:3]).rstrip("."))
     if not text:
         docs = list(dict.fromkeys(e.title for e in (a.cited or [])))[:3]
         missing = "; ".join(v.missing[:3]) or v.feedback or "-"

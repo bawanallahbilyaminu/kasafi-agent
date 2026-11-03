@@ -340,7 +340,10 @@ def claim_age_groups(c: Claim) -> set[str]:
 
 
 def _survey_label(span: str) -> str:
-    """A survey row's label: the words before its first figure ('Sokoto', 'North West', 'Total', '12-23')."""
+    """A survey row's label: the words before its first figure ('Sokoto', 'North West', 'Total', '12-23'); a row
+    that starts with its number in the table ('26 | Sokoto | 7 | 8 | 15,675 | 4,566', 3 Nov) is labelled by the
+    cell after it."""
+    span = re.sub(r"^\s*\d{1,3}\s*\|\s*(?=[^\d\s|])", "", span)
     m = re.match(r"\s*([^\d(]*?)(?=\s*[\d(]|$)", span)
     return (m.group(1) if m else span).strip(" :|")
 
@@ -480,7 +483,9 @@ _LEAD_BACK = re.compile(r"(?i)^\s*(?:this|it|these|that|they|such)\b")
 def _prose_line(line: str) -> bool:
     """A line of running text (a sentence wrapped by the PDF), not a table row: five words or more, no cells,
     and more words than figures twice over."""
-    if "|" in line or line.lstrip().startswith("[Table:"):
+    if "|" in line or line.lstrip().startswith(("[Table:", "[Table printed on page")):
+        return False
+    if line.rstrip().endswith("(printed on the page)"):      # a dashboard row: 'Sokoto: DISPLACED PERSONS 4,566 (…)'
         return False
     words = len(re.findall(r"[A-Za-z]{2,}", line))
     return words >= 5 and words >= 2 * len(NUMBER.findall(line))

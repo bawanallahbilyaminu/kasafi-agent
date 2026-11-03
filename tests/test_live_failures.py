@@ -34,6 +34,74 @@ def test_one_documents_figures_are_not_newest_or_by_source() -> None:
     assert "Newest" not in text and "By source" not in text and "In this document:" in text
 
 
+P31 = ("SOKOTO State ASC Report; 2023/2024\n13\nTable 3.6: Public and Private Primary school enrolment by gender and "
+       "LGA\nLGA\nPublic Private Total\nNumber\nof Schools Pupils Girls % girls\nNumber\nof Schools Pupils Girls % girls "
+       "Pupils % girls\nBINJI 70 38,271 19,360 51% 2 246 80 33% 38,517 50%\nBODINGA 105 60,116 28,901 48% 4 784 325 41% "
+       "60,900 48%\nDANGE SHUNI 91 40,089 17,615 44% 28 2,837 1,251 44% 42,926 44%\nGADA 120 57,916 24,228 42% 2 534 "
+       "201 38% 58,450 42%\nTotal 2,203 1,122,151 508,746 45% 141 30,123 14,229 47% 1,152,274 45%")
+P44 = ("SOKOTO State ASC Report; 2023/2024\n26\nTable 3.10: Public and private junior secondary school enrolment by "
+       "gender and LGA\nLGA\nPublic Private Total\nNumber\nof Schools Pupils Girls % girls\nNumber\nof Schools Pupils "
+       "Girls % girls Pupils % girls\nBINJI 5 2,105 963 46% - - - - 2,105 46%\nDANGE SHUNI 18 9,447 3,916 41% 17 980 "
+       "469 48% 10,427 42%")
+P26 = "Table 3.3 pre-primary schools\nLGA\nDANGE SHUNI 20 2,117 979 46% 28 1,733 845 49%"
+
+
+def test_a_place_is_matched_however_the_document_prints_it() -> None:
+    assert ans.place_pattern("Illela").search("ILELA 12 7,855") and ans.place_pattern("Dange Shuni").search("DANGE-SHUNI")
+    assert not ans.place_pattern("Gada").search("GADABAWA 5") and not ans.place_pattern("Isa").search("Isah")
+
+
+def test_reading_wide_keeps_the_tables_title_headers_the_places_row_and_the_total() -> None:
+    ex = ans.place_excerpt(P31, [ans.place_pattern("Dange Shuni")])
+    assert "Table 3.6" in ex and "of Schools Pupils" in ex and "DANGE SHUNI 91 40,089" in ex and ex.count("Total") >= 1
+    assert "BODINGA" not in ex and "GADA 120" not in ex
+    assert ans.place_excerpt("Table 9: Wards\nLGA\nBINJI 3 4", [ans.place_pattern("Dange Shuni")]) == ""
+
+
+def _evidence():
+    return {n: ans.Evidence(n, "asc-sokoto-2023-2024", ASC.name, 2024, p, "text", t)
+            for n, (p, t) in enumerate(((31, P31), (44, P44), (26, P26)), start=1)}
+
+
+def test_parts_are_added_up_in_code_and_pre_primary_is_shown_not_added() -> None:
+    d = {"total_of": "schools in Dange Shuni LGA", "parts": [
+        {"label": "public pre-primary schools", "value": "20", "cited": 3},
+        {"label": "public primary schools", "value": "91", "cited": 1},
+        {"label": "private primary schools", "value": "28", "cited": 1},
+        {"label": "public junior secondary schools", "value": "18", "cited": 2},
+        {"label": "private junior secondary schools", "value": "17", "cited": 2}]}
+    text, working, plain = ans.parts_block(d, _evidence(), ["Dange Shuni"], "en")
+    assert "Total (schools in Dange Shuni LGA): *154*, added up by Kasafi from the 4 parts above." in text
+    assert "public pre-primary schools: 20 (page 26) – counted with primary: not added" in text
+    assert working == "Total, calculated in code: 91 + 28 + 18 + 17 = 154" and plain.endswith("total 154")
+
+
+def test_a_part_not_in_the_places_row_stops_the_total() -> None:
+    d = {"parts": [{"label": "public primary schools", "value": "70", "cited": 1},     # Binji's row, not Dange Shuni's
+                   {"label": "public junior secondary schools", "value": "18", "cited": 2}]}
+    text, working, _ = ans.parts_block(d, _evidence(), ["Dange Shuni"], "en")
+    assert "No total: public primary schools could not be found in the cited row" in text and working == ""
+
+
+def test_a_count_is_an_answer_so_no_didnt_find_note_goes_under_it() -> None:
+    from app.agent import answer_check
+    assert answer_check.figures_in("Dange Shuni has 91 public primary schools (page 31).") == ["91"]
+
+
+def test_a_numbered_table_row_and_a_dashboard_row_are_labelled_by_their_place() -> None:
+    from app.agent import attribution as A
+    assert A._survey_label("26 | Sokoto | 7 | 8 | 15,675 | 4,566 | 19") == "Sokoto"
+    assert A.row_geo(A._survey_label("Sokoto: DISPLACED PERSONS 4,566 (printed on the page)")) == "sokoto"
+    assert not A._prose_line("Nigeria: States Affected 28 (printed on the page)")
+    ev = [ans.Evidence(4, "nema-flood-sitrep-2025-09-26", "2025 Floods NEOC Situation Report", 2025, 3, "ocr",
+                       "26 | Sokoto | 7 | 8 | 15,675 | 4,566 | 19 | 3 | 1,161 | 6,572\nTotal | 25 | 89 | 325,321\n"
+                       "[Table printed on page 3: NEMA 2025 FLOOD DASHBOARD]\nas of 24/09/25\n"
+                       "Nigeria: States Affected 28 (printed on the page)\n"
+                       "Sokoto: DISPLACED PERSONS 4,566 (printed on the page)")]
+    att = A.bind("Sokoto State, as of 24/09/25: 4,566 displaced persons [4]", ev, [["Sokoto"]])
+    assert att.ok and not any("national" in p for p in att.problems)
+
+
 def test_the_progress_line_names_what_is_checked_never_several_sources() -> None:
     for lang in ("en", "ha"):
         line = tp.PROGRESS[lang].format(n=2, names="ASC, NBS")
