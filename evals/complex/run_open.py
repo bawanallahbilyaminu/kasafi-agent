@@ -76,12 +76,14 @@ def outcome(a) -> str:
     return "partial" if a.partial else "answered"
 
 
-async def main(path: Path, ids: list[str] | None, out: Path, resume: bool = False, concurrency: int = 1) -> None:
+async def main(path: Path, ids: list[str] | None, out: Path, resume: bool = False, concurrency: int = 1,
+               drafts: Path | None = None) -> None:
     s = get_settings()
     qs = [q for q in json.loads(path.read_text(encoding="utf-8"))["questions"] if not ids or q["id"] in ids]
     checks_file = path.with_name(f"{path.stem}_checks.json")
     checks_file = checks_file if checks_file.exists() else path.parent / "mid_tier_checks.json"
     checks = json.loads(checks_file.read_text(encoding="utf-8"))["checks"] if checks_file.exists() else {}
+    checks_ids = set(checks)
     ckpt = Checkpoint(out.stem, {"file": str(path), "ids": ids}, resume=resume)
     resumed = len(ckpt.done)
     warm()
@@ -89,11 +91,19 @@ async def main(path: Path, ids: list[str] | None, out: Path, resume: bool = Fals
 
     async def one(q: dict, conn) -> None:
         t0 = time.perf_counter()
-        # a follow-up is asked after its previous question (its answer isn't needed: the planner reads the question)
-        history = [{"question": q["previous"], "answer": "", "sources": []}] if q.get("previous") else None
+        # a follow-up is asked after its previous question (its answer isn't needed: the planner reads the question);
+        # a conversation from a live failure carries its earlier turns exactly ("history": [{question, answer}])
+        history = [{"question": h["question"], "answer": h.get("answer", ""), "sources": []}
+                   for h in q.get("history") or []] or \
+            ([{"question": q["previous"], "answer": "", "sources": []}] if q.get("previous") else None)
+        reading = None
+        if q.get("understand"):              # the conversation-understanding step first, as live
+            from app.agent.understand import understand_message
+            reading = await understand_message(q["text"], history, None, s)
         try:
             a = await answer_question(q["text"], q["lang"], conn, history=history,   # the library only: no fetching
-                                      settings=usage.eval_settings(s, fetch=bool(q.get("may_fetch"))))
+                                      settings=usage.eval_settings(s, fetch=bool(q.get("may_fetch"))),
+                                      **({"understanding": reading} if reading is not None else {}))
         except Exception as e:      # one bad question must not stop the run
             conn.rollback()
             print(f"{q['id']:>4} ERROR {type(e).__name__}")
@@ -114,7 +124,18 @@ async def main(path: Path, ids: list[str] | None, out: Path, resume: bool = Fals
         print(f"{q['id']:>4} {res[1]:<10} {'WRONG ' if why else ''}cites={res[3]} {path_taken:<22} "
               f"{dt:5.1f}s  [{parts}]" + (f"  {why}" if why else ""))
         prog.case(q["id"], why, dt)
-        ckpt.add(q["id"], {"row": res, "timings": dict(a.timings), "why": why, "text": a.text})
+        verdicts = [{k: c.get(k) for k in ("round", "verdict", "missing", "contradictions", "rules", "feedback")}
+                    for c in getattr(a, "checks", []) or []]
+        ckpt.add(q["id"], {"row": res, "timings": dict(a.timings), "why": why, "text": a.text, "checks": verdicts})
+        if drafts is not None:               # for replaying the answer check (evals/check/run.py)
+            with drafts.open("a", encoding="utf-8") as f:
+                f.write(json.dumps({"id": q["id"], "question": q["text"], "lang": q["lang"], "history": history or [],
+                                    "restatement": getattr(reading, "restatement", "") if reading else "",
+                                    "text": a.text, "exact": a.exact, "working": a.working,
+                                    "verification": a.verification, "found": a.found, "right": not why,
+                                    "checked": q["id"] in checks_ids,
+                                    "cited": [[e.n, e.doc_id, e.title, e.year, e.page, e.source] for e in a.cited],
+                                    "checks": verdicts}, ensure_ascii=False) + "\n")
 
     if not await run_each([q for q in qs if q["id"] not in ckpt.done], one, s.db_url(), concurrency, s):
         raise SystemExit(2)                          # the day's eval budget: --resume continues
@@ -129,9 +150,13 @@ async def main(path: Path, ids: list[str] | None, out: Path, resume: bool = Fals
         why, res = r["why"], r["row"]
         if q["id"] in checks:
             checked.append((q["id"], why))
+        check_line = " → ".join(f"{c.get('verdict')}" + (f" ({'; '.join((c.get('missing') or []) + (c.get('rules') or []))[:200]})"
+                                                          if c.get("verdict") not in ("pass", None) else "")
+                                for c in r.get("checks") or [])
         report.append(f"## {q['id']}: {res[1]}{' WRONG: ' + why if why else ''} ({res[5]}, {res[6]:.1f}s)\n\n"
                       f"**Q:** {q['text']}\n"
-                      + (f"\n_{q['note']}_\n" if q.get("note") else "") + f"\n```\n{r['text']}\n```\n")
+                      + (f"\n_{q['note']}_\n" if q.get("note") else "")
+                      + (f"\n_Answer check: {check_line}_\n" if check_line else "") + f"\n```\n{r['text']}\n```\n")
     counts = Counter(r[1] for r in rows)
     bad = [i for i, why in checked if why]
     summary = (f"{len(rows)} questions: " + ", ".join(f"{k} {v}" for k, v in counts.most_common())
@@ -163,5 +188,6 @@ if __name__ == "__main__":
     p.add_argument("--out", default=str(ROOT / "evals/complex/mid_tier_report.md"))
     p.add_argument("--resume", action="store_true", help="continue the stopped run with this --out")
     p.add_argument("--concurrency", type=int, default=1, choices=[1, 2])
+    p.add_argument("--drafts", help="append each answer as JSON lines here, for replaying the answer check")
     a = p.parse_args()
-    asyncio.run(main(Path(a.file), a.ids, Path(a.out), a.resume, a.concurrency))
+    asyncio.run(main(Path(a.file), a.ids, Path(a.out), a.resume, a.concurrency, Path(a.drafts) if a.drafts else None))

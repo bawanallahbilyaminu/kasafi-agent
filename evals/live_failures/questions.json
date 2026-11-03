@@ -1,0 +1,29 @@
+{
+ "_about": "The 3 Nov 2026 live failures A-E as conversations, with the user's exact wording and, for the follow-ups, the exact replies Kasafi gave live (traces 298-305). Run with evals/complex/run_open.py --file evals/live_failures/questions.json: each case goes through the understanding step and answer_question, so the answer check runs as live. Checks: questions_checks.json.",
+ "questions": [
+  {"id": "lfA", "lang": "en", "understand": true, "text": "How many schools are in Dange Shuni",
+   "note": "A: got only 91 public primary (+ pre-primary) as 'Newest figure'. ASC 23-24: primary 91 + 28 (p31), JSS 18 + 17 (p44), SSS 8 + 11 (p53) = 173; pre-primary 20 + 28 (p26) counted with primary; IQS only statewide (p22)"},
+  {"id": "lfB", "lang": "en", "understand": true,
+   "history": [{"question": "How many schools are in Dange Shuni", "answer": "Dange Shuni LGA has 91 public primary schools in the 2023/2024 ASC, from the Sokoto State Annual School Census 23-24 Report.\n\n📊 Newest figure: *91 schools* – Number of Primary Schools in Public Primary School, DANGE SHUNI LGA (Sokoto State Annual School Census 23-24 Report, 2023/2024 ASC).\n\nBy source:\n• Sokoto State Annual School Census 23-24 Report: 91 schools – Number of Primary Schools in Public Primary School, DANGE SHUNI LGA; 2023/2024 ASC (p. 19)\n• Sokoto State Annual School Census 23-24 Report: 20 schools – public pre-primary schools, DANGE SHUNI LGA; 2023/2024 ASC (p. 26)\n• Sokoto State Annual School Census 23-24 Report: 28 schools – private pre-primary schools, DANGE SHUNI LGA; 2023/2024 ASC (p. 26)"}],
+   "text": "I mean all the total schools primary, senior secondary and junior secondary and IQS",
+   "note": "B: answered about the BUDGET for Dange Shuni"},
+  {"id": "lfC", "lang": "en", "understand": true,
+   "history": [{"question": "How many schools are in Dange Shuni", "answer": "Dange Shuni LGA has 91 public primary schools in the 2023/2024 ASC, from the Sokoto State Annual School Census 23-24 Report."},
+               {"question": "I mean all the total schools primary, senior secondary and junior secondary and IQS", "answer": "The state budget doesn't show money allocated directly to Dange Shuni Local Government. State budget lines for institutions located in Dange Shuni (a hospital or a school, say) are state money, not the LGA's. LGAs get their statutory allocations from the Federation Account separately, and the documents I have don't show Dange Shuni's."}],
+   "text": "Am talking about schools not budget",
+   "note": "C: '91 public primary schools… I didn't find this in the pages I read', with '0 figure(s) found' in show working"},
+  {"id": "lfD", "lang": "en", "understand": true, "text": "Was Wamakko LGA affected by floods in 2025, according to NEMA?",
+   "note": "D: 'Yes, Sokoto State is listed…' then 'can't tell about Wamakko'. NEMA's 2025 reports never name Wamakko: 7 LGAs and 8 wards, 15,675 people (24 Sep sitrep p3)"},
+  {"id": "lfD_ha", "lang": "ha", "understand": true, "text": "Shin ambaliya ta shafi Ƙaramar Hukumar Wamakko a 2025, a cewar NEMA?",
+   "note": "D in Hausa"},
+  {"id": "lfE", "lang": "en", "understand": true,
+   "history": [{"question": "How many people were affected by floods in Sokoto State in 2024?", "answer": "*Flooding: Sokoto State* — experimental\n\nIn 2024, radar saw about 4,120 ha of Sokoto State under water on its biggest pass (27 August 2024), and 26,000 ha at some point in the season."}],
+   "text": "How many people in Sokoto State were affected by floods in October 2024?",
+   "note": "E: satellite hectares. NEMA: 102K (14 and 21 Oct), 97,928 (2 Oct)"},
+  {"id": "lfE2", "lang": "en", "understand": true,
+   "history": [{"question": "How many people were affected by floods in Sokoto State in 2024?", "answer": "*Flooding: Sokoto State* — experimental\n\nIn 2024, radar saw about 4,120 ha of Sokoto State under water on its biggest pass (27 August 2024), and 26,000 ha at some point in the season."}],
+   "text": "I asked about people, not hectares of land",
+   "note": "E as a correction"},
+  {"id": "lfA_ha", "lang": "ha", "understand": true, "text": "Makarantu nawa ne a Dange Shuni?", "note": "A in Hausa"}
+ ]
+}

@@ -72,12 +72,23 @@ def test_the_partial_answer_keeps_only_sentences_whose_figures_are_printed() -> 
     a = _answer("Dange Shuni has 91 public primary schools and 40 JSS.")
     v = ck.Verdict("fail", safe_answer="Dange Shuni has 91 public primary schools (p. 19). It has 40 junior "
                                        "secondary schools. The census tables for SSS weren't in the pages read.",
-                   missing=["SSS counts"])
+                   missing=["SSS counts"], unsupported=["40 JSS"])
     text, supported = ck.safe_answer(a, v, "en")
     assert supported and "91 public primary" in text and "40 junior" not in text and "SSS" in text
     assert "Sokoto State Annual School Census 23-24 Report" in text            # the sources line
-    nothing, ok = ck.safe_answer(a, ck.Verdict("fail", missing=["the number of IQS in Dange Shuni"]), "en")
+    nothing, ok = ck.safe_answer(a, ck.Verdict("fail", missing=["the number of IQS in Dange Shuni"],
+                                               contradictions=["x"]), "en")
     assert not ok and nothing.startswith("I couldn't give a checked answer to that: the number of IQS")
+
+
+def test_a_draft_whose_only_fault_is_a_gap_is_kept_with_its_code_total_and_the_gap_said() -> None:
+    a = _answer("• public primary schools: 91 (page 19)\n• public junior secondary schools: 14 (page 19)\n\n"
+                "Total (schools): *105*, added up by Kasafi from the 2 parts above.\n\n📄 *Sources:* ASC, p. 19")
+    a.working = "Total, calculated in code: 91 + 14 = 105"
+    v = ck.Verdict("fail", safe_answer="• public primary schools: 91", missing=["IQS schools in Dange Shuni"])
+    text, ok = ck.safe_answer(a, v, "en")
+    assert ok and "*105*" in text and "14 (page 19)" in text
+    assert "Not found in the documents I read: IQS schools in Dange Shuni." in text and text.count("📄") == 1
 
 
 def test_parse_reads_the_verdict_and_unknowns_become_revise() -> None:

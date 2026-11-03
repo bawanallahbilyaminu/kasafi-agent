@@ -1,0 +1,13 @@
+{
+ "_about": "What each final answer must (and must not) say. A, B, C: every level from its own row (ASC 23-24: public primary 91, JSS 18, SSS 8; private schools with primary 28, JSS 17, SSS 11 classes) and the code-computed total of separate schools, 117 public; private schools are counted at each level they offer (Table 2.2, p21), so 173 (and 221 with pre-primary) double-count; IQS (Islamiyya Integrated) only statewide (p22); never a budget. D: never 'Yes', Wamakko named, the state figure given. E: people, never hectares.",
+ "checks": {
+  "lfA": {"all_re": ["\\b91\\b", "\\b18\\b", "\\b17\\b", "\\b117\\b"], "must_not": "\\b173\\b|\\b221\\b|Newest figure|(?i:budget)"},
+  "lfB": {"all_re": ["\\b91\\b", "\\b18\\b", "\\b117\\b", "(?i:IQS|Islamiyya|Qur.?anic)"], "must_not": "\\b173\\b|\\b221\\b|(?i:budget|allocat)"},
+  "lfC": {"all_re": ["\\b91\\b", "\\b18\\b", "\\b117\\b"], "must_not": "\\b173\\b|\\b221\\b|(?i:budget|allocat)|didn't find this in the pages I read"},
+  "lfD": {"all_re": ["Wamakko", "15,675|\\b7\\b"], "must_not": "(?im)^\\W*yes\\b"},
+  "lfD_ha": {"all_re": ["Wamakko", "15,675|\\b7\\b"], "must_not": "(?im)^\\W*(?:e{1,2}h?|i|haka ne)\\b[,.!\\s]"},
+  "lfE": {"all_re": ["102K|102,000|97,928"], "must_not": "\\bha\\b|(?i:hectare|radar)"},
+  "lfE2": {"all_re": ["102K|102,000|97,928|98K"], "must_not": "\\bha\\b|(?i:hectare|radar)"},
+  "lfA_ha": {"all_re": ["\\b91\\b", "\\b18\\b", "\\b117\\b"], "must_not": "\\b173\\b|\\b221\\b|₦|(?i:biliyan|miliyan)"}
+ }
+}

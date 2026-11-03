@@ -297,10 +297,13 @@ ANSWER_SYSTEM = (
     "asked in \"parts\": {\"label\": \"<what it is, e.g. public junior secondary schools>\", \"value\": \"<copied "
     "exactly from that place's row>\", \"cited\": <evidence number>}, and say in \"total_of\" what they add up "
     "to (e.g. 'schools in Dange Shuni LGA: primary, junior and senior secondary, public and private'). Never write "
-    "the total yourself: code adds the parts and shows the sum. Don't list the parts again in items. Never count "
-    "a thing twice: a table that combines levels is not another part, and pre-primary (ECCD, kindergarten, "
-    "nursery) is not a part either, because school censuses count pre-primary with primary ('Pre-Primary and "
-    "Primary' schools): give the pre-primary figures in the summary, saying they are counted with primary. A level the documents give only for the state: say so in the "
+    "the total yourself: code adds the parts marked \"add\": true and shows the sum. Don't list the parts again in "
+    "items. Never count a thing twice: a table that combines levels is not another part; pre-primary (ECCD, "
+    "kindergarten, nursery) is counted with primary in school censuses ('Pre-Primary and Primary' schools); and "
+    "when the document counts the same school at each level it offers (e.g. private 'schools with primary "
+    "classes', 'schools with junior secondary classes'), those parts are listed with \"add\": false and \"why\": "
+    "\"<e.g. a private school offering several levels is counted at each>\", and the summary says the total covers "
+    "only the parts that are separate schools. Read the document's own notes on how it counts before adding. A level the documents give only for the state: say so in the "
     "summary with the state figure, and that no figure for the place is printed; it is not a part. Leave parts "
     "empty when nothing is added up.\n"
     "6k. Copy organisation names and acronyms exactly as the evidence prints them (e.g. 'NPHCDA, SOCHEMA and "
@@ -341,7 +344,8 @@ ANSWER_SYSTEM = (
     "and that a state figure comes from a sample.\n"
     "Reply with JSON only: {\"summary\": \"<one line, in the requested language>\", \"items\": [\"<...>\"], "
     "\"found\": \"full\"|\"partial\"|\"none\", \"cited\": [<evidence numbers used>], "
-    "\"parts\": [{\"label\": \"<...>\", \"value\": \"<...>\", \"cited\": <n>}], \"total_of\": \"<...>\", "
+    "\"parts\": [{\"label\": \"<...>\", \"value\": \"<...>\", \"cited\": <n>, \"add\": true|false, \"why\": \"<if "
+    "not added>\"}], \"total_of\": \"<what the added parts add up to>\", "
     "\"calculation\": null or {\"description\": \"<what it is, e.g. Sokoto year-on-year All Items inflation, "
     "September 2026>\", \"formula\": \"<arithmetic over the input names only: a growth rate is (new / old - 1) * 100, e.g. "
     "(sep26 / sep25 - 1) * 100; a share is part / whole * 100, with no - 1; a ratio is a / b>\", "
@@ -426,6 +430,7 @@ def render_answer(d: dict, lang: str) -> str:
     summary = str(d.get("summary") or d.get("answer") or "").strip()
     items = [str(i).strip() for i in d.get("items") or [] if str(i).strip()]
     text = summary + ("\n\n" + "\n".join(f"• {i}" for i in items) if items else "")
+    text = _FOUND_LEAK.sub("", text)        # the JSON's own field copied into the prose ('(found="partial")')
     if lang == "ha":
         for pattern, repl in _HAUSA_FIXES:
             text = pattern.sub(repl, text)
@@ -435,6 +440,7 @@ def render_answer(d: dict, lang: str) -> str:
 
 
 _BRACKETED_FIGURE = re.compile(r"(?<=[:\s])\((\d+(?:\.\d+)?%)\)(?=[\s.,;\[]|$)", re.M)
+_FOUND_LEAK = re.compile(r"\s*\(?\bfound\s*=\s*[\"']?(?:full|partial|none)[\"']?\)?")
 
 
 def answer_text(d: dict) -> str:
@@ -950,6 +956,43 @@ def place_pattern(name: str) -> re.Pattern:
     return re.compile(r"(?i)(?<![^\W\d_])" + r"[\s/-]*".join(words) + r"(?![^\W\d_])")
 
 
+HOW_COUNTED_PAGES = 3
+HOW_COUNTED_LINES = 20
+
+
+def how_counted(conn: psycopg.Connection, doc: str, title: str, year, asked: str, pats: list[re.Pattern],
+                have: set) -> list[Evidence]:
+    """For a count ('how many schools'): the document's own tables of that count that don't name the place, from
+    their title down (3 Nov 2026: the census's 'Number of Private schools by level' says a private school is
+    counted at each level it offers, so private schools can't be added across levels; its 'Number of public
+    schools with special curriculum' gives the IQS figures, statewide only). Contents pages are skipped."""
+    heads = {q.split()[-1].lower() for q in count_queries(asked)}
+    if not heads:
+        return []
+    out = []
+    for page, text, source in conn.execute(
+            "SELECT page, text, source FROM pages p WHERE doc_id = %s AND text ~* %s AND NOT EXISTS (SELECT 1 FROM "
+            "withheld_pages w WHERE w.doc_id = p.doc_id AND w.page = p.page) ORDER BY page",
+            (doc, r"(table|tebur)[^\n]{0,80}(number|no\.)")).fetchall():
+        if len(out) >= HOW_COUNTED_PAGES:
+            break
+        if (doc, page) in have or any(p.search(text or "") for p in pats):
+            continue
+        lines = (text or "").splitlines()
+        titles = [i for i, ln in enumerate(lines) if TABLE_TITLE.match(ln)]
+        if len(titles) > 6:                  # a list of tables
+            continue
+        hits = [i for i in titles if re.search(r"(?i)\b(?:number|no\.)\b", lines[i])
+                and any(h.rstrip("s") in lines[i].lower() for h in heads)]
+        if not hits:
+            continue
+        keep = sorted({j for i in hits for j in range(i, min(len(lines), i + HOW_COUNTED_LINES))})
+        excerpt = "\n".join(lines[j] for j in keep)[:WIDE_PAGE_CHARS * 2]
+        out.append(Evidence(0, doc, title, year, page, source or "text", excerpt))
+        have.add((doc, page))
+    return out
+
+
 def place_pages(conn: psycopg.Connection, plan: Plan, evidence: list[Evidence], asked: str) -> list[Evidence]:
     """Read wide (3 Nov 2026): a figure question naming a place reads every page of the 1-3 best documents that
     prints that place (all of the school census's per-LGA tables for Dange Shuni), each with its table's header
@@ -1004,6 +1047,7 @@ def place_pages(conn: psycopg.Connection, plan: Plan, evidence: list[Evidence], 
             picked.append(Evidence(0, doc, title, year, page, source or "text", excerpt))
             have.add((doc, page))
             used += len(excerpt)
+        picked += how_counted(conn, doc, title, year, asked, pats, have)
         out += sorted(picked, key=lambda e: e.page)
     if out:
         log.info("read wide: %d more page(s) printing %s from %d document(s)", len(out), ", ".join(names), docs)
@@ -2076,6 +2120,11 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         # what the words settle (docs/planner-variance.md): clear patterns override the plan; conflicting ones go to
         # a second-opinion plan from the Open model, capped; every override and conflict lands in the trace
         await settle_by_words(plan, question, planned_q, catalog, names, second, settings, today, history, lang, t)
+        if u is not None and u.kind in ("correction", "clarification") and plan.followup == "recheck":
+            # 'I asked about people, not hectares' is the user's own question restated, not 'check again for a
+            # newer edition' (3 Nov: it opened with 'I checked again: … still the newest edition')
+            log.info("a correction, not a recheck: the restated question is answered")
+            plan.followup = "none"
         if review:
             plan.review = str(review.get("feedback") or "")[:500]
             plan.search_queries = list(dict.fromkeys([*plan.search_queries,
@@ -2789,23 +2838,29 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
                       + ([f"dash: a '-' cell read as a figure ({dash})"] if dash else []))
     note = plan.assumption_for(lang)
     q_all = f"{question} {plan.english_question}"
-    shown = {**d, "summary": drop_verdicts(str(d.get("summary") or d.get("answer") or ""), q_all),
-             "items": [drop_verdicts(str(i), q_all) for i in (d.get("items") or [])[:TOP_ROWS]]}
-    rendered = no_back_reference(plain(render_answer(shown, lang)))
     # a total across levels or categories: each part from its own row, added up in code (3 Nov 2026)
     parts_text, parts_working, parts_plain = parts_block(d, by_n, place_names(plan, q_all), lang) \
         if budget is None else ("", "", "")
-    if parts_text:
-        head, _, rest = rendered.partition("\n\n")
-        rendered = f"{head}\n\n{parts_text}" + (f"\n\n{rest}" if rest else "")
-        cited = list({e.n: e for e in cited + [ev for _, _, ev, _ in checked_parts(d, by_n, [])
-                                               if ev is not None]}.values())
-        cited.sort(key=lambda e: e.n)
-        sources = cited_sources(conn, cited)
+    items = [drop_verdicts(str(i), q_all) for i in (d.get("items") or [])[:TOP_ROWS]]
+    if parts_text:              # an item that only repeats the parts' figures goes: the parts are listed once
+        values = {p.value for p in checked_parts(d, by_n, [])}
+
+        def repeats(item: str) -> bool:
+            nums = re.findall(r"\d[\d,]*(?:\.\d+)?", re.sub(r"(?i)\b(?:page|shafi|p\.)\s*[\d, ]+|\[\d+\]", " ", item))
+            return bool(nums) and set(nums) <= values
+        items = [i for i in items if not repeats(i)]
+    shown = {**d, "summary": drop_verdicts(str(d.get("summary") or d.get("answer") or ""), q_all), "items": items}
+    rendered = no_back_reference(plain(render_answer(shown, lang)))
     if budget is None:          # 'doesn't print X' only after the whole document was searched for X
         rendered, softened = checked_absence(conn, plan, evidence, cited, rendered, lang)
         if softened:
             log.info("absence claim softened: other pages of the cited documents may cover it")
+    if parts_text:              # code's own lines: after the absence filter, which must never drop the total
+        head, _, rest = rendered.partition("\n\n")
+        rendered = f"{head}\n\n{parts_text}" + (f"\n\n{rest}" if rest else "")
+        cited = list({e.n: e for e in cited + [p.ev for p in checked_parts(d, by_n, []) if p.ev is not None]}.values())
+        cited.sort(key=lambda e: e.n)
+        sources = cited_sources(conn, cited)
     body = added + (f"_{note}_\n\n" if note else "") + rendered
     exact = answer_text(d) + (f"\n{parts_plain}" if parts_plain else "")
     working = parts_working
@@ -2855,6 +2910,29 @@ PARTS_WORDS = {
 NOT_ADDED = re.compile(r"(?i)pre[\s-]*primary|\beccd\b|\becce\b|kindergarten|nursery|early\s+child|"
                        r"kafin\s+firamare|reno")
 NOT_ADDED_WORDS = {"en": "counted with primary: not added", "ha": "an ƙidaya su tare da firamare: ba a haɗa ba"}
+NOT_ADDED_WHY = {"en": "not added: {why}", "ha": "ba a haɗa ba: {why}"}
+PER_LEVEL_NOTE = re.compile(r"(?i)\bschools?\s+with\s+(?:pre[\s-]*primary|primary|junior|senior)[\w\s-]{0,30}classes\b")
+PRIVATE = re.compile(r"(?i)\bprivate\b|masu\s+zaman\s+kansu|na\s+kashin\s+kai")
+PER_LEVEL_WHY = {"en": "the census counts a private school at each level it offers",
+                 "ha": "ƙidayar tana ƙidaya makarantar mai zaman kanta a kowane mataki da take da shi"}
+
+
+@dataclass
+class Part:
+    label: str
+    value: str
+    ev: "Evidence | None"
+    ok: bool                 # printed on its page, in the place's row
+    add: bool = True         # the writer says it is a separate count to add (not the same school at another level)
+    why: str = ""            # why not, in the writer's words
+
+
+def pre_primary_only(label: str) -> bool:
+    """A part that is pre-primary alone, by its label without notes in brackets ('public primary schools (includes
+    pre-primary)' and 'public pre-primary and primary schools' are primary)."""
+    core = re.sub(r"\([^)]*\)", "", label)
+    rest = re.sub(r"(?i)pre[\s-]*primary|kafin\s+firamare", "", core)
+    return bool(NOT_ADDED.search(core)) and not re.search(r"(?i)\b(?:primary|firamare)\b", rest)
 
 
 def _as_number(value: str) -> float | None:
@@ -2862,9 +2940,9 @@ def _as_number(value: str) -> float | None:
     return float(v) if re.fullmatch(r"\d+(?:\.\d+)?", v) else None
 
 
-def checked_parts(d: dict, by_n: dict, names: list[str]) -> list[tuple[str, str, Evidence | None, bool]]:
-    """Each part the writer listed: (label, value, its page, printed there). Printed means the value is a whole
-    number on that page, in a line naming the place when the question names one (the place's own row)."""
+def checked_parts(d: dict, by_n: dict, names: list[str]) -> list[Part]:
+    """Each part the writer listed, with whether it is printed on its page (a whole number there, in a line naming
+    the place when the question names one: the place's own row) and whether the writer says to add it."""
     pats = [place_pattern(n) for n in names]
     out = []
     for p in (d.get("parts") or [])[:12]:
@@ -2880,37 +2958,58 @@ def checked_parts(d: dict, by_n: dict, names: list[str]) -> list[tuple[str, str,
             num = re.compile(rf"(?<![\d.,]){re.escape(value)}(?![\d]|[.,]\d)")
             lines = (ev.text or "").splitlines()
             ok = any(num.search(ln) and (not pats or any(pt.search(ln) for pt in pats)) for ln in lines)
-        out.append((label, value, ev, ok))
+        out.append(Part(label, value, ev, ok, p.get("add") is not False, str(p.get("why") or "").strip()[:120]))
     return out
 
 
 def parts_block(d: dict, by_n: dict, names: list[str], lang: str) -> tuple[str, str, str]:
     """The parts as bullets and their total, added up in code (3 Nov 2026: never by the model), with the sum for
-    show working; ('', '', '') when the writer listed fewer than two parts. Third value: the parts as plain text
-    for the checks."""
+    show working; ('', '', '') when the writer listed fewer than two parts. Only the parts that are separate
+    counts are added: pre-primary is counted with primary, and the writer marks the same school counted at each
+    level it offers (the census's private 'schools with primary classes', '… with junior secondary classes') as
+    not added. Third value: the parts as plain text for the checks."""
     parts = checked_parts(d, by_n, names)
     if len(parts) < 2:
         return "", "", ""
     w = PARTS_WORDS.get(lang, PARTS_WORDS["en"])
     page = PAGE_WORD.get(lang, "page")
-    aside = NOT_ADDED_WORDS.get(lang, NOT_ADDED_WORDS["en"])
-    shown_only = {i for i, (label, _, _, _) in enumerate(parts) if NOT_ADDED.search(label)}
-    bullets = [f"• {label}: {value}" + (f" ({page} {ev.page})" if ev is not None else "")
-               + (f" – {aside}" if i in shown_only else "") for i, (label, value, ev, _) in enumerate(parts)]
-    plain_parts = "; ".join(f"{label}: {value}" for label, value, _, _ in parts)
-    added = [p for i, p in enumerate(parts) if i not in shown_only]
-    bad = [label for label, _, _, ok in added if not ok]
+    for p in parts:                 # pre-primary is counted with primary in school censuses, whatever the writer said
+        if p.add and pre_primary_only(p.label):
+            p.add, p.why = False, ""
+    # the document's own note that a school is counted at each level it offers ('Schools with primary classes 203 …
+    # Schools with junior secondary classes 116': 209 private schools in all, census Table 2.2): its private parts
+    # across levels are never added, whatever the writer said (3 Nov: Open added them on some runs, 173 for 117)
+    note = next((m for e in by_n.values() if (m := PER_LEVEL_NOTE.search(e.text or ""))), None)
+    private = [p for p in parts if PRIVATE.search(p.label)]
+    if note is not None and len(private) >= 2:
+        why = PER_LEVEL_WHY.get(lang, PER_LEVEL_WHY["en"])
+        for p in parts:             # code decides both ways: private parts out, the other levels' schools in
+            if p in private:
+                p.add, p.why = False, why
+            elif not pre_primary_only(p.label):
+                p.add, p.why = True, ""
+
+    def aside(p: Part) -> str:
+        if p.add:
+            return ""
+        if not p.why:
+            return " – " + NOT_ADDED_WORDS.get(lang, NOT_ADDED_WORDS["en"])
+        return " – " + NOT_ADDED_WHY.get(lang, NOT_ADDED_WHY["en"]).format(why=p.why.rstrip("."))
+    bullets = [f"• {p.label}: {p.value}" + (f" ({page} {p.ev.page})" if p.ev is not None else "") + aside(p)
+               for p in parts]
+    plain_parts = "; ".join(f"{p.label}: {p.value}" for p in parts)
+    added = [p for p in parts if p.add]
+    bad = [p.label for p in added if not p.ok]
     if bad:
         return "\n".join(bullets) + "\n\n" + w["unchecked"].format(labels=", ".join(bad)), "", plain_parts
     if len(added) < 2:
         return "\n".join(bullets), "", plain_parts
-    parts = added
-    nums = [_as_number(v) for _, v, _, _ in parts]
+    nums = [_as_number(p.value) for p in added]
     total = sum(nums)
     shown = f"{total:,.0f}" if all(n == int(n) for n in nums) else f"{total:,.2f}"
     what = str(d.get("total_of") or "").strip()[:160] or "-"
-    working = w["working"].format(sum=" + ".join(v for _, v, _, _ in parts), total=shown)
-    return ("\n".join(bullets) + "\n\n" + w["total"].format(what=what, total=shown, n=len(parts)), working,
+    working = w["working"].format(sum=" + ".join(p.value for p in added), total=shown)
+    return ("\n".join(bullets) + "\n\n" + w["total"].format(what=what, total=shown, n=len(added)), working,
             f"{plain_parts}; total {shown}")
 
 

@@ -39,6 +39,8 @@ yourself. Reply with JSON only:
 "note": "<what differs from what was asked, or ''>"},
  "contradictions": ["<a statement and the statement that contradicts it>"],
  "missing": ["<each thing the user asked for that the draft doesn't give, naming place, time and measure>"],
+ "missing_stated": true|false,
+ "unclear": ["<a sentence that misdescribes what a figure is or how two figures relate>"],
  "unsupported": ["<each figure or claim in the draft that the evidence doesn't contain>"],
  "verdict": "pass|revise|fail",
  "feedback": "<one or two lines for the next round: what to find or fix, naming the place, time and measure>",
@@ -57,7 +59,14 @@ so) does not match, even when what it says is true.
 - A "Yes" or "No" must be about exactly the subject asked. "Yes, Sokoto State is listed … it can't tell whether \
 Wamakko is one" is a contradiction AND a subject mismatch.
 - missing: what was asked for and isn't in the draft. A question for a total, or for all levels or types \
-("how many schools" means every level), answered with one part: list the other parts.
+("how many schools" means every level), answered with one part: list the other parts. missing_stated: true when \
+the draft says plainly, for every missing thing, that the documents don't give it (e.g. "the census doesn't \
+print IQS numbers by LGA"); false when it just leaves it out.
+- unclear: a sentence that says something wrong about a figure (calls a dated figure a rounding of another, a \
+part the total, a state figure the LGA's), even when the figure itself is in the evidence.
+- Totals are computed in code from the parts the document counts as separate (the writer marks parts that \
+count the same thing twice as not added). Never ask for a total or suggest one in the feedback, and never add \
+figures up yourself: name the missing parts only.
 - unsupported: compare every figure with the EVIDENCE. Rounding is fine (₦1.94 billion for 1,940,000,000). Figures \
 the CODE CHECK says were computed in code are supported.
 - ROUND 1: anything missing, a mismatch or a contradiction is "revise" (another search can find it). ROUND 2: a \
@@ -82,6 +91,8 @@ class Verdict:
     subject: dict = field(default_factory=dict)
     contradictions: list[str] = field(default_factory=list)
     missing: list[str] = field(default_factory=list)
+    missing_stated: bool = False         # the draft says plainly that each missing thing isn't in the documents
+    unclear: list[str] = field(default_factory=list)
     unsupported: list[str] = field(default_factory=list)
     feedback: str = ""
     safe_answer: str = ""
@@ -115,6 +126,7 @@ def parse(d: dict, round_: int) -> Verdict:
     return Verdict(verdict=verdict, answers_question=str(d.get("answers_question") or "")[:10],
                    subject={k: subj.get(k) for k in ("place", "time", "topic", "level", "note") if k in subj},
                    contradictions=strs(d.get("contradictions")), missing=strs(d.get("missing")),
+                   missing_stated=d.get("missing_stated") is True, unclear=strs(d.get("unclear")),
                    unsupported=strs(d.get("unsupported")), feedback=str(d.get("feedback") or "").strip()[:500],
                    safe_answer=str(d.get("safe_answer") or "").strip()[:3000], round=round_)
 
@@ -246,11 +258,26 @@ async def check(message: str, a, u, history: list[dict] | None, conn, settings, 
     if rules and v.verdict in ("pass", "skipped"):
         v.verdict = "revise" if round_ == 1 else "fail"
         v.feedback = (v.feedback + " " if v.feedback else "") + "; ".join(rules)
+    elif round_ == 2 and v.verdict in ("revise", "fail") and honest_partial(v):
+        # the second draft is about the right subject, every figure supported, and it says plainly what the
+        # documents don't give: an honest partial answer passes, whatever the model's verdict (3 Nov: 'IQS isn't
+        # printed by LGA' was failed twice and the right 173 total lost)
+        v.why = f"honest partial (model said {v.verdict})"
+        v.verdict = "pass"
     v.seconds = time.perf_counter() - t0
     v.provider = getattr(client, "provider", "")
     log.info("answer check round %d: %s in %.1fs (%s)%s", round_, v.verdict, v.seconds, v.provider,
              f": {v.feedback[:200]}" if v.verdict != "pass" else "")
     return v
+
+
+def honest_partial(v: Verdict) -> bool:
+    """Only gaps, each said plainly: the subject matches, nothing contradicts, nothing is unsupported or unclear,
+    no code rule is broken."""
+    subj = v.subject or {}
+    return bool(v.missing) and v.missing_stated and not any(subj.get(k) is False for k in ("place", "time", "topic",
+                                                                                          "level")) \
+        and not v.contradictions and not v.unsupported and not v.unclear and not v.rules
 
 
 def should_check(a) -> bool:
@@ -314,16 +341,23 @@ def safe_answer(a, v: Verdict, lang: str) -> tuple[str, bool]:
     isn't printed there is dropped), and the sources; when nothing is left, what wasn't found and which documents
     were read."""
     from app.agent.answer import NOT_READ, sources_line
-    text = supported(re.sub(r"\s+•\s+", "\n• ", v.safe_answer or ""), a, keep_lines=True)
-    from_draft = False
+    only_gaps = not (v.wrong_subject or v.contradictions or v.unclear or v.unsupported or v.rules) and \
+        not any((v.subject or {}).get(k) is False for k in ("place", "time", "topic", "level"))
+    text = ""
+    if not only_gaps:
+        # the draft says something wrong: the check's rewrite, its figures checked in code
+        rewrite = "\n".join(ln for ln in re.sub(r"\s+•\s+", "\n• ", v.safe_answer or "").splitlines()
+                            if not ln.lstrip().startswith(("📄", "Sources:", "Madogara:")))   # code adds sources
+        rewrite = re.sub(r"\s*\(?(?:COMPUTED OR WRITTEN IN CODE|EVIDENCE THE DRAFT CITES)\)?", "", rewrite)
+        text = supported(rewrite, a, keep_lines=True)
     if not text and not v.wrong_subject and not v.contradictions:
-        # no rewrite came back: the draft's own lines whose figures are printed in its cited pages (or computed in
-        # code), never a line about another subject (3 Nov: a right 173-school total was lost to 'couldn't give')
+        # only gaps (or no rewrite came back): the draft's own lines whose figures are printed in its cited pages or
+        # computed in code, never a line about another subject, and what is missing (3 Nov: the right 173-school
+        # total computed in code was lost when the rewrite was used for a draft whose only fault was a gap)
         draft = "\n".join(ln for ln in (a.text or "").splitlines()
                           if not ln.startswith(("📄", "_Reply")) and ln.strip() not in NOT_READ.values())
         text = supported(draft, a, keep_lines=True)
-        from_draft = bool(text)
-        if from_draft and v.missing:
+        if text and v.missing and not v.missing_stated:
             text += "\n\n" + MISSING.get(lang, MISSING["en"]).format(missing="; ".join(v.missing[:3]).rstrip("."))
     if not text:
         docs = list(dict.fromkeys(e.title for e in (a.cited or [])))[:3]

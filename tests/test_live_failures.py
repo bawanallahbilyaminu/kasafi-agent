@@ -74,6 +74,42 @@ def test_parts_are_added_up_in_code_and_pre_primary_is_shown_not_added() -> None
     assert "Total (schools in Dange Shuni LGA): *154*, added up by Kasafi from the 4 parts above." in text
     assert "public pre-primary schools: 20 (page 26) – counted with primary: not added" in text
     assert working == "Total, calculated in code: 91 + 28 + 18 + 17 = 154" and plain.endswith("total 154")
+    d["parts"][1]["label"] = "public primary schools (includes pre-primary)"        # a note, not a pre-primary part
+    assert "*154*" in ans.parts_block(d, _evidence(), ["Dange Shuni"], "en")[0]
+    d["parts"][1]["label"] = "public pre-primary and primary schools"
+    assert "*154*" in ans.parts_block(d, _evidence(), ["Dange Shuni"], "en")[0]
+    d["parts"][1]["label"] = "makarantun gwamnati na pre-primary da firamare"          # Hausa: still primary
+    assert "*154*" in ans.parts_block(d, _evidence(), ["Dange Shuni"], "ha")[0]
+
+
+def test_the_documents_own_per_level_note_keeps_private_parts_out_of_the_sum_whatever_the_writer_said() -> None:
+    ev = _evidence()
+    ev[4] = ans.Evidence(4, "asc-sokoto-2023-2024", ASC.name, 2024, 21, "text",
+                         "Table 2.2: Number of Private schools by level\nSchools with primary classes 203\n"
+                         "Schools with junior secondary classes 116")
+    d = {"parts": [{"label": "public primary schools", "value": "91", "cited": 1},
+                   {"label": "private primary schools", "value": "28", "cited": 1},
+                   {"label": "public junior secondary schools", "value": "18", "cited": 2},
+                   {"label": "private junior secondary schools", "value": "17", "cited": 2}]}
+    text, working, _ = ans.parts_block(d, ev, ["Dange Shuni"], "en")
+    assert working == "Total, calculated in code: 91 + 18 = 109"
+    assert "private primary schools: 28 (page 31) – not added: the census counts a private school at each level" in text
+    del ev[4]                                       # no such note in the evidence: the writer's parts are added
+    assert ans.parts_block(d, ev, ["Dange Shuni"], "en")[1].endswith("= 154")
+
+
+def test_the_same_school_counted_at_each_level_is_shown_not_added() -> None:
+    d = {"total_of": "public schools in Dange Shuni LGA", "parts": [
+        {"label": "public primary schools", "value": "91", "cited": 1},
+        {"label": "public junior secondary schools", "value": "18", "cited": 2},
+        {"label": "private schools with primary classes", "value": "28", "cited": 1, "add": False,
+         "why": "a private school offering several levels is counted at each"},
+        {"label": "private schools with junior secondary classes", "value": "17", "cited": 2, "add": False,
+         "why": "a private school offering several levels is counted at each"}]}
+    text, working, _ = ans.parts_block(d, _evidence(), ["Dange Shuni"], "en")
+    assert "Total (public schools in Dange Shuni LGA): *109*, added up by Kasafi from the 2 parts above." in text
+    assert "private schools with primary classes: 28 (page 31) – not added: a private school offering" in text
+    assert working == "Total, calculated in code: 91 + 18 = 109"
 
 
 def test_a_part_not_in_the_places_row_stops_the_total() -> None:
