@@ -150,3 +150,25 @@ the first reading gets its own search; codes, serials and background are dropped
 trends, shares over details) and capped at 5 per dimension; a figure without its own year carries its document's
 date; a national survey's figure counts only for Sokoto on a page printing Sokoto; the synthesis compares like with
 like and calls a difference only for the same measure and scope. `tests/test_deep.py`.
+
+**L42 (3 Nov 2026): an answer is checked against the question before it is sent; a place's figures are read wide;
+totals are added in code from separate counts.** Live on a phone: "How many schools are in Dange Shuni" got only the
+91 public primary schools ('Newest figure'); "I mean all the total schools …" got a note about the LGA's budget (any
+not-found answer naming an LGA was replaced with the budget explanation); "Am talking about schools not budget" got
+the 91 again with "I didn't find this in the pages I read" (a count wasn't an 'answer figure'); "Was Wamakko affected
+by floods in 2025, according to NEMA?" got "Yes, Sokoto State is listed …" then "can't tell about Wamakko". Every path
+had checked its own figures; nothing checked that the answer answered the question. Now (`app/agent/answer_check.py`):
+one call on Muse Spark Open reads the draft with the last turns, the restatement, the cited pages and the code
+checks, and returns subject match (place, time, topic, level), contradictions, what is missing, unsupported figures,
+a verdict and feedback; code decides two rules (none of the answer's figures printed in its cited pages; a Yes/No not
+about the subject asked); 'revise' runs one more round (the message read again when the subject was wrong, the
+missing parts searched for, the page path instead of the topic sweep); still failing: only what the cited pages
+support. A place's figures read every page of the 1-3 best documents that prints the place (the table's title,
+headers, the place's row and the total), and the document's own counting tables. Parts are added in code, only those
+the document counts separately: the census counts a private school at each level it offers (Table 2.2: 209 private
+schools, 203 with primary classes, 116 with JSS), so Dange Shuni is 117 public schools (91 + 18 + 8) with private
+28/17/11 shown, not 173; pre-primary is counted with primary (not 221). Follow-ups keep the earlier question's
+subject ('X not Y' excludes Y, an 'exclude' field in the reading). The check found its own answer key wrong once: my
+expected 173 double-counted private schools, and the check cited p21. `tests/test_live_failures.py`,
+`tests/test_answer_check.py`, `evals/live_failures/` (8/8), `evals/check/` (Open: 6/6 bad drafts stopped, 3/37 right
+answers sent back = 8%).

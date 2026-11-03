@@ -231,3 +231,22 @@ These are shortcuts into the same pipeline, not a separate bot (`app/whatsapp/me
   year?"). It is never added on emergency, refusal, conversation or help replies, or when the answer already ends
   with a question.
 - **"Type menu any time"** appears once: in the consent thanks, in the "who are you" reply and in the help text.
+
+### Follow-ups keep the subject; the answer is checked (3 Nov)
+
+- A clarification or correction of the user's own question ("I mean all the total schools …", "Am talking about
+  schools not budget", "I asked about people, not hectares") keeps that question's capability, subject, place and
+  time and changes only what the user changed; "X not Y" puts Y in the reading's `exclude` and Y is never the
+  capability. When Kasafi's last answer went off the subject, the user's question decides, not that answer. A
+  correction is never planned as a 'recheck' (look for a newer edition).
+- What one named report or survey finds (its gaps, findings, figures) is statistics, read from that report's pages;
+  deep is for a broad subject with no source named.
+- A question naming an LGA, ward or town takes the page path (read wide), not the multi-publisher topic sweep, unless
+  it compares sources or asks for a change.
+- Every answer (document, place, hazard, deep, and a document path's 'not found') goes through the answer check
+  (`app/agent/answer_check.py`) before it is sent: subject match, contradictions, gaps, unsupported figures. Revise:
+  one more round, the message read again when the draft was about another subject. Settings:
+  `KASAFI_ANSWER_CHECK` (on), `KASAFI_CHECK_PROVIDER` (open), `KASAFI_CHECK_TIMEOUT_S` (30),
+  `KASAFI_CHECK_ROUND_MIN_S` (50: a second round starts only with this much of the answer's 180 s left). Each
+  verdict is in the trace (admin trace page, "Answer check"); /admin/status counts first-draft verdicts and how the
+  answers ended (passed, revised, partial).

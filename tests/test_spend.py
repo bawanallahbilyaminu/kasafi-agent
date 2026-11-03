@@ -125,6 +125,46 @@ def test_credit_fine_meta_answers() -> None:
     assert asyncio.run(client.chat([{"role": "user", "content": "hi"}])).content == "from meta"
 
 
+def test_a_balance_recorded_on_the_status_page_turns_the_guard_on_when_spend_leaves_under_ten_dollars() -> None:
+    psycopg = pytest.importorskip("psycopg")
+    from fastapi.testclient import TestClient
+    from pydantic import SecretStr
+
+    from app.config import get_settings
+    from app.main import app
+    s = get_settings()
+    if not s.has_database:
+        pytest.skip("no database configured")
+    try:
+        conn = psycopg.connect(s.db_url(), connect_timeout=3)
+        if not conn.execute("SELECT to_regclass('meta_credit_readings')").fetchone()[0]:
+            pytest.skip("migration 0031 not applied")
+    except psycopg.OperationalError:
+        pytest.skip("dev database not available")
+    s = s.model_copy(update={"admin_user": "admin", "admin_password": SecretStr("a-long-test-password")})
+    app.dependency_overrides[get_settings] = lambda: s
+    try:
+        c = TestClient(app)
+        r = c.post("/admin/credit", auth=("admin", "a-long-test-password"), content="usd=%2410.50",
+                   headers={"origin": "http://testserver", "content-type": "application/x-www-form-urlencoded"},
+                   follow_redirects=False)
+        assert r.status_code == 303
+        assert float(conn.execute("SELECT usd FROM meta_credit_readings ORDER BY id DESC LIMIT 1").fetchone()[0]) == 10.5
+        spend.add("Meta", {"prompt_tokens": 1_000_000}, s)                 # $1.25 since: $9.25 left
+        st = spend.refresh(s, conn)
+        assert st.configured and st.low and abs(st.remaining_usd - 9.25) < 0.01
+        assert "LOW: Muse Spark calls go to Muse Spark Open" in c.get("/admin/status", auth=("admin", "a-long-test-password")).text
+        bad = c.post("/admin/credit", auth=("admin", "a-long-test-password"), content="usd=lots",
+                     headers={"origin": "http://testserver", "content-type": "application/x-www-form-urlencoded"})
+        assert bad.status_code == 400
+    finally:
+        app.dependency_overrides.clear()
+        conn.execute("DELETE FROM meta_credit_readings WHERE usd = 10.5")
+        conn.execute("DELETE FROM model_spend WHERE provider = 'Meta' AND hour >= now() - interval '2 hours'")
+        conn.commit()
+        conn.close()
+
+
 def test_every_admin_page_says_when_the_credit_is_low() -> None:
     from app.admin import page
     spend.state.low, spend.state.remaining_usd, spend.state.since = True, 9.4, "2026-11-05T10:00+00:00"
