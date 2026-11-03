@@ -230,7 +230,7 @@ async def run_set(round_n: int, which: str, chunk_s: float, only: set[str]) -> N
         why = cause(qn, fails, traces, [answer])
         row = {"id": qn["id"], "set": qn["set"], "feature": qn["feature"], "difficulty": qn["difficulty"], "lang": qn["lang"],
                "ok": not fails, "fails": fails, "cause": why, "seconds": round(secs, 1), "usd": round(usd, 4),
-               "turns": qn["turns"], "expect": qn["expect"], "reply": answer[:1500], "traces": traces}
+               "turns": qn["turns"], "expect": qn["expect"], "reply": answer[:4000], "traces": traces}
         append_jsonl(out, row)
         log(f"{qn['id']:<28} {'ok ' if not fails else 'WRONG'} {secs:5.1f}s ${usd:.3f} {why} {'; '.join(fails)[:100]}")
     rows = read_jsonl(out)
