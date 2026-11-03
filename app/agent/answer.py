@@ -2493,7 +2493,10 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
         bad = unverified_numbers(answer_text(d), doc_pool(d, by_n, evidence), extra)
         dash = dash_misread(answer_text(d))
     # names and acronyms exactly as the cited pages print them: composed again once with the ones that aren't
-    names_bad = acronym_problems(answer_text(d), doc_pool(d, by_n, evidence)) \
+    # the user's own words and the cited documents' publishers count as printed: 'according to NEMA' answered
+    # from pages that spell out 'National Emergency Management Agency' (3 Nov)
+    named = (question, *publishers_of(conn, [e.doc_id for e in evidence]))
+    names_bad = acronym_problems(answer_text(d), doc_pool(d, by_n, evidence), named) \
         if budget is None and _found(d) != "none" else []
     if names_bad:
         t["compose_retry"] = t.get("compose_retry", 0.0) + 1.0
@@ -2502,7 +2505,7 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
                                    "Copy organisation names and acronyms exactly as the pages print them.")
         bad = unverified_numbers(answer_text(d), doc_pool(d, by_n, evidence), extra)
         dash = dash_misread(answer_text(d))
-        names_bad = acronym_problems(answer_text(d), doc_pool(d, by_n, evidence))
+        names_bad = acronym_problems(answer_text(d), doc_pool(d, by_n, evidence), named)
     # every figure bound to its row: the entity named next to it, the year, the unit and the kind (external review,
     # finding 01); a contradiction is composed again with the mismatch named, then refused
     # per entity: a name of another entity in a multi-entity plan never binds a figure (follow-up review, finding 1)
@@ -2594,6 +2597,24 @@ ACRONYM_OK = {"LGA", "LGAS", "NGN", "USD", "US", "UK", "ID", "OK", "PDF", "FCT",
 NAMES_NOTE = {"en": "⚠️ Not found as written in the cited pages: {names}. Check these names against the source.",
               "ha": "⚠️ Ba a samu waɗannan sunaye kamar yadda aka rubuta su a shafukan da aka ambata ba: {names}. "
                     "A duba su a majiyar."}
+
+
+def publishers_of(conn, doc_ids: list[str]) -> list[str]:
+    """The publisher names of these documents, as the library records them ('National Emergency Management Agency
+    (NEMA)'), and their registry names; [] without a database."""
+    if conn is None or not doc_ids:
+        return []
+    try:
+        rows = conn.execute("SELECT DISTINCT publisher, source_url FROM documents WHERE id = ANY(%s)",
+                            (list(dict.fromkeys(doc_ids)),)).fetchall()
+    except Exception:              # noqa: BLE001 - a check's extra; never the answer's failure
+        conn.rollback()
+        return []
+    out = [p for p, _ in rows if p]
+    for _, url in rows:
+        if url and (p := registry().publisher_for(url)):
+            out.append(p.name)
+    return out
 
 
 def acronym_problems(text: str, cited: list, titles: tuple[str, ...] = ()) -> list[str]:

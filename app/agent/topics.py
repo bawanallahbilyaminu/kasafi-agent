@@ -223,8 +223,10 @@ def _title_words(text: str) -> set[str]:
 def local_documents(conn: psycopg.Connection, p: Publisher) -> list[tuple]:
     """Our documents from this publisher, newest first: by its registry URLs and domains, else by the acronyms
     in its name (MPI, NLFS, DTM, NDHS ...) in the document's title."""
+    # within a year, the later edition first ('2025-09-26' over '2025-08-17': NEMA's sitreps and dashboards, 3 Nov),
+    # then the one fetched last
     rows = conn.execute("SELECT id, title, year, source_url, final_url, fetched_at, edition FROM documents "
-                        "ORDER BY year DESC NULLS LAST, fetched_at DESC NULLS LAST").fetchall()
+                        "ORDER BY year DESC NULLS LAST, edition DESC NULLS LAST, fetched_at DESC NULLS LAST").fetchall()
     out = []
     # one domain carries many series (nigerianstat.gov.ng: CPI, the labour force survey, the MPI): the title must
     # also share two words with the publisher's name or document types ('Index' alone made the NBS MPI the CPI)
@@ -1459,6 +1461,15 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
                 task.cancel()
             log.info("aligned measures across %d sources", len(asks))
         related = [results[p.id] for p in context if p.id in results]
+        # a year asked ('in October 2024'): only figures for that year; none of them, and the document path answers
+        # (3 Nov: 'How many people were affected by floods in Sokoto in October 2024?' got 2025's 15,675 as 'newest')
+        asked = {int(y) for y in _YEAR.findall(f"{question} {english}")} if not across_sources(ask) else set()
+        if asked:
+            for s in sources + related:
+                s.cards = [c for c in s.cards if card_year(c) in asked]
+            if not any(s.cards for s in sources):
+                log.info("topic %s: no figure for %s; the document path answers", topic_id, sorted(asked))
+                return TopicResult(topic_id, "", False, False, sources, related, [], {"topic": time.perf_counter() - t0})
         text, partial = compose(topic, sources, related, lang, ask)
         # API figures have no document page to cite or crop: the sources line names them
         cited = list(dict.fromkeys((c.doc_id, c.title, c.page) for s in sources + related for c in s.cards

@@ -571,6 +571,7 @@ topics:
       - id: nema_floods
         name: NEMA flood impact reports
         domains: [nema.gov.ng]
+        doc_types: [floods emergency situation report, flood data dashboard]   # NEOC sitreps, 'FLOOD DATA' dashboards
         level: state
         tier: 1
         verified: "no"

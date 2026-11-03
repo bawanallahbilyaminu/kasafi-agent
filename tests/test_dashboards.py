@@ -58,3 +58,26 @@ def test_one_satellite_sentence_after_the_reports_when_asked(monkeypatch) -> Non
     assert s == ("Satellite radar (Copernicus GFM) saw 26,000 ha of Sokoto State under water at some point in 2024; "
                  "UNOSAT's event map, built over several days, shows 123,410 ha.")
     assert F.context_sentence(object(), "ha", None, 2024, date(2026, 11, 3)).startswith("Radar ta tauraron ɗan adam")
+
+
+def test_an_acronym_the_user_wrote_or_the_publisher_carries_is_not_flagged() -> None:
+    from types import SimpleNamespace as N
+    from app.agent.answer import acronym_problems
+    cited = [N(text="National Emergency Management Agency situation report: Sokoto 15,675", title="2025 Floods NEOC")]
+    text = "According to NEMA, 15,675 people were affected in Sokoto."
+    assert acronym_problems(text, cited) == ["NEMA"]
+    assert acronym_problems(text, cited, ("Was Wamakko affected, according to NEMA?",)) == []
+    assert acronym_problems(text, cited, ("National Emergency Management Agency (NEMA)",)) == []
+
+
+def test_a_publishers_documents_are_newest_edition_first_within_a_year() -> None:
+    import inspect
+    from app.agent import topics
+    assert "edition DESC NULLS LAST, fetched_at DESC" in inspect.getsource(topics.local_documents)
+
+
+def test_a_year_asked_keeps_only_that_years_figures_in_the_topic_sweep() -> None:
+    import inspect
+    from app.agent import topics
+    src = inspect.getsource(topics.topic_answer)
+    assert "card_year(c) in asked" in src and "the document path answers" in src

@@ -24,7 +24,7 @@
 | a018 | flood | ha | 2026 | 0.0 | ok |
 | a019 | flood | en | 2026 | 0.0 | ok |
 | a020 | flood | ha | 2026 | 0.0 | ok |
-| a021 | flood | en | 2026 | 0.1 | ok |
+| a021 | flood | en | 2026 | 0.0 | ok |
 | a022 | flood | ha | 2026 | 0.1 | ok |
 | a023 | flood | en | 2026 | 0.0 | ok |
 | a024 | flood | ha | 2026 | 0.0 | ok |
@@ -36,7 +36,7 @@
 | a030 | flood_map | ha | 2024 | 0.0 | ok |
 | a031 | flood_map | en | 2024 | 0.0 | ok |
 | a032 | flood_map | ha | 2024 | 0.0 | ok |
-| a033 | flood_map | en | 2024 | 0.1 | ok |
+| a033 | flood_map | en | 2024 | 0.0 | ok |
 | a034 | flood_map | ha | 2024 | 0.1 | ok |
 | a035 | flood_map | en | 2024 | 0.0 | ok |
 | a036 | flood_map | ha | 2024 | 0.0 | ok |
@@ -53,12 +53,12 @@
 | a047 | water | en | 0 | 0.0 | ok |
 | a048 | water | ha | 0 | 0.0 | ok |
 | a049 | bare | en | 2024 | 0.1 | ok |
-| a050 | bare | ha | 2024 | 0.1 | ok |
+| a050 | bare | ha | 2024 | 0.0 | ok |
 | a051 | bare | en | 2024 | 0.1 | ok |
 | a052 | bare | ha | 2024 | 0.1 | ok |
 | a053 | bare | en | 2024 | 0.1 | ok |
-| a054 | bare | ha | 2024 | 0.0 | ok |
-| a055 | bare | en | 2024 | 0.0 | ok |
+| a054 | bare | ha | 2024 | 0.1 | ok |
+| a055 | bare | en | 2024 | 0.1 | ok |
 | a056 | bare | ha | 2024 | 0.1 | ok |
 | a057 | bare | en | 2024 | 0.1 | ok |
 | a058 | bare | ha | 2024 | 0.1 | ok |
@@ -84,7 +84,7 @@
 | a078 | state_flood | ha | 2022 | 0.0 | ok |
 | a079 | state_flood | en | 2024 | 0.0 | ok |
 | a080 | state_flood | ha | 2024 | 0.0 | ok |
-| a081 | state_greenness | en | 2022 | 0.0 | ok |
+| a081 | state_greenness | en | 2022 | 0.1 | ok |
 | a082 | state_greenness | ha | 2022 | 0.0 | ok |
 | a083 | state_greenness | en | 2024 | 0.0 | ok |
 | a084 | state_greenness | ha | 2024 | 0.0 | ok |
