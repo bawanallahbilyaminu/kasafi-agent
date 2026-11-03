@@ -49,6 +49,12 @@ def score(reading: dict | None, expect: dict) -> list[str]:
         want = expect.get(k)
         if want is not None and reading.get(k) not in (want if isinstance(want, list) else [want]):
             wrong.append(f"{k} {reading.get(k)} (want {want})")
+    # the subject kept across a clarification ('Dange Shuni'), and what 'X not Y' excludes ('budget'): substrings
+    for k, field_ in (("name_has", "name"), ("exclude_has", "exclude"), ("restatement_has", "restatement")):
+        if (want := expect.get(k)) is not None:
+            got = str(reading.get(field_) or "").lower()
+            if not any(w.lower() in got for w in (want if isinstance(want, list) else [want])):
+                wrong.append(f"{field_} {got!r} (want {want})")
     return wrong
 
 

@@ -4489,7 +4489,9 @@ def _not_found(conn: psycopg.Connection, plan: Plan, lang: str, acq: Acquired | 
             log_gap(conn, plan.english_question, plan.missing_document, "no_answer",
                     {"docs": plan.doc_ids, "acquired": acq.doc_id if acq else None})
         text = NOT_FOUND.get(lang, NOT_FOUND["en"])
-        if lga := lga_in(plan.english_question):         # an LGA question: say why the state budget can't answer it
+        # an LGA's money: say why the state budget can't answer it; only for a money question (3 Nov: 'how many
+        # schools … in Dange Shuni' got this budget note when nothing answered)
+        if (lga := lga_in(plan.english_question)) and MONEY_WORDS.search(f"{plan.original} {plan.english_question}"):
             text = LGA_NOT_FOUND.get(lang, LGA_NOT_FOUND["en"]).format(lga=lga)
     return Answer(text, False, True, plan=plan, timings=t, acquired=acq)
 

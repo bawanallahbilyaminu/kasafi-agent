@@ -522,6 +522,54 @@
    "reading": "hazard",
    "expected": "hazard",
    "note": "control: a forecast named by its publisher stays on the hazard routes (it takes the forecast layers; NiMet's cessation dates aren't matched by the outlook route: an open gap, 3 Nov)"
+  },
+  {
+   "id": "r83",
+   "lang": "en",
+   "question": "How many schools are in Dange Shuni LGA, at each level?",
+   "reading": "statistics",
+   "expected": "planner",
+   "note": "live failure A (3 Nov): a school count is the census, never the facility registry"
+  },
+  {
+   "id": "r84",
+   "lang": "en",
+   "question": "How many primary, junior secondary, senior secondary and IQS schools are there in total in Dange Shuni LGA?",
+   "reading": "statistics",
+   "expected": "planner",
+   "note": "live failure B (3 Nov): the clarification keeps the schools question"
+  },
+  {
+   "id": "r85",
+   "lang": "en",
+   "question": "How many schools are in Dange Shuni LGA (schools, not the budget)?",
+   "reading": "statistics",
+   "expected": "planner",
+   "note": "live failure C (3 Nov): 'X not Y' keeps X"
+  },
+  {
+   "id": "r86",
+   "lang": "ha",
+   "question": "Makarantu nawa ne a Ƙaramar Hukumar Dange Shuni, a kowane mataki?",
+   "reading": "statistics",
+   "expected": "planner",
+   "note": "live failure A, Hausa"
+  },
+  {
+   "id": "r87",
+   "lang": "en",
+   "question": "How many people in Sokoto State were affected by floods in 2024 (people, not land)?",
+   "reading": "statistics",
+   "expected": "planner",
+   "note": "live failure E as a correction: people are the reports, never the satellite record"
+  },
+  {
+   "id": "r88",
+   "lang": "ha",
+   "question": "Mutane nawa ambaliya ta shafa a Jihar Sokoto a watan Oktoba 2024?",
+   "reading": "statistics",
+   "expected": "planner",
+   "note": "live failure E, Hausa"
   }
  ]
 }

@@ -49,6 +49,7 @@ only:
  "measure": "<what is asked: amount, spent, count, nearest, flooded, greenness, rain, coverage...>",
  "facility": {"care": "maternal|children|general", "level": "hospital|primary|any", "ownership": "public|private|any"},
  "satellite_context": true|false,
+ "exclude": "<what the user said they do NOT mean ('not budget' -> 'budget'), or ''>",
  "urgent": true|false,
  "urgent_reason": "<one short line: why it is or isn't an emergency now>",
  "restatement": "<the full question in one English line, standalone, using these place words: 'my farm (the pin)' \
@@ -74,8 +75,21 @@ zaɓuɓɓuka") is kind "menu", capability "conversation".
 
 Rules:
 - A follow-up keeps the previous subject and place unless the message names new ones.
+- A clarification or correction of the user's own earlier question ("I mean …", "I meant all of them", "I'm \
+talking about X", "na ce …", "ina nufin …") keeps that question's capability, subject, place and time, and changes \
+only what the user changed; restate the whole earlier question with the change. It never switches to a capability \
+the user didn't ask about: after "How many schools are in Dange Shuni?", "I mean all the total schools primary, \
+JSS, SSS and IQS" is statistics about the number of schools in Dange Shuni LGA at each level, never a budget \
+question. When Kasafi's last answer went off the subject, the user's question decides, not that answer.
+- "X not Y" ("schools not budget", "makarantu ba kasafi ba", "people, not land") is kind "correction": the user \
+wants X; Y goes in "exclude" and is never the capability. Restate the earlier question about X.
+- "How many" of a kind of place that has several levels or types ("how many schools", "how many health \
+facilities", "makarantu nawa") means all of them unless the user names one: the measure says "all levels, with \
+the number at each level". A kind the user names ("clinic", "PHC", "hospital", "primary school") keeps its own \
+level.
 - A correction or disagreement about the previous answer ("but X is closer", "that's not right") is kind \
-"correction"; the capability is the previous answer's; the subject is what the user names (e.g. the facility). \
+"correction"; the capability is the one the user's question was about; the subject is what the user names (e.g. \
+the facility). \
 A claim that a named facility is closer or nearer is capability "facility" with the facility as the subject, even \
 with no list before it.
 - "this land", "here", "my farm", "this place" with a pin = level "pin"; "this area", "my ward", "my community" = \
@@ -132,6 +146,7 @@ class Understanding:
     facility_level: str = ""    # hospital | primary | any
     ownership: str = ""         # public | private | any
     satellite_context: bool = False   # 'how bad were the floods': the reports answer, one satellite sentence follows
+    exclude: str = ""           # what the user said they don't mean ('schools not budget' -> 'budget')
     urgent: bool = False        # an emergency happening now: the fast path's net when its phrases and classifier miss
     urgent_reason: str = ""
     safety: dict = field(default_factory=dict)   # what the fast path's layers said (phrase, classifier), for the trace
@@ -160,6 +175,7 @@ def parse(d: dict) -> Understanding | None:
     u.urgent = d.get("urgent") is True
     u.satellite_context = d.get("satellite_context") is True and u.capability in ("statistics", "deep")
     u.urgent_reason = str(d.get("urgent_reason") or "").strip()[:200]
+    u.exclude = str(d.get("exclude") or "").strip()[:80]
     fac = d.get("facility") if isinstance(d.get("facility"), dict) else {}
     if (u.capability == "facility" or u.urgent) and fac:
         u.care = fac.get("care") if fac.get("care") in CARE else "general"

@@ -137,7 +137,7 @@
   {"id": "m08", "place": "pin", "lang": "en", "turns": [], "message": "Is there a private clinic near me?", "expect": {"capability": "facility", "facility_level": "primary", "ownership": "private"}},
   {"id": "m09", "place": "pin", "lang": "en", "turns": [
      {"user": "Where can my wife deliver a baby?", "kasafi": "Nearest facilities with emergency obstetric care: 1. Kalambaina PHC 1.1 km 2. Women and Children Welfare Clinic 7.0 km"}],
-   "message": "Only government ones", "expect": {"capability": "facility", "kind": "follow_up", "care": "maternal", "ownership": "public"}},
+   "message": "Only government ones", "expect": {"capability": "facility", "kind": ["follow_up", "clarification"], "care": "maternal", "ownership": "public"}},
   {"id": "m10", "place": "pin", "lang": "en", "turns": [
      {"user": "What is the government budgeting for my area?", "kasafi": "The 2026 budget has 163 capital projects located in Wamakko, worth N79.98 billion, mostly health."}],
    "message": "Anything for schools?", "expect": {"capability": "place_budget"}},
@@ -179,6 +179,43 @@
   {"id": "n15", "place": "none", "turns": [],
    "message": "What does the MICS report say about birth registration in Sokoto?", "expect": {"capability": "statistics"}},
   {"id": "n16", "place": "lga", "turns": [],
-   "message": "According to NiMet, when will the rains end in my LGA this year?", "expect": {"capability": "hazard"}}
+   "message": "According to NiMet, when will the rains end in my LGA this year?", "expect": {"capability": "hazard"}},
+  {"id": "lf01", "place": "none", "turns": [],
+   "message": "How many schools are in Dange Shuni", "expect": {"capability": "statistics", "level": "lga", "name_has": "dange"}},
+  {"id": "lf02", "place": "none", "turns": [
+     {"user": "How many schools are in Dange Shuni", "kasafi": "Dange Shuni LGA has 91 public primary schools in the 2023/2024 ASC, from the Sokoto State Annual School Census 23-24 Report. Newest figure: 91 schools. By source: 91 public primary; 20 public pre-primary; 28 private pre-primary."}],
+   "message": "I mean all the total schools primary, senior secondary and junior secondary and IQS",
+   "expect": {"capability": "statistics", "kind": ["clarification", "correction", "follow_up"], "name_has": "dange", "restatement_has": "school"}},
+  {"id": "lf03", "place": "none", "turns": [
+     {"user": "How many schools are in Dange Shuni", "kasafi": "Dange Shuni LGA has 91 public primary schools in the 2023/2024 ASC."},
+     {"user": "I mean all the total schools primary, senior secondary and junior secondary and IQS", "kasafi": "The state budget doesn't show money allocated directly to Dange Shuni Local Government. State budget lines for institutions located in Dange Shuni are state money, not the LGA's."}],
+   "message": "Am talking about schools not budget",
+   "expect": {"capability": "statistics", "kind": ["correction", "clarification"], "name_has": "dange", "exclude_has": ["budget", "kasafi"], "restatement_has": "school"}},
+  {"id": "lf04", "place": "none", "lang": "ha", "turns": [],
+   "message": "Makarantu nawa ne a Dange Shuni?", "expect": {"capability": "statistics", "level": "lga", "name_has": "dange"}},
+  {"id": "lf05", "place": "none", "lang": "ha", "turns": [
+     {"user": "Makarantu nawa ne a Dange Shuni?", "kasafi": "Ƙaramar Hukumar Dange Shuni tana da makarantun firamare na gwamnati 91 (ASC 2023/2024)."}],
+   "message": "Ina nufin duka makarantun: firamare, ƙaramar sakandare, babbar sakandare da IQS",
+   "expect": {"capability": "statistics", "kind": ["clarification", "correction", "follow_up"], "name_has": "dange", "restatement_has": "school"}},
+  {"id": "lf06", "place": "none", "lang": "ha", "turns": [
+     {"user": "Makarantu nawa ne a Dange Shuni?", "kasafi": "Ƙaramar Hukumar Dange Shuni tana da makarantun firamare na gwamnati 91."},
+     {"user": "Duka makarantun nake nufi", "kasafi": "Kasafin jihar bai nuna kuɗin da aka ware kai tsaye ga Ƙaramar Hukumar Dange Shuni ba."}],
+   "message": "Makarantu nake magana ba kasafi ba",
+   "expect": {"capability": "statistics", "kind": ["correction", "clarification"], "name_has": "dange", "exclude_has": ["budget", "kasafi"]}},
+  {"id": "lf07", "place": "none", "turns": [
+     {"user": "How many people were affected by floods in Sokoto State in 2024?", "kasafi": "In 2024, radar saw about 4,120 ha of Sokoto State under water on its biggest pass, and 26,000 ha at some point in the season."}],
+   "message": "I asked about people, not hectares of land",
+   "expect": {"capability": "statistics", "kind": ["correction", "clarification"], "exclude_has": ["land", "hectare", "satellite", "area", "place_history"]}},
+  {"id": "lf08", "place": "none", "turns": [
+     {"user": "What is the government budgeting for Wamakko LGA in 2026?", "kasafi": "The 2026 budget has 163 capital projects located in Wamakko, with ₦79.98 billion allocated."}],
+   "message": "I mean the 2025 budget", "expect": {"capability": "place_budget", "kind": ["clarification", "correction", "follow_up"], "name_has": "wamakko"}},
+  {"id": "lf09", "place": "none", "turns": [
+     {"user": "How many health facilities are in Wamakko?", "kasafi": "Wamakko LGA has 12 hospitals in the facility registry."}],
+   "message": "I mean all of them, PHCs and dispensaries too",
+   "expect": {"capability": "facility", "kind": ["clarification", "correction", "follow_up"], "name_has": "wamakko"}},
+  {"id": "lf10", "place": "none", "turns": [
+     {"user": "Was Wamakko LGA affected by floods in 2025, according to NEMA?", "kasafi": "NEMA's situation report of 26 September 2025 lists 7 LGAs and 8 wards of Sokoto State as affected (15,675 people), but doesn't name them, so it can't say whether Wamakko was among them."}],
+   "message": "Ok so which LGAs does it name?",
+   "expect": {"capability": "statistics", "kind": "follow_up"}}
  ]
 }

@@ -1,6 +1,6 @@
 # Routing eval (in code), 2026-11-03
 
-82 cases, **0 wrong**, 0 skipped (no facility registry).
+88 cases, **0 wrong**, 0 skipped (no facility registry).
 
 | id | lang | expected | got | question |
 |---|---|---|---|---|
@@ -86,3 +86,9 @@
 | r80 | en | place_area | place_area | Which wards of Wamakko flooded most in 2022? |
 | r81 | ha | place_area | place_area | Waɗanne gundumomin Ƙaramar Hukumar Wamakko ne ambaliya ta fi rufewa a 2022? |
 | r82 | en | hazard | hazard | According to NiMet, when will the rains end in Sokoto this year? |
+| r83 | en | planner | planner | How many schools are in Dange Shuni LGA, at each level? |
+| r84 | en | planner | planner | How many primary, junior secondary, senior secondary and IQS schools are there in total in Dange Shuni LGA? |
+| r85 | en | planner | planner | How many schools are in Dange Shuni LGA (schools, not the budget)? |
+| r86 | ha | planner | planner | Makarantu nawa ne a Ƙaramar Hukumar Dange Shuni, a kowane mataki? |
+| r87 | en | planner | planner | How many people in Sokoto State were affected by floods in 2024 (people, not land)? |
+| r88 | ha | planner | planner | Mutane nawa ambaliya ta shafa a Jihar Sokoto a watan Oktoba 2024? |

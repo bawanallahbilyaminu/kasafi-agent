@@ -789,7 +789,8 @@ async def fact_cards(conn: psycopg.Connection, src: SourceResult, topic: Topic, 
 
 W = {
     "en": {"newest": "📊 Newest figure: *{value}{unit}* – {what}{geo} ({pub}, {date}).",
-           "head": "By source:", "line": "• {pub}: {value}{unit} – {what}{geo}; {date} ({cite})",
+           "lead": "📊 *{value}{unit}* – {what}{geo} ({pub}, {date}).",
+           "head": "By source:", "head_one": "In this document:", "line": "• {pub}: {value}{unit} – {what}{geo}; {date} ({cite})",
            "differ": "↔️ Why they differ: {why}. These are separate counts; Kasafi doesn't average them or pick one.",
            "differ_based": "↔️ Why they differ: {why}. Kasafi doesn't average them or pick one.",
            "based": "the statewide figures of {names} are {source} counts, not separate counts; they differ by "
@@ -824,7 +825,8 @@ W = {
            "no_change": "No change can be computed: the sources don't give the same measure for two different "
                         "years."},
     "ha": {"newest": "📊 Alƙaluma mafi sabo: *{value}{unit}* – {what}{geo} ({pub}, {date}).",
-           "head": "Daga kowace majiya:", "line": "• {pub}: {value}{unit} – {what}{geo}; {date} ({cite})",
+           "lead": "📊 *{value}{unit}* – {what}{geo} ({pub}, {date}).",
+           "head": "Daga kowace majiya:", "head_one": "A cikin wannan takarda:", "line": "• {pub}: {value}{unit} – {what}{geo}; {date} ({cite})",
            "differ": "↔️ Dalilin bambanci: {why}. Waɗannan ƙididdiga ne daban-daban; Kasafi ba ya haɗa su ko zaɓar "
                      "ɗaya.",
            "differ_based": "↔️ Dalilin bambanci: {why}. Kasafi ba ya haɗa su ko zaɓar ɗaya.",
@@ -1148,8 +1150,13 @@ def compose(topic: Topic, sources: list[SourceResult], related: list[SourceResul
             tag += f", {c.population}"
         return f"{c.what} ({tag})" if tag and tag.split(",")[0] not in c.what.lower() else c.what
     top = cards[0]
-    out = [w["newest"].format(value=top.value, unit=unit(top), what=what(top), geo=geo(top),
-                              pub=source_label(top, lang), date=_when(top)), "", w["head"]]
+    # 'Newest' only when the figures shown carry more than one date (a series); one source: no 'By source' (3 Nov:
+    # Dange Shuni's 91 primary schools was labelled 'Newest figure' beside two figures of the same census)
+    dated = {_when(c) for c in cards + extra} - {"-"}
+    one_doc = len({c.title for c in cards + extra}) == 1
+    out = [w["newest" if len(dated) > 1 else "lead"].format(value=top.value, unit=unit(top), what=what(top),
+                                                            geo=geo(top), pub=source_label(top, lang),
+                                                            date=_when(top)), "", w["head_one" if one_doc else "head"]]
     def line(c: Card) -> str:
         text = w["line"].format(pub=source_label(c, lang), value=c.value, unit=unit(c), what=what(c), geo=geo(c),
                                 date=_when(c), cite=f"{w['page']} {c.page}" if c.page else "")
@@ -1228,9 +1235,11 @@ async def publishers_answer(conn: psycopg.Connection, topic: Topic, lang: str, s
 
 # --- the whole answer ------------------------------------------------------------------------------------------
 
+# sent before any source is read, so it can't know how many will answer: it says what is being checked, never that
+# 'several sources publish figures' (3 Nov: said when one document answered)
 PROGRESS = {
-    "ha": "🔎 Wannan tambaya ce da majiyoyi da yawa ke bayani a kai. Ina duba {n}: {names}… (zai iya ɗaukar minti ɗaya)",
-    "en": "🔎 Several sources publish figures on this. Checking {n}: {names}… (this can take a minute)",
+    "ha": "🔎 Ina duba takardu {n}: {names}… (zai iya ɗaukar minti ɗaya)",
+    "en": "🔎 Checking {n} documents: {names}… (this can take a minute)",
 }
 STILL = {"ha": "⏳ Na samu {done} daga cikin {n}; ina jiran sauran…", "en": "⏳ Got {done} of {n}; waiting for the rest…"}
 
