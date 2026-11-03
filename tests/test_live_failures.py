@@ -186,3 +186,17 @@ def test_the_progress_line_names_what_is_checked_never_several_sources() -> None
     for lang in ("en", "ha"):
         line = tp.PROGRESS[lang].format(n=2, names="ASC, NBS")
         assert "Several sources" not in line and "majiyoyi da yawa" not in line and "2" in line
+
+
+def test_a_part_without_a_number_never_blocks_the_total_and_the_double_count_is_dropped_from_the_summary() -> None:
+    d = {"total_sentence": "Dange Shuni had {total} public schools [1][2].", "parts": [
+        {"label": "public primary", "value": "91", "cited": 1}, {"label": "public junior secondary", "value": "18", "cited": 2},
+        {"label": "IQS", "value": "isn't published by LGA", "cited": 1}]}
+    text, working, _ = ans.parts_block(d, _evidence(), ["Dange Shuni"], "en")
+    assert text.startswith("Dange Shuni had *109* public schools.") and working.endswith("= 109")
+    assert "• IQS: isn't published by LGA" in text
+    parts = [ans.Part("public primary", "91", None, True), ans.Part("public JSS", "18", None, True),
+             ans.Part("private primary", "28", None, True, False, "the census counts a private school at each level it offers")]
+    assert ans.restates_parts("Dange Shuni has 137 schools when public and private are added.", parts)
+    assert ans.restates_parts("Private schools are counted at each level they offer, so they can't be added.", parts)
+    assert not ans.restates_parts("The census gives IQS only for the whole state: 123 (p. 22).", parts)

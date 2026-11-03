@@ -314,7 +314,8 @@ ANSWER_SYSTEM = (
     "one sentence saying so with that figure, its date and its source (e.g. 'The census gives IQS schools only for "
     "the whole state: 123 Islamiyya Integrated primary schools (2023/24, p. 22); it prints no figure for Dange "
     "Shuni'); or, when the evidence has nothing on it, one sentence saying it isn't in these documents. Never leave "
-    "a named part out.\n"
+    "a named part out. A document may print a part under its full or another name: look for it (IQS, Integrated "
+    "Qur'anic Schools, is printed as 'Islamiyya Integrated' in the school census).\n"
     "6k. Copy organisation names and acronyms exactly as the evidence prints them (e.g. 'NPHCDA, SOCHEMA and "
     "SOSMEA'): never correct, expand, update or respell them.\n"
     "6l. Each answer stands alone: never refer to 'the previous answer', 'my earlier reply' or 'as I said'.\n"
@@ -978,6 +979,10 @@ def how_counted(conn: psycopg.Connection, doc: str, title: str, year, asked: str
     counted at each level it offers, so private schools can't be added across levels; its 'Number of public
     schools with special curriculum' gives the IQS figures, statewide only). Contents pages are skipped."""
     heads = {q.split()[-1].lower() for q in count_queries(asked)}
+    # 'How many total primary, JSS, SSS and IQS schools …': no plain 'how many X in Y', but still a count of schools
+    if m := re.search(r"(?i)\b(?:how\s+many|number\s+of|total\s+number\s+of|nawa)\b[^.?]*?"
+                      r"\b(schools?|facilit\w+|hospitals?|clinics?|teachers?|makarantu)\b", asked):
+        heads |= {m.group(1).lower()}
     if not heads:
         return []
     out = []
@@ -2884,7 +2889,12 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
     summary_text = drop_verdicts(str(d.get("summary") or d.get("answer") or ""), q_all)
     if parts_text and parts_working:   # a total leads: the summary keeps only what the parts don't already say
         values = {p.value for p in checked_parts(d, by_n, [])} | set(re.findall(r"= ([\d,.]+)", parts_working))
-        summary_text = " ".join(s for s in _SENTENCE.split(summary_text) if s.strip() and not repeats(s))
+        listed = checked_parts(d, by_n, [])
+        for p in listed:
+            p.add = p.add and not PRIVATE.search(p.label)        # the reason of a private part is a reason given above
+            p.why = p.why or PER_LEVEL_WHY.get(lang, PER_LEVEL_WHY["en"])
+        summary_text = " ".join(s for s in _SENTENCE.split(summary_text)
+                                if s.strip() and not repeats(s) and not restates_parts(s, listed))
     shown = {**d, "summary": summary_text, "items": items}
     rendered = no_back_reference(plain(render_answer(shown, lang)))
     if budget is None:          # 'doesn't print X' only after the whole document was searched for X
@@ -2998,8 +3008,24 @@ def checked_parts(d: dict, by_n: dict, names: list[str]) -> list[Part]:
             num = re.compile(rf"(?<![\d.,]){re.escape(value)}(?![\d]|[.,]\d)")
             lines = (ev.text or "").splitlines()
             ok = any(num.search(ln) and (not pats or any(pt.search(ln) for pt in pats)) for ln in lines)
-        out.append(Part(label, value, ev, ok, p.get("add") is not False, str(p.get("why") or "").strip()[:120]))
+        out.append(Part(_CITE_MARK.sub("", label).strip(), value, ev, ok, p.get("add") is not False,
+                        _CITE_MARK.sub("", str(p.get("why") or "")).strip()[:120]))
     return out
+
+
+_CITE_MARK = re.compile(r"\s*\[\d+\]")
+
+
+def restates_parts(sentence: str, parts: list[Part]) -> bool:
+    """A summary sentence that gives the sum of every part, added or not (the double count: 173 for Dange Shuni's
+    117), or says again why parts aren't added (the reason is said once, above them)."""
+    nums = [_as_number(p.value) for p in parts if _as_number(p.value) is not None]
+    whole = sum(nums)
+    if nums and whole == int(whole) and re.search(rf"(?<![\d,.]){int(whole):,}(?![\d,]|\.\d)", sentence):
+        return True
+    stem = lambda t: {w[:5] for w in re.findall(r"[^\W\d_]{4,}", t.lower())}      # noqa: E731
+    words = stem(sentence)
+    return any(p.why and len(stem(p.why) & words) >= max(3, len(stem(p.why)) // 2) for p in parts if not p.add)
 
 
 def parts_block(d: dict, by_n: dict, names: list[str], lang: str) -> tuple[str, str, str]:
@@ -3009,6 +3035,9 @@ def parts_block(d: dict, by_n: dict, names: list[str], lang: str) -> tuple[str, 
     level it offers (the census's private 'schools with primary classes', '… with junior secondary classes') as
     not added. Third value: the parts as plain text for the checks."""
     parts = checked_parts(d, by_n, names)
+    # a 'part' without a number ('IQS: isn't published') is a statement, not something to add: it never blocks the total
+    statements = [p for p in parts if _as_number(p.value) is None]
+    parts = [p for p in parts if _as_number(p.value) is not None]
     if len(parts) < 2:
         return "", "", ""
     w = PARTS_WORDS.get(lang, PARTS_WORDS["en"])
@@ -3039,6 +3068,9 @@ def parts_block(d: dict, by_n: dict, names: list[str], lang: str) -> tuple[str, 
             groups.setdefault(p.why.rstrip(".") or NOT_ADDED_WORDS.get(lang, NOT_ADDED_WORDS["en"]), []).append(p)
     aside = "\n\n".join(NOT_ADDED_HEAD.get(lang, NOT_ADDED_HEAD["en"]).format(why=why) + "\n"
                         + "\n".join(bullet(p) for p in ps) for why, ps in groups.items())
+    if statements:
+        lines = "\n".join(f"• {p.label}: {p.value}" for p in statements)
+        aside = f"{aside}\n\n{lines}" if aside else lines
     breakdown = "\n".join(bullet(p) for p in added)
     plain_parts = "; ".join(f"{p.label}: {p.value}" for p in parts)
     bad = [p.label for p in added if not p.ok]
@@ -3053,7 +3085,7 @@ def parts_block(d: dict, by_n: dict, names: list[str], lang: str) -> tuple[str, 
     working = w["working"].format(sum=" + ".join(p.value for p in added), total=shown)
     # the total first, in the writer's sentence with code's figure ('Sokoto North had {total} public schools in
     # 2023/24'): the writer never computes it; then the breakdown, then what isn't added and why
-    sentence = str(d.get("total_sentence") or "").strip()[:200]
+    sentence = _CITE_MARK.sub("", str(d.get("total_sentence") or "")).strip()[:200]
     lead = sentence.replace("{total}", f"*{shown}*") if "{total}" in sentence else \
         w["total"].format(what=what, total=shown, n=len(added))
     return ("\n\n".join(x for x in (lead, breakdown, aside) if x), working, f"{plain_parts}; total {shown}")
