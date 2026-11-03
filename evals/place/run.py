@@ -56,6 +56,9 @@ def check(case: dict, text: str, working: str, level: str, unit: str) -> list[st
     return wrong
 
 
+LAST: dict = {}          # the last --full case's reading and check verdicts, printed with --detail
+
+
 async def run_full(case: dict, conn) -> tuple[str, str, str, str]:
     """As live (3 Nov): the understanding step reads the message, then answer_question, whose answer check runs."""
     from app import usage
@@ -66,6 +69,10 @@ async def run_full(case: dict, conn) -> tuple[str, str, str, str]:
     reading = await understand_message(case["question"], None, case.get("place"), s)
     a = await answer_question(case["question"], case["lang"], conn, settings=s, today=date.today(),
                               place=case.get("place"), **({"understanding": reading} if reading is not None else {}))
+    LAST.update(reading=getattr(reading, "capability", None), level=getattr(reading, "level", None),
+                restatement=getattr(reading, "restatement", ""), found=a.found,
+                checks=[{k: c.get(k) for k in ("verdict", "subject", "missing", "rules", "why")}
+                        for c in getattr(a, "checks", []) or []], maps=len(a.maps or []), text=(a.text or "")[:300])
     spec = (a.maps or [{}])[0]
     if spec.get("highlight"):                 # a ward answer: its map is the LGA's with the ward outlined
         return a.text, a.working, "ward", spec["highlight"]
@@ -78,15 +85,28 @@ def main() -> None:
     ap.add_argument("--only", default="", help="a family or an id")
     ap.add_argument("--file", default=str(ROOT / "evals/place/cases.json"))
     ap.add_argument("--start", default="", help="resume at this id (the cases before it are skipped)")
+    ap.add_argument("--chunk-s", type=float, default=0, help="stop cleanly after this many seconds and print NEXT <id>")
+    ap.add_argument("--ids", default="", help="comma-separated ids: only these")
+    ap.add_argument("--detail", action="store_true", help="print each case's reading and check verdicts (--full)")
     a = ap.parse_args()
+    started = time.perf_counter()
     cases = json.loads(Path(a.file).read_text(encoding="utf-8"))["cases"]
     if a.only:
         cases = [c for c in cases if c["family"] == a.only or c["id"] == a.only]
+    if a.ids:
+        wanted = {x.strip() for x in a.ids.split(",")}
+        cases = [c for c in cases if c["id"] in wanted]
     if a.start:
         cases = cases[next(i for i, c in enumerate(cases) if c["id"] == a.start):]
     lines, wrong_n, times = [], 0, []
     with psycopg.connect(get_settings().db_url()) as conn:
         for c in cases:
+            if a.chunk_s and time.perf_counter() - started > a.chunk_s:     # a foreground chunk: the next one resumes
+                from app import usage
+                print(f"NEXT {c['id']}")
+                print(usage.summary(get_settings(), answers=len(times)))
+                sys.stdout.flush()
+                os._exit(0)
             t0 = time.perf_counter()
             if a.full:
                 try:                       # a network failure is that case's error, never the end of the run
@@ -112,12 +132,17 @@ def main() -> None:
             lines.append(f"| {c['id']} | {c['family']} | {c['lang']} | {c['year']} | {dt:.1f} | "
                          f"{'ok' if not wrong else '; '.join(wrong)} |")
             print(c["id"], c["family"], c["lang"], "ok" if not wrong else wrong)
+            if a.detail and a.full:
+                print("  DETAIL", json.dumps(LAST, ensure_ascii=False, default=str)[:900])
     med = sorted(times)[len(times) // 2] if times else 0
     report = [f"# Place history planner eval ({'full pipeline' if a.full else 'in code'}), {date.today()}", "",
               f"{len(cases)} cases, **{wrong_n} wrong**, median {med:.1f} s.", "",
               "| id | family | lang | year | s | result |", "|---|---|---|---|---|---|", *lines]
     Path(ROOT / "evals/place/report.md").write_text("\n".join(report), encoding="utf-8")
     print(f"\n{len(cases)} cases, {wrong_n} wrong, median {med:.1f}s -> evals/place/report.md")
+    if a.full:
+        from app import usage
+        print(usage.summary(get_settings(), answers=len(times)))
     sys.stdout.flush()
     os._exit(1 if wrong_n else 0)
 
