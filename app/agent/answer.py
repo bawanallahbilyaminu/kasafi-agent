@@ -2888,6 +2888,10 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
             return bool(nums) and set(nums) <= values
         items = [i for i in items if not repeats(i)]
     summary_text = drop_verdicts(str(d.get("summary") or d.get("answer") or ""), q_all)
+    if d.get("parts") and budget is None and settings.kasafi_read_wide and not parts_working:
+        # no total could be computed: still no sentence giving the writer's own sum of the parts
+        summary_text = " ".join(s for s in _SENTENCE.split(summary_text)
+                                if s.strip() and not restates_parts(s, checked_parts(d, by_n, [])))
     if parts_text and parts_working:   # a total leads: the summary keeps only what the parts don't already say
         values = {p.value for p in checked_parts(d, by_n, [])} | set(re.findall(r"= ([\d,.]+)", parts_working))
         listed = checked_parts(d, by_n, [])
@@ -3040,7 +3044,9 @@ def parts_block(d: dict, by_n: dict, names: list[str], lang: str) -> tuple[str, 
     parts = checked_parts(d, by_n, names)
     # a 'part' without a number ('IQS: isn't published') is a statement, not something to add: it never blocks the total
     statements = [p for p in parts if _as_number(p.value) is None]
-    parts = [p for p in parts if _as_number(p.value) is not None]
+    # a figure not printed in the place's row is never shown, added or not (3 Nov: the writer's own sums, 37 and 31,
+    # appeared as 'parts'); one meant to be added still stops the total below
+    parts = [p for p in parts if _as_number(p.value) is not None and (p.ok or p.add)]
     if len(parts) < 2:
         return "", "", ""
     w = PARTS_WORDS.get(lang, PARTS_WORDS["en"])

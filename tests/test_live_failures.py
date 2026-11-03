@@ -188,6 +188,13 @@ def test_the_progress_line_names_what_is_checked_never_several_sources() -> None
         assert "Several sources" not in line and "majiyoyi da yawa" not in line and "2" in line
 
 
+def test_a_not_added_figure_that_isnt_printed_is_never_shown() -> None:
+    d = {"parts": [{"label": "public primary", "value": "91", "cited": 1}, {"label": "public junior secondary", "value": "18", "cited": 2},
+                   {"label": "private and public primary", "value": "119", "cited": 1, "add": False, "why": "combined"}]}
+    text, _, _ = ans.parts_block(d, _evidence(), ["Dange Shuni"], "en")
+    assert "119" not in text and "*109*" in text
+
+
 def test_a_part_without_a_number_never_blocks_the_total_and_the_double_count_is_dropped_from_the_summary() -> None:
     d = {"total_sentence": "Dange Shuni had {total} public schools [1][2].", "parts": [
         {"label": "public primary", "value": "91", "cited": 1}, {"label": "public junior secondary", "value": "18", "cited": 2},

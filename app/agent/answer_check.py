@@ -222,6 +222,12 @@ def code_rules(a, u, figures_found: tuple[int, int]) -> list[str]:
         rules.append(f"named_part_missing: {part} is named by the user but not in the answer (give its figure, or the "
                      f"higher level's figure with one line saying the documents have it only there, or say it isn't "
                      f"in the documents)")
+    # a place the user named (an LGA, a ward) is named in a written answer, even to say the documents don't have it
+    # (3 Nov: 'Was Wamakko affected?' got Sokoto State's figures and no word on Wamakko)
+    if u is not None and a.found and not computed_in_code(a) and getattr(u, "level", "") in ("lga", "ward"):
+        place_words = [w for w in re.findall(r"[\w'’]+", GENERIC.sub(" ", getattr(u, "name", "") or "")) if len(w) > 2]
+        if place_words and not any(w.lower() in (a.text or "").lower() for w in place_words):
+            rules.append(f"subject_not_named: the answer never names {u.name}, the place asked about")
     first = re.split(r"(?<=[.!?])\s|\n", (a.text or "").lstrip("_*📊🔎 \n"), maxsplit=1)[0]
     if u is not None and YES_NO.match(first or ""):
         words = [w for w in re.findall(r"[\w'’]+", GENERIC.sub(" ", u.name or "")) if len(w) > 2]
@@ -363,6 +369,7 @@ NOTHING = {
     "en": "I couldn't give a checked answer to that: {missing}.{docs}",
     "ha": "Ban iya ba da amsar da aka tabbatar ba: {missing}.{docs}",
 }
+NOTHING_ASKED = {"en": "what you asked", "ha": "abin da ka tambaya"}
 NOTHING_DOCS = {"en": " The documents I read were {docs}.", "ha": " Takardun da na karanta: {docs}."}
 
 
@@ -456,6 +463,9 @@ def partial_answer(a, v: Verdict, lang: str) -> tuple[str, bool, list]:
     refused = a.verification == "unsupported" or not a.verified
     text = ""
     block = getattr(a, "code_block", "") or ""
+    # code's total and parts come from rows checked in the place's own line: only a wrong topic or a refusal removes them
+    if block and not refused and (v.subject or {}).get("topic") is not False and v.wrong_subject:
+        text = block.strip()
     if not v.wrong_subject and not refused:
         figs, quotes = flagged_bits(v)
         figs -= set(figures_in(block)) | set(figures_in(a.working or ""))
@@ -473,7 +483,8 @@ def partial_answer(a, v: Verdict, lang: str) -> tuple[str, bool, list]:
             text += "\n\n" + MISSING.get(lang, MISSING["en"]).format(missing="; ".join(gaps[:3]).rstrip("."))
     if not text:
         docs = list(dict.fromkeys(e.title for e in (a.cited or [])))[:3]
-        missing = "; ".join(truly_missing(v.missing, a)[:3]) or v.feedback or "-"
+        # never the check's feedback: that is written for the writer, not the user (3 Nov: it reached a reply)
+        missing = "; ".join(truly_missing(v.missing, a)[:3]) or NOTHING_ASKED.get(lang, NOTHING_ASKED["en"])
         read = NOTHING_DOCS.get(lang, NOTHING_DOCS["en"]).format(docs="; ".join(docs)) if docs else ""
         return NOTHING.get(lang, NOTHING["en"]).format(missing=missing.rstrip("."), docs=read), False, []
     kept_figs = set(figures_in(text))

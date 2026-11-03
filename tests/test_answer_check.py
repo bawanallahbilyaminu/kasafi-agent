@@ -24,8 +24,8 @@ def test_a_yes_about_another_place_breaks_the_subject_rule() -> None:
     assert any(r.startswith("yes_no") for r in ck.code_rules(a, u, (0, 0)))
     ok = _answer("Yes: Wamakko LGA is listed among the affected LGAs in 2025.", cited_text="Wamakko")
     assert ck.code_rules(ok, u, (0, 0)) == []
-    plain = _answer("NEMA's report of 26 September 2025 lists 7 affected LGAs in Sokoto State but doesn't name them.")
-    assert ck.code_rules(plain, u, (0, 0)) == []                 # no Yes/No: the model judges it
+    plain = _answer("NEMA's report of 26 September 2025 lists 7 affected LGAs in Sokoto State, not naming Wamakko.")
+    assert ck.code_rules(plain, u, (0, 0)) == []                 # no Yes/No, the place named: the model judges it
 
 
 def test_an_answer_none_of_whose_figures_is_printed_can_never_pass() -> None:
@@ -137,6 +137,30 @@ def test_one_bad_claim_goes_and_codes_total_and_parts_stay_first_in_the_main_ans
     assert "31" not in text and "Not found in the documents I read: IQS schools in Sokoto North." in text
     assert ck.working_note(a, v, "en", True).endswith("One part, IQS schools in Sokoto North, isn't in the documents, "
                                                       "so it was left out.")
+
+
+def test_the_checks_feedback_never_reaches_a_reply() -> None:
+    v = ck.Verdict("fail", subject={"place": False}, feedback="Ka dawo da rarraben da ke cikin EVIDENCE")
+    text, ok, _ = ck.partial_answer(_answer("Sokoto State has 91 schools."), v, "ha")
+    assert not ok and "EVIDENCE" not in text and "Ka dawo" not in text and "abin da ka tambaya" in text
+
+
+def test_codes_total_survives_a_place_or_level_complaint_but_not_a_wrong_topic() -> None:
+    block = "Sokoto North had *60* public schools in 2023/24.\n\n• public primary: 23 (page 19)"
+    a = _answer(f"{block}\n\nA sentence the check disliked.", cited_text="SOKOTO NORTH 23")
+    a.code_block, a.working = block, "Total, calculated in code: 23 + 23 + 14 = 60"
+    text, ok, _ = ck.partial_answer(a, ck.Verdict("fail", subject={"place": False}), "en")
+    assert ok and text.startswith("Sokoto North had *60*") and "disliked" not in text
+    text, ok, _ = ck.partial_answer(a, ck.Verdict("fail", subject={"topic": False}), "en")
+    assert not ok and "60" not in text
+
+
+def test_a_place_the_user_named_must_be_named_in_a_written_answer() -> None:
+    u = N(name="Wamakko LGA", level="lga", restatement="Was Wamakko affected?", asked_parts=[])
+    no = _answer("For Sokoto State, NEMA listed 7 affected LGAs without naming them.", cited_text="Sokoto 7")
+    assert any(r.startswith("subject_not_named") for r in ck.code_rules(no, u, (0, 0)))
+    yes = _answer("NEMA's reports give no figure for Wamakko; for Sokoto State they list 7 LGAs.", cited_text="Sokoto 7")
+    assert ck.code_rules(yes, u, (0, 0)) == []
 
 
 def test_the_writer_gets_a_try_before_any_fallback_and_code_answers_keep_place_and_level() -> None:
