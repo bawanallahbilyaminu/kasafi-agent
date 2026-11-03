@@ -11,8 +11,10 @@ cites (page texts, or what code computed) and the code checks' result, and retur
 whether its subject (place, time, topic, level) is the one asked, contradictions, what is missing, whether every
 figure is in the evidence, a verdict (pass, revise, fail) and feedback for one more round. Two rules are code, not
 the model's judgement: an answer none of whose figures is printed in its cited pages can't pass, and a "Yes"/"No"
-must name the subject asked. When the second round still doesn't pass, the answer sent is built only from what the
-evidence supports (`safe_answer`, its figures checked in code), never the draft.
+must name the subject asked. The check never writes user-facing text: its outputs are the verdict and feedback. On
+'revise' the normal writer answers again (with every map, chart, crop and button of that path); when the second
+round still doesn't pass, the answer is built in code from the draft's supported lines (`partial_answer`), with the
+attachments that belong to them.
 """
 
 from __future__ import annotations
@@ -44,12 +46,9 @@ no figures>"],
  "unclear": ["<a sentence that misdescribes what a figure is or how two figures relate>"],
  "unsupported": ["<each figure or claim in the draft that the evidence doesn't contain>"],
  "verdict": "pass|revise|fail",
- "feedback": "<one or two lines for the next round: what to find or fix, naming the place, time and measure>",
- "safe_answer": "<only when the verdict is not pass: the answer rewritten with ONLY what the evidence supports, in \
-the draft's language: what was found (figures exactly as in the draft or the evidence, with document and page), \
-what wasn't found, and where it might be; one bullet ('• ') per figure, each on its own line. Never add up, \
-subtract or compute anything: a total may be copied only from COMPUTED OR WRITTEN IN CODE. '' when the evidence \
-supports nothing about the subject asked>"}
+ "feedback": "<one or two lines for the writer of the next round: what to find or fix, naming the place, time and \
+measure>"}
+You never write the answer yourself: the verdict and the feedback are your only outputs.
 
 How to judge:
 - The subject is what the USER asked about (the restatement says it in full): the place, the time, the topic and \
@@ -97,7 +96,6 @@ class Verdict:
     unclear: list[str] = field(default_factory=list)
     unsupported: list[str] = field(default_factory=list)
     feedback: str = ""
-    safe_answer: str = ""
     rules: list[str] = field(default_factory=list)       # the code rules this draft broke
     round: int = 1
     seconds: float = 0.0
@@ -112,9 +110,7 @@ class Verdict:
             r.startswith("yes_no") for r in self.rules)
 
     def to_dict(self) -> dict:
-        d = asdict(self)
-        d["safe_answer"] = d["safe_answer"][:600]
-        return d
+        return asdict(self)
 
 
 def parse(d: dict, round_: int) -> Verdict:
@@ -130,7 +126,7 @@ def parse(d: dict, round_: int) -> Verdict:
                    contradictions=strs(d.get("contradictions")), missing=strs(d.get("missing")),
                    missing_stated=d.get("missing_stated") is True, unclear=strs(d.get("unclear")),
                    unsupported=strs(d.get("unsupported")), feedback=str(d.get("feedback") or "").strip()[:500],
-                   safe_answer=str(d.get("safe_answer") or "").strip()[:3000], round=round_)
+                   round=round_)
 
 
 # --- what the check reads ----------------------------------------------------------------------------------------
@@ -256,6 +252,17 @@ async def check(message: str, a, u, history: list[dict] | None, conn, settings, 
             break
     if v is None:
         v = Verdict("skipped", round=round_, why=why)
+    v = settle(a, v, rules, round_)
+    v.seconds = time.perf_counter() - t0
+    v.provider = getattr(client, "provider", "")
+    log.info("answer check round %d: %s in %.1fs (%s)%s", round_, v.verdict, v.seconds, v.provider,
+             f": {v.feedback[:200]}" if v.verdict != "pass" else "")
+    return v
+
+
+def settle(a, v: Verdict, rules: list[str], round_: int) -> Verdict:
+    """The model's verdict, settled by the rules code decides: a broken code rule never passes; an answer computed
+    in code is judged on its subject alone; an honest partial answer passes."""
     v.rules = rules
     if computed_in_code(a) and (v.subject or {}).get("level") is False:
         # code chose the level from the reading, and a short code answer keeps its full ranking in show working
@@ -277,10 +284,6 @@ async def check(message: str, a, u, history: list[dict] | None, conn, settings, 
         # 'revise' was a stated gap, while every live bad draft left its gap out, contradicted itself or broke a rule)
         v.why = f"honest partial (model said {v.verdict})"
         v.verdict = "pass"
-    v.seconds = time.perf_counter() - t0
-    v.provider = getattr(client, "provider", "")
-    log.info("answer check round %d: %s in %.1fs (%s)%s", round_, v.verdict, v.seconds, v.provider,
-             f": {v.feedback[:200]}" if v.verdict != "pass" else "")
     return v
 
 
@@ -363,46 +366,52 @@ def supported(text: str, a, keep_lines: bool = False) -> str:
     return re.sub(r"\n{3,}", "\n\n", "\n".join(x for x in out if x is not None)).strip()
 
 
-NOTE = {"en": "Answer check: the first answer wasn't sent ({why}); this one keeps only what the cited pages support.",
-        "ha": "Binciken amsa: ba a aika amsar farko ba ({why}); wannan tana ɗauke da abin da shafukan da aka ambata "
-              "suka tabbatar kaɗai."}
+NOTE = {"en": "Answer check: the draft wasn't sent as written ({why}); this answer keeps only its lines the cited "
+              "pages or the code's own figures support.",
+        "ha": "Binciken amsa: ba a aika daftarin kamar yadda yake ba ({why}); wannan amsar tana ɗauke da layukansa da "
+              "shafukan da aka ambata ko lissafin shirin suka tabbatar kaɗai."}
 
 
-def safe_answer(a, v: Verdict, lang: str) -> tuple[str, bool]:
-    """The answer built only from what the evidence supports, and whether anything supported is in it: the
-    check's safe answer with every figure checked in code against the cited pages (a sentence with a figure that
-    isn't printed there is dropped), and the sources; when nothing is left, what wasn't found and which documents
-    were read."""
+def flagged_bits(v: Verdict) -> tuple[set[str], list[str]]:
+    """What the check found wrong, as figures and quoted sentences: a draft line carrying one of them goes."""
+    items = [*v.contradictions, *v.unclear, *v.unsupported]
+    figs = {f for i in items for f in figures_in(i)}
+    quotes = [q.strip() for i in items for q in re.findall(r"[\"“'‘]([^\"”'’]{15,})[\"”'’]", i)]
+    return figs, quotes
+
+
+def partial_answer(a, v: Verdict, lang: str) -> tuple[str, bool, list]:
+    """The answer sent when no draft passed, built in code (the check never writes user-facing text): the draft's
+    own lines, without any line the check flagged (a figure or sentence it named as contradicted, unclear or
+    unsupported) and without any figure not printed in the cited pages or computed in code, then what is missing,
+    then the sources of what is kept. Returns (text, anything supported kept, the cited pages kept: their crops go
+    with it). A draft about another subject, or one that refused, keeps nothing."""
     from app.agent.answer import NOT_READ, sources_line
-    # a draft that refused ('couldn't verify the figures') has nothing of its own to keep: the rewrite, whose every
-    # figure is then checked against the cited pages (3 Nov: s11's refusal was kept, with the figures it had in a
-    # 'not found' line)
     refused = a.verification == "unsupported" or not a.verified
-    only_gaps = not refused and not (v.wrong_subject or v.contradictions or v.unclear or v.unsupported or v.rules) \
-        and not any((v.subject or {}).get(k) is False for k in ("place", "time", "topic", "level"))
     text = ""
-    if not only_gaps:
-        # the draft says something wrong: the check's rewrite, its figures checked in code
-        rewrite = "\n".join(ln for ln in re.sub(r"\s+•\s+", "\n• ", v.safe_answer or "").splitlines()
-                            if not ln.lstrip().startswith(("📄", "Sources:", "Madogara:")))   # code adds sources
-        rewrite = re.sub(r"\s*\(?(?:COMPUTED OR WRITTEN IN CODE|EVIDENCE THE DRAFT CITES)\)?", "", rewrite)
-        text = supported(rewrite, a, keep_lines=True)
-    if not text and not v.wrong_subject and not v.contradictions and not refused:
-        # only gaps (or no rewrite came back): the draft's own lines whose figures are printed in its cited pages or
-        # computed in code, never a line about another subject, and what is missing (3 Nov: the right 173-school
-        # total computed in code was lost when the rewrite was used for a draft whose only fault was a gap)
-        draft = "\n".join(ln for ln in (a.text or "").splitlines()
-                          if not ln.startswith(("📄", "_Reply")) and ln.strip() not in NOT_READ.values())
-        text = supported(draft, a, keep_lines=True)
+    if not v.wrong_subject and not refused:
+        figs, quotes = flagged_bits(v)
+        keep = []
+        for ln in (a.text or "").splitlines():
+            if ln.startswith(("📄", "_Reply", "_Ku rubuta")) or ln.strip() in NOT_READ.values():
+                continue
+            parts = re.split(r"(?<!\bp\.)(?<=[.!?])\s+", ln) if not ln.lstrip().startswith("•") else [ln]
+            parts = [p for p in parts if not (set(figures_in(p)) & figs) and not any(q in p for q in quotes)]
+            if parts or not ln.strip():
+                keep.append(" ".join(parts))
+        text = supported("\n".join(keep), a, keep_lines=True)
         if text and (gaps := truly_missing(v.missing, a)) and not v.missing_stated:
             text += "\n\n" + MISSING.get(lang, MISSING["en"]).format(missing="; ".join(gaps[:3]).rstrip("."))
     if not text:
         docs = list(dict.fromkeys(e.title for e in (a.cited or [])))[:3]
-        missing = "; ".join(v.missing[:3]) or v.feedback or "-"
+        missing = "; ".join(truly_missing(v.missing, a)[:3]) or v.feedback or "-"
         read = NOTHING_DOCS.get(lang, NOTHING_DOCS["en"]).format(docs="; ".join(docs)) if docs else ""
-        return NOTHING.get(lang, NOTHING["en"]).format(missing=missing.rstrip("."), docs=read), False
-    tail = sources_line(a.cited, lang) if a.cited else ""
-    return f"{text}\n\n{tail}".strip(), True
+        return NOTHING.get(lang, NOTHING["en"]).format(missing=missing.rstrip("."), docs=read), False, []
+    kept_figs = set(figures_in(text))
+    cited = [e for e in (a.cited or []) if not kept_figs or any(re.search(rf"(?<![\d.,]){re.escape(f)}(?!\d)",
+                                                                          e.text or "") for f in kept_figs)]
+    tail = sources_line(cited, lang) if cited else ""
+    return f"{text}\n\n{tail}".strip(), True, cited
 
 
 def trace_entry(v: Verdict) -> dict:

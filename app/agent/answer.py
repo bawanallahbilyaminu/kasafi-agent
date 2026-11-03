@@ -1427,7 +1427,8 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
     evidence = [Evidence(i, h.doc_id, h.title, h.year, h.page, sources.get((h.doc_id, h.page), "text"),
                          survey_excerpt(h.title, texts[(h.doc_id, h.page)])) for i, h in enumerate(ranked, start=1)]
     extra = state_row_pages(conn, evidence) if not money else []        # the Sokoto rows of a national table
-    extra += place_pages(conn, plan, evidence + extra, asked) if not money else []   # read wide for a named place
+    if not money and get_settings().kasafi_read_wide:                   # read wide for a named place
+        extra += place_pages(conn, plan, evidence + extra, asked)
     extra += line_evidence(conn, plan, evidence) if money or not plan.statistics else []
     for i, e in enumerate(extra, start=len(evidence) + 1):
         e.n = i
@@ -1631,9 +1632,13 @@ async def compose(question: str, lang: str, plan: Plan, evidence: list[Evidence]
             + (f"ASSUMPTION MADE: {plan.assumption}\n" if plan.assumption else "")
             + (f"CONTEXT: {context}\n" if context else "")
             + f"\nEVIDENCE:\n{ev}" + (f"\n\nCORRECTION NEEDED: {feedback}" if feedback else ""))
+    system = ANSWER_SYSTEM if settings.kasafi_read_wide else RULE_6O.sub("", ANSWER_SYSTEM)   # parts and totals: off
     return await stage_json("compose", client, second, settings,
-                            [{"role": "system", "content": with_core(ANSWER_SYSTEM)}, {"role": "user", "content": user}],
+                            [{"role": "system", "content": with_core(system)}, {"role": "user", "content": user}],
                             reasoning_effort="low", max_tokens=4000)
+
+
+RULE_6O = re.compile(r"6o\. When the question asks for a total.*?empty when nothing is added up\.\n", re.S)
 
 
 @asynccontextmanager
@@ -2018,7 +2023,7 @@ async def checked_answer(a: Answer, question: str, lang: str, conn, kw: dict, t_
                 a2.understanding = u2 if u2 is not None else a2.understanding
                 if v2.verdict in ("pass", "skipped"):
                     return a2
-                if v2.safe_answer.strip() or not v.safe_answer.strip():
+                if a2.found or not a.found:          # the second draft, unless it found nothing and the first did
                     best, best_v = a2, v2
                 best.checks = a2.checks
             elif a2 is not None and not a2.found and not a.found:
@@ -2029,11 +2034,16 @@ async def checked_answer(a: Answer, question: str, lang: str, conn, kw: dict, t_
                 a.checks.append({"verdict": "no second answer", "round": 2})
         if not best.found:                   # a 'not found' that couldn't be retried: it stands as it is
             return best
-        # still not passing: only what the evidence supports, never the draft
-        text, supported = answer_check.safe_answer(best, best_v, lang)
+        # still not passing: the draft's supported lines, built in code (the check never writes the reply), with the
+        # attachments that belong to them: the path's maps (a code answer's map is its data), the cited pages still
+        # carrying a kept figure (their crops), the calculation offer; nothing when the subject was wrong
+        text, supported, kept = answer_check.partial_answer(best, best_v, lang)
         note = answer_check.NOTE.get(lang, answer_check.NOTE["en"]).format(
             why="; ".join([*best_v.rules, *best_v.contradictions, *best_v.missing][:3]) or best_v.feedback)
-        out = replace(best, text=text, partial=True, exact=text, found=supported,
+        keep_all = supported and not best_v.wrong_subject
+        out = replace(best, text=text, partial=True, exact=text, found=supported, cited=kept,
+                      maps=best.maps if keep_all else [], offer=best.offer if keep_all else None,
+                      quotes=best.quotes if keep_all else "",
                       working=f"{best.working}\n\n{note}" if best.working else note,
                       parts=[], deep=None)          # a deep analysis's sections aren't sent after a failed check
         log.info("check: sent an answer built from what is supported (round %d verdict %s)", best_v.round,
@@ -2121,7 +2131,8 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         # what the words settle (docs/planner-variance.md): clear patterns override the plan; conflicting ones go to
         # a second-opinion plan from the Open model, capped; every override and conflict lands in the trace
         await settle_by_words(plan, question, planned_q, catalog, names, second, settings, today, history, lang, t)
-        if u is not None and u.kind in ("correction", "clarification") and plan.followup == "recheck":
+        if settings.kasafi_followup_rules and u is not None and u.kind in ("correction", "clarification") and \
+                plan.followup == "recheck":
             # 'I asked about people, not hectares' is the user's own question restated, not 'check again for a
             # newer edition' (3 Nov: it opened with 'I checked again: … still the newest edition')
             log.info("a correction, not a recheck: the restated question is answered")
@@ -2844,7 +2855,7 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
     q_all = f"{question} {plan.english_question}"
     # a total across levels or categories: each part from its own row, added up in code (3 Nov 2026)
     parts_text, parts_working, parts_plain = parts_block(d, by_n, place_names(plan, q_all), lang) \
-        if budget is None else ("", "", "")
+        if budget is None and settings.kasafi_read_wide else ("", "", "")
     items = [drop_verdicts(str(i), q_all) for i in (d.get("items") or [])[:TOP_ROWS]]
     if parts_text:              # an item that only repeats the parts' figures goes: the parts are listed once
         values = {p.value for p in checked_parts(d, by_n, [])}
@@ -3317,7 +3328,7 @@ def topic_route(question: str, plan: Plan) -> str:
     # page path, not one card from each publisher (3 Nov: 'how many schools in Dange Shuni' got only the public
     # primary card); a comparison or change across sources keeps the sweep
     from app.agent.topics import across_sources
-    if place_names(plan, text) and not across_sources(text):
+    if get_settings().kasafi_read_wide and place_names(plan, text) and not across_sources(text):
         return ""
     # budget money asked about: the budget tools answer. The planner sometimes adds them to a statistics
     # question ("How many IDPs according to IOM?" got line_search): without money words, the topic path wins
@@ -4928,7 +4939,8 @@ def _not_found(conn: psycopg.Connection, plan: Plan, lang: str, acq: Acquired | 
         text = NOT_FOUND.get(lang, NOT_FOUND["en"])
         # an LGA's money: say why the state budget can't answer it; only for a money question (3 Nov: 'how many
         # schools … in Dange Shuni' got this budget note when nothing answered)
-        if (lga := lga_in(plan.english_question)) and MONEY_WORDS.search(f"{plan.original} {plan.english_question}"):
+        if (lga := lga_in(plan.english_question)) and (not get_settings().kasafi_followup_rules or MONEY_WORDS.search(
+                f"{plan.original} {plan.english_question}")):
             text = LGA_NOT_FOUND.get(lang, LGA_NOT_FOUND["en"]).format(lga=lga)
     return Answer(text, False, True, plan=plan, timings=t, acquired=acq)
 

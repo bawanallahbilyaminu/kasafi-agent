@@ -115,6 +115,14 @@ class Settings(BaseSettings):
     # its evidence; revise -> one more round; still not passing -> an answer built only from what is supported.
     # provider: open = Muse Spark Open (Baseten, then Fireworks), meta = Muse Spark
     kasafi_answer_check: bool = True
+    # the other 3 Nov changes, each with its own switch (docs/routing.md): reading wide for a named place, with totals
+    # added in code from separate counts and the place's figures on the page path; the follow-up rules in the
+    # understanding prompt (a clarification keeps the subject, 'X not Y', 'how many' = all levels, what one named
+    # report finds = statistics) with the money-only LGA note and 'a correction is never a recheck'; past rain as
+    # place history (held back until the old-vs-new comparison is done)
+    kasafi_read_wide: bool = True
+    kasafi_followup_rules: bool = True
+    kasafi_past_rain_rule: bool = False
     kasafi_check_provider: str = "open"
     kasafi_check_timeout_s: float = 30.0
     # a revise round starts only with at least this many seconds left of kasafi_answer_timeout_s

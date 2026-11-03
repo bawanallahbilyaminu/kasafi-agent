@@ -86,26 +86,31 @@ def test_a_check_that_cannot_run_never_blocks_the_answer() -> None:
     assert v.verdict == "skipped" and v.why
 
 
-def test_the_partial_answer_keeps_only_sentences_whose_figures_are_printed() -> None:
-    a = _answer("Dange Shuni has 91 public primary schools and 40 JSS.")
-    v = ck.Verdict("fail", safe_answer="Dange Shuni has 91 public primary schools (p. 19). It has 40 junior "
-                                       "secondary schools. The census tables for SSS weren't in the pages read.",
-                   missing=["SSS counts"], unsupported=["40 JSS"])
-    text, supported = ck.safe_answer(a, v, "en")
-    assert supported and "91 public primary" in text and "40 junior" not in text and "SSS" in text
+def test_the_check_writes_no_reply_text_its_outputs_are_the_verdict_and_feedback() -> None:
+    assert "safe_answer" not in ck.SYSTEM and "never write the answer yourself" in ck.SYSTEM
+    assert not hasattr(ck.Verdict(), "safe_answer")
+
+
+def test_the_partial_answer_is_the_drafts_supported_lines_built_in_code() -> None:
+    a = _answer("Dange Shuni has 91 public primary schools. It has 40 junior secondary schools.")
+    v = ck.Verdict("fail", missing=["SSS counts"], unsupported=["40 junior secondary schools"])
+    text, supported, kept = ck.partial_answer(a, v, "en")
+    assert supported and "91 public primary" in text and "40" not in text
+    assert "Not found in the documents I read: SSS counts." in text and [e.page for e in kept] == [19]
     assert "Sokoto State Annual School Census 23-24 Report" in text            # the sources line
-    nothing, ok = ck.safe_answer(a, ck.Verdict("fail", missing=["the number of IQS in Dange Shuni"],
-                                               contradictions=["x"]), "en")
-    assert not ok and nothing.startswith("I couldn't give a checked answer to that: the number of IQS")
+    flagged = ck.Verdict("fail", contradictions=["\"Dange Shuni has 91 public primary schools\" contradicts p. 19"])
+    nothing, ok, kept = ck.partial_answer(_answer("Dange Shuni has 91 public primary schools."), flagged, "en")
+    assert not ok and not kept and nothing.startswith("I couldn't give a checked answer to that")
 
 
-def test_a_refused_draft_gives_way_to_the_checked_rewrite() -> None:
+def test_a_refused_or_wrong_subject_draft_keeps_nothing() -> None:
     a = _answer("I found documents about your question, but couldn't verify the figures.", verification="unsupported")
     a.verified = False
-    v = ck.Verdict("fail", safe_answer="• public primary schools in Dange Shuni: 91 (p. 19)\n• JSS: 40",
-                   missing=["Dange Shuni public primary schools: 91"])
-    text, ok = ck.safe_answer(a, v, "en")
-    assert ok and "91 (p. 19)" in text and "40" not in text and "couldn't verify" not in text
+    text, ok, kept = ck.partial_answer(a, ck.Verdict("fail", missing=["the IQS count"]), "en")
+    assert not ok and not kept and "couldn't verify" not in text and "the IQS count" in text
+    wrong = ck.Verdict("fail", subject={"place": False}, missing=["Wamakko's figures"])
+    text, ok, kept = ck.partial_answer(_answer("Sokoto State has 91 schools."), wrong, "en")
+    assert not ok and "91" not in text
 
 
 def test_a_missing_item_whose_figure_is_printed_is_not_called_missing() -> None:
@@ -118,8 +123,8 @@ def test_a_draft_whose_only_fault_is_a_gap_is_kept_with_its_code_total_and_the_g
     a = _answer("• public primary schools: 91 (page 19)\n• public junior secondary schools: 14 (page 19)\n\n"
                 "Total (schools): *105*, added up by Kasafi from the 2 parts above.\n\n📄 *Sources:* ASC, p. 19")
     a.working = "Total, calculated in code: 91 + 14 = 105"
-    v = ck.Verdict("fail", safe_answer="• public primary schools: 91", missing=["IQS schools in Dange Shuni"])
-    text, ok = ck.safe_answer(a, v, "en")
+    v = ck.Verdict("fail", missing=["IQS schools in Dange Shuni"])
+    text, ok, _ = ck.partial_answer(a, v, "en")
     assert ok and "*105*" in text and "14 (page 19)" in text
     assert "Not found in the documents I read: IQS schools in Dange Shuni." in text and text.count("📄") == 1
 
@@ -156,8 +161,7 @@ def test_a_revise_round_reads_again_and_a_second_failure_sends_only_what_is_supp
         seen.append(kw)
         return next(drafts)
     verdicts = iter([ck.Verdict("revise", subject={"place": False}, feedback="asked about Wamakko", round=1),
-                     ck.Verdict("fail", subject={"place": False}, round=2,
-                                safe_answer="NEMA lists 4 affected LGAs in Sokoto State without naming them.")])
+                     ck.Verdict("fail", subject={"place": False}, round=2, missing=["whether Wamakko is listed"])])
 
     async def fake_check(message, a, u, history, conn, settings, client, *, round_=1, model=None):
         return next(verdicts)
@@ -184,6 +188,71 @@ def test_a_revise_round_reads_again_and_a_second_failure_sends_only_what_is_supp
                                         history=[]))
     assert seen[1]["review"]["feedback"] == "asked about Wamakko"            # the second round got the feedback
     assert seen[1]["understanding"].capability == "statistics"              # and the message read again
-    assert a.text.startswith("NEMA lists 4 affected LGAs in Sokoto State without naming them.")   # never the draft
-    assert a.partial and "Answer check: the first answer wasn't sent" in a.working
+    # both drafts were about another place: nothing of them is sent, only what is missing, in code's words
+    assert a.text == "I couldn't give a checked answer to that: whether Wamakko is listed. The documents I read were " \
+                     "Sokoto State Annual School Census 23-24 Report."
+    assert a.partial and "Answer check: the draft wasn't sent as written" in a.working and not a.maps
     assert [c["verdict"] for c in a.checks] == ["revise", "fail"]
+
+
+def _flood_answer(text: str = "Which wards of Dange Shuni flooded most in 2026: Bodai 0.1%, Tuntube-Tsefe 0.0%.") \
+        -> ans.Answer:
+    """A flood answer written in code by the place path, with its map."""
+    return ans.Answer(text, True, True, exact=text, working="Ranking: Bodai 0.1% … (radar, Copernicus GFM)",
+                      verification="calculation checked", maps=[{"layer": "gfm", "level": "lga", "unit": "NG034005"}],
+                      timings={"place_area": 0.1})
+
+
+def _run_checked(monkeypatch, drafts: list, verdicts: list) -> ans.Answer:
+    drafts_it, verdicts_it = iter(drafts), iter(verdicts)
+
+    async def fake_finished(question, lang, conn, **kw):
+        return next(drafts_it)
+
+    async def fake_check(message, a, u, history, conn, settings, client, *, round_=1, model=None):
+        v = next(verdicts_it)                       # the model's verdict, settled by code's rules as in check()
+        return ck.settle(a, ck.Verdict(**{**ck.asdict(v), "round": round_}), ck.code_rules(a, u, ck.found_count(a)),
+                         round_)
+
+    class Client:
+        provider = "fake"
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return None
+    monkeypatch.setattr(ans, "_answer_finished", fake_finished)
+    monkeypatch.setattr(ans.answer_check, "check", fake_check)
+    monkeypatch.setattr(ans, "check_client", lambda settings, factory: Client())
+    from tests.helpers import make_settings
+    u = N(capability="place_history", name="Dange Shuni", level="lga", restatement="Which wards flooded most?")
+    return asyncio.run(ans.answer_question("Which wards of Dange Shuni flooded most in 2026?", "en", object(),
+                                           settings=make_settings(kasafi_answer_check=True), understanding=u,
+                                           history=[]))
+
+
+def test_a_code_computed_flood_answers_map_always_reaches_the_user(monkeypatch) -> None:
+    # the model calls it 'not ward-level' and a figure 'unsupported': computed in code, the subject matches: passes
+    level = ck.Verdict("revise", subject={"place": True, "topic": True, "level": False}, unsupported=["0.1%"])
+    a = _run_checked(monkeypatch, [_flood_answer()], [level])
+    assert a.maps == [{"layer": "gfm", "level": "lga", "unit": "NG034005"}] and "Bodai 0.1%" in a.text
+    # a gap the draft doesn't state: computed in code and on the subject, it passes with its map
+    gap = ck.Verdict("revise", subject={"place": True, "topic": True}, missing=["hectares per ward"])
+    a = _run_checked(monkeypatch, [_flood_answer()], [gap])
+    assert a.maps == [{"layer": "gfm", "level": "lga", "unit": "NG034005"}] and a.text == _flood_answer().text
+
+
+def test_a_partial_answer_keeps_the_attachments_of_what_it_keeps(monkeypatch) -> None:
+    """A page answer with a map and a crop, failed twice for an unstated gap: its supported lines are sent with the
+    map and the cited page (its crop); a calculation offer stays."""
+    def draft():
+        a = _answer("Dange Shuni has 91 public primary schools (page 19).")
+        a.maps, a.offer = [{"layer": "schools", "level": "lga"}], "OFFER"
+        return a
+    gap = ck.Verdict("revise", subject={"place": True, "topic": True}, missing=["IQS schools in Dange Shuni"])
+    a = _run_checked(monkeypatch, [draft(), draft()], [gap, ck.Verdict("fail", subject={"place": True},
+                                                                       missing=["IQS schools in Dange Shuni"])])
+    assert a.text.startswith("Dange Shuni has 91 public primary schools (page 19).")
+    assert "Not found in the documents I read: IQS schools in Dange Shuni." in a.text
+    assert a.maps == [{"layer": "schools", "level": "lga"}] and [e.page for e in a.cited] == [19] and a.offer == "OFFER"

@@ -146,6 +146,20 @@ def test_a_year_asked_matches_any_year_a_figure_is_for() -> None:
     assert tp.card_years(card("October 2024")) == {2024}
 
 
+def test_each_change_has_its_own_switch(monkeypatch) -> None:
+    from app.agent import understand as U
+    from tests.helpers import make_settings
+    off = make_settings(kasafi_followup_rules=False, kasafi_read_wide=False)
+    monkeypatch.setattr(ans, "get_settings", lambda: off)
+    q = "How many total primary, junior secondary, senior secondary and IQS schools are in Dange Shuni LGA?"
+    assert ans._not_found(None, _plan(q), "en", None, {}, gap=False).text.startswith("The state budget doesn't show")
+    assert "X not Y" not in U.system_prompt(off) and "X not Y" in U.system_prompt(make_settings())
+    assert "rain fell in a past season" not in U.system_prompt(make_settings())        # held back: off by default
+    assert "rain fell in a past season" in U.system_prompt(make_settings(kasafi_past_rain_rule=True))
+    assert "6o." in ans.ANSWER_SYSTEM and "6o." not in ans.RULE_6O.sub("", ans.ANSWER_SYSTEM)
+    assert not make_settings().kasafi_past_rain_rule and make_settings().kasafi_answer_check
+
+
 def test_the_progress_line_names_what_is_checked_never_several_sources() -> None:
     for lang in ("en", "ha"):
         line = tp.PROGRESS[lang].format(n=2, names="ASC, NBS")
