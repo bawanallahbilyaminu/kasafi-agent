@@ -90,10 +90,18 @@ def page(title: str, body: str, on: str = "") -> HTMLResponse:
     nav = "".join(f'<a href="/admin/{p}" class="{"on" if p == on else ""}">{n}</a>'
                   for p, n in (("status", "Status"), ("traces", "Traces"), ("traces?flagged=1", "Flagged"),
                                ("review", "Review queue"), ("alerts", "Alerts")))
+    from app import spend
+    s = spend.state
+    banner = (f'<div class="card" style="border-color:var(--bad)"><b class="wrong">Meta credit low</b> since '
+              f'{e(s.since or "-")} UTC: '
+              + (e("Meta refused a call for billing (402). ") if s.exhausted else
+                 e(f"about ${s.remaining_usd:.2f} left by Kasafi's estimate. "))
+              + 'Muse Spark calls are going to Muse Spark Open (Baseten, then Fireworks). '
+              '<a href="/admin/status">Status</a></div>') if s.low else ""
     doc = (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" '
            f'content="width=device-width,initial-scale=1"><title>{e(title)} · Kasafi admin</title>'
            f'<style>{CSS}</style></head><body><main><header class="top"><b>Kasafi admin</b><nav>{nav}</nav>'
-           f'</header>{body}</main></body></html>')
+           f'</header>{banner}{body}</main></body></html>')
     return HTMLResponse(doc, headers=HEADERS)
 
 
@@ -202,11 +210,34 @@ def trace_page(tid: int, _: None = Depends(admin), settings: Settings = Depends(
             f'{_understanding_card(t)}'
             f'<div class="card"><h2>1 · Plan (Muse Spark)</h2>{plan_html}</div>{readings}{verify}'
             f'<div class="card"><h2>4 · Citations</h2><ul class="picks">{cited}</ul></div>'
+            f'{_check_trace(t)}'
             f'<div class="card"><h2>5 · Reply sent</h2><pre>{e(answer)}</pre></div>'
             f'<div class="card">{buttons}</div>'
             f'<details class="card"><summary class="small">Raw trace JSON</summary><pre>'
             f'{e(json.dumps(_understanding_first(t), ensure_ascii=False, indent=1))}</pre></details>')
     return page(f"Trace {tid}", body, "traces")
+
+
+def _check_trace(t: dict) -> str:
+    """The answer check's verdicts, round by round (app/agent/answer_check.py)."""
+    rows = []
+    for c in t.get("check") or []:
+        subj = c.get("subject") or {}
+        off = [k for k in ("place", "time", "topic", "level") if subj.get(k) is False]
+        bits = [f'round {c.get("round", "?")}: <b class="{"answered" if c.get("verdict") == "pass" else "wrong"}">'
+                f'{e(str(c.get("verdict")))}</b> ({float(c.get("seconds") or 0):.1f}s, {e(str(c.get("provider", "")))})']
+        for label, v in (("subject off", ", ".join(off) + (f' – {subj.get("note")}' if subj.get("note") else "")),
+                         ("rules", "; ".join(c.get("rules") or [])),
+                         ("contradictions", "; ".join(c.get("contradictions") or [])),
+                         ("missing", "; ".join(c.get("missing") or [])),
+                         ("unsupported", "; ".join(c.get("unsupported") or [])),
+                         ("feedback", c.get("feedback") or ""), ("why", c.get("why") or "")):
+            if v and v != " – ":
+                bits.append(f'<div class="small">{label}: {e(str(v))}</div>')
+        rows.append(f'<div style="margin:6px 0">{"".join(bits)}</div>')
+    if not rows:
+        return ""
+    return (f'<div class="card"><h2>Answer check · {e(str(t.get("check_result", "")))}</h2>{"".join(rows)}</div>')
 
 
 def _understanding_first(t: dict) -> dict:
@@ -370,6 +401,20 @@ def status_data(conn, store, settings: Settings) -> dict:
     failures = dict(conn.execute(
         "SELECT split_part(trace->>'failure', ':', 1), count(*) FROM traces WHERE outcome = 'failed' AND "
         "created_at >= now() - make_interval(days => %s) GROUP BY 1", (STATUS_DAYS,)).fetchall())
+    # the answer check (app/agent/answer_check.py): how each checked answer ended, and the first draft's verdict
+    check = {"passed": 0, "revised": 0, "partial": 0, "skipped": 0}
+    first = {"pass": 0, "revise": 0, "fail": 0, "skipped": 0}
+    for result, verdict, n in conn.execute(
+            "SELECT trace->>'check_result', trace->'check'->0->>'verdict', count(*) FROM traces WHERE "
+            "created_at >= now() - make_interval(days => %s) AND trace ? 'check_result' GROUP BY 1, 2",
+            (STATUS_DAYS,)).fetchall():
+        check[result or "skipped"] = check.get(result or "skipped", 0) + n
+        first[verdict or "skipped"] = first.get(verdict or "skipped", 0) + n
+    from app import spend
+    credit = spend.refresh(settings, conn)
+    meta_today = conn.execute(
+        "SELECT provider, coalesce(sum(usd), 0) FROM model_spend WHERE hour >= now() - interval '24 hours' "
+        "GROUP BY 1 ORDER BY 1").fetchall() if _has_table(conn, "model_spend") else []
     return {
         "now": now, "commit": os.environ.get("KASAFI_COMMIT", "unknown"),
         "layers": [{"layer": l, "last_ok": ok_at, "age": _age(ok_at, now), "last_try": tried, "ok": ok,
@@ -380,7 +425,13 @@ def status_data(conn, store, settings: Settings) -> dict:
         "place": {"first": place.get("place:first", 0), "cached": place.get("place:cached", 0),
                   "area": place.get("place_area", 0), "failed": failures.get("satellite", 0)},
         "failures": failures,
+        "check": check, "check_first": first,
+        "credit": credit, "spend_24h": [(p, float(u)) for p, u in meta_today],
     }
+
+
+def _has_table(conn, name: str) -> bool:
+    return bool(conn.execute("SELECT to_regclass(%s)", (name,)).fetchone()[0])
 
 
 @router.get("/status", response_class=HTMLResponse)
@@ -411,8 +462,61 @@ def status_page(_: None = Depends(admin), settings: Settings = Depends(get_setti
             f'now), {p["cached"]} from the cache · ward/LGA questions: {p["area"]} · satellite failures (apology sent): '
             f'{p["failed"]}</p></div>'
             f'<div class="card"><h2>Failed replies</h2><p>{e(fails)} <span class="small mute">(each is a trace with '
-            f'outcome "failed" and its reason)</span></p></div>')
+            f'outcome "failed" and its reason)</span></p></div>'
+            + _check_card(d) + _credit_card(d))
     return page("Status", body, "status")
+
+
+def _check_card(d: dict) -> str:
+    c, f = d["check"], d["check_first"]
+    checked = sum(c.values())
+    return (f'<div class="card"><h2>Answer check</h2><p>{checked} answer(s) checked · first drafts: pass '
+            f'{f.get("pass", 0)}, <b class="partial">revise {f.get("revise", 0)}</b>, <b class="wrong">fail '
+            f'{f.get("fail", 0)}</b>, check skipped {f.get("skipped", 0)} · sent: passed {c.get("passed", 0)}, '
+            f'revised and passed {c.get("revised", 0)}, <b class="wrong">partial (only what was supported) '
+            f'{c.get("partial", 0)}</b> <span class="small mute">(<a href="/admin/traces?flagged=1">flagged '
+            f'traces</a> show each verdict and its feedback)</span></p></div>')
+
+
+def _credit_card(d: dict) -> str:
+    s = d["credit"]
+    spent = ", ".join(f"{p} ${u:.2f}" for p, u in d["spend_24h"]) or "none recorded"
+    if not s.configured:
+        head = ("No Meta balance recorded: the guard is off. Read the balance on dev.meta.ai/usage and record it "
+                "below.")
+    else:
+        head = (f"Reading ${s.balance_usd:.2f} at {s.as_of:%Y-%m-%d %H:%M} UTC; Meta spend Kasafi recorded since: "
+                f"${s.spent_usd:.2f}; about <b>${(s.remaining_usd or 0):.2f}</b> left. "
+                + ("<b class=wrong>LOW: Muse Spark calls go to Muse Spark Open.</b>" if s.low else
+                   "Muse Spark answers live."))
+    form = ('<form method="post" action="/admin/credit" class="small">Balance on the Meta dashboard now: $'
+            '<input name="usd" inputmode="decimal" size="7" required> <button>Record</button></form>')
+    return (f'<div class="card"><h2>Meta credit</h2><p>{head}</p><p class="small mute">Model spend in the last 24 h: '
+            f'{e(spent)}. Meta has no balance API: the estimate counts this server\'s calls only, so read the '
+            f'dashboard again now and then.</p>{form}</div>')
+
+
+@router.post("/credit")
+async def record_credit(request: Request, _: None = Depends(admin),
+                        settings: Settings = Depends(get_settings)) -> RedirectResponse:
+    """A balance read on the Meta dashboard, as of now: the guard counts from it."""
+    from datetime import datetime, timezone
+
+    from app import spend
+    from urllib.parse import parse_qs
+    same_site(request)
+    form = parse_qs((await request.body())[:2000].decode("utf-8", "replace"))     # no python-multipart needed
+    try:
+        usd = float(str((form.get("usd") or [""])[0]).replace("$", "").replace(",", "").strip())
+    except ValueError:
+        raise HTTPException(400, "a dollar amount") from None
+    if not 0 <= usd < 100000:
+        raise HTTPException(400, "a dollar amount")
+    with _conn(settings) as conn:
+        spend.flush(conn)
+        spend.record_reading(conn, usd, datetime.now(timezone.utc))
+        spend.refresh(settings, conn)
+    return RedirectResponse("/admin/status", 303)
 
 
 @router.post("/domains/{domain}")

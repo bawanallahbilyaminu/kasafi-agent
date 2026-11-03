@@ -98,6 +98,11 @@ def account_dollars(settings, name: str) -> float:
 
 
 def record_chat(provider: str, usage: dict) -> None:
+    from app import spend                 # the persistent ledger behind the Meta credit guard
+    try:
+        spend.add(provider, usage)
+    except Exception:                     # noqa: BLE001 - the ledger never breaks a model call
+        pass
     chat[provider].add(usage)
     by_stage[f"{provider}/{_stage.get()}"].add(usage)
     if acct := _account.get():

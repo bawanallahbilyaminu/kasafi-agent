@@ -111,6 +111,21 @@ class Settings(BaseSettings):
     # 1600 since the urgent rule (2 Nov night): on 'Where can I take my sick child?' minimal reasoning used 898 of
     # 900 tokens and returned nothing (a retry, ~18 s); with room it finishes at ~500-900
     kasafi_understand_max_tokens: int = 1600
+    # the answer check before sending (app/agent/answer_check.py): one call reads the draft against the question and
+    # its evidence; revise -> one more round; still not passing -> an answer built only from what is supported.
+    # provider: open = Muse Spark Open (Baseten, then Fireworks), meta = Muse Spark
+    kasafi_answer_check: bool = True
+    kasafi_check_provider: str = "open"
+    kasafi_check_timeout_s: float = 30.0
+    # a revise round starts only with at least this many seconds left of kasafi_answer_timeout_s
+    kasafi_check_round_min_s: float = 50.0
+    # Meta credit guard (app/spend.py): the balance read on dev.meta.ai/usage (USD) and when it was read (ISO,
+    # UTC); the Meta spend Kasafi records after that is taken off it. Below kasafi_meta_credit_low_usd, every Muse
+    # Spark text call goes to Muse Spark Open (Baseten, then Fireworks) and the admin status page says so. 0 = not
+    # set (no guard). The admin status page can record a newer reading without a redeploy.
+    kasafi_meta_credit_usd: float = 0.0
+    kasafi_meta_credit_as_of: str = ""
+    kasafi_meta_credit_low_usd: float = 10.0
     kasafi_shortcut_facilities: bool = True
     kasafi_shortcut_hazards: bool = True
     kasafi_shortcut_place: bool = True

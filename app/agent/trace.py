@@ -75,7 +75,21 @@ def flags(a, out: str) -> list[str]:
             f.append("Muse Spark Open fell back")
         if a.lines.disputed or a.lines.uncertain:
             f.append("readings disagreed")
+    checks = getattr(a, "checks", None) or []
+    if checks and checks[0].get("verdict") in ("revise", "fail"):       # the answer check stopped the first draft
+        f.append(f"check: {checks[0]['verdict']} -> {check_result(checks)}")
     return f
+
+
+def check_result(checks: list[dict]) -> str:
+    """How the answer check ended: passed (first draft), revised (the second draft passed), partial (an answer built
+    from what is supported was sent), skipped (no check ran), or '' when none was made."""
+    if not checks:
+        return ""
+    first, last = checks[0].get("verdict"), checks[-1].get("verdict")
+    if first in ("pass", "skipped"):
+        return "passed" if first == "pass" else "skipped"
+    return "revised" if len(checks) > 1 and last in ("pass", "skipped") else "partial"
 
 
 def _scrub(v):
@@ -107,6 +121,9 @@ def record(a) -> dict:
                "cited": [{"n": e.n, "doc": e.doc_id, "title": e.title, "page": e.page, "source": e.source}
                          for e in a.cited],
                "verified": a.verified}
+    if getattr(a, "checks", None):                  # the answer check, round by round (app/agent/answer_check.py)
+        t["check"] = _scrub(a.checks)
+        t["check_result"] = check_result(a.checks)
     if a.lines is not None:
         from app.agent.line_answer import pick_text
         r = a.lines

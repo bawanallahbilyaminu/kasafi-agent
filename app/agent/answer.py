@@ -61,7 +61,7 @@ from app.agent.topics import local_documents as topics_local
 from app.agent.topics import named_publishers
 from app.agent.topics import short_pub
 from app.agent.budget_query import QueryResult, context_text, lga_in, render_working, run_budget_query
-from app.agent import attribution, figures, trace
+from app.agent import answer_check, attribution, figures, trace
 from app import usage
 from app.agent.category import TOP_UNITS, CategoryResult, pct, run_category
 from app.agent.calculate import MIXED, CalcError, Calculation, MixedBases, offer_text, validate
@@ -72,7 +72,7 @@ from app.retrieval.line_search import (MAX_LINES, name_key, names_a_kind, neares
                                        project_phrases, search_lines)
 from app.config import Settings, get_settings
 from app.providers.baseten import BasetenClient
-from app.providers.fireworks import FireworksClient, OpenModel, batch_factory
+from app.providers.fireworks import BatchModel, FireworksClient, OpenModel, batch_factory
 from app.providers.chat import ChatClient
 from app.providers.meta import MetaClient
 from app.providers.stt import parse_json_reply
@@ -460,6 +460,7 @@ class Plan:
     skip_docs: list[str] = field(default_factory=list)  # that year's other reports: never read for this question
     breadth: int = 3                                    # documents to read: 3 for a simple fact, 8 for a broad question
     words: dict = field(default_factory=dict)           # what the words settled, the overrides, the second opinion (traced)
+    review: str = ""                                    # the answer check's feedback on a first draft: the writer sees it
 
     def assumption_for(self, lang: str) -> str:
         if not self.assumption:
@@ -513,6 +514,7 @@ class Answer:
     parts: list[str] = field(default_factory=list)          # further messages after the text (a deep answer's sections)
     deep: object | None = None                              # a deep analysis (app/agent/deep.py): its brief on request
     understanding: object | None = None                     # the understanding step's reading, for the trace
+    checks: list[dict] = field(default_factory=list)        # the answer check's verdicts, round by round (trace)
 
 
 CONVERTED: dict[str, str] = {}       # doc id -> original format, for documents converted from Word-type files
@@ -1766,6 +1768,105 @@ async def deep_path(conn, plan: Plan, question: str, lang: str, client, second, 
 
 
 async def answer_question(question: str, lang: str, conn: psycopg.Connection, **kw) -> Answer:
+    """An answer, checked before it is sent (app/agent/answer_check.py): the draft against the question, its
+    subject and its evidence; 'revise' -> one more round (the message read again when the draft was about another
+    subject), then a second check; still not passing -> an answer built only from what the evidence supports."""
+    t_start = time.perf_counter()
+    a = await _answer_finished(question, lang, conn, **kw)
+    try:
+        return await checked_answer(a, question, lang, conn, kw, t_start)
+    except Exception as e:                  # noqa: BLE001 - a check that breaks never loses the answer
+        log.warning("answer check failed: %s", type(e).__name__)
+        return a
+
+
+@asynccontextmanager
+async def check_client(settings: Settings, factory) -> AsyncIterator:
+    """The model that checks answers: Muse Spark Open (Baseten, then Fireworks) or Muse Spark, by
+    kasafi_check_provider; None when it can't be made (no key) or when a test's fake client answers."""
+    if factory is not MetaClient:            # a test's scripted client, or an eval's batch model: as given
+        if factory.__name__ == "BatchModel":
+            async with factory(settings) as c:
+                yield c
+        else:
+            yield None
+        return
+    try:
+        client = BatchModel(settings) if settings.kasafi_check_provider == "open" and (
+            settings.baseten_api_key or settings.fireworks_api_key) else MetaClient(settings)
+    except Exception as e:                   # noqa: BLE001 - no key: no check
+        log.info("answer check: no client (%s)", type(e).__name__)
+        yield None
+        return
+    async with client:
+        yield client
+
+
+async def checked_answer(a: Answer, question: str, lang: str, conn, kw: dict, t_start: float) -> Answer:
+    settings = kw.get("settings") or get_settings()
+    if not settings.kasafi_answer_check or kw.get("review") or not answer_check.should_check(a) or conn is None:
+        return a                             # no database: a unit test's answer (live answers always have one)
+    if settings.kasafi_answer_timeout_s - (time.perf_counter() - t_start) < settings.kasafi_check_timeout_s + 10:
+        log.info("answer check skipped: too little time left")      # the answer's own checks stand
+        a.checks = [{"verdict": "skipped", "why": "too little time left"}]
+        return a
+    u, history, place = kw.get("understanding"), kw.get("history"), kw.get("place")
+    factory = kw.get("client_factory") or MetaClient
+    if factory is MetaClient and (batch := batch_factory(settings)):
+        factory = batch                      # an eval run on Muse Spark Open: the check runs there too
+    async with check_client(settings, factory) as client:
+        if client is None:
+            return a
+        v = await answer_check.check(question, a, u, history, conn, settings, client)
+        a.checks = [answer_check.trace_entry(v)]
+        if v.verdict in ("pass", "skipped"):
+            return a
+        left = settings.kasafi_answer_timeout_s - (time.perf_counter() - t_start)
+        best, best_v = a, v
+        if v.verdict == "revise" and left - 15 >= settings.kasafi_check_round_min_s:
+            u2 = u
+            if v.wrong_subject and u is not None:
+                # the draft was about another subject: the message is read again with what the check said
+                from app.agent.understand import understand_message
+                try:
+                    u2 = await asyncio.wait_for(understand_message(question, history, place, settings,
+                                                                   feedback=v.feedback or v.subject.get("note", "")),
+                                                timeout=25) or u
+                except Exception as e:       # noqa: BLE001 - the first reading stands
+                    log.info("re-reading the message failed: %s", type(e).__name__)
+                if u2 is not u:
+                    log.info("check: the message read again: %s -> %s", u.capability, u2.capability)
+            review = {"feedback": v.feedback, "missing": v.missing}
+            try:
+                a2 = await asyncio.wait_for(
+                    _answer_finished(question, lang, conn, **{**kw, "understanding": u2, "review": review}),
+                    timeout=max(10.0, left - 15 - settings.kasafi_check_timeout_s))
+            except asyncio.TimeoutError:
+                a2 = None
+                log.info("check: the second round ran out of time")
+            if a2 is not None and answer_check.should_check(a2):
+                v2 = await answer_check.check(question, a2, u2, history, conn, settings, client, round_=2)
+                a2.checks = a.checks + [answer_check.trace_entry(v2)]
+                a2.understanding = u2 if u2 is not None else a2.understanding
+                if v2.verdict in ("pass", "skipped"):
+                    return a2
+                if v2.safe_answer.strip() or not v.safe_answer.strip():
+                    best, best_v = a2, v2
+                best.checks = a2.checks
+            else:
+                a.checks.append({"verdict": "no second answer", "round": 2})
+        # still not passing: only what the evidence supports, never the draft
+        text, supported = answer_check.safe_answer(best, best_v, lang)
+        note = answer_check.NOTE.get(lang, answer_check.NOTE["en"]).format(
+            why="; ".join([*best_v.rules, *best_v.contradictions, *best_v.missing][:3]) or best_v.feedback)
+        out = replace(best, text=text, partial=True, exact=text, found=supported,
+                      working=f"{best.working}\n\n{note}" if best.working else note)
+        log.info("check: sent an answer built from what is supported (round %d verdict %s)", best_v.round,
+                 best_v.verdict)
+        return out
+
+
+async def _answer_finished(question: str, lang: str, conn: psycopg.Connection, **kw) -> Answer:
     """The loop around the paths: never crash on a malformed model reply (after one retry, ask the user to
     rephrase); keep a structured partial answer when the text paths do no better; say where a figure exists
     when nothing answers at the asked level; stop at the time budget with whatever was verified."""
@@ -1809,11 +1910,13 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
                            client_factory: type[MetaClient] = MetaClient, notify: Notify | None = None,
                            acquire_fn=None, latest_fn=None, today: date | None = None,
                            history: list[dict] | None = None, box: dict | None = None,
-                           place: dict | None = None, understanding=None) -> Answer:
+                           place: dict | None = None, understanding=None, review: dict | None = None) -> Answer:
     """`place`: the user's point or LGA on file, in memory only (app/geo/location.py), for 'here' and hazard
     answers; never logged or traced. `understanding`: the conversation-understanding step's reading
     (app/agent/understand.py): the planner and the routes work from its standalone restatement, and its capability
-    decides which shortcut may answer (keyword routes are hints it overrides)."""
+    decides which shortcut may answer (keyword routes are hints it overrides). `review`: the answer check's
+    {"feedback", "missing"} on a first draft (app/agent/answer_check.py): the missing parts are searched for, the
+    writer sees the feedback, and the page path reads instead of the topic sweep."""
     settings = settings or get_settings()
     today = today or lagos_today()
     t: dict[str, float] = {}
@@ -1843,6 +1946,11 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         # what the words settle (docs/planner-variance.md): clear patterns override the plan; conflicting ones go to
         # a second-opinion plan from the Open model, capped; every override and conflict lands in the trace
         await settle_by_words(plan, question, planned_q, catalog, names, second, settings, today, history, lang, t)
+        if review:
+            plan.review = str(review.get("feedback") or "")[:500]
+            plan.search_queries = list(dict.fromkeys([*plan.search_queries,
+                                                      *[str(m)[:160] for m in review.get("missing") or []][:4]]))
+            t["review"] = 1.0
         if box is not None:
             box["plan"] = plan            # the loop's budget can stop us; it keeps what was verified
         # a broad question ('the state of PHCs', 'yaya yanayin ...'): a deep analysis across the library, never a
@@ -1993,7 +2101,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
                 return a
         # a follow-up is planned as its standalone question ("which LGA have the most IDPs living there?" ->
         # "Which LGAs in Sokoto State have the most IDPs?"), so it takes the topic path too; a recheck doesn't
-        tid = topic_route(question, plan)
+        tid = topic_route(question, plan) if not review else ""     # a second round: the pages, read wide
         # a follow-up that names a source for the earlier question ("there's an NBS MPI report from 2022"): that
         # source is required, and the earlier question is answered again with it
         hint = bool(tid and prev and plan.followup != "none" and names_source(tid, question))
@@ -2470,7 +2578,8 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
         context = (context + "\n" if context else "") + context_text(budget, nmap)
     if prev and plan.followup != "none":
         context += f"\nPREVIOUS QUESTION: {prev.get('question', '')[:300]}\nPREVIOUS ANSWER: {prev.get('answer', '')[:1200]}"
-    d = await compose(question, lang, plan, evidence, client, settings, context=context, second=second)
+    d = await compose(question, lang, plan, evidence, client, settings, context=context, second=second,
+                      feedback=plan.review)
     t["compose"] = time.perf_counter() - t0
     by_n = {e.n: e for e in evidence}
     # The working (labels with the asked years, and computed figures) is written by code: its numbers count too

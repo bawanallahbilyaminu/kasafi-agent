@@ -238,21 +238,23 @@ def keyword_hint(text: str, place: dict | None) -> str:
     return ", ".join(hints) or "none"
 
 
-def user_message(message: str, history: list[dict] | None, place: dict | None) -> str:
+def user_message(message: str, history: list[dict] | None, place: dict | None, feedback: str = "") -> str:
     return (f"CONVERSATION (oldest first):\n{conversation_text(history)}\n\nLOCATION ON FILE: {place_text(place)}\n"
-            f"HINT: {keyword_hint(message, place)}\n\nNEW MESSAGE: {message[:600]}")
+            f"HINT: {keyword_hint(message, place)}\n\nNEW MESSAGE: {message[:600]}"
+            + (f"\n\nREVIEW: an answer written from an earlier reading of this message was off the subject the user "
+               f"asked about: {feedback[:400]}\nRead the message again with the conversation." if feedback else ""))
 
 
 async def understand(message: str, history: list[dict] | None, place: dict | None, client, settings: Settings,
-                     model: str | None = None, timeout_s: float | None = None, why: list | None = None
-                     ) -> Understanding | None:
+                     model: str | None = None, timeout_s: float | None = None, why: list | None = None,
+                     feedback: str = "") -> Understanding | None:
     """One model call (a second when the reply isn't the JSON asked for); None when it fails or runs out of time,
     with the reason appended to `why`. Effort and token budget: KASAFI_UNDERSTAND_EFFORT / _MAX_TOKENS ('low'
     needs room to think: at 600 tokens it returned nothing, 2 Nov)."""
     import asyncio
 
     from app.providers.stt import parse_json_reply
-    user = user_message(message, history, place)
+    user = user_message(message, history, place, feedback)
     limit = timeout_s or settings.kasafi_understand_timeout_s
     t0 = time.perf_counter()
     u = None
@@ -286,7 +288,7 @@ async def understand(message: str, history: list[dict] | None, place: dict | Non
 
 
 async def understand_message(message: str, history: list[dict] | None, place: dict | None, settings: Settings,
-                             fallbacks: list | None = None) -> Understanding | None:
+                             fallbacks: list | None = None, feedback: str = "") -> Understanding | None:
     """The step for the conversation: Muse Spark (or Muse Spark Open with KASAFI_UNDERSTAND_PROVIDER=open), then
     once on the other model when the first fails; None when both fail (the keyword routing then decides), with
     the reasons appended to `fallbacks` for the trace."""
@@ -300,7 +302,8 @@ async def understand_message(message: str, history: list[dict] | None, place: di
         if name == "open" and not settings.baseten_api_key:
             continue
         async with client_cls(settings) as client:
-            if (u := await understand(message, history, place, client, settings, model=model, why=why)) is not None:
+            if (u := await understand(message, history, place, client, settings, model=model, why=why,
+                                      feedback=feedback)) is not None:
                 if why:
                     log.info("understood on %s after: %s", name, "; ".join(why))
                 return u
