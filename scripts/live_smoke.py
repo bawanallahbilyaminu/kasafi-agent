@@ -9,7 +9,8 @@ that ignores a live reading (2 Nov: 'Who are you?' read as chitchat went to the 
 --set deploy (default, ~$0.01): "Who are you?", "Kai wanene?", a cold "But uduth is closer to me" (Wamakko on file).
 --set full (~$0.15): the 8 conversations of the 2 Nov fix (pin + nearest hospital + correction, pin + flood history,
 an English and a Hausa budget question, thanks), then the menu: "menu" -> tap "Budget for my area" -> share the
-location -> the answer, and "zaɓi" in Hausa.
+location -> the answer (the acknowledgement never asks "What would you like to know?"), the same for "Rain and
+flood outlook", and "zaɓi" in Hausa.
 --set emergency (~$0.15): the 40 off-list cases of evals/emergency (x01-x20 must fire: a miss fails; y01-y20 must
 not: a false alarm is reported, not failed).
 
@@ -65,6 +66,14 @@ def asks_location(r: str) -> str:
     return "" if "[location request]" in r else "no location request"
 
 
+def pin_answers(r: str) -> str:
+    """A pin that something waited for: the acknowledgement never asks, and the waiting request is answered."""
+    if any(w in r for w in ("What would you like to know", "Me kuke so ku sani")):
+        return "the acknowledgement asked instead of answering"
+    lines = [x for x in r.splitlines() if x.strip() and not x.startswith(("📍", "Kasafi will use your location"))]
+    return "" if len(" ".join(lines)) > 80 else "no answer after the acknowledgement"
+
+
 def flood_record(r: str) -> str:
     return "" if any(w in r.lower() for w in ("flood", "water", "ambaliya", "satellite")) else "no flood record"
 
@@ -83,7 +92,8 @@ FULL = DEPLOY + [
     ("budget in Hausa", "ha", None, [("Nawa aka ware wa ilimi a kasafin 2026?", answered)]),
     ("thanks", "en", None, [("thanks", no_documents)]),
     ("menu, budget row, pin", "en", None, [("menu", a_list), ("[row:menu_budget]", asks_location),
-                                           ("[pin]", answered)]),
+                                           ("[pin]", pin_answers)]),
+    ("menu, outlook row, pin", "en", None, [("[row:menu_outlook]", asks_location), ("[pin]", pin_answers)]),
     ("menu in Hausa", "ha", None, [("zaɓi", a_list)]),
 ]
 

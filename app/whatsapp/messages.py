@@ -134,6 +134,12 @@ TEXTS = {
         "ha": "📍 Na gane wurinku: Ƙaramar Hukumar {lga}{ward}, Jihar Sokoto. Me kuke so ku sani game da wurin?",
         "en": "📍 Got it: you're in {lga} LGA{ward}, Sokoto State. What would you like to know about it?",
     },
+    # a place arrived for something waiting (a menu row, a location request, a question that needed a place): the
+    # place and what is coming, never a question; the request is answered next (conversation._coming)
+    "location_got_for": {
+        "ha": "📍 Na gane: Ƙaramar Hukumar {lga}{ward}. {coming}",
+        "en": "📍 Got it: {lga} LGA{ward}. {coming}",
+    },
     "location_ward": {"ha": " (mazaɓar {ward})", "en": " ({ward} ward)"},
     # within ~300 m of a ward border (the 2019 GRID3 wards can be off near their edges)
     "location_ward_likely": {"ha": " (wataƙila mazaɓar {ward})", "en": " (likely {ward} ward)"},
@@ -283,6 +289,24 @@ NOT_IN_PILOT = (
     "Kasafi yana cikin gwaji, kuma ba a buɗe shi ga kowa ba tukuna.\n\n"
     "Kasafi is in a closed pilot and isn't open to everyone yet."
 )
+
+
+COMING = {             # what a request waiting for a place gets now (location_got_for); Hausa in the respectful plural
+    "en": {"outlook": "Checking the rainfall and flood outlook for your area…",
+           "forecast": "Checking the latest forecasts for your area…",
+           "budget": "Checking what the budget gives your area…",
+           "facility": "Finding the health facilities nearest to you…",
+           "claim": "Checking which facility is closer to you…",
+           "satellite": "Checking the satellite records for this place…",
+           "question": "Answering your question for this place…"},
+    "ha": {"outlook": "Ina duba hasashen ruwan sama da ambaliya na yankinku…",
+           "forecast": "Ina duba sabbin hasashen yanayi na yankinku…",
+           "budget": "Ina duba abin da kasafin kuɗi ya ware wa yankinku…",
+           "facility": "Ina neman cibiyoyin lafiya mafi kusa da ku…",
+           "claim": "Ina duba wace cibiya ce ta fi kusa da ku…",
+           "satellite": "Ina duba bayanan tauraron ɗan adam na wannan wuri…",
+           "question": "Ina amsa tambayarku game da wannan wuri…"},
+}
 
 
 def t(key: str, lang: str | None, **kw) -> str:

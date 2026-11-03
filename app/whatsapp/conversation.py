@@ -281,11 +281,15 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                 return before
     # a location pin, or "share my location": handled here (PostGIS, no model); the point stays in memory only
     if not resume and (kind == "location" or (text and SHARE.search(text))):
-        before = await _location(msg, key, lang, store, settings, locate_fn)
+        # something waiting for this place (a menu row, a location request, 'Send location', a question that needed
+        # a place in the last 30 minutes): the acknowledgement says what is coming, never 'what would you like?'
+        coming = _coming(location_memory.peek_question(key)) if pin_of(msg) is not None else ""
+        before = await _location(msg, key, lang, store, settings, locate_fn, coming=coming)
         if (pin := pin_of(msg)) is not None:
             location_memory.add_pin(key, *pin)                                            # a corner candidate
         if pin and (spot := location_memory.recall(key)) and (q := location_memory.waiting_question(key)):
-            before += await _after_location(q, key, lang, settings, facility_fn, spot)    # the question that asked
+            after = await _after_location(q, key, lang, settings, facility_fn, spot)     # the question that asked
+            before += after
             if q.startswith(PLACE_BUDGET_WAIT):                    # 'what does the budget give my area?'
                 resume, resume_reading = q[len(PLACE_BUDGET_WAIT):], place_budget_reading(q)
             elif q.startswith(READING_WAIT):                       # a menu row or 'Send location' that waited
@@ -294,17 +298,18 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                     before += await _facility_reading(r.restatement, r, key, lang, settings, facility_fn, spot) or []
                 else:
                     resume, resume_reading = r.restatement, r
-            elif not q.startswith((FACILITY_WAIT, CLAIM_WAIT)) and \
-                    (place_route(q) or area_route(q, "", {"lga_pcode": spot.lga_pcode, "wardcode": spot.wardcode})) \
-                    and not is_facility_query(q):                 # the farm's record, or 'my ward / my LGA'
-                resume = q
+            elif not q.startswith((FACILITY_WAIT, CLAIM_WAIT, SIZE_WAIT)) and not after and not is_facility_query(q):
+                resume = q                                         # any other question that waited for a place
         if not resume:
             return before
     # the reply to "share your location, or tell me your LGA or town": a typed place, from our own gazetteer
     if text and (waiting := location_memory.waiting_question(key)) is not None:
         if (typed := await place_fn(settings, text)) is not None:
-            located = _located(key, lang, store, typed) + await _after_location(waiting, key, lang, settings,
-                                                                                facility_fn, typed)
+            # a typed town answers the waits below; a plain farm question still needs a pin, so nothing is promised
+            answers = waiting.startswith((READING_WAIT, PLACE_BUDGET_WAIT, FACILITY_WAIT, CLAIM_WAIT)) or \
+                is_facility_query(waiting)
+            located = _located(key, lang, store, typed, coming=_coming(waiting) if answers else "") + \
+                await _after_location(waiting, key, lang, settings, facility_fn, typed)
             if waiting.startswith(READING_WAIT) and (r := reading_from_wait(waiting)).capability != "facility":
                 before, resume, resume_reading = located, r.restatement, r
             elif waiting.startswith(READING_WAIT):
@@ -798,7 +803,7 @@ async def _plot_shape(msg: dict[str, Any], text: str, key: str, lang: str, quest
 
 
 async def _location(msg: dict[str, Any], key: str, lang: str, store: UserStore, settings: Settings,
-                    locate_fn: LocateFn) -> list[Out]:
+                    locate_fn: LocateFn, coming: str = "") -> list[Out]:
     """A pin: its LGA (and ward) from the boundaries; the point kept in memory for 30 minutes, only the LGA on the
     user record and in the log. No pin ("share my location"): the request button. The notice line comes once."""
     outs = [Out(t("location_notice", lang))] if store.location_notice_due(key) else []
@@ -817,16 +822,43 @@ async def _location(msg: dict[str, Any], key: str, lang: str, store: UserStore, 
         return outs + [Out(t("location_outside", lang))]
     return outs + _located(key, lang, store, Spot(pin[0], pin[1], area.lga_pcode, area.lga, area.ward,
                                                   ward_likely=getattr(area, "ward_likely", False),
-                                                  wardcode=getattr(area, "wardcode", "")))
+                                                  wardcode=getattr(area, "wardcode", "")), coming=coming)
 
 
-def _located(key: str, lang: str, store: UserStore, spot: Spot) -> list[Out]:
-    """A place found (a pin or a typed place): the point in memory, the LGA on the user record and in the log."""
+def _located(key: str, lang: str, store: UserStore, spot: Spot, coming: str = "") -> list[Out]:
+    """A place found (a pin or a typed place): the point in memory, the LGA on the user record and in the log. With
+    something waiting for it (`coming`, from _coming), the acknowledgement says the place and what is coming, and
+    the request is answered next; only with nothing waiting does it ask what the user would like to know."""
     location_memory.remember(key, spot)
     store.set_last_lga(key, spot.lga_pcode)
-    log.info("location: %s LGA (%s)", spot.lga, spot.how)
+    log.info("location: %s LGA (%s)%s", spot.lga, spot.how, f"; answering the waiting {coming} request" if coming else "")
     ward = t("location_ward_likely" if spot.ward_likely else "location_ward", lang, ward=spot.ward) if spot.ward else ""
+    if coming:
+        from app.whatsapp.messages import COMING
+        return [Out(t("location_got_for", lang, lga=spot.lga, ward=ward,
+                      coming=COMING["en" if lang == "en" else "ha"][coming]), lang=lang)]
     return [Out(t("location_got", lang, lga=spot.lga, ward=ward))]
+
+
+def _coming(waiting: str | None) -> str:
+    """What a request waiting for a place will get now ('' when nothing is waiting): outlook, forecast, budget,
+    facility, claim, satellite or question (a key of the 'location_coming' message)."""
+    if not waiting:
+        return ""
+    if waiting.startswith(READING_WAIT):
+        r = reading_from_wait(waiting)
+        if r.capability == "hazard":
+            return "outlook" if r.time == "forecast" and re.search(r"(?i)outlook|flood", r.restatement or "") else "forecast"
+        return {"place_budget": "budget", "facility": "facility", "place_history": "satellite"}.get(r.capability, "question")
+    if waiting.startswith(PLACE_BUDGET_WAIT):
+        return "budget"
+    if waiting.startswith(CLAIM_WAIT):
+        return "claim"
+    if waiting.startswith(FACILITY_WAIT) or is_facility_query(waiting):
+        return "facility"
+    if waiting.startswith((EMERGENCY_WAIT, SIZE_WAIT)):
+        return ""
+    return "satellite" if place_route(waiting) or area_route(waiting) else "question"
 
 
 async def _emergency(key: str, lang: str, d: em.Detection, store: UserStore, settings: Settings,
