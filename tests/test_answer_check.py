@@ -357,3 +357,19 @@ def test_the_named_parts_rule_has_its_own_switch(monkeypatch) -> None:
     monkeypatch.setattr("app.config.get_settings", lambda: make_settings(kasafi_named_parts=False))
     u = N(name="Dange Shuni", level="lga", restatement="q", asked_parts=["IQS"])
     assert answer_check.named_parts_missing(_answer(LF_B_DRAFT), u) == []
+
+
+def test_overnight_round_1_check_rules() -> None:
+    """4 Nov overnight, round 1: 'No 2028 budget is in the library' is not a Yes/No verdict; a deep analysis is judged
+    on its subject only (its claims are verified in deep.py); a draft with no figures is sent as written."""
+    u = N(name="Shehu Shagari University of Education", level="agency", restatement="q", asked_parts=[])
+    plain = _answer("No 2028 approved budget is in the library (approved budgets: 2024-2026).", cited_text="2024 2025 2026")
+    assert ck.code_rules(plain, u, (0, 0)) == []
+    assert any(r.startswith("yes_no") for r in ck.code_rules(_answer("No, it isn't in the 2026 budget.", cited_text="x"), u, (0, 0)))
+    deep = _answer("Education in Sokoto: 15,039 primary teachers in 2022 …", cited_text="nothing of this")
+    deep.deep = object()
+    assert ck.computed_in_code(deep)
+    v = ck.settle(deep, ck.Verdict("fail", unsupported=["15,039 primary teachers"], subject={"topic": True}), [], 2)
+    assert v.verdict == "pass"
+    text, ok, _ = ck.partial_answer(plain, ck.Verdict("fail", unsupported=["the 2028 gap isn't evidenced"]), "en")
+    assert ok and text.startswith("No 2028 approved budget is in the library")
