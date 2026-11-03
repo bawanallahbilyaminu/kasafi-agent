@@ -429,10 +429,11 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
 
     answer = (answer_from_documents if settings.has_database else None) if answer_fn is _DEFAULT else answer_fn
 
-    async def respond(question: str, prefix: str, fallback: Out, understanding=None) -> list[Out]:
+    async def respond(question: str, prefix: str, fallback: Out, understanding=None, announced: bool = False) -> list[Out]:
         """Answer an in-scope, confirmed question from the documents, after `prefix` (what we heard).
 
-        With no document store (dev, tests), the old acknowledgement `fallback` is sent instead.
+        With no document store (dev, tests), the old acknowledgement `fallback` is sent instead. `announced`: the
+        location acknowledgement already said what is being checked, so the first progress line is not sent again.
         """
         if answer is None:
             return [fallback]
@@ -450,7 +451,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             # the typing indicator covers a quick answer: "Checking the documents…" only when it takes longer than
             # PROGRESS_AFTER_S, and a slow one (a second search, a fallback) gets one more word later
             await asyncio.sleep(PROGRESS_AFTER_S)
-            if not sent and not satellite:
+            if not sent and not satellite and not announced:
                 await notify(Out(t(searching_key(question), lang)))
             await asyncio.sleep(SLOW_ANSWER_S - PROGRESS_AFTER_S)
             if not sent and not satellite:
@@ -554,11 +555,13 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         return outs
 
     if resume:                                   # the pin or the shape arrived: the place-history question goes on
+        announced = any(o.text.startswith("📍") for o in before)        # 'Got it: … Checking …' already said
         if _sender(notify) is not None:          # "Got it…" goes out now, before the answer's own progress line
             for o in before:
                 await notify(o)
             before = []
-        return before + await respond(resume, "", Out(t("echo", lang, text=resume[:500])), understanding=resume_reading)
+        return before + await respond(resume, "", Out(t("echo", lang, text=resume[:500])), understanding=resume_reading,
+                                      announced=announced)
 
     async def resolution_reply(res: Resolution, pending_q: str, reply: str = "") -> list[Out]:
         if res.kind == "ambiguous":            # replace or add? Ask once; the pending question stays

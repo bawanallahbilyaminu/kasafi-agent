@@ -114,3 +114,25 @@ def test_a_wait_older_than_30_minutes_is_dropped_and_the_pin_asks(monkeypatch) -
     outs = _pin(s, store, _recorder(seen), 4)
     ack = next(o.text for o in outs if o.text.startswith("📍"))
     assert ASK["en"] in ack and not seen
+
+
+def test_a_slow_resumed_answer_sends_no_second_checking_line(monkeypatch) -> None:
+    """The acknowledgement already says 'Checking the rainfall and flood outlook…': no '🌦️ Checking the latest
+    forecasts…' after it (3 Nov smoke)."""
+    s, store, key = _user("en")
+    monkeypatch.setattr(C, "PROGRESS_AFTER_S", 0.2)
+    notes = []
+
+    async def notify(out):
+        notes.append(out.text)
+
+    async def slow(question, lang, **k):
+        await asyncio.sleep(0.5)
+        return SimpleNamespace(text="THE ANSWER", found=True, sources=[], working="", quotes="")
+    asyncio.run(C.handle(_row("menu_outlook"), None, store=store, settings=s, answer_fn=slow, guard_fn=_ok,
+                         place_fn=_none))
+    msg = {"from": SENDER, "id": "w-pin-slow", "type": "location", "location": {"latitude": 13.045, "longitude": 5.155}}
+    asyncio.run(C.handle(msg, None, store=store, settings=s, answer_fn=slow, guard_fn=_ok, place_fn=_none,
+                         locate_fn=_locate, facility_fn=_facilities, notify=notify))
+    checking = [n for n in notes if n.startswith(("🌦️", "🔎", "🛰️"))]
+    assert checking == [] and any(n.startswith("📍 Got it") for n in notes)
