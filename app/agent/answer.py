@@ -315,7 +315,8 @@ ANSWER_SYSTEM = (
     "the whole state: 123 Islamiyya Integrated primary schools (2023/24, p. 22); it prints no figure for Dange "
     "Shuni'); or, when the evidence has nothing on it, one sentence saying it isn't in these documents. Never leave "
     "a named part out. A document may print a part under its full or another name: look for it (IQS, Integrated "
-    "Qur'anic Schools, is printed as 'Islamiyya Integrated' in the school census).\n"
+    "Qur'anic Schools, is printed as 'Islamiyya Integrated' in the school census). Such a sentence goes in the "
+    "summary, never in parts, and it carries the higher level's figure whenever the evidence prints one.\n"
     "6k. Copy organisation names and acronyms exactly as the evidence prints them (e.g. 'NPHCDA, SOCHEMA and "
     "SOSMEA'): never correct, expand, update or respell them.\n"
     "6l. Each answer stands alone: never refer to 'the previous answer', 'my earlier reply' or 'as I said'.\n"
@@ -2910,7 +2911,9 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
         cited = list({e.n: e for e in cited + [p.ev for p in checked_parts(d, by_n, []) if p.ev is not None]}.values())
         cited.sort(key=lambda e: e.n)
         sources = cited_sources(conn, cited)
-    body = added + (f"_{note}_\n\n" if note else "") + rendered
+    # a count by category leads with its total; the assumption note follows the answer there
+    body = added + (f"{rendered}\n\n_{note}_" if note else rendered) if parts_working else \
+        added + (f"_{note}_\n\n" if note else "") + rendered
     exact = answer_text(d) + (f"\n{parts_plain}" if parts_plain else "")
     working = parts_working
     if budget is not None:
