@@ -176,6 +176,45 @@ async def sitemap_links(http: httpx.AsyncClient, robots: Robots, site: str, most
 
 # --- classes and dedupe -------------------------------------------------------------------------------------------
 
+# ReliefWeb (3 Nov): flood reports about Nigeria that mention Sokoto, from the v2 API (an approved appname). Only
+# reports with the topic in the title; human-interest stories (a person's name and story) and reports about other
+# places only are left out with the reason, as are conflict titles (the same exclusion as every import).
+RW_PERSONAL = re.compile(r"(?i)\bjourney\b|\bstory\b|\bI was\b|\bmy\b|[‘'\"“].*[’'\"”]\s*-")
+RW_ELSEWHERE = re.compile(r"(?i)\bmaiduguri\b|\bborno\b|\bjere\b|\bbenue\b|\bmokwa\b")
+
+
+async def reliefweb_items(http: httpx.AsyncClient, appname: str, topic: str, since: str, until: str,
+                          most: int = 200) -> tuple[list[Item], list[dict]]:
+    """(items, left out) for ReliefWeb reports on Nigeria mentioning Sokoto and the topic, `since`–`until`, each
+    report's first PDF. Left out: no PDF, the topic not in the title, a personal story, another place only."""
+    from app.acquisition.channels import RELIEFWEB_REPORTS
+    words = topic.split()
+    body = {"query": {"value": f"Sokoto AND ({' OR '.join(words)})", "fields": ["title", "body"]},
+            "filter": {"operator": "AND", "conditions": [
+                {"field": "country.name", "value": "Nigeria"},
+                {"field": "date.original", "value": {"from": f"{since}T00:00:00+00:00", "to": f"{until}T23:59:59+00:00"}}]},
+            "fields": {"include": ["title", "date.original", "source.shortname", "file.url", "file.filesize"]},
+            "sort": ["date.original:desc"], "limit": most}
+    r = await http.post(RELIEFWEB_REPORTS, params={"appname": appname}, json=body, timeout=60)
+    r.raise_for_status()
+    items, left = [], []
+    stem = re.compile(r"(?i)\b(?:" + "|".join(re.escape(w.rstrip("s")) for w in words) + r")")
+    for row in r.json().get("data", []):
+        f = row.get("fields", {})
+        title, day = f.get("title", ""), (f.get("date", {}).get("original") or "")[:10]
+        pdfs = [x for x in f.get("file", []) if x.get("url", "").lower().endswith(".pdf")]
+        why = ("no PDF" if not pdfs else f"'{topic}' not in the title" if not stem.search(title) else
+               "a personal story (names a person)" if RW_PERSONAL.search(title) else
+               "about another place only" if RW_ELSEWHERE.search(title) and "sokoto" not in title.lower() else "")
+        if why:
+            left.append({"title": title, "date": day, "why": why})
+            continue
+        sources = ", ".join(s.get("shortname", "") for s in f.get("source", []))
+        items.append(Item(pdfs[0]["url"], f"{title} ({sources})" if sources else title, "pdf", day,
+                          int(pdfs[0].get("filesize") or 0), "reliefweb"))
+    return items, left
+
+
 def plan(conn: psycopg.Connection, items: list[Item]) -> list[Item]:
     """Classes, editions and the dedupe before download; the order to ingest in."""
     known = {}

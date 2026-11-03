@@ -32,18 +32,43 @@ def say(text: str) -> None:
     print(text, flush=True)
 
 
-async def discover(site: str, state: Path) -> None:
+async def discover(site: str, state: Path, only: str = "", pages: bool = True) -> None:
     s = get_settings()
     async with httpx.AsyncClient(headers=bulk.client_headers(), follow_redirects=True) as http:
         robots = Robots(http)
         say(f"listing https://{site}/wp-json/wp/v2/media (public) ...")
         docs, others = await bulk.list_media(http, robots, site)
         say(f"  {len(docs)} document files, {len(others)} other files")
-        say("reading the sitemap's pages for links to files ...")
-        linked = await bulk.sitemap_links(http, robots, site)
-        say(f"  {len(linked)} linked files")
+        linked = []
+        if pages:
+            say("reading the sitemap's pages for links to files ...")
+            linked = await bulk.sitemap_links(http, robots, site)
+            say(f"  {len(linked)} linked files")
+    found = docs + linked
+    if only:                                   # one topic from a large site: the titles (or file names) matching
+        import re
+        found = [i for i in found if re.search(only, f"{i.title} {i.url}", re.I)]
+        say(f"  {len(found)} match '{only}'")
     with psycopg.connect(s.db_url()) as conn:
-        items = bulk.plan(conn, docs + linked)
+        items = bulk.plan(conn, found)
+    bulk.save_state(state, items, others, 0.0)
+    say(bulk.report(items, others))
+
+
+async def discover_reliefweb(topic: str, since: str, until: str, state: Path) -> None:
+    """ReliefWeb's reports on Sokoto and the topic (its v2 API, the approved appname from the settings, never
+    printed), through the same plan, dedupe and report as a site."""
+    s = get_settings()
+    if not s.reliefweb_appname:
+        sys.exit("RELIEFWEB_APPNAME is not set")
+    async with httpx.AsyncClient(headers=bulk.client_headers(), follow_redirects=True) as http:
+        items, left = await bulk.reliefweb_items(http, s.reliefweb_appname, topic, since, until)
+    say(f"ReliefWeb: {len(items)} reports to plan, {len(left)} left out")
+    for x in left:
+        say(f"  left out: {x['date']} {x['title'][:90]} ({x['why']})")
+    with psycopg.connect(s.db_url()) as conn:
+        items = bulk.plan(conn, items)
+    others = [{"mime": f"left out: {x['why']}", **x} for x in left]
     bulk.save_state(state, items, others, 0.0)
     say(bulk.report(items, others))
 
@@ -175,10 +200,19 @@ def main() -> int:
     ap.add_argument("--limit", type=int)
     ap.add_argument("--retry", action="store_true", help="try the failed documents again")
     ap.add_argument("--classes", help="only these classes, e.g. budget,bir,citizens,mtef,plans,accounts")
+    ap.add_argument("--reliefweb", metavar="TOPIC", help="discover ReliefWeb reports on Sokoto and the topic "
+                                                          "(e.g. 'flood floods flooding') instead of a site")
+    ap.add_argument("--only", help="discover only files whose title or name matches this pattern (e.g. 'flood')")
+    ap.add_argument("--media-only", action="store_true", help="the public media listing only (no sitemap crawl)")
+    ap.add_argument("--since", default="2018-01-01")
+    ap.add_argument("--until", default="2025-12-31")
     a = ap.parse_args()
-    state = ROOT / "data" / "bulk" / f"{a.site}.json"
-    if a.discover:
-        asyncio.run(discover(a.site, state))
+    name = f"reliefweb-sokoto-{a.reliefweb.split()[0]}" if a.reliefweb else a.site
+    state = ROOT / "data" / "bulk" / f"{name}.json"
+    if a.discover and a.reliefweb:
+        asyncio.run(discover_reliefweb(a.reliefweb, a.since, a.until, state))
+    elif a.discover:
+        asyncio.run(discover(a.site, state, a.only or "", pages=not a.media_only))
     if a.replan:
         replan(state)
     if a.ingest:
