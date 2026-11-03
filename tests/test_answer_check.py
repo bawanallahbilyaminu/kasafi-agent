@@ -256,3 +256,44 @@ def test_a_partial_answer_keeps_the_attachments_of_what_it_keeps(monkeypatch) ->
     assert a.text.startswith("Dange Shuni has 91 public primary schools (page 19).")
     assert "Not found in the documents I read: IQS schools in Dange Shuni." in a.text
     assert a.maps == [{"layer": "schools", "level": "lga"}] and [e.page for e in a.cited] == [19] and a.offer == "OFFER"
+
+
+LF_B_DRAFT = ("Dange Shuni LGA has 117 public schools counted as separate schools in the 2023/2024 ASC: 91 public "
+              "primary + 18 public junior secondary + 8 public senior secondary = 117.\n\n"
+              "• public primary schools in Dange Shuni LGA: 91 (page 19)\n"
+              "• public junior secondary schools in Dange Shuni LGA: 18 (page 44)\n"
+              "• public senior secondary schools in Dange Shuni LGA: 8 (page 53)")
+
+
+def test_a_named_part_the_answer_leaves_out_breaks_a_rule_and_a_higher_level_line_satisfies_it() -> None:
+    """3 Nov, live failure B: 'I mean all the total schools primary, senior secondary and junior secondary and IQS'
+    got primary, JSS and SSS and nothing on IQS, which the census gives only for the whole state."""
+    u = N(name="Dange Shuni", level="lga", restatement="How many schools of each level are in Dange Shuni LGA?",
+          asked_parts=["primary", "JSS", "SSS", "IQS"])
+    rules = ck.code_rules(_answer(LF_B_DRAFT), u, (0, 0))
+    assert any(r.startswith("named_part_missing: IQS") for r in rules) and not any(" JSS " in r for r in rules)
+    stated = LF_B_DRAFT + ("\n\nThe census gives IQS schools only for the whole state: 123 Islamiyya Integrated "
+                           "primary schools (2023/24, page 22); it prints no figure for Dange Shuni.")
+    assert ck.code_rules(_answer(stated), u, (0, 0)) == []
+    hausa = LF_B_DRAFT + "\n\nƘidayar ta ba da makarantun IQS na jiha baki ɗaya kaɗai: 123 (shafi 22)."
+    assert ck.code_rules(_answer(hausa), u, (0, 0)) == []
+
+
+def test_named_parts_reach_the_writer_and_the_check() -> None:
+    p = ans.Plan(english_question="q", search_queries=[], doc_ids=[], asked_parts=["primary", "IQS"])
+    assert "6p. Every part, level or kind listed under PARTS THE USER NAMED" in ans.ANSWER_SYSTEM
+    assert "higher level" in ans.ANSWER_SYSTEM.split("6p.")[1].split("6k.")[0] and p.asked_parts == ["primary", "IQS"]
+    text = ck.user_text("I mean … and IQS", "How many schools?", [], "draft", "(none)", "figures checked", [], (0, 0), 1,
+                        parts=["primary", "IQS"])
+    assert "PARTS THE USER NAMED: primary, IQS" in text
+    from app.agent.understand import parse
+    u = parse({"restatement": "How many schools?", "asked_parts": ["primary", "JSS", "", "IQS"]})
+    assert u.asked_parts == ["primary", "JSS", "IQS"]
+
+
+def test_the_named_parts_rule_has_its_own_switch(monkeypatch) -> None:
+    from app.agent import answer_check
+    from tests.helpers import make_settings
+    monkeypatch.setattr("app.config.get_settings", lambda: make_settings(kasafi_named_parts=False))
+    u = N(name="Dange Shuni", level="lga", restatement="q", asked_parts=["IQS"])
+    assert answer_check.named_parts_missing(_answer(LF_B_DRAFT), u) == []

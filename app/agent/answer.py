@@ -306,6 +306,12 @@ ANSWER_SYSTEM = (
     "only the parts that are separate schools. Read the document's own notes on how it counts before adding. A level the documents give only for the state: say so in the "
     "summary with the state figure, and that no figure for the place is printed; it is not a part. Leave parts "
     "empty when nothing is added up.\n"
+    "6p. Every part, level or kind listed under PARTS THE USER NAMED gets its own line in the reply: its figure for "
+    "the place asked; or, when the evidence gives it only for a higher level (the state, the zone, the country), "
+    "one sentence saying so with that figure, its date and its source (e.g. 'The census gives IQS schools only for "
+    "the whole state: 123 Islamiyya Integrated primary schools (2023/24, p. 22); it prints no figure for Dange "
+    "Shuni'); or, when the evidence has nothing on it, one sentence saying it isn't in these documents. Never leave "
+    "a named part out.\n"
     "6k. Copy organisation names and acronyms exactly as the evidence prints them (e.g. 'NPHCDA, SOCHEMA and "
     "SOSMEA'): never correct, expand, update or respell them.\n"
     "6l. Each answer stands alone: never refer to 'the previous answer', 'my earlier reply' or 'as I said'.\n"
@@ -480,6 +486,7 @@ class Plan:
     breadth: int = 3                                    # documents to read: 3 for a simple fact, 8 for a broad question
     words: dict = field(default_factory=dict)           # what the words settled, the overrides, the second opinion (traced)
     review: str = ""                                    # the answer check's feedback on a first draft: the writer sees it
+    asked_parts: list[str] = field(default_factory=list)   # parts the user named: each answered (compose rule 6p)
 
     def assumption_for(self, lang: str) -> str:
         if not self.assumption:
@@ -1630,6 +1637,7 @@ async def compose(question: str, lang: str, plan: Plan, evidence: list[Evidence]
     user = (f"Reply in {LANG_NAME.get(lang, 'English')}.\nQUESTION: {question}\n"
             f"(English: {plan.english_question})\n"
             + (f"ASSUMPTION MADE: {plan.assumption}\n" if plan.assumption else "")
+            + (f"PARTS THE USER NAMED: {', '.join(plan.asked_parts)}\n" if plan.asked_parts else "")
             + (f"CONTEXT: {context}\n" if context else "")
             + f"\nEVIDENCE:\n{ev}" + (f"\n\nCORRECTION NEEDED: {feedback}" if feedback else ""))
     system = ANSWER_SYSTEM if settings.kasafi_read_wide else RULE_6O.sub("", ANSWER_SYSTEM)   # parts and totals: off
@@ -2131,6 +2139,8 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         # what the words settle (docs/planner-variance.md): clear patterns override the plan; conflicting ones go to
         # a second-opinion plan from the Open model, capped; every override and conflict lands in the trace
         await settle_by_words(plan, question, planned_q, catalog, names, second, settings, today, history, lang, t)
+        if settings.kasafi_named_parts and u is not None and getattr(u, "asked_parts", None):
+            plan.asked_parts = list(u.asked_parts)       # 'primary, JSS, SSS and IQS': each one answered (6p)
         if settings.kasafi_followup_rules and u is not None and u.kind in ("correction", "clarification") and \
                 plan.followup == "recheck":
             # 'I asked about people, not hectares' is the user's own question restated, not 'check again for a

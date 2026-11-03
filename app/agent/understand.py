@@ -50,6 +50,8 @@ only:
  "facility": {"care": "maternal|children|general", "level": "hospital|primary|any", "ownership": "public|private|any"},
  "satellite_context": true|false,
  "exclude": "<what the user said they do NOT mean ('not budget' -> 'budget'), or ''>",
+ "asked_parts": ["<each part, level or kind the user names in this message or the question it clarifies, as \
+written or as its usual short form: 'primary', 'JSS', 'SSS', 'IQS'; [] when none is named>"],
  "urgent": true|false,
  "urgent_reason": "<one short line: why it is or isn't an emergency now>",
  "restatement": "<the full question in one English line, standalone, using these place words: 'my farm (the pin)' \
@@ -175,6 +177,7 @@ class Understanding:
     ownership: str = ""         # public | private | any
     satellite_context: bool = False   # 'how bad were the floods': the reports answer, one satellite sentence follows
     exclude: str = ""           # what the user said they don't mean ('schools not budget' -> 'budget')
+    asked_parts: list[str] = field(default_factory=list)   # parts the user named ('primary, JSS, SSS and IQS')
     urgent: bool = False        # an emergency happening now: the fast path's net when its phrases and classifier miss
     urgent_reason: str = ""
     safety: dict = field(default_factory=dict)   # what the fast path's layers said (phrase, classifier), for the trace
@@ -204,6 +207,8 @@ def parse(d: dict) -> Understanding | None:
     u.satellite_context = d.get("satellite_context") is True and u.capability in ("statistics", "deep")
     u.urgent_reason = str(d.get("urgent_reason") or "").strip()[:200]
     u.exclude = str(d.get("exclude") or "").strip()[:80]
+    parts = d.get("asked_parts") if isinstance(d.get("asked_parts"), list) else []
+    u.asked_parts = [str(p).strip()[:40] for p in parts if str(p).strip()][:8]
     fac = d.get("facility") if isinstance(d.get("facility"), dict) else {}
     if (u.capability == "facility" or u.urgent) and fac:
         u.care = fac.get("care") if fac.get("care") in CARE else "general"
