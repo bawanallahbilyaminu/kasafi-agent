@@ -38,12 +38,12 @@ def test_a_hausa_sign_up_message_asks_for_an_explicit_ok_before_storing_anything
     step = signup.reply("Sanar da ni game da ambaliya a Goronyo", None, "k", "ha", store)
     text, buttons = step.messages[0]
     assert "ambaliya a Ƙaramar Hukumar Goronyo" in text and "DAINA" in text
-    assert "lambar WhatsApp ɗinka a ɓoye" in text and "ba lambar kanta ba" not in text   # the number, encrypted
+    assert "lambar WhatsApp ɗinku a ɓoye" in text and "ba lambar kanta ba" not in text   # the number, encrypted
     assert [b[0] for b in buttons] == ["alert_yes", "alert_no", "alert_ask"]
     assert all(len(title) <= 20 for _, title in buttons)
     assert store.subscription("k") is None                                     # nothing until the OK
     done = signup.reply("", "alert_yes", "k", "ha", store)
-    assert "An yi maka rajistar" in done.messages[0][0]
+    assert "An yi muku rajistar" in done.messages[0][0]
     assert store.subscription("k") == {"lgas": [GORONYO], "hazards": ["flood"], "lang": "ha",
                                        "pairs": [[GORONYO, "flood"]]}
 
@@ -172,7 +172,7 @@ def test_stop_deletes_the_subscription(word) -> None:
     store.subscribe("k", [GORONYO], ["flood"], "ha")
     assert "An gama" in signup.reply(word, None, "k", "ha", store).messages[0][0]
     assert store.subscription("k") is None
-    assert "Ba ka da faɗakarwa" in signup.reply(word, None, "k", "ha", store).messages[0][0]
+    assert "Ba ku da faɗakarwa" in signup.reply(word, None, "k", "ha", store).messages[0][0]
 
 
 def test_delete_my_data_removes_the_subscription_too() -> None:

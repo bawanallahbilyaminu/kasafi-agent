@@ -1085,7 +1085,7 @@ WORDS = {
            "writing": "✍️ Ina rubuta taƙaitawa daga alƙaluma {n} da aka tabbatar…",
            "differ": "↔️ Inda majiyoyi suka bambanta: {text}",
            "missing": "ℹ️ Ba a samu a takardun da aka karanta ba: {text}",
-           "brief": "📄 Ka amsa da *full brief* don samun PDF mai dukkan sassan da madogararsu.",
+           "brief": "📄 Ku amsa da *full brief* don samun PDF mai dukkan sassan da madogararsu.",
            "none": "Ban samu alƙaluma da aka tabbatar a kan wannan a takardun ɗakin karatu ba.",
            "head": "*{name}*"},
 }

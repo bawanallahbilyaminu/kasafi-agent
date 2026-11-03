@@ -243,7 +243,7 @@ WORDS = {
            "summary": "The nearest health facility is {name}, {dist}.",
            "summary_hospital": "Nearest hospital: {name}, {dist}.",
            "follow": "Reply “next” for the next one, “route”, “only government”, “only hospitals” or “on foot”."},
-    "ha": {"head": "🏥 *Cibiyoyin lafiya mafi kusa*{what}{where}:", "where_spot": " da inda kake",
+    "ha": {"head": "🏥 *Cibiyoyin lafiya mafi kusa*{what}{where}:", "where_spot": " da inda kuke",
            "where_lga": " kusa da tsakiyar Ƙaramar Hukumar {lga}",
            "row": "{n}. *{name}*, {level} ({kind}), {place}: {dist}",
            "road": "kilomita {km} ta hanya, kusan {mins}", "foot": "kilomita {km} da ƙafa, kusan {mins}",
@@ -253,23 +253,23 @@ WORDS = {
            "own": {"Public": "na gwamnati", "Private": "masu zaman kansu"}, "hospitals": "asibitoci",
            "emonc": {"bemonc": "kulawar gaggawa ta haihuwa", "cemonc": "cikakkiyar kulawar gaggawa ta haihuwa"},
            "emonc_tag": {"bemonc": "EmONC na asali", "cemonc": "cikakken EmONC"},
-           "caution": "Kasafi ba zai iya tabbatar da lokutan buɗewa ko ayyuka ba; ka kira kafin ka je idan za ka iya.",
-           "pin": "📍 *{name}*: wurinta yana zuwa.\nBuɗe ainihin wurin a taswira: {spot}\nHanya daga inda kake yanzu: "
+           "caution": "Kasafi ba zai iya tabbatar da lokutan buɗewa ko ayyuka ba; ku kira kafin ku je idan za ku iya.",
+           "pin": "📍 *{name}*: wurinta yana zuwa.\nBuɗe ainihin wurin a taswira: {spot}\nHanya daga inda kuke yanzu: "
                   "{link}",
            "head_quick": "🏥 *Cibiyoyin lafiya, mafi saurin isa a farko*{what}{where}:",
            "summary_quick": "Cibiyar lafiya mafi saurin isa ita ce {name}, {dist}.",
            "summary_hospital_quick": "Asibiti mafi saurin isa: {name}, {dist}.",
            "none": "Ba a sami cibiyar da ta dace da haka ({what}) a jerin cibiyoyin lafiya na Sokoto ba.",
            "next_none": "Babu ƙarin cibiyoyi da suka dace da haka a jerin.",
-           "need_location": "Don nemo cibiyar lafiya mafi kusa, raba wurinka, ko faɗa mini ƙaramar hukumarka ko "
-                            "garinka.",
+           "need_location": "Don nemo cibiyar lafiya mafi kusa, ku raba wurinku, ko ku faɗa mini ƙaramar hukumarku ko "
+                            "garinku.",
            "address": "Ƙaramar Hukumar {lga}, Jihar Sokoto", "mins_h": "awa {h} da minti {m}", "mins": "minti {m}",
            "route_head": "🧭 *Hanya zuwa {name}*{checked}: {dist}.",
            "checked": " (an tabbatar da wurin {d})",
            "any_nearer": "; cibiyar lafiya mafi kusa ta kowace iri: {name} ({level}), {dist}.",
            "summary": "Cibiyar lafiya mafi kusa ita ce {name}, {dist}.",
            "summary_hospital": "Asibiti mafi kusa: {name}, {dist}.",
-           "follow": "Rubuta “na gaba” don na gaba, “hanya”, “na gwamnati kawai”, “asibitoci kawai” ko “da ƙafa”."},
+           "follow": "Ku rubuta “na gaba” don na gaba, “hanya”, “na gwamnati kawai”, “asibitoci kawai” ko “da ƙafa”."},
 }
 
 

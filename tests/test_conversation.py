@@ -98,7 +98,7 @@ def test_notice_is_two_messages_hausa_then_english_within_limits(lang, source) -
 def test_notice_states_detected_language_in_both_languages() -> None:
     ha, en = first_contact_notice("en", "detected")
     assert "I'll reply in English. Switch any time with /hausa" in en
-    assert "zan riƙa amsa da Turanci. Don sauyawa, aika /hausa" in ha
+    assert "zan riƙa amsa da Turanci. Don sauyawa, ku aika /hausa" in ha
     assert "Which language" in first_contact_notice(None, None)[1]
 
 

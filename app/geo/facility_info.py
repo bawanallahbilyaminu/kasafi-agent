@@ -146,7 +146,7 @@ W = {
            "also": "Duka cibiyoyin matakin farko (health posts, clinics da centres): {n:,}.",
            "by_lga": "Mafi yawa a: {top}.",
            "emonc": "Binciken EmONC na UNFPA yana da wani adadi daban: cibiyoyin da ya bincika, ba duka ba. "
-                    "Rubuta “EmONC” don gani.",
+                    "Ku rubuta “EmONC” don gani.",
            "source": "📄 Rajistar cibiyoyin lafiya ta GRID3 Nigeria / NHFR (an sabunta Nuwamba 2024)",
            "state": "Jihar Sokoto", "lga": "Ƙaramar Hukumar {lga}", "ward": "Mazaɓar {ward} (Ƙaramar Hukumar {lga})",
            "card": "*{name}*: {kind}, matakin {level}, {own}; {likely}a mazaɓar {ward}, Ƙaramar Hukumar {lga}{differs}.",
@@ -160,8 +160,8 @@ W = {
            "own_kinds": {"Public": "ta gwamnati", "Private": "mai zaman kanta", "Unknown": "ba a rubuta mallaka ba",
                          "": "ba a rubuta mallaka ba"},
            "more": "Wasu masu wannan suna: {names}.",
-           "caution": "Kasafi ba zai iya tabbatar da lokutan buɗewa ko ayyuka ba; ka kira kafin ka je idan za ka iya.",
-           "go": "Rubuta “yaya nisanta” don nisan hanya da kwatance."},
+           "caution": "Kasafi ba zai iya tabbatar da lokutan buɗewa ko ayyuka ba; ku kira kafin ku je idan za ku iya.",
+           "go": "Ku rubuta “yaya nisanta” don nisan hanya da kwatance."},
 }
 
 

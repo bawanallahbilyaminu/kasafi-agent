@@ -232,8 +232,8 @@ W = {
         "short_months": ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"),
     },
     "ha": {
-        "need_pin": "Don in duba tarihin wuri ina buƙatar wurin kansa: danna maɓallin da ke ƙasa ka aiko da wurin "
-                    "gonarka ko filinka (ko tafki, madatsar ruwa ko filin da kake nufi).",
+        "need_pin": "Don in duba tarihin wuri ina buƙatar wurin kansa: ku danna maɓallin da ke ƙasa ku aiko da wurin "
+                    "gonarku ko filinku (ko tafki, madatsar ruwa ko filin da kuke nufi).",
         "progress": "🛰️ Ina duba hotunan tauraron ɗan adam na kusan shekaru {n} na wannan wuri. A karon farko "
                     "yana ɗaukar kusan minti 1 zuwa 2.",
         "head": "*Abin da hotunan tauraron ɗan adam suka nuna game da wannan wuri (Ƙaramar Hukumar {lga})* — na gwaji",
@@ -269,40 +269,40 @@ W = {
                       "{first}–{last}).",
         "water_caveat": "Ambaliya a ƙarƙashin shuke-shuke, gajeriyar ambaliya da ambaliya a ƙarƙashin gajimare na "
                         "iya ɓacewa.",
-        "nearest": "Tafkin ruwa mafi kusa yana da nisan kilomita {km} daga wurinka (hekta {ha}; ruwa a kashi {occ}% na "
+        "nearest": "Tafkin ruwa mafi kusa yana da nisan kilomita {km} daga wurinku (hekta {ha}; ruwa a kashi {occ}% na "
                    "watannin da JRC ta lura, 1984–2020); Sentinel-2 ta ga ruwa a can a {when}.",
-        "nearest_named": "Tafkin ruwa mafi kusa shi ne {name}, kilomita {km} daga wurinka (hekta {ha}; ruwa a kashi "
+        "nearest_named": "Tafkin ruwa mafi kusa shi ne {name}, kilomita {km} daga wurinku (hekta {ha}; ruwa a kashi "
                          "{occ}% na watannin da JRC ta lura, 1984–2020); Sentinel-2 ta ga ruwa a can a {when}.",
         "nearest_none": "Babu tafkin ruwa (ruwa a rabin watannin da JRC ta lura, 1984–2020) a cikin kilomita 2 daga "
-                        "wurinka.",
+                        "wurinku.",
         "outline_sam": "Iyakar gona: kusan hekta {ha}, an zana ta daga hoton tauraron ɗan adam (SAM 3.1, mita 10): "
                        "kiyasi ce, ba iyakar mallaka ba.",
         "outline_circle": "Ba a iya zana iyakar gona daga hoton tauraron ɗan adam ba, saboda haka alƙaluman na "
-                          "da'ira ce ta kusan hekta 1 a sel ɗin mita 100 na wurinka.",
-        "outline_given": "Siffar gona: da'irar hekta {ha} da ka bayar, kewaye da wurinka (ba a iya zana iyaka daga "
+                          "da'ira ce ta kusan hekta 1 a sel ɗin mita 100 na wurinku.",
+        "outline_given": "Siffar gona: da'irar hekta {ha} da kuka bayar, kewaye da wurinku (ba a iya zana iyaka daga "
                          "hoton tauraron ɗan adam ba).",
-        "outline_corners": "Siffar gona: kusan hekta {ha}, daga wuraren kusurwoyi {n} da ka aiko: kiyasi ce, ba "
+        "outline_corners": "Siffar gona: kusan hekta {ha}, daga wuraren kusurwoyi {n} da kuka aiko: kiyasi ce, ba "
                            "iyakar mallaka ba.",
-        "ask_size_big": "Iyakar da na iya zanawa kewaye da wurinka daga hoton tauraron ɗan adam ta kai kusan hekta "
+        "ask_size_big": "Iyakar da na iya zanawa kewaye da wurinku daga hoton tauraron ɗan adam ta kai kusan hekta "
                         "{ha}, ta fi girman gona ɗaya (wataƙila ta haɗa da gonakin makwabta), don haka ba zan yi "
-                        "amfani da ita ba. Girman gonarka nawa ne, a kadada (acre) ko hekta (misali «kadada 3» ko "
-                        "«hekta 2»)? Ko ka aiko da wuraren kusurwoyinta 3 zuwa 6, sannan ka ce *an gama*. Idan ba ka "
-                        "sani ba, ka ce *tsallake*, zan yi amfani da da'ira ta kusan hekta 1 kewaye da wurinka.",
+                        "amfani da ita ba. Girman gonarku nawa ne, a kadada (acre) ko hekta (misali «kadada 3» ko "
+                        "«hekta 2»)? Ko ku aiko da wuraren kusurwoyinta 3 zuwa 6, sannan ku ce *an gama*. Idan ba ku "
+                        "sani ba, ku ce *tsallake*, zan yi amfani da da'ira ta kusan hekta 1 kewaye da wurinku.",
         "ask_size": "Ban iya zana iyakar wannan gona daga hoton tauraron ɗan adam ba. Girman gonar nawa ne, a "
-                    "kadada (acre) ko hekta (misali «kadada 3» ko «hekta 2»)? Ko ka aiko da wuraren kusurwoyinta 3 "
-                    "zuwa 6, sannan ka ce *an gama*. Idan ba ka sani ba, ka ce *tsallake*, zan yi amfani da da'ira ta "
-                    "kusan hekta 1 kewaye da wurinka.",
-        "corner_got": "📍 An karɓi wurin kusurwa na {n}. Aiko da sauran (3 zuwa 6 gaba ɗaya), sannan ka ce *an gama*.",
-        "corner_few": "Ina da wurin kusurwa {n}; gona tana buƙatar aƙalla 3. Aiko da sauran, ko ka faɗi girman gonar a "
+                    "kadada (acre) ko hekta (misali «kadada 3» ko «hekta 2»)? Ko ku aiko da wuraren kusurwoyinta 3 "
+                    "zuwa 6, sannan ku ce *an gama*. Idan ba ku sani ba, ku ce *tsallake*, zan yi amfani da da'ira ta "
+                    "kusan hekta 1 kewaye da wurinku.",
+        "corner_got": "📍 An karɓi wurin kusurwa na {n}. Ku aiko da sauran (3 zuwa 6 gaba ɗaya), sannan ku ce *an gama*.",
+        "corner_few": "Ina da wurin kusurwa {n}; gona tana buƙatar aƙalla 3. Ku aiko da sauran, ko ku faɗi girman gonar a "
                       "kadada ko hekta.",
-        "corner_bad": "Waɗannan wurare {n} ba su yi siffar gona mai ma'ana ba ({why}). Aiko da kusurwoyin a jere, ko ka "
+        "corner_bad": "Waɗannan wurare {n} ba su yi siffar gona mai ma'ana ba ({why}). Ku aiko da kusurwoyin a jere, ko ku "
                       "faɗi girman gonar a kadada ko hekta.",
         "corner_why": {"too_small": "ƙasa da hekta 0.1", "too_big": "sama da hekta 50", "too_thin": "siriri ce",
                        "not_a_shape": "layukan sun ketare juna", "too_many": "fiye da wurare 6", "too_few": "ƙasa da wurare 3"},
-        "shape_set": "An gama: gona ta kusan hekta {ha} daga wuraren kusurwoyi {n} da ka aiko. {next}",
-        "size_set": "An gama: da'irar hekta {ha} kewaye da wurinka. {next}",
-        "shape_next": "Tambaye ni game da ita, misali «Yaya koriyar gonata a 2024?».",
-        "size_bad": "Ban gane girman ba. Faɗi shi kamar «kadada 3» ko «hekta 2», aiko da wuraren kusurwoyi, ko ka ce "
+        "shape_set": "An gama: gona ta kusan hekta {ha} daga wuraren kusurwoyi {n} da kuka aiko. {next}",
+        "size_set": "An gama: da'irar hekta {ha} kewaye da wurinku. {next}",
+        "shape_next": "Ku tambaye ni game da ita, misali «Yaya koriyar gonata a 2024?».",
+        "size_bad": "Ban gane girman ba. Ku faɗi shi kamar «kadada 3» ko «hekta 2», ku aiko da wuraren kusurwoyi, ko ku ce "
                     "*tsallake*.",
         "resolution": "Sentinel-2: koriya (NDVI) da ruwa (NDWI) a mita 10, ƙasa mara ciyayi (BSI) da matakin "
                       "gajimare a mita 20; bayanan ruwa (JRC) a mita 30; ruwan sama daga ragar Open-Meteo ta kusan "
@@ -315,7 +315,7 @@ W = {
                       "a ɗakin karatu kan wannan.",
         "budget": "Layukan kasafin {year} na Ƙaramar Hukumar {lga} (noma, ban ruwa, zaizayar ƙasa):",
         "budget_row": "• {name}: ₦{amount} ({title}, shafi na {page})",
-        "referral": "Don shawara kan abin da za a shuka ko abin da za a yi amfani da shi, ka tuntuɓi ma'aikatan "
+        "referral": "Don shawara kan abin da za a shuka ko abin da za a yi amfani da shi, ku tuntuɓi ma'aikatan "
                     "hidimar noma (Sokoto ADP). Kasafi yana bayyana abin da hotunan suka nuna ne kawai.",
         "sources": "Madogara: Copernicus Sentinel-2 L2A da Sentinel-1 RTC ta Microsoft Planetary Computer; JRC "
                    "Global Surface Water v1.3; ESA WorldCover 2021; Open-Meteo archive (ERA5-Land); taswirorin "

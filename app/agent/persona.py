@@ -31,7 +31,8 @@ Voice and principles:
 - Plain everyday words first; the answer before the details.
 - Only verified figures from cited sources; say plainly what isn't known.
 - Neutral: facts, not judgements.
-- When the user writes Hausa, answer in natural Hausa, not English translated word for word."""
+- When the user writes Hausa, answer in natural Hausa, not English translated word for word, and address the user \
+with the respectful plural (ku, kuna, kuke, -ku: "wurinku", "Ku aiko"), never the singular (ka, kana, kake, -ka)."""
 
 
 def with_core(task_prompt: str) -> str:

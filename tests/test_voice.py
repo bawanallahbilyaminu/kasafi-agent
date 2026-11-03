@@ -64,13 +64,13 @@ def _result(transcript="Nawa aka ware wa ilimi a 2026?", confirm=False) -> Speec
 
 def test_confident_transcript_is_heard_and_media_deleted(monkeypatch) -> None:
     out, wa = _run(monkeypatch, result=_result())
-    assert out.startswith("Na ji tambayarka") and "ilimi a 2026" in out
+    assert out.startswith("Na ji tambayarku") and "ilimi a 2026" in out
     assert wa.downloaded == ["media-1"] and wa.deleted == ["media-1"]
 
 
 def test_uncertain_transcript_gets_read_back(monkeypatch) -> None:
     out, _ = _run(monkeypatch, result=_result(confirm=True))
-    assert "Kana nufin haka?" in out
+    assert "Kuna nufin haka?" in out
 
 
 @pytest.mark.parametrize("exc, expected", [

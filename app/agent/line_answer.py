@@ -253,7 +253,7 @@ def ask_which(lines: list[Line], question: str, lang: str) -> tuple[str, list[di
     tops = groups(strong, 3)
     if len(strong) < STRONG_HITS_TO_ASK or len(tops) < 2:
         return None
-    q = {"ha": "Tambayarka ta shafi layuka da yawa a kasafin. Wane ɓangare kake nufi?",
+    q = {"ha": "Tambayarku ta shafi layuka da yawa a kasafin. Wane ɓangare kuke nufi?",
          "en": "Your question matches many budget lines. Which area do you mean?"}.get(lang, "")
     return q, [{"title": name[:20], "question": f"{question} ({name})"} for name, _ in tops]
 
@@ -579,7 +579,7 @@ def _key(res: LineResult) -> set[tuple]:
 
 
 CLARIFY_READINGS = {"en": "I can read your question two ways. Which do you mean?",
-                    "ha": "Zan iya fahimtar tambayarka ta hanyoyi biyu. Wanne kake nufi?"}
+                    "ha": "Zan iya fahimtar tambayarku ta hanyoyi biyu. Wanne kuke nufi?"}
 
 
 def reconcile(r1: LineResult, d1: dict, r2: LineResult, lines: list[Line], extra_numbers: list[str],

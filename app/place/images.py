@@ -90,22 +90,22 @@ T = {
                       "ba raguwa ba ce.",
         "chart_caption": "Koriyar damina a ƙololuwa a kowace shekara a wannan wuri ({first}–{last}) tare da ruwan "
                          "sama na Yuni–Oktoba; shekarun da aka zana da layuka ba su da isassun hotuna bayyanannu.",
-        "map_title": "Gonarka a hoton tauraron ɗan adam, Ƙaramar Hukumar {lga}",
+        "map_title": "Gonarku a hoton tauraron ɗan adam, Ƙaramar Hukumar {lga}",
         "map_sub": "Sentinel-2, launin gaske, {day} (mita 10), kusan kilomita {km} faɗi",
         "leg_outline": "Iyakar gona ta kiyasi (daga hoton; ba iyakar mallaka ba)",
-        "leg_circle": "Da'ira ta kusan hekta 1 kewaye da wurinka (ba a iya zana iyaka ba)",
-        "leg_given": "Da'irar hekta {ha} kewaye da wurinka (girman da ka bayar)",
-        "leg_corners": "Gona daga wuraren kusurwoyi {n} da ka aiko (kiyasi; ba iyakar mallaka ba)",
+        "leg_circle": "Da'ira ta kusan hekta 1 kewaye da wurinku (ba a iya zana iyaka ba)",
+        "leg_given": "Da'irar hekta {ha} kewaye da wurinku (girman da kuka bayar)",
+        "leg_corners": "Gona daga wuraren kusurwoyi {n} da kuka aiko (kiyasi; ba iyakar mallaka ba)",
         "leg_water": "Yawan ganin ruwa, 1984–2020 (JRC): mai haske = da wuya, mai duhu = mafi yawan watanni",
         "leg_nearest": "Tafkin ruwa mafi kusa, kilomita {km}",
         "leg_nearest_named": "Tafkin ruwa mafi kusa: {name}, kilomita {km}",
-        "leg_pin": "Wurinka",
+        "leg_pin": "Wurinku",
         "map_foot": "Madogara: Copernicus Sentinel-2 L2A ta Microsoft Planetary Computer; JRC Global Surface Water "
                     "v1.3; iyaka daga SAM 3.1 (Meta) bisa hoton, kiyasi ce.",
         "map_caption": "Iyakar gona ({how}) a hoton Sentinel-2 na {day}; shuɗin inuwa yana nuna yawan ganin ruwa a "
                        "can a 1984–2020.",
         "how_sam": "kiyasi, kusan hekta {ha}", "how_circle": "da'ira ta kusan hekta 1",
-        "how_given": "da'irar hekta {ha} da ka bayar", "how_corners": "daga wuraren kusurwoyi {n} da ka aiko, kusan hekta {ha}",
+        "how_given": "da'irar hekta {ha} da kuka bayar", "how_corners": "daga wuraren kusurwoyi {n} da kuka aiko, kusan hekta {ha}",
     },
 }
 
@@ -284,7 +284,7 @@ A = {
            "legend": "Launi: {what} a kowace {unit}, aji biyar masu yawan daidai. Toka mai layuka: babu gona, ƙarancin bayanai ko babu bayanai.",
            "caption": "{short} a kowace {unit} a {area}{year}: daga {lo} zuwa {hi} a {units} {valued} cikin {total}; mafi duhu = mafi girma.{missing}",
            "missing": " Masu layuka: {parts}.", "no_crop": "{n} ba su da gona a taswirar yanayin ƙasa ta 2021",
-           "low_data": "{n} masu ƙarancin bayanai", "no_data": "{n} ba su da bayanai na shekarar", "mine": "Gundumarka: {ward}",
+           "low_data": "{n} masu ƙarancin bayanai", "no_data": "{n} ba su da bayanai na shekarar", "mine": "Gundumarku: {ward}",
            "low": "Babu gona / ƙarancin bayanai / babu bayanai", "ward": "gunduma", "lga": "ƙaramar hukuma",
            "wards": "gundumomi", "lgas": "ƙananan hukumomi",
            "area_lga": "Ƙaramar Hukumar {lga}", "area_state": "Jihar Sokoto",

@@ -29,7 +29,7 @@ def setup_pending() -> UserStore:
     run_handle(text("Sannu"), store=store)
     run_handle(text("OK"), store=store)
     outs, _ = run_handle(voice(), store=store, spoken=heard(WRONG, confirm=True))
-    assert "Kana nufin haka?" in outs[0].text and WRONG in outs[0].text
+    assert "Kuna nufin haka?" in outs[0].text and WRONG in outs[0].text
     return store
 
 

@@ -38,7 +38,7 @@ lines that fit this user (the LOCATION ON FILE: with a pin or an LGA, examples a
 none, include "send your location" for the nearest health facility or a farm's flood history); and that it answers \
 from public documents (budgets, reports, surveys) and shows the page as evidence.
 - For who / what / how / help, end with one line saying they can type "menu" any time to see the options (in \
-Hausa: 'Rubuta *menu* a kowane lokaci don ganin abin da zan iya yi.'). Not for thanks, greetings or goodbye.
+Hausa: 'Ku rubuta *menu* a kowane lokaci don ganin abin da zan iya yi.'). Not for thanks, greetings or goodbye.
 - Facts you may use: Kasafi is an automated assistant (a bot), not a person; it was built by Halal Numeriq Limited \
 on Meta's Muse Spark models; it reads and replies in Hausa and English and listens to voice notes.
 - Never give figures or facts about budgets, places or reports here, and never say you looked anything up.
@@ -58,15 +58,15 @@ HELP = {
                     "Nearest hospital (send your location)", "Has my farm ever flooded? (send your location)"],
            "ask": "What are you looking for?"},
     "ha": {"intro": "Ni ne Kasafi, mataimaki na Jihar Sokoto. Ina amsa tambayoyi daga takardun gwamnati na jama'a "
-                    "(kasafin kuɗi, rahotanni, bincike) kuma ina nuna shafin a matsayin shaida. Kana iya tambaya, "
+                    "(kasafin kuɗi, rahotanni, bincike) kuma ina nuna shafin a matsayin shaida. Kuna iya tambaya, "
                     "misali:",
            "pin": ["Me gwamnati ta ware wa yankina a kasafin kuɗi?", "Gonata ta taɓa yin ambaliya?",
                    "Ina asibiti mafi kusa?", "Za a yi ruwan sama a nan wannan makon?"],
            "lga": ["Me gwamnati ta ware wa ƙaramar hukumata?", "Ƙaramar hukumata ta taɓa yin ambaliya?",
-                   "Ina asibiti mafi kusa? (aiko da wurinka)", "Za a yi ruwan sama a ƙaramar hukumata wannan makon?"],
+                   "Ina asibiti mafi kusa? (ku aiko da wurinku)", "Za a yi ruwan sama a ƙaramar hukumata wannan makon?"],
            "none": ["Nawa aka ware wa lafiya a kasafin 2026?", "Me MICS ta ce game da rajistar haihuwa?",
-                    "Ina asibiti mafi kusa? (aiko da wurinka)", "Gonata ta taɓa yin ambaliya? (aiko da wurinka)"],
-           "ask": "Me kake nema?"},
+                    "Ina asibiti mafi kusa? (ku aiko da wurinku)", "Gonata ta taɓa yin ambaliya? (ku aiko da wurinku)"],
+           "ask": "Me kuke nema?"},
 }
 
 

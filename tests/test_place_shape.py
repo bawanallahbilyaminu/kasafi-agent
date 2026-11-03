@@ -68,7 +68,7 @@ def test_the_answer_says_which_shape_was_used() -> None:
                                            "be drawn from the satellite image).")
     assert A.outline_line(corners, "en") == "Plot shape: about 3.4 ha, from your 4 corner pins: approximate, not a boundary."
     assert A.outline_line(fallback(LON, LAT, "too_big"), "en").startswith("No plot outline could be drawn")
-    assert "da'irar hekta 2 da ka bayar" in A.outline_line(given, "ha")
+    assert "da'irar hekta 2 da kuka bayar" in A.outline_line(given, "ha")
     assert "kusurwoyi 4" in A.outline_line(corners, "ha")
     assert given.is_plot and corners.is_plot and not fallback(LON, LAT, "x").is_plot
 
@@ -77,7 +77,7 @@ def test_the_map_legend_names_the_shape() -> None:
     from app.place.images import T, _shape_words
     given = Outline.from_shape(S.shape_from_size(LAT, LON, 1.5))
     assert _shape_words(T["en"], given, "leg") == "Circle of 1.5 ha around your pin (the size you gave)"
-    assert _shape_words(T["ha"], given, "how") == "da'irar hekta 1.5 da ka bayar"
+    assert _shape_words(T["ha"], given, "how") == "da'irar hekta 1.5 da kuka bayar"
     assert _shape_words(T["en"], None, "leg").startswith("Circle of about 1 ha")
 
 
@@ -104,7 +104,7 @@ def test_place_answer_asks_for_the_size_only_when_told_to_and_uses_a_given_shape
     assert pa.found and "circle of about 1 ha" in pa.text
     place["shape"] = S.shape_from_size(LAT, LON, 3.0)
     pa = asyncio.run(A.place_answer(None, None, "yaya koriyar gonata a 2024?", "", "ha", place, TODAY, ask_size=True))
-    assert pa.found and "da'irar hekta 3 da ka bayar" in pa.text and seen["polygon"] == place["shape"]["geometry"]
+    assert pa.found and "da'irar hekta 3 da kuka bayar" in pa.text and seen["polygon"] == place["shape"]["geometry"]
     assert pa.specs[1]["shape"]["method"] == "given_circle"           # the map draws the same shape
 
 

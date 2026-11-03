@@ -131,7 +131,7 @@ W = {
     "ha": {"heat": "🌡️ *Zafin rana*", "rain": "🌧️ *Ruwan sama*", "air": "🌫️ *Ƙura da iska*", "flood": "🌊 *Koguna*",
            "fires": "🔥 *Gobara*",
            "where_state": "Jihar Sokoto", "where_lga": "Ƙaramar Hukumar {lga}", "today": "yau", "tomorrow": "gobe",
-           "pin_fallback": "Hasashen Ƙaramar Hukumar {lga} (babu na daidai inda kake tukuna):",
+           "pin_fallback": "Hasashen Ƙaramar Hukumar {lga} (babu na daidai inda kuke tukuna):",
            "heat_line": "{day}: har zuwa {t:.0f} °C, ana jin kamar {f:.0f} °C, ma'aunin zafi har zuwa {hi:.0f} °C: "
                         "*{cat}* (matakan ma'aunin zafi na US National Weather Service, bisa {basis}). Ma'aunin UV "
                         "har zuwa {uv:.0f}. Iska har zuwa {w:.0f} km/h, guguwa {g:.0f} km/h.",

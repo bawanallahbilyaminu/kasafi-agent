@@ -223,9 +223,9 @@ W = {
         "head_plain": "*{short}: {area}{year}* — na gwaji",
         "head_ward": "*{short}: gundumar {ward}{likely}, Ƙaramar Hukumar {lga}* — na gwaji",
         "likely": " (wataƙila)",
-        "ward_scope": "Wurinka yana gundumar {ward}{likely} ta Ƙaramar Hukumar {lga}, saboda haka wannan amsa ta wannan gunduma ce, "
+        "ward_scope": "Wurinku yana gundumar {ward}{likely} ta Ƙaramar Hukumar {lga}, saboda haka wannan amsa ta wannan gunduma ce, "
                       "an kwatanta ta da dukkan Ƙaramar Hukumar {lga} da jihar.",
-        "ward_scope_no_ward": "Wurinka ya nuna Ƙaramar Hukumar {lga} amma ba gunduma ba, saboda haka wannan amsa ta gundumomin ƙaramar hukumar ce.",
+        "ward_scope_no_ward": "Wurinku ya nuna Ƙaramar Hukumar {lga} amma ba gunduma ba, saboda haka wannan amsa ta gundumomin ƙaramar hukumar ce.",
         "trend_head": "Tun {first}, {what} a {ward} {dir}; ta Ƙaramar Hukumar {lga} {lga_dir}, ta jiha kuma {state_dir} "
                       "({first}–{last}, shekaru {n} masu bayanai na yau da kullum).",
         "trend_dir": {"rising": "tana ƙaruwa", "falling": "tana raguwa", "no clear change": "ba ta nuna canji a fili",

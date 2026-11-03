@@ -107,7 +107,7 @@ PLAN_SYSTEM = (
     "and policies that state it: list them first, before budgets>\"], "
     '"assumption": "<if the question leaves something open, e.g. no year, the assumption you made, e.g. '
     "'used the latest budget, 2026'; else empty>\", "
-    '"assumption_ha": "<the same assumption as one short Hausa sentence, e.g. \'Ban ga shekara a tambayarka ba, '
+    '"assumption_ha": "<the same assumption as one short Hausa sentence, e.g. \'Ban ga shekara a tambayarku ba, '
     "don haka na yi amfani da kasafin 2026 mafi sabo.'; else empty>\", "
     '"missing_document": "<ONLY if answering needs a specific public document that is NOT in the catalog, e.g. a '
     "quarterly report for a quarter the catalog lacks, or a partner report it doesn't list: describe it for a web "
@@ -1582,7 +1582,7 @@ NOT_FOUND = {
     "en": "I couldn't find the answer to that in the documents I have.",
 }
 UNVERIFIED = {
-    "ha": "Na sami takardun da suka shafi tambayarka, amma ban iya tabbatar da alƙaluman ba. Duba madogarar nan:",
+    "ha": "Na sami takardun da suka shafi tambayarku, amma ban iya tabbatar da alƙaluman ba. Ku duba madogarar nan:",
     "en": "I found documents about your question, but couldn't verify the figures. Please check these sources:",
 }
 
@@ -1681,7 +1681,7 @@ async def recheck(conn: psycopg.Connection, plan: Plan, prev: dict, lang: str, c
 
 
 REPHRASE = {
-    "ha": "Yi haƙuri, ban fahimci tambayar sosai ba. Don Allah ka sake rubuta ta a wata hanya.",
+    "ha": "Yi haƙuri, ban fahimci tambayar sosai ba. Don Allah ku sake rubuta ta a wata hanya.",
     "en": "Sorry, I couldn't work that question out. Please try rephrasing it.",
 }
 
@@ -3091,7 +3091,7 @@ def named_dtm(plan: Plan) -> bool:
 
 WHICH_AGENCY = {
     "en": "The budget doesn't print an agency named exactly \"{name}\". Do you mean one of these: {names}?",
-    "ha": "Kasafin bai buga wata hukuma mai suna \"{name}\" daidai ba. Ko kana nufin ɗaya daga cikin waɗannan: {names}?",
+    "ha": "Kasafin bai buga wata hukuma mai suna \"{name}\" daidai ba. Ko kuna nufin ɗaya daga cikin waɗannan: {names}?",
 }
 
 
@@ -3612,7 +3612,7 @@ CATEGORY_WORDS = {
            "spent": " Zuwa ƙarshen {month} {year}, an kashe {spent} daga ciki a duk jihar ({pct}%, {report}).",
            "no_spent": "⚠️ Rahotannin aiwatar da kasafi da nake da su ba su nuna kuɗin da aka kashe kan waɗannan "
                        "abubuwa a {year} ba.",
-           "clarify": "Wanne kake nufi?"},
+           "clarify": "Wanne kuke nufi?"},
 }
 
 
@@ -3900,11 +3900,11 @@ ANALYSIS_WORDS = {
         "revenue_prev": " A {prev}, an yi kasafin {prev_amt} (wanda aka sabunta), kuma an samu {prev_got} zuwa Satumba.",
         "largest": "Mafi girma:", "parts": "Manyan sassa:", "sources": "Madogara", "page": "shafi",
         "spent_word": "an kashe", "prev_word": "{prev}",
-        "offer": "_Rubuta *nuna lissafi* don ganin layukan da lissafin._",
+        "offer": "_Ku rubuta *nuna lissafi* don ganin layukan da lissafin._",
         "head": "🧮 *Yadda aka lissafa* (abin da aka ƙidaya da aka haɗa, ta code):",
         "no_mda": "Ban sami {subject} cikin ma'aikatu da hukumomin kasafin ba.",
         "no_lga": "Ban sami {subject} cikin wuraren ayyukan kasafin ba.",
-        "clarify": "Wanne kake nufi?",
+        "clarify": "Wanne kuke nufi?",
     },
 }
 
@@ -4000,7 +4000,7 @@ def reading_lga_route(u, question: str, plan: Plan, place: dict | None) -> dict 
 
 NEED_PLACE = {
     "en": "Which area do you mean? Share your location, or tell me your LGA, and I'll show what the budget gives it.",
-    "ha": "Wane yanki kake nufi? Raba wurinka, ko faɗa mini ƙaramar hukumarka, in nuna maka abin da kasafin kuɗi "
+    "ha": "Wane yanki kuke nufi? Ku raba wurinku, ko ku faɗa mini ƙaramar hukumarku, in nuna muku abin da kasafin kuɗi "
           "ya ware masa.",
 }
 

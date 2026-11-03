@@ -78,7 +78,7 @@ def test_clear_voice_question_is_answered_with_what_was_heard() -> None:
 def test_unclear_voice_waits_for_eh_then_answers() -> None:
     store, calls = consented(), []
     outs, _ = run_handle(voice(), store=store, spoken=heard(Q, confirm=True), answer_calls=calls)
-    assert calls == [] and "Kana nufin haka?" in outs[0].text                 # nothing answered yet
+    assert calls == [] and "Kuna nufin haka?" in outs[0].text                 # nothing answered yet
     outs, _ = run_handle(text("Eh"), store=store, answer_calls=calls)
     assert calls == [(Q, "ha")]
     assert outs[0].text.startswith(t("confirmed_prefix", "ha", question=Q)) and outs[0].text.endswith(f"ANSWER[ha]: {Q}")

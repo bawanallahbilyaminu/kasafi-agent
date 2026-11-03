@@ -314,7 +314,7 @@ def test_my_ward_in_hausa_and_the_pin_asked_for_when_none_is_on_file(harness):
     sends = h.turn(text("Yaya noma ya canza a unguwata tun shekaru?", me), lambda s: s[-1][0] == "location_request", "no pin yet")
     assert "wurin kansa" in sends[-1][2]
     sends = h.turn(pin(LAT, LON, me), lambda s: s[-2][0] == "image" and s[-1][0] == "buttons", "pin resumes the question")
-    body = [p for k, _, p in sends if k == "text" and "Wurinka yana gundumar" in str(p)]
+    body = [p for k, _, p in sends if k == "text" and "Wurinku yana gundumar" in str(p)]
     assert body and body[0].startswith("*Koriyar ƙololuwa: gundumar ") and "Tun 20" in body[0]
 
 

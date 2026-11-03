@@ -69,24 +69,24 @@ WORDS = {
         "menu": "🔔 *Faɗakarwar Kasafi*\n{have}Zaɓi abin da kuma inda a saƙo ɗaya, misali *1 3 Goronyo* ko *ambaliya "
                 "Goronyo, Wurno*:\n1 Zafin rana\n2 Ƙurar hunturu\n3 Ambaliya\n4 Ɓarkewar cututtuka\n5 Duka huɗun\n"
                 "Sannan ƙaramar hukuma ɗaya ko fiye: kowace daga cikin 23 na Jihar Sokoto.",
-        "have": "Kana da rajistar {pairs}. Don ƙara wasu:\n", "pair": "{hazard} a {lga}",
+        "have": "Kuna da rajistar {pairs}. Don ƙara wasu:\n", "pair": "{hazard} a {lga}",
         "ask_lga": "Wace ƙaramar hukuma (ɗaya ko fiye) faɗakarwar {hazards} za ta shafa? Misali *Goronyo* ko "
                    "*Goronyo, Wurno*.",
         "confirm": "🔔 *Faɗakarwar Kasafi*: {hazards} a {lgas}.\n"
                    "• Faɗakarwa ɗaya kawai ga kowane haɗari a kowace ƙaramar hukuma a rana, kuma babu daga 22:00 zuwa "
                    "06:00 sai gargaɗin hukuma.\n"
                    "• Kowace faɗakarwa tana faɗin majiyarta. Bayani ne, ba agajin gaggawa ba.\n"
-                   "• Don aiko maka da faɗakarwa, Kasafi zai ajiye lambar WhatsApp ɗinka a ɓoye (an rufe ta da "
-                   "makulli), tare da ƙananan hukumomin, haɗurran, harshenka da ranar rajista; babu wani abu kuma. "
+                   "• Don aiko muku da faɗakarwa, Kasafi zai ajiye lambar WhatsApp ɗinku a ɓoye (an rufe ta da "
+                   "makulli), tare da ƙananan hukumomin, haɗurran, harshenku da ranar rajista; babu wani abu kuma. "
                    "Rubuta DAINA a kowane lokaci don dainawa da goge su duka.\n"
                    "• Faɗakarwar za ta zo da Hausa (rubuta ENGLISH don Turanci).\n\nA yi rajista?",
-        "done": "An yi maka rajistar faɗakarwar Kasafi game da {hazards} a {lgas}. Ba za ka samu fiye da faɗakarwa "
+        "done": "An yi muku rajistar faɗakarwar Kasafi game da {hazards} a {lgas}. Ba za ku samu fiye da faɗakarwa "
                 "ɗaya ga kowane haɗari a rana ba, kuma babu da daddare sai sanarwar hukuma. Kowace faɗakarwa tana "
                 "faɗin majiyarta. Rubuta DAINA a kowane lokaci don dainawa.",
-        "declined": "To: babu faɗakarwa. Kana iya tambayar Kasafi komai a kowane lokaci.",
-        "stopped": "An gama: ba za ka sake karɓar faɗakarwar Kasafi ba. Har yanzu kana iya tambayar Kasafi a kowane "
+        "declined": "To: babu faɗakarwa. Kuna iya tambayar Kasafi komai a kowane lokaci.",
+        "stopped": "An gama: ba za ku sake karɓar faɗakarwar Kasafi ba. Har yanzu kuna iya tambayar Kasafi a kowane "
                    "lokaci.",
-        "none": "Ba ka da faɗakarwar Kasafi da za a daina. Kana iya tambayar Kasafi a kowane lokaci.",
+        "none": "Ba ku da faɗakarwar Kasafi da za a daina. Kuna iya tambayar Kasafi a kowane lokaci.",
         "lga_one": "Ƙaramar Hukumar {lga}", "lga_many": "Ƙananan Hukumomin {lgas}", "and": " da ",
         "more_q": "Yaya yanayin {hazard} yake a Ƙaramar Hukumar {lga} yau?",
         "more_outbreak": "Akwai ɓarkewar cuta a Sokoto yanzu?",

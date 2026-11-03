@@ -365,7 +365,7 @@ def test_the_conversational_reply_falls_back_to_the_fixed_words_in_the_users_lan
     class Down(_Client):
         replies = {"Down": TimeoutError()}
     text, how = asyncio.run(CV.reply("Kai wanene?", "ha", [], None, make_settings(), client_cls=Down))
-    assert how == "fixed" and text.startswith("Ni ne Kasafi") and "aiko da wurinka" in text
+    assert how == "fixed" and text.startswith("Ni ne Kasafi") and "ku aiko da wurinku" in text
     _Client.replies = {"Meta": "# Hello\nI'm Kasafi."}
     text, how = asyncio.run(CV.reply("Hello", "en", [], None, make_settings(), client_cls=Meta))
     assert how == "model" and text == "Hello\nI'm Kasafi."

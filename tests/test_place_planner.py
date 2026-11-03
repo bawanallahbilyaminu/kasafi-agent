@@ -274,7 +274,7 @@ def test_the_ward_answer_names_the_ward_gives_the_trend_and_never_headlines_a_th
     assert later.year == 2024 and "composites to 30 September" in later.text        # the calendar alone never finishes a season
     ha = P.area_answer(conn, "Yaya noma ya canza a unguwata tun shekaru?", "", "ha", "ward", "62102", TODAY, place=PIN)
     assert ha.text.startswith("*Koriyar ƙololuwa: gundumar Bado (wataƙila), Ƙaramar Hukumar Wamakko*")
-    assert "Wurinka yana gundumar Bado" in ha.text and "Tun 20" in ha.text and " sun fi koriya" not in ha.text
+    assert "Wurinku yana gundumar Bado" in ha.text and "Tun 20" in ha.text and " sun fi koriya" not in ha.text
     sure = P.area_answer(conn, q, "", "en", "ward", "62102", TODAY, place={**PIN, "ward_likely": False})
     assert "(likely)" not in sure.text
     year = P.area_answer(conn, "How green was my ward in 2024?", "", "en", "ward", "62102", TODAY, place=PIN)

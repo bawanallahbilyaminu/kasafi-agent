@@ -84,7 +84,7 @@ BRIEF_WORDS = {"en": {"caption": "📄 The full brief: every section with its so
                       "none": "There is no recent analysis to send as a brief. Ask a broad question first, e.g. "
                               "'What's the state of PHCs in Sokoto?'"},
                "ha": {"caption": "📄 Cikakken rahoton: dukkan sassan da madogararsu da shafuka.",
-                      "none": "Babu wani bincike na kwanan nan da zan aika a matsayin rahoto. Ka fara da tambaya mai "
+                      "none": "Babu wani bincike na kwanan nan da zan aika a matsayin rahoto. Ku fara da tambaya mai "
                               "fadi, misali 'Yaya yanayin cibiyoyin kiwon lafiya na Sokoto?'"}}
 _briefs: dict[str, tuple[float, str, object]] = {}     # user key -> (when, question, deep result): memory only, 1 h
 SHOW_WORKING = {"nuna lissafi", "nuna min lissafi", "nuna lissafin", "yadda aka lissafa", "lissafi",
@@ -179,6 +179,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     if text and is_delete_command(text):
         delete_user_data(sender, store=store, settings=settings)
         location_memory.forget(user_key(sender, settings))       # and any point still in memory
+        _first_messages.pop(user_key(sender, settings), None)    # and a first message kept before consent
         return [Out(DELETED_REPLY)]
     key = user_key(sender, settings)
     store.touch_alert_contact(key)             # a subscriber's sign-up lasts 90 days from their last message
@@ -210,6 +211,13 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     if not allowed:
         return [Out(NOT_IN_PILOT)]
 
+    async def replay(first: dict) -> list[Out]:
+        """The message kept from before consent, handled as if it had just arrived (same functions)."""
+        return await handle(first, wa, store=store, settings=settings, voice_fn=voice_fn, notify=notify,
+                            resolve_fn=resolve_fn, guard_fn=guard_fn, answer_fn=answer_fn, locate_fn=locate_fn,
+                            place_fn=place_fn, facility_fn=facility_fn, emergency_fn=emergency_fn,
+                            classify_fn=classify_fn, understand_fn=understand_fn)
+
     # 3. Language switch
     chosen = LANG_BUTTON_IDS.get(button or "") or LANG_COMMANDS.get(_norm(text))
     if chosen:
@@ -217,21 +225,32 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             store.create(key, None)
         store.set_lang(key, chosen)
         user = store.get(key)
+        if user.consented and (first := _kept_first(key)) is not None:   # consent came first, then the language
+            return [Out(t("consent_thanks_first", chosen))] + await replay(first)
         return [Out(t("lang_set", chosen))] if user.consented else _notice(chosen, "chosen")
 
     # 4. Consent
     if user is None:
         user = store.create(key, detect_language(text) if text else None)
+        _first_messages.pop(key, None)            # a new user never inherits a kept message
         if not (button == "consent_ok" or _norm(text) in CONSENT_TEXTS):
             log.info("first contact from %s: consent notice sent (lang=%s)", mask_phone(sender), user.lang)
+            _keep_first(key, msg)
             return _notice(user.lang, user.lang_source)
     if not user.consented:
         if button == "consent_ok" or _norm(text) in CONSENT_TEXTS:
             store.give_consent(key)
             log.info("consent given by %s", mask_phone(sender))
-            if user.lang is None:
+            if user.lang is None:                 # the kept first message waits for the language
                 return [Out(t("consent_thanks_ask_lang", None), LANG_BUTTONS)]
+            if (first := _kept_first(key)) is not None:
+                # the first message, through the whole pipeline now that models may be called: the fast path
+                # (phrases, then the classifier) and the understanding step's 'urgent' come before anything else
+                outs = await replay(first)
+                emergency = bool(outs) and outs[0].text.startswith(em.WORDS.get(user.lang, em.WORDS["ha"])["now"][:1])
+                return outs if emergency else [Out(t("consent_thanks_first", user.lang))] + outs
             return [Out(t("consent_thanks", user.lang))]
+        _keep_first(key, msg)
         return _notice(user.lang, user.lang_source)
 
     # 5. Consented: limits (skipped for our own test numbers), then work
@@ -319,7 +338,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         maternal = u.care == "maternal" or bool(em.MATERNAL.search(text))
         await _trace_emergency(settings, lang, "understanding", {**safety, "urgent": True}, True)
         log.info("emergency from the understanding step (fast path layers: %s)", safety)
-        return await _emergency(key, lang, em.Detection(True, maternal=maternal, by="understanding"), store,
+        # a conditional reading ('if my child has trouble breathing') still fires (the safe side), and says so
+        conditional = u.urgent_reason.lower().startswith("conditional") or bool(IF_WORDS.search(text))
+        return await _emergency(key, lang, em.Detection(True, maternal=maternal, by="understanding",
+                                                        conditional=conditional), store,
                                 settings, emergency_fn, notify=_sender(notify))
     # 'menu' / 'zaɓi', read as kind 'menu' (with no reading, the word alone): the interactive list
     if kind == "text" and text and (u.kind == "menu" if u is not None else _norm(text) in MENU_WORDS):
@@ -821,7 +843,7 @@ async def _emergency(key: str, lang: str, d: em.Detection, store: UserStore, set
     w = em.WORDS[lang]
     spot = spot or location_memory.recall(key)
     last = None if spot else store.get_last_lga(key)
-    lines = ([w["now"]] if first else []) + em.contact_lines(lang, lga=spot.lga if spot else name_of(last or ""))
+    lines = ([w["now_if" if d.conditional else "now"]] if first else []) + em.contact_lines(lang, lga=spot.lga if spot else name_of(last or ""))
     outs: list[Out] = []
     picks = []
     if (spot or last) and settings.has_database:
@@ -1003,6 +1025,8 @@ ABOUT_KASAFI = re.compile(r"(?i)^\s*(?:who are you|what are you|what can you do|
 CLOSER = re.compile(r"(?i)\b(?:closer|nearer|ya fi kusa|ta fi kusa|fi kusa da)\b")
 REQUEST_WORDS = re.compile(r"(?i)\b(?:what|how|which|when|where|who|why|show|list|give|tell|find|send|is|are|does|"
                            r"nawa|mene|menene|wane|wace|wanne|ina|yaya|yaushe|nuna|ba ni|fa[ɗd]a|budget|kasafi\w*)\b")
+# the user's own 'if' (a fallback when the reading's reason doesn't say 'conditional')
+IF_WORDS = re.compile(r"(?i)\b(?:if|in case|idan|in har|ko da)\b")
 CLAIM_WAIT = "facility-claim:"     # a facility claim waiting for the user's location: the facility's name follows
 PLACE_BUDGET_WAIT = "place-budget:"  # a place-budget reading waiting for a location: its restatement follows
 FACILITY_WAIT = "facility-search:"  # a facility reading waiting for a location: the message follows
@@ -1138,6 +1162,34 @@ async def _answer_button(button: str, key: str, lang: str, store: UserStore) -> 
     return None, last, last.restatement, other
 
 
+FIRST_TTL_S = 1800
+# before consent no model may read the message, so a bare greeting is told apart by its words alone
+GREETING = re.compile(r"(?i)^\s*(?:hello|hi|hey|good (?:morning|afternoon|evening)|sannu(?: da \w+)?|"
+                      r"assalamu alaikum|salam|ina kwana|ina wuni|barka da \w+)\s*[.!]*\s*$")
+# a message sent before consent: kept in memory only (never sent to a model before consent, never written to disk),
+# for 30 minutes, and handled right after the user accepts; DELETE MY DATA drops it
+_first_messages: dict[str, tuple[float, dict]] = {}
+
+
+def _keep_first(key: str, msg: dict) -> None:
+    """Keep the first question sent before consent (not the consent words, buttons or later messages)."""
+    if key in _first_messages or msg.get("type") not in ("text", "audio") or _button_id(msg):
+        return
+    body = ((msg.get("text") or {}).get("body") or "") if msg.get("type") == "text" else ""
+    if msg.get("type") == "text" and (not body.strip() or _norm(body) in CONSENT_TEXTS or
+                                      LANG_COMMANDS.get(_norm(body)) or GREETING.match(body)):
+        return                     # a bare greeting opened the conversation: nothing to answer after consent
+    now = time.time()
+    _first_messages[key] = (now, {**msg, "id": f"{msg.get('id', '')}-after-consent"})
+    for k in [k for k, (at, _) in _first_messages.items() if now - at > FIRST_TTL_S]:
+        _first_messages.pop(k, None)
+
+
+def _kept_first(key: str) -> dict | None:
+    at, msg = _first_messages.pop(key, (0.0, None))
+    return msg if msg is not None and time.time() - at <= FIRST_TTL_S else None
+
+
 def place_budget_reading(waiting: str):
     """The reading a place-budget question resumes with once the location has come."""
     from app.agent.understand import Understanding
@@ -1229,18 +1281,18 @@ CORRECTION_WORDS = {
            "cold_not_closer": "{first} is closer to {you} than {name}.",
            "you": "you", "you_lga": "the centre of {lga} LGA", "hospital": "hospital", "facility": "health facility"},
     "ha": {"closer": "Gaskiya ne: {name} ya fi kusa da kai fiye da waɗanda na lissafa.",
-           "not_closer": "{first} ne har yanzu mafi kusa da kai ta hanya.",
-           "where": "{name}: {road} ta hanya daga wurinka ({km} km a mike).",
+           "not_closer": "{first} ne har yanzu mafi kusa da ku ta hanya.",
+           "where": "{name}: {road} ta hanya daga wurinku ({km} km a mike).",
            "first": "Mafi kusa da na lissafa, {first}: {road} ta hanya.",
            "why_filter": "Ba ya cikin jerin saboda binciken na {what} ne.",
            "why_line": "Ba ya cikin jerin saboda ina ɗaukar {k} mafi kusa a mike kafin in duba lokacin tafiya ta "
                        "hanya, kuma yana da {km} km a mike.",
-           "no_road": "{name} yana da {km} km daga wurinka a mike (ba a samu lokacin tafiya ta hanya yanzu ba).",
+           "no_road": "{name} yana da {km} km daga wurinku a mike (ba a samu lokacin tafiya ta hanya yanzu ba).",
            "why_missed": "Ya kamata ya kasance cikin jerin: ya fi waɗanda na bayar kusa.",
-           "need_location": "Don in duba ko {name} ne mafi kusa da kai, ina buƙatar wurinka: raba shi, ko faɗa mini "
-                            "ƙaramar hukumarka ko garinka.",
-           "from_lga": "Ba ni da ainihin wurinka, don haka na auna daga tsakiyar ƙaramar hukumar {lga} (wadda ke "
-                       "rubuce a wurina). Raba wurinka don amsa daidai.",
+           "need_location": "Don in duba ko {name} ne mafi kusa da ku, ina buƙatar wurinku: ku raba shi, ko ku faɗa mini "
+                            "ƙaramar hukumarku ko garinku.",
+           "from_lga": "Ba ni da ainihin wurinku, don haka na auna daga tsakiyar ƙaramar hukumar {lga} (wadda ke "
+                       "rubuce a wurina). Ku raba wurinku don amsa daidai.",
            "where_lga": "{name}: {road} ta hanya daga tsakiyar ƙaramar hukumar {lga} ({km} km a mike).",
            "no_road_lga": "{name} yana da {km} km daga tsakiyar ƙaramar hukumar {lga} a mike (ba a samu lokacin "
                           "tafiya ta hanya yanzu ba).",
@@ -1248,7 +1300,7 @@ CORRECTION_WORDS = {
            "other_km": "Wani {what} mafi kusa, {first}: {km} km a mike.",
            "cold_closer": "Gaskiya ne: {name} ne {what} mafi kusa da {you}.",
            "cold_not_closer": "{first} ya fi {name} kusa da {you}.",
-           "you": "kai", "you_lga": "tsakiyar ƙaramar hukumar {lga}", "hospital": "asibiti",
+           "you": "ku", "you_lga": "tsakiyar ƙaramar hukumar {lga}", "hospital": "asibiti",
            "facility": "cibiyar lafiya"},
 }
 

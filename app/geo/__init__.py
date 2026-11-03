@@ -19,7 +19,7 @@ FACILITY_NOTE = {
     "en": "Facility list: GRID3 Nigeria / NHFR, updated Nov 2024; opening hours and services aren't confirmed. "
           "Call ahead if you can.",
     "ha": "Jerin cibiyoyin lafiya: GRID3 Nigeria / NHFR, an sabunta Nuwamba 2024; ba a tabbatar da lokutan buɗewa "
-          "da ayyukansu ba. Ka kira kafin ka je idan za ka iya.",
+          "da ayyukansu ba. Ku kira kafin ku je idan za ku iya.",
 }
 
 

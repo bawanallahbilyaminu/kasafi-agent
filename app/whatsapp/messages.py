@@ -22,17 +22,19 @@ _NOTICE_HA = """*Barka da zuwa Kasafi* (gwaji).
 
 Ina amsa tambayoyi game da takardun kasafi da manufofin gwamnati.
 
-• Sabis ɗin AI na Meta ne ke sarrafa saƙonninka da saƙon murya. Yayin da muke amfani da kuɗin gwaji kyauta, Meta na iya amfani da su don inganta ayyukansa.
+• Sabis ɗin AI na Meta ne ke sarrafa saƙonninku da saƙon murya. Yayin da muke amfani da kuɗin gwaji kyauta, Meta na iya amfani da su don inganta ayyukansa.
 
-• Kada ka tura bayanan sirri.
+• Kada ku tura bayanan sirri.
 
 • Ana goge saƙon murya bayan an mayar da shi rubutu.
+
+{emergency}
 
 {lang_line}
 
 Sirri: {url}
 
-Danna *OK / Na yarda* a saƙon da ke ƙasa idan ka yarda."""
+Ku danna *OK / Na yarda* a saƙon da ke ƙasa idan kun yarda."""
 
 _NOTICE_EN = """*Welcome to Kasafi* (pilot).
 
@@ -44,6 +46,8 @@ I answer questions about public budget and policy documents.
 
 • Voice notes are deleted after transcription.
 
+{emergency}
+
 {lang_line}
 
 Privacy: {url}
@@ -51,86 +55,100 @@ Privacy: {url}
 Tap *OK / Na yarda* to agree."""
 
 _LANG_LINE = {
-    ("detected", "ha"): ("Bisa ga saƙonka na farko, zan riƙa amsa da Hausa. Don sauyawa, aika /english.",
+    ("detected", "ha"): ("Bisa ga saƙonku na farko, zan riƙa amsa da Hausa. Don sauyawa, ku aika /english.",
                          "Based on your first message, I'll reply in Hausa. Switch any time with /english."),
-    ("detected", "en"): ("Bisa ga saƙonka na farko, zan riƙa amsa da Turanci. Don sauyawa, aika /hausa.",
+    ("detected", "en"): ("Bisa ga saƙonku na farko, zan riƙa amsa da Turanci. Don sauyawa, ku aika /hausa.",
                          "Based on your first message, I'll reply in English. Switch any time with /hausa."),
-    ("chosen", "ha"): ("Zan riƙa amsa da Hausa. Don sauyawa, aika /english.",
+    ("chosen", "ha"): ("Zan riƙa amsa da Hausa. Don sauyawa, ku aika /english.",
                        "I'll reply in Hausa. Switch any time with /english."),
-    ("chosen", "en"): ("Zan riƙa amsa da Turanci. Don sauyawa, aika /hausa.",
+    ("chosen", "en"): ("Zan riƙa amsa da Turanci. Don sauyawa, ku aika /hausa.",
                        "I'll reply in English. Switch any time with /hausa."),
 }
-_ASK_LANG = ("Da wane harshe zan riƙa amsa? Danna *Hausa* ko *English* a ƙasa.",
+_ASK_LANG = ("Da wane harshe zan riƙa amsa? Ku danna *Hausa* ko *English* a ƙasa.",
              "Which language should I reply in? Tap *Hausa* or *English* below.")
 
 
 def first_contact_notice(lang: str | None, source: str | None) -> tuple[str, str]:
     """The consent notice as two messages: Hausa first, then English (which carries the buttons)."""
     ha_line, en_line = (_LANG_LINE.get((source or "detected", lang)) if lang else None) or _ASK_LANG
-    return (_NOTICE_HA.format(lang_line=ha_line, url=PRIVACY_URL),
-            _NOTICE_EN.format(lang_line=en_line, url=PRIVACY_URL))
+    return (_NOTICE_HA.format(lang_line=ha_line, url=PRIVACY_URL, emergency=emergency_line("ha")),
+            _NOTICE_EN.format(lang_line=en_line, url=PRIVACY_URL, emergency=emergency_line("en")))
+
+
+EMERGENCY_LINE = {"ha": "🚨 Idan gaggawar lafiya ce, kada ku jira: ku je asibiti mafi kusa nan take.",
+                  "en": "🚨 In a medical emergency, don't wait: go to the nearest health facility now."}
+
+
+def emergency_line(lang: str) -> str:
+    """One short line for the consent notice, with the same verified numbers as the emergency reply."""
+    from app.guardrails.emergency import contact_lines
+    return "\n".join([EMERGENCY_LINE[lang], *contact_lines(lang)])
 
 
 TEXTS = {
     "consent_thanks": {
-        "ha": "Na gode.\n\nYanzu ka aiko da tambayarka, a rubuce ko da saƙon murya.\n\nRubuta *menu* a kowane "
+        "ha": "Na gode.\n\nYanzu ku aiko da tambayarku, a rubuce ko da saƙon murya.\n\nKu rubuta *menu* a kowane "
               "lokaci don ganin abin da zan iya yi.",
         "en": "Thank you.\n\nNow send your question, as text or a voice note.\n\nType *menu* any time to see what "
               "I can do.",
+    },
+    "consent_thanks_first": {         # consent given after a first question: that question is answered now
+        "ha": "Na gode. Ga amsar saƙonku na farko.\n\nKu rubuta *menu* a kowane lokaci don ganin abin da zan iya yi.",
+        "en": "Thank you. Here is the answer to your first message.\n\nType *menu* any time to see what I can do.",
     },
     "consent_thanks_ask_lang": {
         "both": "Na gode. Da wane harshe zan riƙa amsa?\n\nThank you. Which language should I reply in?",
     },
     "lang_set": {
-        "ha": "To, zan riƙa amsa da Hausa.\n\nDon sauyawa, aika /english.",
+        "ha": "To, zan riƙa amsa da Hausa.\n\nDon sauyawa, ku aika /english.",
         "en": "OK, I'll reply in English.\n\nSwitch any time with /hausa.",
     },
     "voice_limit": {
-        "ha": "Ka kai iyakar saƙon murya {n} na yau.\n\nDon Allah ka rubuta tambayarka, ko ka sake gwadawa gobe.",
+        "ha": "Kun kai iyakar saƙon murya {n} na yau.\n\nDon Allah ku rubuta tambayarku, ko ku sake gwadawa gobe.",
         "en": "You've reached today's limit of {n} voice notes.\n\nPlease type your question, or try again tomorrow.",
     },
     "question_limit": {
-        "ha": "Ka kai iyakar tambayoyi {n} na yau.\n\nDon Allah ka sake gwadawa gobe. Mun gode!",
+        "ha": "Kun kai iyakar tambayoyi {n} na yau.\n\nDon Allah ku sake gwadawa gobe. Mun gode!",
         "en": "You've reached today's limit of {n} questions.\n\nPlease try again tomorrow. Thank you!",
     },
     "busy": {
-        "ha": "Yi haƙuri, Kasafi ya kai iyakar aikinsa na yau.\n\nDon Allah ka sake gwadawa gobe.",
+        "ha": "Yi haƙuri, Kasafi ya kai iyakar aikinsa na yau.\n\nDon Allah ku sake gwadawa gobe.",
         "en": "Sorry, Kasafi has reached its capacity for today.\n\nPlease try again tomorrow.",
     },
     "echo": {
-        "ha": "Kasafi (gwaji): na karɓi saƙonka:\n\n«{text}»",
+        "ha": "Kasafi (gwaji): na karɓi saƙonku:\n\n«{text}»",
         "en": "Kasafi (test): I received your message:\n\n«{text}»",
     },
     "other": {
-        "ha": "Kasafi (gwaji): don Allah ka aiko da rubutu ko saƙon murya.",
+        "ha": "Kasafi (gwaji): don Allah ku aiko da rubutu ko saƙon murya.",
         "en": "Kasafi (test): please send text or a voice note.",
     },
     # Location (docs/hazard-and-services.md section 3): used for the request only; only the LGA is kept
     "location_notice": {
-        "ha": "Kasafi zai yi amfani da wurinka ne kawai don amsa wannan, kuma ba zai ajiye shi ba. Ƙaramar hukumarka "
+        "ha": "Kasafi zai yi amfani da wurinku ne kawai don amsa wannan, kuma ba zai ajiye shi ba. Ƙaramar hukumarku "
               "kaɗai za a tuna don tambayoyin da za su biyo baya.",
         "en": "Kasafi will use your location only to answer this and won't keep it. Only your LGA is remembered for "
               "follow-ups.",
     },
     "location_got": {
-        "ha": "📍 Na gane wurinka: Ƙaramar Hukumar {lga}{ward}, Jihar Sokoto. Me kake so ka sani game da wurin?",
+        "ha": "📍 Na gane wurinku: Ƙaramar Hukumar {lga}{ward}, Jihar Sokoto. Me kuke so ku sani game da wurin?",
         "en": "📍 Got it: you're in {lga} LGA{ward}, Sokoto State. What would you like to know about it?",
     },
     "location_ward": {"ha": " (mazaɓar {ward})", "en": " ({ward} ward)"},
     # within ~300 m of a ward border (the 2019 GRID3 wards can be off near their edges)
     "location_ward_likely": {"ha": " (wataƙila mazaɓar {ward})", "en": " (likely {ward} ward)"},
     "location_outside": {
-        "ha": "Wannan wurin yana wajen Jihar Sokoto. Kasafi yana bayani ne kan Jihar Sokoto kaɗai; ka aiko da wuri a "
-              "cikin jihar, ko ka rubuta sunan ƙaramar hukuma ko gari.",
+        "ha": "Wannan wurin yana wajen Jihar Sokoto. Kasafi yana bayani ne kan Jihar Sokoto kaɗai; ku aiko da wuri a "
+              "cikin jihar, ko ku rubuta sunan ƙaramar hukuma ko gari.",
         "en": "That location is outside Sokoto State. Kasafi covers Sokoto State only; send a place inside the state, "
               "or type an LGA or town name.",
     },
     "location_request": {
-        "ha": "Ka danna maɓallin da ke ƙasa don raba wurinka, ko ka rubuta sunan ƙaramar hukumarka ko garinka.",
+        "ha": "Ku danna maɓallin da ke ƙasa don ku raba wurinku, ko ku rubuta sunan ƙaramar hukumarku ko garinku.",
         "en": "Tap the button below to share your location, or tell me your LGA or town.",
     },
     "location_unavailable": {
-        "ha": "Ba zan iya gane wurare yanzu ba. Ka rubuta sunan ƙaramar hukumarka.",
+        "ha": "Ba zan iya gane wurare yanzu ba. Ku rubuta sunan ƙaramar hukumarku.",
         "en": "I can't look up places right now. Please type your LGA.",
     },
     # Voice notes
@@ -139,19 +157,19 @@ TEXTS = {
         "en": "🎧 Listening…",
     },
     "read_back": {
-        "ha": "Na ji kamar ka ce:\n\n«{transcript}»\n\nKana nufin haka? Ka amsa *Eh*, ko ka gyara, misali da shekarar da ta dace.",
+        "ha": "Na ji kamar kun ce:\n\n«{transcript}»\n\nKuna nufin haka? Ku amsa *Eh*, ko ku gyara, misali da shekarar da ta dace.",
         "en": "I heard:\n\n«{transcript}»\n\nDid you mean that? Reply *Yes*, or send a correction, for example the right year.",
     },
     "heard": {
-        "ha": "Na ji tambayarka:\n\n«{transcript}»\n\n(Kasafi yana gwaji: amsoshi za su zo nan ba da jimawa ba.)",
+        "ha": "Na ji tambayarku:\n\n«{transcript}»\n\n(Kasafi yana gwaji: amsoshi za su zo nan ba da jimawa ba.)",
         "en": "I heard your question:\n\n«{transcript}»\n\n(Kasafi is in testing: answers are coming soon.)",
     },
     "not_heard": {
-        "ha": "Yi haƙuri, ban ji saƙon muryar sosai ba.\n\nDon Allah ka sake turawa, ko ka rubuta tambayarka.",
+        "ha": "Yi haƙuri, ban ji saƙon muryar sosai ba.\n\nDon Allah ku sake turawa, ko ku rubuta tambayarku.",
         "en": "Sorry, I couldn't hear that voice note clearly.\n\nPlease send it again, or type your question.",
     },
     "too_long": {
-        "ha": "Saƙon murya ya yi tsawo.\n\nDon Allah ka tura gajere (ƙasa da minti {minutes}), ko ka rubuta tambayarka.",
+        "ha": "Saƙon murya ya yi tsawo.\n\nDon Allah ku tura gajere (ƙasa da minti {minutes}), ko ku rubuta tambayarku.",
         "en": "That voice note is too long.\n\nPlease send a shorter one (under {minutes} minutes), or type your question.",
     },
     # Answers from the documents (app/agent/answer.py). The answer follows the prefix after a blank line.
@@ -168,11 +186,11 @@ TEXTS = {
         "en": "🌦️ Checking the latest forecasts…",
     },
     "heard_prefix": {
-        "ha": "Na ji tambayarka:\n\n«{transcript}»",
+        "ha": "Na ji tambayarku:\n\n«{transcript}»",
         "en": "I heard your question:\n\n«{transcript}»",
     },
     "confirmed_prefix": {
-        "ha": "Na gode. Tambayarka:\n\n«{question}»",
+        "ha": "Na gode. Tambayarku:\n\n«{question}»",
         "en": "Thank you. Your question:\n\n«{question}»",
     },
     "corrected_prefix": {
@@ -180,21 +198,21 @@ TEXTS = {
         "en": "Corrected:\n\n«{question}»",
     },
     "answer_failed": {
-        "ha": "Yi haƙuri, an sami matsala wajen neman amsar.\n\nDon Allah ka sake gwadawa nan da ɗan lokaci.",
+        "ha": "Yi haƙuri, an sami matsala wajen neman amsar.\n\nDon Allah ku sake gwadawa nan da ɗan lokaci.",
         "en": "Sorry, something went wrong while looking up the answer.\n\nPlease try again in a little while.",
     },
     "answer_timeout": {               # a long job that didn't finish within the limit (app/whatsapp/conversation.py)
-        "ha": "Yi haƙuri, ban iya kammala neman amsar a kan lokaci ba.\n\nDon Allah ka sake gwadawa nan da ƴan mintoci.",
+        "ha": "Yi haƙuri, ban iya kammala neman amsar a kan lokaci ba.\n\nDon Allah ku sake gwadawa nan da ƴan mintoci.",
         "en": "Sorry, I couldn't finish the answer in time.\n\nPlease try again in a few minutes.",
     },
     "satellite_failed": {             # a place-history request that timed out or failed
-        "ha": "Yi haƙuri, ban iya kammala duba hotunan tauraron ɗan adam ba.\n\nDon Allah ka sake gwadawa nan da ƴan "
+        "ha": "Yi haƙuri, ban iya kammala duba hotunan tauraron ɗan adam ba.\n\nDon Allah ku sake gwadawa nan da ƴan "
               "mintoci.",
         "en": "Sorry, I couldn't finish checking the satellite images.\n\nPlease try again in a few minutes.",
     },
     # Read-back confirmation and corrections
     "confirmed": {
-        "ha": "Na gode. Tambayarka:\n\n«{question}»\n\n(Kasafi yana gwaji: amsoshi za su zo nan ba da jimawa ba.)",
+        "ha": "Na gode. Tambayarku:\n\n«{question}»\n\n(Kasafi yana gwaji: amsoshi za su zo nan ba da jimawa ba.)",
         "en": "Thank you. Your question:\n\n«{question}»\n\n(Kasafi is in testing: answers are coming soon.)",
     },
     "corrected": {
@@ -202,32 +220,32 @@ TEXTS = {
         "en": "Corrected:\n\n«{question}»\n\n(Kasafi is in testing: answers are coming soon.)",
     },
     "ask_replace_or_add": {
-        "ha": "Kana nufin «{value}» ya maye gurbin abin da na ji, ko in ƙara shi?\n\nDanna *Maye gurbi* ko *Ƙara*.",
+        "ha": "Kuna nufin «{value}» ya maye gurbin abin da na ji, ko in ƙara shi?\n\nKu danna *Maye gurbi* ko *Ƙara*.",
         "en": "Should «{value}» replace what I heard, or be added to it?\n\nTap *Replace* or *Add*.",
     },
     "correction_failed": {
-        "ha": "Yi haƙuri, ban iya yin wannan gyaran ba.\n\nDon Allah ka sake aiko da cikakkiyar tambayar.",
+        "ha": "Yi haƙuri, ban iya yin wannan gyaran ba.\n\nDon Allah ku sake aiko da cikakkiyar tambayar.",
         "en": "Sorry, I couldn't apply that correction.\n\nPlease send the full question again.",
     },
     # Scope guardrails (app/guardrails/scope.py)
     "guard_electoral": {
-        "ha": "Kasafi ba ya ba da ra'ayi kan 'yan siyasa, jam'iyyu ko zaɓe.\n\nZan iya nuna maka abin da kasafi da tsare-tsaren gwamnati suka ce, tare da madogara, misali: «Nawa aka ware wa ilimi a 2026?»",
+        "ha": "Kasafi ba ya ba da ra'ayi kan 'yan siyasa, jam'iyyu ko zaɓe.\n\nZan iya nuna muku abin da kasafi da tsare-tsaren gwamnati suka ce, tare da madogara, misali: «Nawa aka ware wa ilimi a 2026?»",
         "en": "Kasafi doesn't give opinions on politicians, parties or elections.\n\nI can show you what the budgets and plans say, with sources, for example: «How much was allocated to education in 2026?»",
     },
     "guard_verdict": {
-        "ha": "Kasafi ba ya yanke hukunci kan ayyukan gwamnati ko na 'yan siyasa.\n\nAmma zan iya nuna maka bayanai daga takardu gefe da gefe, misali: «Nawa aka ware wa ilimi a 2025, kuma nawa aka kashe?»",
+        "ha": "Kasafi ba ya yanke hukunci kan ayyukan gwamnati ko na 'yan siyasa.\n\nAmma zan iya nuna muku bayanai daga takardu gefe da gefe, misali: «Nawa aka ware wa ilimi a 2025, kuma nawa aka kashe?»",
         "en": "Kasafi doesn't judge the performance of the government or politicians.\n\nBut I can show you the facts from the documents side by side, for example: «How much was allocated to education in 2025, and how much was spent?»",
     },
     "guard_security": {
-        "ha": "Yi haƙuri, Kasafi ba ya amsa tambayoyi game da hare-hare, 'yan bindiga, rikici ko amincin hanyoyi.\n\nZan iya ba ka alƙaluman kasafin hukumomin tsaro, tare da madogara, ko bayanin yanayi da haɗari (zafi, ƙura, ambaliya).",
+        "ha": "Yi haƙuri, Kasafi ba ya amsa tambayoyi game da hare-hare, 'yan bindiga, rikici ko amincin hanyoyi.\n\nZan iya ba ku alƙaluman kasafin hukumomin tsaro, tare da madogara, ko bayanin yanayi da haɗari (zafi, ƙura, ambaliya).",
         "en": "Sorry, Kasafi doesn't answer questions about attacks, armed groups, security incidents or which roads are safe.\n\nI can give you budget figures for security agencies, with sources, or weather and hazard information (heat, dust, floods).",
     },
     "guard_medical_advice": {
-        "ha": "Kasafi ba ya ba da shawarar magani ko ta abinci mai gina jiki.\n\nDon Allah ka tuntuɓi ma'aikacin lafiya. Zan iya taimaka maka da alƙaluman kasafin lafiya, misali: «Nawa aka ware wa lafiya a 2026?»",
+        "ha": "Kasafi ba ya ba da shawarar magani ko ta abinci mai gina jiki.\n\nDon Allah ku tuntuɓi ma'aikacin lafiya. Zan iya taimaka muku da alƙaluman kasafin lafiya, misali: «Nawa aka ware wa lafiya a 2026?»",
         "en": "Kasafi doesn't give medical or nutrition advice.\n\nPlease speak to a health worker. I can help with health budget figures, for example: «How much was allocated to health in 2026?»",
     },
     "guard_land": {
-        "ha": "Kasafi ba ya tabbatar da mallakar ƙasa ko iyakokin gona, kuma ba ya ba da takardar shaida.\n\nZan iya nuna maka abin da hotunan tauraron ɗan adam suka nuna game da koriyar gona, ruwa ko ƙasa mara ciyayi a shekarun baya, misali: «Yaya koriyar gonata ta kasance a 2024?»",
+        "ha": "Kasafi ba ya tabbatar da mallakar ƙasa ko iyakokin gona, kuma ba ya ba da takardar shaida.\n\nZan iya nuna muku abin da hotunan tauraron ɗan adam suka nuna game da koriyar gona, ruwa ko ƙasa mara ciyayi a shekarun baya, misali: «Yaya koriyar gonata ta kasance a 2024?»",
         "en": "Kasafi can't confirm who owns land, where a farm's boundary runs, or issue any certificate.\n\nI can show what the satellite images say about a farm's greenness, water or bare soil over the years, for example: «How green was my farm in 2024?»",
     },
     "searching_satellite": {          # a place-history question: satellite images, not documents
@@ -235,12 +253,12 @@ TEXTS = {
         "en": "🛰️ Checking the satellite images…",
     },
     "images_off": {
-        "ha": "To, daga yanzu ba zan riƙa aiko da hotunan shaida ba.\n\nRubuta *kunna hotuna* idan kana so a dawo da su.",
+        "ha": "To, daga yanzu ba zan riƙa aiko da hotunan shaida ba.\n\nKu rubuta *kunna hotuna* idan kuna so a dawo da su.",
         "en": "OK, I won't send evidence images from now on.\n\nSend *images on* to turn them back on.",
     },
     "images_on": {
-        "ha": "To, zan riƙa aiko da hoton layin teburin da na ɗauko alƙaluman daga ciki.\n\nRubuta *kashe hotuna* "
-              "idan kana so in daina.",
+        "ha": "To, zan riƙa aiko da hoton layin teburin da na ɗauko alƙaluman daga ciki.\n\nKu rubuta *kashe hotuna* "
+              "idan kuna so in daina.",
         "en": "OK, I'll send a picture of the table row each figure comes from.\n\nSend *images off* to stop.",
     },
     "calc_cancelled": {
@@ -256,7 +274,7 @@ TEXTS = {
         "en": "There's no working to show: the last answer didn't add up budget lines.",
     },
     "cancelled": {
-        "ha": "To, an soke wannan tambayar.\n\nKa aiko da sabuwar tambaya a duk lokacin da kake so.",
+        "ha": "To, an soke wannan tambayar.\n\nKu aiko da sabuwar tambaya a duk lokacin da kuke so.",
         "en": "OK, that question is cancelled.\n\nSend a new question whenever you like.",
     },
 }

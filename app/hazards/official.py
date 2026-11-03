@@ -143,7 +143,7 @@ T = {
            "outlook_now": "📘 *Hasashen hukuma na waɗannan watanni (na lokaci, ba gargaɗi ba):*",
            "issued": "an fitar", "item": "• {covers}, shafi {page}{table}: “{text}”",
            "lga_more": "Akwai ƙarin bayanai {n} na ƙananan hukumomi ɗaya-ɗaya (farkon damina, ƙarshenta, yawan "
-                       "ruwa, lokutan fari): tambayi ƙaramar hukumarka.",
+                       "ruwa, lokutan fari): ku tambayi ƙaramar hukumarku.",
            "outlook_note": "An kawo su yadda aka buga; inda teburorin hasashen da rubutunsa suka bambanta, an nuna "
                            "duka biyun. Sabon bayani yana maye gurbin na farko ne kawai a watannin da ya shafa."},
 }

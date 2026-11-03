@@ -163,6 +163,7 @@ class Detection:
     health: bool = False        # no phrase, but words about a person's body or health: the classifier is asked
     maternal: bool = False      # pregnancy or labour: comprehensive EmONC facilities first
     by: str = ""                # what fired it: phrase | classifier | understanding (for the trace)
+    conditional: bool = False   # 'if my child has trouble breathing': the reply opens "If this is happening now…"
 
 
 def detect(*texts: str) -> Detection:
@@ -247,6 +248,7 @@ async def decide(text: str, settings, consented: bool, classify_fn=classify, why
 
 WORDS = {
     "en": {"now": "🚨 This sounds like an emergency. Get help now.",
+           "now_if": "🚨 If this is happening now, it is an emergency. Get help now.",
            "near_spot": "", "near_lga": " (near the centre of {lga} LGA)",
            "cemonc": "Nearest hospital with comprehensive emergency obstetric care{near}: *{name}*, {dist}, in {lga} "
                      "LGA.",
@@ -262,18 +264,19 @@ WORDS = {
                   "hospital.",
            "levels": {"Primary": "primary", "Secondary": "secondary", "Tertiary": "tertiary"}},
     "ha": {"now": "🚨 Wannan yana kama da gaggawa. Ku nemi taimako yanzu.",
+           "now_if": "🚨 Idan hakan na faruwa yanzu, gaggawa ce. Ku nemi taimako yanzu.",
            "near_spot": "", "near_lga": " (kusa da tsakiyar Ƙaramar Hukumar {lga})",
            "cemonc": "Asibiti mafi kusa mai cikakkiyar kulawar gaggawa ta haihuwa{near}: *{name}*, {dist}, a "
                      "Ƙaramar Hukumar {lga}.",
            "hospital": "Babban asibiti mafi kusa{near}: *{name}*, {dist}, a Ƙaramar Hukumar {lga}.",
            "any": "Cibiyar lafiya mafi kusa{near}: *{name}* ({level}), {dist}.",
            "any_too": "; cibiyar lafiya mafi kusa ta kowace iri: *{name}* ({level}), {dist}.",
-           "link": "📍 *{name}*: buɗe ainihin wurin a taswira: {spot}\n🧭 Hanya daga inda kake yanzu: {link}",
+           "link": "📍 *{name}*: buɗe ainihin wurin a taswira: {spot}\n🧭 Hanya daga inda kuke yanzu: {link}",
            "spot": "📍 *{name}*: buɗe ainihin wurin a taswira: {spot}",
            "no_road": "(Ba a samu nisan hanya yanzu ba: an nuna nisa a miƙe.)",
            "road_next": "Nisan hanya da kwatance suna zuwa nan da ɗan lokaci.",
            "road_head": "🚗 *Ta hanya:*", "by_road": "*{name}*: {dist}",
-           "ask": "Raba wurinka (maɓallin da ke ƙasa), ko faɗa mini ƙaramar hukumarka ko garinka, zan aiko da "
+           "ask": "Ku raba wurinku (maɓallin da ke ƙasa), ko ku faɗa mini ƙaramar hukumarku ko garinku, zan aiko da "
                   "asibiti mafi kusa.",
            "levels": {"Primary": "matakin farko", "Secondary": "mataki na biyu", "Tertiary": "babban asibiti"}},
 }

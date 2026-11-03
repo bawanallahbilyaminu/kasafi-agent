@@ -83,11 +83,11 @@ WORDS = {
                    "hazard": "Want the outlook for another LGA?"},
     },
     "ha": {
-        "body": "Me kake so ka yi? Zaɓi ɗaya, ko kawai ka rubuta tambayarka ko ka aiko da saƙon murya.",
+        "body": "Me kuke so ku yi? Ku zaɓi ɗaya, ko kawai ku rubuta tambayarku ko ku aiko da saƙon murya.",
         "button": "Buɗe zaɓuɓɓuka",
         "section": "Kasafi",
         "rows": {
-            "menu_budget": ("Kasafin yankina", "Abin da kasafin jiha ya ware wa ƙaramar hukumarka"),
+            "menu_budget": ("Kasafin yankina", "Abin da kasafin jiha ya ware wa ƙaramar hukumarku"),
             "menu_facility": ("Asibiti mafi kusa", "Asibitoci da cibiyoyin lafiya mafi kusa ta hanya"),
             "menu_place": ("Tarihin gona ko wuri", "Abin da tauraron ɗan adam ya gani: ambaliya, kore"),
             "menu_outlook": ("Hasashen ruwa, ambaliya", "Hasashen damina da ambaliya na hukuma"),
@@ -97,32 +97,32 @@ WORDS = {
             "menu_about": ("Game da Kasafi", "Wanda ya yi shi da yadda yake aiki"),
         },
         "need_place": {
-            "menu_budget": "Aiko da wurinka, in nuna maka abin da kasafin kuɗi ya ware wa yankinka.",
-            "menu_facility": "Aiko da wurinka, in nemo cibiyoyin lafiya mafi kusa ta hanya.",
-            "menu_place": "Aiko da wurin gonarka ko wurin, in duba tarihinsa a hotunan tauraron ɗan adam.",
-            "menu_outlook": "Aiko da wurinka, in faɗa maka hasashen ruwan sama da ambaliya na yankinka.",
+            "menu_budget": "Ku aiko da wurinku, in nuna muku abin da kasafin kuɗi ya ware wa yankinku.",
+            "menu_facility": "Ku aiko da wurinku, in nemo cibiyoyin lafiya mafi kusa ta hanya.",
+            "menu_place": "Ku aiko da wurin gonarku ko wurin, in duba tarihinsa a hotunan tauraron ɗan adam.",
+            "menu_outlook": "Ku aiko da wurinku, in faɗa muku hasashen ruwan sama da ambaliya na yankinku.",
         },
-        "docs": "Tambaye ni game da kowace takardar gwamnati ta jama'a: kasafin kuɗi, rahoton aiwatar da kasafi, "
+        "docs": "Ku tambaye ni game da kowace takardar gwamnati ta jama'a: kasafin kuɗi, rahoton aiwatar da kasafi, "
                 "tsare-tsare, bincike. Misali:\n• Nawa aka ware wa lafiya a kasafin 2026?\n• Me MICS ta ce game da "
                 "rajistar haihuwa a Sokoto?\n• Nawa aka kashe daga kasafin ilimi na 2025?",
         "lang": "Da wane harshe zan riƙa amsa?",
-        "privacy": "Abin da Kasafi ke ajiyewa:\n• Harshen da ka zaɓa, amincewarka da ƙididdigar amfanin yau.\n"
-                   "• Tambayoyinka 5 na ƙarshe da amsoshinsu, don tambayoyin biyo baya (kwana 90).\n• Ba a taɓa "
-                   "ajiye lambar wayarka ba: ana gane ka da wata lamba ta sirri.\n• Wurin da ka aiko yana zama a "
-                   "ƙwaƙwalwa na minti 30; ƙaramar hukumarka kaɗai ake ajiyewa.\n• Ana goge saƙon murya bayan an "
-                   "mayar da shi rubutu.\n\nDon goge komai, aika *GOGE BAYANAI NA*.\n\nManufar sirri: {url}",
+        "privacy": "Abin da Kasafi ke ajiyewa:\n• Harshen da kuka zaɓa, amincewarku da ƙididdigar amfanin yau.\n"
+                   "• Tambayoyinku 5 na ƙarshe da amsoshinsu, don tambayoyin biyo baya (kwana 90).\n• Ba a taɓa "
+                   "ajiye lambar wayarku ba: ana gane ku da wata lamba ta sirri.\n• Wurin da kuka aiko yana zama a "
+                   "ƙwaƙwalwa na minti 30; ƙaramar hukumarku kaɗai ake ajiyewa.\n• Ana goge saƙon murya bayan an "
+                   "mayar da shi rubutu.\n\nDon goge komai, ku aika *GOGE BAYANAI NA*.\n\nManufar sirri: {url}",
         "about": "Kai wanene, me za ka iya yi?",
-        "type_menu": "Rubuta *menu* a kowane lokaci don ganin abin da zan iya yi.",
+        "type_menu": "Ku rubuta *menu* a kowane lokaci don ganin abin da zan iya yi.",
         "anything_else": "Akwai wani abu kuma?",
         "buttons": {"working": "Nuna lissafi", "brief": "Cikakken rahoto PDF", "lang": "English",
                     "location": "Aiko da wuri", "menu": "Zaɓuɓɓuka"},
-        "send_location": "Aiko da wurinka da maɓallin da ke ƙasa.",
-        "offers": {"place_budget": "Kana so na wata shekara? Faɗi shekarar kawai.",
-                   "budget": "Kana so na wata shekara?",
-                   "statistics": "Kana so na wata ƙaramar hukuma ko shekara?",
-                   "place_history_pin": "Kana so na gundumarka ma?",
-                   "place_history": "Kana so na wata gunduma ko ƙaramar hukuma?",
-                   "hazard": "Kana so na wata ƙaramar hukuma?"},
+        "send_location": "Ku aiko da wurinku da maɓallin da ke ƙasa.",
+        "offers": {"place_budget": "Kuna so na wata shekara? Ku faɗi shekarar kawai.",
+                   "budget": "Kuna so na wata shekara?",
+                   "statistics": "Kuna so na wata ƙaramar hukuma ko shekara?",
+                   "place_history_pin": "Kuna so na gundumarku ma?",
+                   "place_history": "Kuna so na wata gunduma ko ƙaramar hukuma?",
+                   "hazard": "Kuna so na wata ƙaramar hukuma?"},
     },
 }
 
