@@ -19,7 +19,8 @@
 #   deploy/deploy.sh --sync-hints  copy data/private/partners_hints.json (not in git) to deploy/private/ on the
 #                                  server, mounted read-only into the app; takes effect on the next deploy/restart
 #   deploy/deploy.sh --sync-place  place history (docs/place-history.md): copy the UNOSAT flood maps
-#                                  (data/place/floodmaps/*.gpkg) to /data/place, the water-body layer
+#                                  (data/place/floodmaps/*.gpkg) and the Copernicus GFM season rasters
+#                                  (data/place/gfm/<year>.tif) to /data/place, the water-body layer
 #                                  (data/geo/water_bodies.geojson + .yaml) to /data/geo, and the precomputed
 #                                  ward_history plus the per-cell satellite cache (sat_cache: rounded 100 m cells,
 #                                  no user data, no plot geometry) from the dev DB, so the server never recomputes them
@@ -409,7 +410,7 @@ case "$MODE" in
     tmp=$(tmpfile place)
     # two folders in one tar: place/floodmaps/*.gpkg and geo/water_bodies.*; unpacked under /data on the server
     files=(data/place/floodmaps/*.gpkg data/geo/water_bodies.geojson)
-    for f in data/geo/water_bodies.yaml data/geo/osm_water_sokoto.json; do [ -f "$f" ] && files+=("$f"); done
+    for f in data/geo/water_bodies.yaml data/geo/osm_water_sokoto.json data/place/gfm/*.tif; do [ -f "$f" ] && files+=("$f"); done
     "${KIT[@]}" pack "$tmp" --base data --label "packing ${#files[@]} files" "${files[@]}" || fail "packing the place files failed"
     step "dumping ward_history and sat_cache from the dev database (per cell and unit; no user data, no geometry)"
     tmpsql=$(tmpfile place-sql)
