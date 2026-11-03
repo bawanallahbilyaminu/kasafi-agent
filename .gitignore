@@ -46,4 +46,7 @@ evals/generated/runs/
 # per-case results of eval runs in progress (evals/runtime.py, for --resume)
 evals/.checkpoints/
 evals/progress.log
+# drafts dumped by eval runs for replaying the answer check (evals/complex/run_open.py --drafts): regenerated
+evals/**/drafts*.jsonl
+evals/**/good_drafts*.jsonl
 deploy/logs/
