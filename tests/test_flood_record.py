@@ -50,7 +50,14 @@ def test_radar_and_unosat_quoted_side_by_side_with_the_reason_never_averaged() -
 
 def test_a_map_year_without_radar_passes_is_never_radar_saw_nothing() -> None:
     rec = {2022: {"unosat_ha": (1610.0, None), "s1_flood_share": (0.023, 14)}}
-    assert "nothing (no passes on file)" in F.compare_lines(rec, "en")[0]
+    assert F.compare_lines(rec, "en")[0].startswith("In 2022, no radar passes are on file;")
+    assert F.compare_lines(DRY, "ha")[0].startswith("A 2024, hotunan radar ba su ga ruwan ambaliya ba;")
+
+
+def test_a_ward_flooded_every_season_says_every_season_not_a_list_of_years() -> None:
+    every = {y: season(50, 40, 250, 30, 20) for y in range(2015, 2027)}
+    s = F.record_line(every, "Gidan Bubu", "en", TODAY)
+    assert s.startswith("Satellite radar saw floodwater in Gidan Bubu in every rainy season 2015–2026 (12 seasons).")
 
 
 def test_the_share_radar_cant_judge_is_always_said() -> None:

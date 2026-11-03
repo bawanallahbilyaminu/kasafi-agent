@@ -40,10 +40,13 @@ T = {
         "year_missing": "No radar season is on file for {year}; the record runs {first}–{last}.",
         "so_far": " ({year} so far)",
         "where_crop": "{ha} on farmland", "where_plain": "{ha} in the river floodplain", "where_other": "{ha} on other land",
-        "compare": "In {year}, radar passes saw {g}; UNOSAT's event map of {period}, built from several days and "
-                   "sensors, shows {u}. UNOSAT's map covers several days, so it catches more of the flood than single "
-                   "passes.",
-        "g_none": "no floodwater", "g_some": "{ha} under water at some point", "g_nodata": "nothing (no passes on file)",
+        "compare": "In {year}, {g}; UNOSAT's event map of {period}, built from several days and sensors, shows {u}. "
+                   "UNOSAT's map covers several days, so it catches more of the flood than single passes.",
+        "g_none": "radar passes saw no floodwater", "g_some": "radar passes saw {ha} under water at some point",
+        "g_nodata": "no radar passes are on file", "u_none": "no floodwater",
+        "every": "Satellite radar saw floodwater in {name} in every rainy season {first}–{last} ({n} seasons). The "
+                 "largest was in {big}: about {max} on its biggest pass ({day}), and {union} under water at some point "
+                 "that season ({where}).",
         "excluded": "Radar can't judge {pct} of {name} (about {ha}: built-up land, dense trees and dry sandy ground, "
                     "where radar can't tell water from land), so floods there aren't counted. It can't see water "
                     "between buildings: for built-up parts, flood reports are the source.",
@@ -89,11 +92,14 @@ T = {
         "year_missing": "Babu daminar radar ta {year} a cikin bayanai; tarihin ya kama daga {first} zuwa {last}.",
         "so_far": " ({year} har zuwa yanzu)",
         "where_crop": "{ha} a gonaki", "where_plain": "{ha} a fadamar kogi", "where_other": "{ha} a sauran ƙasa",
-        "compare": "A {year}, hotunan radar sun ga {g}; taswirar UNOSAT ta {period}, wadda aka haɗa daga kwanaki da "
-                   "na'urori da dama, ta nuna {u}. Taswirar UNOSAT ta haɗa kwanaki da dama, don haka tana kama yawancin "
-                   "ambaliyar fiye da hotunan radar ɗaya-ɗaya.",
-        "g_none": "babu ruwan ambaliya", "g_some": "{ha} ƙarƙashin ruwa a wani lokaci",
-        "g_nodata": "babu komai (babu hotunan radar a bayanai)",
+        "compare": "A {year}, {g}; taswirar UNOSAT ta {period}, wadda aka haɗa daga kwanaki da na'urori da dama, ta "
+                   "nuna {u}. Taswirar UNOSAT ta haɗa kwanaki da dama, don haka tana kama yawancin ambaliyar fiye da "
+                   "hotunan radar ɗaya-ɗaya.",
+        "g_none": "hotunan radar ba su ga ruwan ambaliya ba", "g_some": "hotunan radar sun ga {ha} ƙarƙashin ruwa a wani lokaci",
+        "g_nodata": "babu hotunan radar a cikin bayanai", "u_none": "babu ruwan ambaliya",
+        "every": "Radar ta tauraron ɗan adam ta ga ruwan ambaliya a {name} a kowace damina ta {first}–{last} (damina {n}). "
+                 "Mafi girma ita ce ta {big}: kusan {max} a hotonta mafi girma ({day}), kuma {union} ya kasance ƙarƙashin "
+                 "ruwa a wani lokaci a daminar ({where}).",
         "excluded": "Radar ba za ta iya tantance kashi {pct} na {name} ba (kusan {ha}: wuraren gine-gine, bishiyoyi "
                     "masu yawa da busasshiyar ƙasa mai yashi, inda radar ba ta bambance ruwa da ƙasa), saboda haka ba a "
                     "ƙidaya ambaliya a can. Ba ta ganin ruwa tsakanin gine-gine: ga wuraren gine-gine, rahotannin "
@@ -202,7 +208,7 @@ def record_line(rec: dict, name: str, lang: str, today: date) -> str:
         return t["none"].format(name=name, first=first, last=last_txt, n=len(ys), p=passes) + so_far
     big = max(wet, key=lambda y: _v(rec[y], "gfm_union_ha"))
     r = rec[big]
-    key = "some_one" if len(wet) == 1 else "some"
+    key = "some_one" if len(wet) == 1 else "every" if len(wet) == len(ys) and len(ys) >= 3 else "some"
     return t[key].format(name=name, k=len(wet), n=len(ys), first=first, last=last_txt, years=", ".join(map(str, wet)),
                          big=big, max=ha_text(_v(r, "gfm_max_ha"), lang), day=day_text(r, big, lang),
                          union=ha_text(_v(r, "gfm_union_ha"), lang), where=where_text(r, lang)) + so_far
@@ -238,7 +244,7 @@ def compare_lines(rec: dict, lang: str, years: list[int] | None = None) -> list[
             gt = t["g_nodata"]
         else:
             gt = t["g_none"] if g < MIN_HA else t["g_some"].format(ha=ha_text(g, lang))
-        ut = t["g_none"] if u < MIN_HA else ha_text(u, lang)
+        ut = t["u_none"] if u < MIN_HA else ha_text(u, lang)
         out.append(t["compare"].format(year=y, g=gt, period=map_period(y, lang), u=ut))
     return out
 
