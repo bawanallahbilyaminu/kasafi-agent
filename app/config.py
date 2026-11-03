@@ -123,6 +123,10 @@ class Settings(BaseSettings):
     kasafi_read_wide: bool = True
     kasafi_followup_rules: bool = True
     kasafi_past_rain_rule: bool = False
+    # every part the user names ('primary, JSS, SSS and IQS') is answered: its figure, or one line giving the higher
+    # level's figure when the documents have it only for the state, or saying it isn't there (compose rule 6p; the
+    # answer check's named_part_missing rule)
+    kasafi_named_parts: bool = True
     kasafi_check_provider: str = "open"
     kasafi_check_timeout_s: float = 30.0
     # a revise round starts only with at least this many seconds left of kasafi_answer_timeout_s

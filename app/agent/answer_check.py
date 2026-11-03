@@ -58,6 +58,9 @@ hectares of land) or another level (asked about all schools, answered about publ
 so) does not match, even when what it says is true.
 - A "Yes" or "No" must be about exactly the subject asked. "Yes, Sokoto State is listed … it can't tell whether \
 Wamakko is one" is a contradiction AND a subject mismatch.
+- Every one of the PARTS THE USER NAMED must be in the draft: its figure for the place, or one line saying the \
+documents give it only for a higher level (with that figure), or that they don't give it. A named part left out is \
+missing, and missing_stated is false for it.
 - missing: what was asked for and isn't in the draft. A question for a total, or for all levels or types \
 ("how many schools" means every level), answered with one part: list the other parts. missing_stated: true when \
 the draft says plainly, for every missing thing, that the documents don't give it (e.g. "the census doesn't \
@@ -181,6 +184,32 @@ def figures_in(text: str) -> list[str]:
     return out
 
 
+ACRONYM_PART = re.compile(r"[A-Z][A-Z0-9]{1,6}s?")
+
+
+def named_parts_missing(a, u) -> list[str]:
+    """The parts the user named as acronyms ('IQS', 'JSS': the same in Hausa and English) that the answer never
+    mentions (3 Nov: 'I mean all the total schools primary, senior secondary and junior secondary and IQS' got
+    primary, JSS and SSS, and nothing on IQS, which the census has only for the whole state)."""
+    from app.config import get_settings
+    if u is None or not get_settings().kasafi_named_parts:
+        return []
+    text = a.text or ""
+    # the answer's words by their first letters: 'junior secondary schools' spells JSS, 'Integrated Qur'anic
+    # Schools' IQS (a part spelled out is a part answered)
+    initials = "".join(w[0].lower() for w in re.findall(r"[A-Za-z][A-Za-z'’]*", text))
+    out = []
+    for p in getattr(u, "asked_parts", None) or []:
+        p = p.strip()
+        core = p[:-1] if p.endswith("s") and p[:-1].isupper() else p
+        if not ACRONYM_PART.fullmatch(p) or re.search(rf"(?<![A-Za-z]){re.escape(core)}", text):
+            continue
+        if len(core) >= 3 and core.lower() in initials:
+            continue
+        out.append(p)
+    return out
+
+
 def code_rules(a, u, figures_found: tuple[int, int]) -> list[str]:
     """The two rules code decides, whatever the model says. `figures_found`: (figures in the answer, of them
     printed in its cited pages) for an answer read from pages; (0, 0) when code computed it."""
@@ -188,6 +217,10 @@ def code_rules(a, u, figures_found: tuple[int, int]) -> list[str]:
     n, found = figures_found
     if n and not found:
         rules.append(f"no_figure_found: none of the answer's {n} figure(s) is printed in its cited pages")
+    for part in named_parts_missing(a, u):
+        rules.append(f"named_part_missing: {part} is named by the user but not in the answer (give its figure, or the "
+                     f"higher level's figure with one line saying the documents have it only there, or say it isn't "
+                     f"in the documents)")
     first = re.split(r"(?<=[.!?])\s|\n", (a.text or "").lstrip("_*📊🔎 \n"), maxsplit=1)[0]
     if u is not None and YES_NO.match(first or ""):
         words = [w for w in re.findall(r"[\w'’]+", GENERIC.sub(" ", u.name or "")) if len(w) > 2]
@@ -210,14 +243,16 @@ def found_count(a) -> tuple[int, int]:
 
 
 def user_text(message: str, restatement: str, history: list[dict] | None, draft: str, evidence: str,
-              verification: str, rules: list[str], counts: tuple[int, int], round_: int) -> str:
+              verification: str, rules: list[str], counts: tuple[int, int], round_: int,
+              parts: list[str] | None = None) -> str:
     from app.agent.understand import conversation_text
     n, found = counts
     check = f"{verification or 'none'}" + (f"; {found} of the answer's {n} figure(s) are printed in its cited pages"
                                           if n else "")
+    named = f"PARTS THE USER NAMED: {', '.join(parts)}\n" if parts else ""
     return (f"ROUND: {round_} of 2\nCONVERSATION (oldest first):\n{conversation_text(history)}\n\n"
-            f"USER'S MESSAGE: {message[:600]}\nWHAT IT MEANS (restatement): {restatement[:400] or message[:400]}\n\n"
-            f"DRAFT ANSWER:\n{draft[:4000]}\n\nCODE CHECK: {check}"
+            f"USER'S MESSAGE: {message[:600]}\nWHAT IT MEANS (restatement): {restatement[:400] or message[:400]}\n"
+            f"{named}\nDRAFT ANSWER:\n{draft[:4000]}\n\nCODE CHECK: {check}"
             + (f"\nRULES BROKEN (decided in code): {'; '.join(rules)}" if rules else "")
             + f"\n\nEVIDENCE THE DRAFT CITES:\n{evidence}")
 
@@ -231,7 +266,8 @@ async def check(message: str, a, u, history: list[dict] | None, conn, settings, 
     counts = found_count(a)
     rules = code_rules(a, u, counts)
     user = user_text(message, getattr(u, "restatement", "") if u is not None else "", history, a.text,
-                     evidence_text(conn, a), a.verification, rules, counts, round_)
+                     evidence_text(conn, a), a.verification, rules, counts, round_,
+                     parts=list(getattr(u, "asked_parts", None) or []) if u is not None else None)
     v = None
     why = ""
     for attempt in (1, 2):
