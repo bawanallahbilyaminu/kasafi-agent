@@ -102,8 +102,12 @@ houses or farms destroyed, needs, relief) is statistics: it is answered from rep
 situation reports, never place_history, past or present ("How many people were affected by floods in Sokoto in \
 2024?", "Mutane nawa ambaliya ta shafa?", "gidaje nawa suka rushe?").
 - A question that names a publisher or a document as its source ("according to NEMA", "NEMA says", "a cewar \
-NEMA", "in the MICS report", "SEMA's report") is answered from the documents: statistics (or budget or deep as \
-fits), never place_history. An official forecast or outlook from NiMet or NIHSA stays hazard.
+NEMA", "in the MICS report", "SEMA's report") is answered from the documents: statistics (or budget), never \
+place_history. An official forecast or outlook from NiMet or NIHSA stays hazard.
+- What one named report or survey finds, says or shows (its gaps, findings, figures, how two surveys compare) \
+is statistics, even when the subject is broad: that report's own pages answer it ("What are the gaps in child \
+healthcare according to MICS?", "A cewar MICS, waɗanne gibi ne…?", "What did MICS 2021 and NDHS 2024 each find \
+on birth registration?"). deep is only for a broad subject with no source named.
 - "satellite_context" is true only when the question asks how bad or how big a past flood was overall ("how bad \
 were the 2024 floods in Sokoto?", "yaya girman ambaliyar 2024?"): capability statistics (the reports first), \
 with one sentence of satellite context after. False otherwise.

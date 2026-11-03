@@ -3,20 +3,20 @@
   "kind": "correction",
   "capability": "facility",
   "level": "facility",
-  "name": "UDUTH",
+  "name": "Usmanu Danfodiyo University Teaching Hospital (UDUTH)",
   "time": "none",
   "years": [],
-  "measure": "distance/nearest",
-  "restatement": "Is UDUTH (Usmanu Danfodiyo University Teaching Hospital) closer to my farm (the pin) than the hospitals previously listed?",
+  "measure": "nearest distance comparison to my farm (the pin)",
+  "restatement": "Is Usmanu Danfodiyo University Teaching Hospital (UDUTH) closer to my farm (the pin) in Kalambaina ward, Wamakko LGA than Specialist Hospital Sokoto and what is its road distance and time?",
   "care": "general",
   "facility_level": "hospital",
   "ownership": "any",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about facility distance, not a medical emergency now",
+  "urgent_reason": "no emergency described; question about facility distance",
   "safety": {},
-  "seconds": 2.4811538999783807
+  "seconds": 2.8631564000388607
  },
  "u02": {
   "kind": "follow_up",
@@ -33,28 +33,28 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "past flood history question, no one in immediate danger",
+  "urgent_reason": "past flood history question, no emergency now",
   "safety": {},
-  "seconds": 2.7594119000132196
+  "seconds": 6.686366299982183
  },
  "u03": {
   "kind": "follow_up",
   "capability": "place_history",
   "level": "pin",
-  "name": "",
+  "name": "my farm (the pin)",
   "time": "past",
   "years": [],
   "measure": "flooded",
-  "restatement": "Has my farm (the pin) ever flooded?",
+  "restatement": "Has my farm (the pin) ever been flooded?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "past flood history question, no one in immediate danger",
+  "urgent_reason": "no emergency described; past flood history question",
   "safety": {},
-  "seconds": 5.307373300020117
+  "seconds": 3.064998999994714
  },
  "u04": {
   "kind": "follow_up",
@@ -63,17 +63,17 @@
   "name": "my farm (the pin)",
   "time": "forecast",
   "years": [],
-  "measure": "rainfall forecast and flood risk",
-  "restatement": "Will my farm (the pin) flood this rainy season and what is the rainfall forecast for my area?",
+  "measure": "rain and flood risk",
+  "restatement": "Will my farm (the pin) flood from rain this season?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "forecast question about future rain, not an emergency happening now",
+  "urgent_reason": "forecast question, not an emergency happening now",
   "safety": {},
-  "seconds": 1.7299999999813735
+  "seconds": 2.573245399980806
  },
  "u05": {
   "kind": "follow_up",
@@ -84,40 +84,40 @@
   "years": [
    2026
   ],
-  "measure": "amount actually spent / budget execution",
-  "restatement": "How much of the 2026 budgeted amount for my LGA has actually been spent?",
+  "measure": "amount spent / budget implementation",
+  "restatement": "How much of the 2026 budget for my LGA (Wamakko LGA) has actually been spent?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no medical or safety emergency described; question is about budget spending",
+  "urgent_reason": "question about budget spending, not a medical or safety emergency",
   "safety": {},
-  "seconds": 6.530955600028392
+  "seconds": 1.8393248000065796
  },
  "u06": {
   "kind": "follow_up",
   "capability": "place_budget",
   "level": "lga",
-  "name": "Wamakko LGA",
+  "name": "Wamakko",
   "time": "span",
   "years": [
    2023,
    2024,
    2025
   ],
-  "measure": "amount budgeted and capital projects by year",
-  "restatement": "What did Sokoto State budget for my LGA in each of the past three years (2023, 2024, 2025)?",
+  "measure": "amount budgeted",
+  "restatement": "What was the government budget for capital projects in my LGA in the past three years (2023-2025)?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described, question is about past budgets",
+  "urgent_reason": "request is about budget figures, not a medical or safety emergency",
   "safety": {},
-  "seconds": 4.6067340999725275
+  "seconds": 2.4722554000327364
  },
  "u07": {
   "kind": "follow_up",
@@ -126,17 +126,17 @@
   "name": "Gidan Bubu Health Post",
   "time": "none",
   "years": [],
-  "measure": "route",
-  "restatement": "How do I get to Gidan Bubu Health Post from my farm (the pin)?",
+  "measure": "route/directions",
+  "restatement": "How do I get from my farm (the pin) to Gidan Bubu Health Post (the second nearest clinic)?",
   "care": "general",
   "facility_level": "primary",
   "ownership": "any",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "request for directions, no medical emergency described",
+  "urgent_reason": "request for directions is not a medical emergency",
   "safety": {},
-  "seconds": 2.140526900009718
+  "seconds": 1.7141735999612138
  },
  "u08": {
   "kind": "follow_up",
@@ -145,17 +145,17 @@
   "name": "Kalambaina PHC",
   "time": "now",
   "years": [],
-  "measure": "whether it has enough nurses / nurse staffing adequacy",
-  "restatement": "Does Kalambaina PHC have enough nurses?",
+  "measure": "nurse staffing adequacy / number of nurses",
+  "restatement": "Does Kalambaina PHC in Wamakko LGA have enough nurses?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about staffing levels, not a current medical emergency",
+  "urgent_reason": "question about staffing levels, not a medical emergency",
   "safety": {},
-  "seconds": 2.2101324000395834
+  "seconds": 1.6325825999956578
  },
  "u09": {
   "kind": "correction",
@@ -164,17 +164,17 @@
   "name": "UDUTH",
   "time": "none",
   "years": [],
-  "measure": "nearest health facility / distance to UDUTH",
-  "restatement": "Is UDUTH the nearest health facility to my farm (the pin) and how far is it?",
+  "measure": "nearest distance to UDUTH",
+  "restatement": "Is UDUTH the nearest hospital to my farm (the pin) in my ward in Wamakko LGA?",
   "care": "general",
   "facility_level": "hospital",
   "ownership": "any",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described, only correcting facility distance",
+  "urgent_reason": "no emergency described, only a correction about distance",
   "safety": {},
-  "seconds": 2.5870067999931052
+  "seconds": 2.2471750000258908
  },
  "u10": {
   "kind": "follow_up",
@@ -191,20 +191,20 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about past flooding, not a medical or safety emergency happening now",
+  "urgent_reason": "no emergency described",
   "safety": {},
-  "seconds": 3.3807806000113487
+  "seconds": 2.2029048000113107
  },
  "u11": {
   "kind": "follow_up",
   "capability": "hazard",
   "level": "pin",
-  "name": "Kalambaina",
+  "name": "my farm (the pin)",
   "time": "forecast",
   "years": [
    2026
   ],
-  "measure": "flooded",
+  "measure": "flood forecast",
   "restatement": "Will my farm (the pin) be flooded this year?",
   "care": "",
   "facility_level": "",
@@ -212,9 +212,9 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about future flood forecast, not an emergency happening now",
+  "urgent_reason": "forecast question about flooding, no emergency happening now",
   "safety": {},
-  "seconds": 2.3603664999827743
+  "seconds": 1.837701599986758
  },
  "u12": {
   "kind": "follow_up",
@@ -225,17 +225,17 @@
   "years": [
    2026
   ],
-  "measure": "spent",
-  "restatement": "How much of the N79.98 billion allocated to my LGA (Wamakko) in the 2026 budget has been spent?",
+  "measure": "amount spent",
+  "restatement": "How much of the budget allocated to my LGA in 2026 has been spent?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question is about budget spending, not a medical or safety emergency",
+  "urgent_reason": "no medical or safety emergency described",
   "safety": {},
-  "seconds": 1.9594357999740168
+  "seconds": 3.8295056999777444
  },
  "u13": {
   "kind": "follow_up",
@@ -247,27 +247,27 @@
    2026
   ],
   "measure": "amount spent by June",
-  "restatement": "How much of the 2026 health budget for Sokoto State was spent by June?",
+  "restatement": "How much of the 2026 health budget for Sokoto State was spent by June 2026?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "budget spending question, not a medical or safety emergency",
+  "urgent_reason": "request for budget implementation data, not a medical or safety emergency",
   "safety": {},
-  "seconds": 2.4784975000075065
+  "seconds": 1.8552897000336088
  },
  "u14": {
   "kind": "correction",
   "capability": "budget",
   "level": "sector",
-  "name": "Health",
+  "name": "health",
   "time": "year",
   "years": [
    2026
   ],
-  "measure": "amount budgeted / allocation",
+  "measure": "amount budgeted",
   "restatement": "What was budgeted for health in Sokoto State in 2026?",
   "care": "",
   "facility_level": "",
@@ -275,9 +275,9 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "user disputes a budget figure; no medical or safety emergency described",
+  "urgent_reason": "not an emergency; disagreement about budget figure",
   "safety": {},
-  "seconds": 2.4024792999844067
+  "seconds": 1.7518361999536864
  },
  "u15": {
   "kind": "follow_up",
@@ -294,37 +294,37 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about vaccination statistics, not a medical emergency now",
+  "urgent_reason": "question about past survey coverage, no emergency described",
   "safety": {},
-  "seconds": 1.8976177999866195
+  "seconds": 2.7937278999597766
  },
  "u16": {
   "kind": "follow_up",
   "capability": "hazard",
   "level": "pin",
-  "name": "my farm (the pin)",
+  "name": "",
   "time": "forecast",
   "years": [],
-  "measure": "dust / air quality / haze",
-  "restatement": "What will the dust / air quality be like tomorrow at my farm (the pin)?",
+  "measure": "dust / dust haze / air quality",
+  "restatement": "Will there be dust/dust haze at my farm (the pin) in Kalambaina ward tomorrow?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about future dust/haze, not a medical or safety emergency happening now",
+  "urgent_reason": "question about future dust conditions, no one currently in danger",
   "safety": {},
-  "seconds": 2.6184415000025183
+  "seconds": 3.32885069999611
  },
  "u17": {
   "kind": "new",
   "capability": "facility",
-  "level": "facility",
+  "level": "pin",
   "name": "",
   "time": "none",
   "years": [],
-  "measure": "nearest hospital for child with trouble breathing",
+  "measure": "nearest hospital",
   "restatement": "Which hospital near my farm (the pin) can I go to if my child has trouble breathing?",
   "care": "children",
   "facility_level": "hospital",
@@ -332,9 +332,9 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": true,
-  "urgent_reason": "conditional: possible child breathing difficulty needs urgent care location if occurs",
+  "urgent_reason": "conditional: child trouble breathing could be emergency if occurs",
   "safety": {},
-  "seconds": 2.9706778000108898
+  "seconds": 2.308034800051246
  },
  "u18": {
   "kind": "follow_up",
@@ -345,39 +345,36 @@
   "years": [
    2026
   ],
-  "measure": "amount budgeted",
-  "restatement": "How much did Sokoto State Government budget for Specialist Hospital Sokoto in 2026?",
+  "measure": "budgeted amount",
+  "restatement": "How much did Sokoto State government budget for Specialist Hospital Sokoto in 2026?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about budget allocation, no medical emergency described",
+  "urgent_reason": "budget inquiry, no medical emergency described",
   "safety": {},
-  "seconds": 1.8531796999741346
+  "seconds": 4.980414399993606
  },
  "u19": {
   "kind": "follow_up",
   "capability": "place_history",
   "level": "pin",
   "name": "my farm (the pin)",
-  "time": "span",
-  "years": [
-   2017,
-   2026
-  ],
-  "measure": "greenness trend / vegetation greenness change over years",
-  "restatement": "Has my farm (the pin) become greener over the years?",
+  "time": "past",
+  "years": [],
+  "measure": "greenness trend over the years",
+  "restatement": "Is my farm (the pin) getting greener over the years?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described; question about past vegetation trend",
+  "urgent_reason": "question about vegetation greenness over time, not a medical or safety emergency",
   "safety": {},
-  "seconds": 2.1296646000118926
+  "seconds": 1.8413796999957412
  },
  "u20": {
   "kind": "follow_up",
@@ -385,30 +382,27 @@
   "level": "lga",
   "name": "Wamakko LGA",
   "time": "past",
-  "years": [
-   2017,
-   2026
-  ],
+  "years": [],
   "measure": "flooded",
-  "restatement": "Has my LGA (Wamakko LGA) ever been flooded?",
+  "restatement": "Has my LGA ever flooded?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described; past flood history question",
+  "urgent_reason": "question about past flooding, no current emergency",
   "safety": {},
-  "seconds": 1.848169400007464
+  "seconds": 2.4002701999852434
  },
  "u21": {
   "kind": "follow_up",
   "capability": "place_budget",
   "level": "lga",
-  "name": "Wamakko",
+  "name": "Wamakko LGA",
   "time": "none",
   "years": [],
-  "measure": "budget for irrigation",
+  "measure": "budget amount for irrigation",
   "restatement": "Is there any budget for irrigation in my LGA?",
   "care": "",
   "facility_level": "",
@@ -416,20 +410,20 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about budget allocation, no medical or safety emergency now",
+  "urgent_reason": "budget information request, no immediate danger",
   "safety": {},
-  "seconds": 4.879497200017795
+  "seconds": 4.460721499985084
  },
  "u22": {
   "kind": "follow_up",
   "capability": "budget",
-  "level": "state",
-  "name": "Sokoto State",
+  "level": "sector",
+  "name": "Education",
   "time": "year",
   "years": [
    2026
   ],
-  "measure": "budget allocations and projects to address out-of-school children",
+  "measure": "amount and projects addressing out-of-school children",
   "restatement": "What is Sokoto State doing about out-of-school children in the 2026 budget?",
   "care": "",
   "facility_level": "",
@@ -437,9 +431,9 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about budget allocations, not an immediate safety or medical emergency",
+  "urgent_reason": "budget inquiry about education policy, no medical or safety emergency",
   "safety": {},
-  "seconds": 1.7881362999905832
+  "seconds": 2.461318699992262
  },
  "u23": {
   "kind": "follow_up",
@@ -449,16 +443,16 @@
   "time": "none",
   "years": [],
   "measure": "full brief overview of PHCs",
-  "restatement": "Send the full brief on the state of PHCs in Sokoto State",
+  "restatement": "Send the full brief on the state of primary health care (PHC) facilities in Sokoto State",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "request for information brief, not an emergency",
+  "urgent_reason": "request for information brief, not a medical or safety emergency",
   "safety": {},
-  "seconds": 1.6223573999595828
+  "seconds": 3.2057387999957427
  },
  "u24": {
   "kind": "chitchat",
@@ -468,16 +462,16 @@
   "time": "none",
   "years": [],
   "measure": "",
-  "restatement": "The user says thanks (conversation)",
+  "restatement": "Thanks for the nearest PHC information",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described; user says thanks",
+  "urgent_reason": "no emergency described; thanks after information",
   "safety": {},
-  "seconds": 3.6271131000248715
+  "seconds": 2.1878761000116356
  },
  "u25": {
   "kind": "follow_up",
@@ -487,37 +481,37 @@
   "time": "now",
   "years": [],
   "measure": "open at night / opening hours",
-  "restatement": "Is Arkilla PHC open at night?",
+  "restatement": "Is Arkilla PHC near my farm (the pin) in Kalambaina ward, Wamakko LGA open at night?",
   "care": "general",
   "facility_level": "primary",
   "ownership": "any",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about opening hours, not an emergency happening now",
+  "urgent_reason": "question about facility opening hours, not a medical emergency now",
   "safety": {},
-  "seconds": 1.6807034999947064
+  "seconds": 2.2675460999598727
  },
  "u26": {
   "kind": "follow_up",
   "capability": "place_history",
   "level": "lga",
-  "name": "my LGA",
+  "name": "Wamakko LGA",
   "time": "past",
   "years": [
    2025
   ],
-  "measure": "whether the land was flooded",
-  "restatement": "Was my LGA flooded last year?",
+  "measure": "flooded",
+  "restatement": "Was my LGA (Wamakko LGA) flooded last year (2025)?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "past flood inquiry, no current emergency",
+  "urgent_reason": "past flooding question, no one in immediate danger now",
   "safety": {},
-  "seconds": 4.00746789999539
+  "seconds": 1.855370299948845
  },
  "u27": {
   "kind": "follow_up",
@@ -526,40 +520,19 @@
   "name": "Specialist Hospital Sokoto",
   "time": "none",
   "years": [],
-  "measure": "route/directions",
-  "restatement": "How do I get to Specialist Hospital Sokoto from my farm (the pin)?",
+  "measure": "route/directions to facility",
+  "restatement": "How do I get to Specialist Hospital Sokoto from my farm (the pin) in my ward, Wamakko LGA?",
   "care": "general",
   "facility_level": "hospital",
   "ownership": "any",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "request for directions to a facility, no emergency happening now",
+  "urgent_reason": "request for directions, no emergency described",
   "safety": {},
-  "seconds": 2.481058400007896
+  "seconds": 2.1137457999866456
  },
  "u28": {
-  "kind": "follow_up",
-  "capability": "place_budget",
-  "level": "lga",
-  "name": "Wamakko LGA",
-  "time": "year",
-  "years": [
-   2026
-  ],
-  "measure": "amount of education budget allocated to my LGA",
-  "restatement": "What amount of the 2026 Sokoto State education budget is allocated to my LGA (Wamakko LGA)?",
-  "care": "",
-  "facility_level": "",
-  "ownership": "",
-  "satellite_context": false,
-  "exclude": "",
-  "urgent": false,
-  "urgent_reason": "no emergency described, only budget information request",
-  "safety": {},
-  "seconds": 2.6591913999873213
- },
- "u29": {
   "kind": "follow_up",
   "capability": "place_budget",
   "level": "lga",
@@ -568,17 +541,38 @@
   "years": [
    2026
   ],
-  "measure": "budget amounts and projects for farmers and agriculture",
-  "restatement": "Is there anything in the 2026 budget for farmers in my LGA (Wamakko LGA)?",
+  "measure": "amount allocated to education",
+  "restatement": "How much of the 2026 education budget is allocated to my LGA?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described; asking about budget allocations",
+  "urgent_reason": "question about budget allocation, no medical or safety emergency",
   "safety": {},
-  "seconds": 3.078644199995324
+  "seconds": 1.5505365999997593
+ },
+ "u29": {
+  "kind": "follow_up",
+  "capability": "place_budget",
+  "level": "lga",
+  "name": "my LGA",
+  "time": "year",
+  "years": [
+   2026
+  ],
+  "measure": "agriculture projects and budget for farmers",
+  "restatement": "What is the 2026 budget allocating for farmers in my LGA?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "satellite_context": false,
+  "exclude": "",
+  "urgent": false,
+  "urgent_reason": "no emergency described, question is about budget allocation",
+  "safety": {},
+  "seconds": 3.715620699978899
  },
  "u30": {
   "kind": "correction",
@@ -590,16 +584,16 @@
    2020
   ],
   "measure": "flooded",
-  "restatement": "Has my farm (the pin) flooded in 2020?",
+  "restatement": "Did my farm (the pin) ever flood, specifically did it flood in 2020 as my neighbour says?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described, question about past flooding",
+  "urgent_reason": "no emergency described, verification of past flood in 2020",
   "safety": {},
-  "seconds": 1.4605256999493577
+  "seconds": 4.328063900000416
  },
  "f01": {
   "kind": "new",
@@ -608,36 +602,36 @@
   "name": "Sokoto State",
   "time": "none",
   "years": [],
-  "measure": "number of medical officers needed in PHCs",
-  "restatement": "How many medical officers are needed in PHCs in Sokoto State?",
+  "measure": "number of medical officers needed at PHCs",
+  "restatement": "How many medical officers do PHCs need in Sokoto State?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about staffing requirements, not an immediate medical emergency",
+  "urgent_reason": "question about staffing needs, not a medical emergency happening now",
   "safety": {},
-  "seconds": 1.5399478999897838
+  "seconds": 4.166572900023311
  },
  "f02": {
   "kind": "new",
   "capability": "deep",
   "level": "state",
   "name": "Sokoto State",
-  "time": "now",
+  "time": "none",
   "years": [],
-  "measure": "state of PHCs overview",
-  "restatement": "What is the overall state of PHCs (primary health centres) in Sokoto State?",
+  "measure": "state of PHCs - broad overview",
+  "restatement": "What is the state of PHCs in Sokoto State?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "broad information request about PHCs, not a medical emergency now",
+  "urgent_reason": "no medical emergency described; general information request",
   "safety": {},
-  "seconds": 1.3987096000346355
+  "seconds": 1.7470662000123411
  },
  "f03": {
   "kind": "new",
@@ -646,36 +640,36 @@
   "name": "Sokoto State",
   "time": "none",
   "years": [],
-  "measure": "overview",
-  "restatement": "Give me a broad overview of health in Sokoto State",
+  "measure": "overview of health",
+  "restatement": "Tell me about the state of health in Sokoto State",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "general information request, no emergency",
+  "urgent_reason": "broad information request, no emergency described",
   "safety": {},
-  "seconds": 1.1692637999658473
+  "seconds": 2.4453670000075363
  },
  "f04": {
   "kind": "new",
   "capability": "deep",
   "level": "ward",
   "name": "Kalambaina",
-  "time": "none",
+  "time": "now",
   "years": [],
-  "measure": "overview of what is happening in my area",
-  "restatement": "Give me a broad overview of what is happening in my ward",
+  "measure": "general overview of what is happening",
+  "restatement": "Give a broad overview of what is happening in my ward (Kalambaina ward in Wamakko LGA, Sokoto State)",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described; general information request about area",
+  "urgent_reason": "no emergency described; general information request",
   "safety": {},
-  "seconds": 2.539120900037233
+  "seconds": 3.1751331000123173
  },
  "f05": {
   "kind": "new",
@@ -684,17 +678,17 @@
   "name": "Tureta",
   "time": "none",
   "years": [],
-  "measure": "count of PHCs (primary health centres)",
-  "restatement": "How many PHCs are in Tureta LGA?",
+  "measure": "count, number of PHCs",
+  "restatement": "How many PHCs are there in Tureta LGA?",
   "care": "general",
   "facility_level": "primary",
   "ownership": "any",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "count of facilities is not an emergency now",
+  "urgent_reason": "no emergency described, only a count question",
   "safety": {},
-  "seconds": 2.90298289997736
+  "seconds": 2.5882941999589093
  },
  "f06": {
   "kind": "new",
@@ -713,28 +707,28 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "general budget question, no immediate danger",
+  "urgent_reason": "question about past spending, no immediate medical or safety emergency",
   "safety": {},
-  "seconds": 1.5475636000046507
+  "seconds": 1.5048014000058174
  },
  "f07": {
   "kind": "new",
   "capability": "hazard",
   "level": "pin",
-  "name": "Kalambaina",
+  "name": "",
   "time": "forecast",
   "years": [],
-  "measure": "rain forecast and planting safety",
-  "restatement": "Will it rain this week at my farm (the pin) in my ward, Wamakko LGA and is it safe to plant?",
+  "measure": "rain and planting safety",
+  "restatement": "Will it rain this week at my farm (the pin) in my ward in my LGA and is it safe to plant?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described, forecast question only",
+  "urgent_reason": "request about future rain for planting, not a medical or safety emergency happening now",
   "safety": {},
-  "seconds": 2.1987851000158116
+  "seconds": 1.8961010999628343
  },
  "f08": {
   "kind": "new",
@@ -746,16 +740,16 @@
    2026
   ],
   "measure": "amount allocated",
-  "restatement": "How much was allocated to the Ministry of Health in Sokoto State in 2026?",
+  "restatement": "How much was allocated to the Ministry of Health in Sokoto State in the 2026 budget?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described; request is for budget information",
+  "urgent_reason": "question about budget allocation, no medical emergency described",
   "safety": {},
-  "seconds": 1.529427300032694
+  "seconds": 1.3726762000005692
  },
  "f09": {
   "kind": "new",
@@ -765,16 +759,16 @@
   "time": "none",
   "years": [],
   "measure": "nearest",
-  "restatement": "Where is the nearest health facility to my farm (the pin) in Kalambaina ward, Wamakko LGA?",
+  "restatement": "Where is the nearest health facility to my farm (the pin)?",
   "care": "general",
   "facility_level": "any",
   "ownership": "any",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "routine request for nearest facility, no emergency described",
+  "urgent_reason": "routine request for nearest facility location, no emergency described",
   "safety": {},
-  "seconds": 2.2912748000235297
+  "seconds": 1.7249134000157937
  },
  "f10": {
   "kind": "new",
@@ -791,9 +785,9 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described; question about past flooding",
+  "urgent_reason": "past flood question, no emergency now",
   "safety": {},
-  "seconds": 1.821691200020723
+  "seconds": 1.8647156999795698
  },
  "f11": {
   "kind": "new",
@@ -802,17 +796,17 @@
   "name": "MICS",
   "time": "none",
   "years": [],
-  "measure": "birth registration coverage",
-  "restatement": "What does the MICS report say about birth registration coverage in Sokoto State?",
+  "measure": "birth registration coverage and findings",
+  "restatement": "What does the MICS report say about birth registration in Sokoto State?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described; request for survey data",
+  "urgent_reason": "question about survey statistics, not an emergency",
   "safety": {},
-  "seconds": 1.3855118000064977
+  "seconds": 3.2434616000391543
  },
  "f12": {
   "kind": "new",
@@ -822,16 +816,16 @@
   "time": "forecast",
   "years": [],
   "measure": "flood alerts subscription",
-  "restatement": "Sign me up for alerts when floods are forecast for Goronyo LGA",
+  "restatement": "Subscribe me to flood alerts for Goronyo LGA in Sokoto State",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described, request for future alerts only",
+  "urgent_reason": "request for future flood alerts, not an emergency happening now",
   "safety": {},
-  "seconds": 1.3107728000031784
+  "seconds": 1.1766750999959186
  },
  "f13": {
   "kind": "new",
@@ -841,16 +835,16 @@
   "time": "none",
   "years": [],
   "measure": "projects",
-  "restatement": "What projects is the Sokoto State government doing in Tambuwal LGA?",
+  "restatement": "What projects is Sokoto State government doing/budgeting in Tambuwal LGA?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described; information request about projects",
+  "urgent_reason": "no emergency described; information request about government projects",
   "safety": {},
-  "seconds": 3.2550206999876536
+  "seconds": 3.84013500000583
  },
  "f14": {
   "kind": "chitchat",
@@ -860,25 +854,25 @@
   "time": "none",
   "years": [],
   "measure": "",
-  "restatement": "Greeting saying hello",
+  "restatement": "User says hello (Sannu)",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "",
+  "urgent_reason": "greeting only, no emergency",
   "safety": {},
-  "seconds": 2.8090316000161693
+  "seconds": 1.0491155000054277
  },
  "f15": {
   "kind": "new",
   "capability": "deep",
-  "level": "sector",
-  "name": "education",
+  "level": "state",
+  "name": "Sokoto State",
   "time": "none",
   "years": [],
-  "measure": "overview",
+  "measure": "overview of education status",
   "restatement": "What is the state of education in Sokoto State?",
   "care": "",
   "facility_level": "",
@@ -886,9 +880,9 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "broad information request about education, no emergency",
+  "urgent_reason": "broad statistics question, no emergency",
   "safety": {},
-  "seconds": 2.9892751000006683
+  "seconds": 1.7035442999913357
  },
  "c01": {
   "kind": "chitchat",
@@ -898,16 +892,16 @@
   "time": "none",
   "years": [],
   "measure": "",
-  "restatement": "who is Kasafi and what can you do",
+  "restatement": "Who are you?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "",
+  "urgent_reason": "no emergency described, only asking about identity",
   "safety": {},
-  "seconds": 2.810700500034727
+  "seconds": 1.1711757000302896
  },
  "c02": {
   "kind": "chitchat",
@@ -924,9 +918,9 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "greeting/identity question, no emergency",
+  "urgent_reason": "greeting and identity question, no emergency",
   "safety": {},
-  "seconds": 3.4784657999989577
+  "seconds": 1.866480600030627
  },
  "c03": {
   "kind": "chitchat",
@@ -936,16 +930,16 @@
   "time": "none",
   "years": [],
   "measure": "",
-  "restatement": "What can you do as Kasafi?",
+  "restatement": "What can you (Kasafi) do?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency; question about services",
+  "urgent_reason": "no emergency described; asking about capabilities",
   "safety": {},
-  "seconds": 7.771456499991473
+  "seconds": 1.8152281999937259
  },
  "c04": {
   "kind": "chitchat",
@@ -962,9 +956,9 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "",
+  "urgent_reason": "no emergency described",
   "safety": {},
-  "seconds": 4.238633900007699
+  "seconds": 1.335451099963393
  },
  "c05": {
   "kind": "chitchat",
@@ -974,16 +968,16 @@
   "time": "none",
   "years": [],
   "measure": "",
-  "restatement": "Explain how Kasafi works and what help it can provide",
+  "restatement": "How does Kasafi work and what can it do?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described; informational question about how the assistant works",
+  "urgent_reason": "",
   "safety": {},
-  "seconds": 4.320285799971316
+  "seconds": 2.4398434999748133
  },
  "c06": {
   "kind": "chitchat",
@@ -1002,7 +996,7 @@
   "urgent": false,
   "urgent_reason": "",
   "safety": {},
-  "seconds": 3.5087720999727026
+  "seconds": 2.8622782999882475
  },
  "c07": {
   "kind": "chitchat",
@@ -1019,9 +1013,9 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency; general question about the assistant",
+  "urgent_reason": "no emergency described; question about Kasafi identity",
   "safety": {},
-  "seconds": 1.7270913000102155
+  "seconds": 2.170828700007405
  },
  "c08": {
   "kind": "chitchat",
@@ -1030,7 +1024,7 @@
   "name": "",
   "time": "none",
   "years": [],
-  "measure": "language ability",
+  "measure": "",
   "restatement": "Can Kasafi speak Hausa?",
   "care": "",
   "facility_level": "",
@@ -1038,9 +1032,9 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described",
+  "urgent_reason": "no emergency described, just a language question",
   "safety": {},
-  "seconds": 1.3023819000227377
+  "seconds": 2.8325711999787018
  },
  "c09": {
   "kind": "chitchat",
@@ -1050,16 +1044,16 @@
   "time": "none",
   "years": [],
   "measure": "",
-  "restatement": "User is thanking Kasafi",
+  "restatement": "User is saying thank you",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described; user is thanking",
+  "urgent_reason": "message is thanks, no emergency",
   "safety": {},
-  "seconds": 1.3084038000088185
+  "seconds": 1.2663873999845237
  },
  "c10": {
   "kind": "chitchat",
@@ -1069,16 +1063,16 @@
   "time": "none",
   "years": [],
   "measure": "",
-  "restatement": "greeting to Kasafi",
+  "restatement": "Greeting exchanged",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "greeting, no emergency",
+  "urgent_reason": "greeting only, no emergency described",
   "safety": {},
-  "seconds": 1.6903743000002578
+  "seconds": 2.0420295000076294
  },
  "c11": {
   "kind": "chitchat",
@@ -1088,16 +1082,16 @@
   "time": "none",
   "years": [],
   "measure": "",
-  "restatement": "user greets Kasafi",
+  "restatement": "User says hello",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "greeting, no emergency",
+  "urgent_reason": "greeting only, no emergency described",
   "safety": {},
-  "seconds": 2.977434500004165
+  "seconds": 1.034517300024163
  },
  "c12": {
   "kind": "chitchat",
@@ -1107,16 +1101,16 @@
   "time": "none",
   "years": [],
   "measure": "",
-  "restatement": "The user is saying goodbye (see you later) and ending the conversation for now",
+  "restatement": "See you later - goodbye for now",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "",
+  "urgent_reason": "not an emergency, just a goodbye phrase",
   "safety": {},
-  "seconds": 2.1812327000079677
+  "seconds": 1.8591029000235721
  },
  "c13": {
   "kind": "chitchat",
@@ -1126,16 +1120,16 @@
   "time": "none",
   "years": [],
   "measure": "",
-  "restatement": "User is saying thank you and goodbye",
+  "restatement": "Thank you and goodbye",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "polite closing, no request or emergency",
+  "urgent_reason": "no emergency described; thank you and goodbye",
   "safety": {},
-  "seconds": 2.6671781999757513
+  "seconds": 2.88488679996226
  },
  "c14": {
   "kind": "chitchat",
@@ -1145,16 +1139,16 @@
   "time": "none",
   "years": [],
   "measure": "",
-  "restatement": "What can Kasafi do and how to use it",
+  "restatement": "User asks for help / what Kasafi can do.",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described, request for help information",
+  "urgent_reason": "no emergency described - general help request",
   "safety": {},
-  "seconds": 3.8419207999831997
+  "seconds": 2.0621004999848083
  },
  "c15": {
   "kind": "chitchat",
@@ -1164,16 +1158,16 @@
   "time": "none",
   "years": [],
   "measure": "",
-  "restatement": "Greeting",
+  "restatement": "Greeting in Hausa",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "greeting, not a medical or safety emergency",
+  "urgent_reason": "greeting only, no emergency described",
   "safety": {},
-  "seconds": 1.1792133999988437
+  "seconds": 1.0937319999793544
  },
  "c16": {
   "kind": "chitchat",
@@ -1190,9 +1184,9 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described; asking about identity",
+  "urgent_reason": "",
   "safety": {},
-  "seconds": 1.9798710000468418
+  "seconds": 3.715990500000771
  },
  "c17": {
   "kind": "chitchat",
@@ -1202,16 +1196,16 @@
   "time": "none",
   "years": [],
   "measure": "",
-  "restatement": "whether the assistant can understand and speak Hausa",
+  "restatement": "The user asks if Kasafi can understand and speak Hausa",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "",
+  "urgent_reason": "no emergency described; user asks about language ability",
   "safety": {},
-  "seconds": 1.78946050000377
+  "seconds": 2.9869746000040323
  },
  "c18": {
   "kind": "chitchat",
@@ -1221,16 +1215,16 @@
   "time": "none",
   "years": [],
   "measure": "",
-  "restatement": "Are you a human or a machine?",
+  "restatement": "Is Kasafi a human or a machine/bot?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described, question about identity",
+  "urgent_reason": "question about identity, not a medical or safety emergency",
   "safety": {},
-  "seconds": 1.7011654999805614
+  "seconds": 2.292962300009094
  },
  "c19": {
   "kind": "chitchat",
@@ -1239,36 +1233,36 @@
   "name": "",
   "time": "none",
   "years": [],
-  "measure": "",
-  "restatement": "How does Kasafi work and what can you help me with?",
+  "measure": "how Kasafi works",
+  "restatement": "How do you (Kasafi) work?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "greeting/question about Kasafi function, no emergency",
+  "urgent_reason": "no emergency described; question about how Kasafi works",
   "safety": {},
-  "seconds": 1.9480063000228256
+  "seconds": 1.7272730999975465
  },
  "c20": {
   "kind": "correction",
   "capability": "facility",
   "level": "facility",
-  "name": "UDUTH",
+  "name": "Usmanu Danfodiyo University Teaching Hospital (UDUTH)",
   "time": "none",
   "years": [],
-  "measure": "nearest",
-  "restatement": "UDUTH (Usmanu Danfodiyo University Teaching Hospital) is the nearest health facility to me in my LGA (Wamakko LGA)",
+  "measure": "nearest distance/route",
+  "restatement": "Isn't Usmanu Danfodiyo University Teaching Hospital (UDUTH) the closest hospital to me in my LGA?",
   "care": "general",
   "facility_level": "hospital",
   "ownership": "public",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "proximity claim, no emergency described now",
+  "urgent_reason": "no emergency described, only a claim about facility proximity",
   "safety": {},
-  "seconds": 3.6485582999885082
+  "seconds": 2.3261515000485815
  },
  "m01": {
   "kind": "new",
@@ -1277,17 +1271,17 @@
   "name": "",
   "time": "none",
   "years": [],
-  "measure": "nearest facility for delivery",
-  "restatement": "Where is the nearest health facility to my farm (the pin) in Kalambaina ward, Wamakko LGA where my wife can deliver a baby?",
+  "measure": "nearest facilities for delivery",
+  "restatement": "Where can my wife deliver a baby near my farm (the pin)?",
   "care": "maternal",
   "facility_level": "any",
   "ownership": "any",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "general question about future delivery, no emergency described as happening now",
+  "urgent_reason": "planning question about future delivery, no indication of labour happening now",
   "safety": {},
-  "seconds": 3.269746700010728
+  "seconds": 2.94204679998802
  },
  "m02": {
   "kind": "new",
@@ -1297,16 +1291,16 @@
   "time": "now",
   "years": [],
   "measure": "nearest",
-  "restatement": "Where should I take my wife who is in labour near my farm (the pin) in my ward, Wamakko LGA, Sokoto State?",
+  "restatement": "Where should I take my wife who is in labour from my farm (the pin) in my ward, my LGA?",
   "care": "maternal",
   "facility_level": "any",
   "ownership": "any",
   "satellite_context": false,
   "exclude": "",
   "urgent": true,
-  "urgent_reason": "woman in labour now needs immediate care",
+  "urgent_reason": "woman in labour requiring immediate care",
   "safety": {},
-  "seconds": 1.6491454999777488
+  "seconds": 4.048867999983486
  },
  "m03": {
   "kind": "new",
@@ -1315,36 +1309,36 @@
   "name": "",
   "time": "none",
   "years": [],
-  "measure": "nearest facility for antenatal care",
-  "restatement": "What is the nearest health facility for antenatal care to my farm (the pin) in my ward, Wamakko LGA?",
+  "measure": "nearest",
+  "restatement": "Where is the nearest health facility to my farm (the pin) for antenatal care?",
   "care": "maternal",
   "facility_level": "any",
   "ownership": "any",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "routine request for antenatal care location, not an emergency happening now",
+  "urgent_reason": "request for antenatal care location is not an emergency happening now",
   "safety": {},
-  "seconds": 2.7605636999942362
+  "seconds": 4.300618600042071
  },
  "m04": {
   "kind": "new",
   "capability": "facility",
   "level": "pin",
   "name": "",
-  "time": "none",
+  "time": "now",
   "years": [],
-  "measure": "nearest facility for delivery",
-  "restatement": "Where can my wife give birth near my farm (the pin) in Kalambaina ward, Wamakko LGA?",
+  "measure": "nearest facility for childbirth/delivery",
+  "restatement": "Where can my wife give birth/deliver nearest to my farm (the pin) in my ward, my LGA?",
   "care": "maternal",
   "facility_level": "any",
   "ownership": "any",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about where to deliver in future, no emergency happening now",
+  "urgent_reason": "routine question about where to give birth, no emergency described as happening now",
   "safety": {},
-  "seconds": 2.320354099967517
+  "seconds": 3.304703999951016
  },
  "m05": {
   "kind": "new",
@@ -1353,93 +1347,93 @@
   "name": "",
   "time": "none",
   "years": [],
-  "measure": "nearest health facilities for childbirth/delivery",
-  "restatement": "Where is the nearest health facility where I can deliver a baby near my farm (the pin) in my ward in Wamakko LGA?",
+  "measure": "nearest facility for delivery",
+  "restatement": "Where is the nearest health facility to my farm (the pin) in my ward where a baby can be delivered?",
   "care": "maternal",
   "facility_level": "any",
   "ownership": "any",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "general information request about delivery services, no active labour or emergency described",
+  "urgent_reason": "general question about where to deliver, no emergency happening now",
   "safety": {},
-  "seconds": 3.0888722999952734
+  "seconds": 2.7356309999595396
  },
  "m06": {
   "kind": "new",
   "capability": "facility",
-  "level": "pin",
+  "level": "facility",
   "name": "",
   "time": "now",
   "years": [],
-  "measure": "nearest",
-  "restatement": "Where is the nearest health facility where I can take my sick child near my farm (the pin) in Kalambaina ward, Wamakko LGA?",
+  "measure": "nearest health facility",
+  "restatement": "Where is the nearest health facility where I can take my sick child from my farm (the pin) in my ward, Wamakko LGA?",
   "care": "children",
   "facility_level": "any",
   "ownership": "any",
   "satellite_context": false,
   "exclude": "",
   "urgent": true,
-  "urgent_reason": "child is sick now and needs care promptly",
+  "urgent_reason": "sick child needing care now - may need immediate facility",
   "safety": {},
-  "seconds": 3.058865799976047
+  "seconds": 4.151778300001752
  },
  "m07": {
   "kind": "new",
   "capability": "facility",
   "level": "pin",
-  "name": "my farm (the pin)",
+  "name": "",
   "time": "none",
   "years": [],
-  "measure": "nearest",
-  "restatement": "Where is the nearest government hospital to my farm (the pin)?",
+  "measure": "nearest government hospital",
+  "restatement": "What is the nearest government hospital to my farm (the pin) in my ward in Wamakko LGA?",
   "care": "general",
   "facility_level": "hospital",
   "ownership": "public",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "request for nearest facility location, no emergency described",
+  "urgent_reason": "general information request about nearest facility, no emergency described",
   "safety": {},
-  "seconds": 2.9905882999883033
+  "seconds": 3.4965180999715813
  },
  "m08": {
   "kind": "new",
   "capability": "facility",
   "level": "pin",
-  "name": "Kalambaina",
+  "name": "",
   "time": "none",
   "years": [],
   "measure": "nearest",
-  "restatement": "What is the nearest private clinic to my farm (the pin) in my ward, Wamakko LGA?",
+  "restatement": "What is the nearest private clinic to my farm (the pin)?",
   "care": "general",
   "facility_level": "primary",
   "ownership": "private",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described, only location request",
+  "urgent_reason": "no emergency described; request for nearest facility location",
   "safety": {},
-  "seconds": 2.559522699972149
+  "seconds": 3.2036808999837376
  },
  "m09": {
-  "kind": "follow_up",
+  "kind": "correction",
   "capability": "facility",
-  "level": "facility",
-  "name": "",
+  "level": "pin",
+  "name": "Kalambaina",
   "time": "none",
   "years": [],
   "measure": "nearest",
-  "restatement": "Where can my wife deliver a baby at government-owned facilities nearest to my farm (the pin) in my ward, Wamakko LGA?",
+  "restatement": "Where can my wife deliver a baby near my farm (the pin) at government-owned facilities?",
   "care": "maternal",
   "facility_level": "any",
   "ownership": "public",
   "satellite_context": false,
-  "exclude": "",
+  "exclude": "private",
   "urgent": false,
-  "urgent_reason": "request for information about delivery location, not labour happening now",
+  "urgent_reason": "routine inquiry about delivery location, no emergency described",
   "safety": {},
-  "seconds": 5.308101500035264
+  "seconds": 3.6229653999907896
  },
  "m10": {
   "kind": "follow_up",
@@ -1450,17 +1444,17 @@
   "years": [
    2026
   ],
-  "measure": "education/school projects and amount budgeted",
-  "restatement": "Is there anything for schools for my LGA (Wamakko) in the 2026 budget?",
+  "measure": "capital projects and amount for schools/education",
+  "restatement": "What is the government budgeting for schools in my LGA in the 2026 budget?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no medical or safety emergency described",
+  "urgent_reason": "no emergency described; informational follow-up about school budgets",
   "safety": {},
-  "seconds": 2.8281494000111707
+  "seconds": 1.771822999988217
  },
  "k01": {
   "kind": "menu",
@@ -1470,16 +1464,16 @@
   "time": "none",
   "years": [],
   "measure": "",
-  "restatement": "Show the main menu of what Kasafi can do",
+  "restatement": "user asks to see the menu of options",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "menu request, no emergency",
+  "urgent_reason": "",
   "safety": {},
-  "seconds": 2.1206063000136055
+  "seconds": 1.5279758999822661
  },
  "k02": {
   "kind": "menu",
@@ -1489,16 +1483,16 @@
   "time": "none",
   "years": [],
   "measure": "",
-  "restatement": "User wants to see the menu of options",
+  "restatement": "Show me the menu of what Kasafi can do",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "",
+  "urgent_reason": "no emergency described; request is to see menu options",
   "safety": {},
-  "seconds": 1.4593298999825493
+  "seconds": 1.8296352999750525
  },
  "k03": {
   "kind": "menu",
@@ -1508,16 +1502,16 @@
   "time": "none",
   "years": [],
   "measure": "",
-  "restatement": "Show me the menu of options",
+  "restatement": "Show me the menu options.",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described; menu request",
+  "urgent_reason": "",
   "safety": {},
-  "seconds": 1.720981499995105
+  "seconds": 2.3467846999992616
  },
  "n01": {
   "kind": "new",
@@ -1529,27 +1523,27 @@
    2024
   ],
   "measure": "number of people affected by floods",
-  "restatement": "How many people in Sokoto State were affected by floods in October 2024?",
+  "restatement": "How many people were affected by floods in Sokoto State in October 2024?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about past flood statistics, not an emergency happening now",
+  "urgent_reason": "question about past statistics, not an emergency happening now",
   "safety": {},
-  "seconds": 1.865467499999795
+  "seconds": 1.7900495000067167
  },
  "n02": {
   "kind": "new",
   "capability": "statistics",
   "level": "state",
   "name": "Sokoto State",
-  "time": "past",
+  "time": "year",
   "years": [
    2024
   ],
-  "measure": "number of people displaced by floods",
+  "measure": "count displaced",
   "restatement": "How many people were displaced by the 2024 floods in Sokoto State?",
   "care": "",
   "facility_level": "",
@@ -1557,9 +1551,9 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about past displacement statistics, not an emergency happening now",
+  "urgent_reason": "no emergency described; question about past displacement statistics",
   "safety": {},
-  "seconds": 1.4021681000012904
+  "seconds": 1.422598699980881
  },
  "n03": {
   "kind": "new",
@@ -1578,9 +1572,9 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about past flood damage statistics, no emergency now",
+  "urgent_reason": "past statistics question, no one in danger now",
   "safety": {},
-  "seconds": 1.6677722000167705
+  "seconds": 2.7980114999809302
  },
  "n04": {
   "kind": "new",
@@ -1599,9 +1593,9 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about past flood reports, not a current emergency",
+  "urgent_reason": "question about past flood reports, no one reported in danger now",
   "safety": {},
-  "seconds": 2.6886251000105403
+  "seconds": 2.2257841999526136
  },
  "n05": {
   "kind": "new",
@@ -1612,17 +1606,17 @@
   "years": [
    2025
   ],
-  "measure": "list of LGAs in Sokoto State affected by floods",
-  "restatement": "Which LGAs in Sokoto State were affected by floods in 2025 according to NEMA reports?",
+  "measure": "LGAs affected by floods",
+  "restatement": "Which LGAs in Sokoto State were affected by floods in 2025 according to NEMA?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no medical or safety emergency described; request is for past flood report data",
+  "urgent_reason": "no medical or safety emergency described; request is for report data",
   "safety": {},
-  "seconds": 2.7499429000308737
+  "seconds": 2.611038399976678
  },
  "n06": {
   "kind": "new",
@@ -1641,9 +1635,9 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about past statistics, no one in immediate danger now",
+  "urgent_reason": "question about past flood statistics, not an emergency happening now",
   "safety": {},
-  "seconds": 2.3770373000297695
+  "seconds": 2.3543817000463605
  },
  "n07": {
   "kind": "new",
@@ -1654,24 +1648,24 @@
   "years": [
    2024
   ],
-  "measure": "count of people displaced due to flooding",
-  "restatement": "How many people were displaced due to flooding in Sokoto State in 2024?",
+  "measure": "number of people displaced due to floods",
+  "restatement": "How many people were displaced due to floods in Sokoto State in 2024?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "request for past displacement statistics, no emergency now",
+  "urgent_reason": "question about past flood displacement statistics, not an immediate emergency",
   "safety": {},
-  "seconds": 3.0809597999905236
+  "seconds": 1.6839345000335015
  },
  "n08": {
   "kind": "new",
   "capability": "statistics",
   "level": "state",
   "name": "Sokoto State",
-  "time": "past",
+  "time": "year",
   "years": [
    2024
   ],
@@ -1683,9 +1677,9 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "past statistics question, no one in danger now",
+  "urgent_reason": "question about 2024 flood statistics, not an emergency happening now",
   "safety": {},
-  "seconds": 1.771375399956014
+  "seconds": 3.57887229998596
  },
  "n09": {
   "kind": "new",
@@ -1696,50 +1690,50 @@
   "years": [
    2024
   ],
-  "measure": "people affected, houses/farms damaged and overall flood impact",
-  "restatement": "How bad were the 2024 floods in Sokoto State overall?",
+  "measure": "flood impact how bad people affected houses damage",
+  "restatement": "What was the impact of the 2024 floods in Sokoto State?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": true,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "past flood impact question, no emergency happening now",
+  "urgent_reason": "question about past flood impact statistics not a medical or safety emergency now",
   "safety": {},
-  "seconds": 2.486474299977999
+  "seconds": 1.8507782999658957
  },
  "n10": {
   "kind": "new",
   "capability": "statistics",
   "level": "state",
   "name": "Sokoto State",
-  "time": "past",
+  "time": "year",
   "years": [
    2024
   ],
-  "measure": "flood extent / severity / impact",
-  "restatement": "How severe/extensive were the 2024 floods in Sokoto State?",
+  "measure": "extent and impact of floods",
+  "restatement": "How severe and extensive were the 2024 floods in Sokoto State?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": true,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "past flood statistics question, no current emergency",
+  "urgent_reason": "question about past flood extent, not a medical or safety emergency happening now",
   "safety": {},
-  "seconds": 1.8622474999865517
+  "seconds": 2.4540425000013784
  },
  "n11": {
   "kind": "new",
   "capability": "statistics",
   "level": "state",
   "name": "Sokoto State",
-  "time": "past",
+  "time": "year",
   "years": [
    2024
   ],
-  "measure": "number of people died in floods",
-  "restatement": "How many people died in floods in Sokoto State in 2024?",
+  "measure": "number of deaths due to floods",
+  "restatement": "How many people died due to floods in Sokoto State in 2024?",
   "care": "",
   "facility_level": "",
   "ownership": "",
@@ -1748,7 +1742,7 @@
   "urgent": false,
   "urgent_reason": "question about past flood deaths, not an emergency happening now",
   "safety": {},
-  "seconds": 1.4891596999950707
+  "seconds": 1.6081253999727778
  },
  "n12": {
   "kind": "follow_up",
@@ -1759,63 +1753,63 @@
   "years": [
    2024
   ],
-  "measure": "flooded area",
-  "restatement": "How much of my ward (Kalambaina) was under water in 2024?",
+  "measure": "area flooded / proportion under water",
+  "restatement": "How much of my ward was flooded / under water in 2024?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "past flood extent question, not an emergency now",
+  "urgent_reason": "historical flood extent question, no immediate danger",
   "safety": {},
-  "seconds": 1.8988824000116438
+  "seconds": 2.3023532000370324
  },
  "n13": {
   "kind": "new",
   "capability": "place_history",
   "level": "lga",
   "name": "Wamakko",
-  "time": "year",
+  "time": "past",
   "years": [
    2022
   ],
-  "measure": "which wards flooded most / flooded area",
-  "restatement": "Which wards of Wamakko LGA flooded most in 2022?",
+  "measure": "wards most flooded area",
+  "restatement": "Which wards of Wamakko LGA were most flooded in 2022?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described; past flood information request",
+  "urgent_reason": "no emergency described; historical flood information request",
   "safety": {},
-  "seconds": 2.0099651999771595
+  "seconds": 3.2841051999712363
  },
  "n14": {
-  "kind": "new",
+  "kind": "follow_up",
   "capability": "place_history",
   "level": "pin",
-  "name": "",
+  "name": "my farm (the pin)",
   "time": "past",
   "years": [],
-  "measure": "flooded",
-  "restatement": "Has my farm (the pin) ever been flooded?",
+  "measure": "was flooded",
+  "restatement": "Has flood water ever covered my farm (the pin) in Kalambaina ward, Wamakko LGA?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about past flooding at my farm, not a current emergency",
+  "urgent_reason": "no emergency described; past flood history question",
   "safety": {},
-  "seconds": 2.080643300025258
+  "seconds": 2.178759899979923
  },
  "n15": {
   "kind": "new",
   "capability": "statistics",
   "level": "document",
-  "name": "MICS report",
+  "name": "MICS",
   "time": "none",
   "years": [],
   "measure": "birth registration coverage",
@@ -1826,9 +1820,9 @@
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described; request for survey statistic",
+  "urgent_reason": "no emergency described; question about statistics in a report",
   "safety": {},
-  "seconds": 1.7960530000273138
+  "seconds": 1.615162500005681
  },
  "n16": {
   "kind": "new",
@@ -1839,17 +1833,98 @@
   "years": [
    2026
   ],
-  "measure": "when will the rains end / cessation date of rainy season",
-  "restatement": "According to NiMet, when will the rains end in my LGA this year?",
+  "measure": "rainy season cessation date",
+  "restatement": "According to NiMet, when will the rains end in my LGA (Wamakko LGA) this year (2026)?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about seasonal forecast, not an emergency happening now",
+  "urgent_reason": "no medical or safety emergency described; forecast question",
   "safety": {},
-  "seconds": 2.3719339000526816
+  "seconds": 1.681534899980761
+ },
+ "lf11": {
+  "kind": "new",
+  "capability": "statistics",
+  "level": "document",
+  "name": "Multiple Indicator Cluster Survey (MICS) by NBS and UNICEF",
+  "time": "none",
+  "years": [],
+  "measure": "gaps in child healthcare and civil registration",
+  "restatement": "What are the gaps in child healthcare and civil registration for Sokoto State according to the Multiple Indicator Cluster Survey (MICS) by NBS and UNICEF?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "satellite_context": false,
+  "exclude": "",
+  "urgent": false,
+  "urgent_reason": "no medical or safety emergency described now",
+  "safety": {},
+  "seconds": 2.2062170000281185
+ },
+ "lf12": {
+  "kind": "new",
+  "capability": "statistics",
+  "level": "document",
+  "name": "MICS",
+  "time": "year",
+  "years": [
+   2021
+  ],
+  "measure": "gaps in child healthcare and birth registration",
+  "restatement": "According to the NBS and UNICEF MICS, what gaps exist in child healthcare and birth registration in Sokoto State?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "satellite_context": false,
+  "exclude": "",
+  "urgent": false,
+  "urgent_reason": "no emergency described; request for report findings",
+  "safety": {},
+  "seconds": 1.7423706999979913
+ },
+ "lf13": {
+  "kind": "new",
+  "capability": "statistics",
+  "level": "document",
+  "name": "MICS 2021 and NDHS 2024",
+  "time": "span",
+  "years": [
+   2021,
+   2024
+  ],
+  "measure": "birth registration coverage and comparability",
+  "restatement": "What did MICS 2021 and NDHS 2024 each find about birth registration in Sokoto State and can the two surveys be directly compared?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "satellite_context": false,
+  "exclude": "",
+  "urgent": false,
+  "urgent_reason": "question about survey findings, not an emergency happening now",
+  "safety": {},
+  "seconds": 2.056908000027761
+ },
+ "lf14": {
+  "kind": "new",
+  "capability": "deep",
+  "level": "state",
+  "name": "Sokoto State",
+  "time": "none",
+  "years": [],
+  "measure": "overall state of child health",
+  "restatement": "What is the state of child health in Sokoto State?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "satellite_context": false,
+  "exclude": "",
+  "urgent": false,
+  "urgent_reason": "question about health statistics not an immediate emergency",
+  "safety": {},
+  "seconds": 2.4051988999708556
  },
  "lf01": {
   "kind": "new",
@@ -1858,17 +1933,17 @@
   "name": "Dange Shuni",
   "time": "none",
   "years": [],
-  "measure": "count of schools, all levels with number at each level",
-  "restatement": "How many schools are in Dange Shuni LGA in total, with numbers at each level?",
+  "measure": "number of schools, all levels, with the number at each level",
+  "restatement": "How many schools are in Dange Shuni LGA, at each level (primary, JSS, SSS, IQS) and in total?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "count question, not a medical or safety emergency now",
+  "urgent_reason": "",
   "safety": {},
-  "seconds": 2.2396161999786273
+  "seconds": 2.3892236999818124
  },
  "lf02": {
   "kind": "clarification",
@@ -1877,8 +1952,8 @@
   "name": "Dange Shuni",
   "time": "none",
   "years": [],
-  "measure": "count of schools - all levels, with the number at each level (primary, junior se",
-  "restatement": "What is the total number of schools (primary, junior secondary, senior secondary and IQS) in my LGA Dange Shuni, with the number at each level?",
+  "measure": "count of schools, all levels with number at each level (primary, junior secondar",
+  "restatement": "How many schools are there in total in Dange Shuni LGA, including public and private primary, junior secondary, senior secondary and IQS, with the number at each level?",
   "care": "",
   "facility_level": "",
   "ownership": "",
@@ -1887,7 +1962,7 @@
   "urgent": false,
   "urgent_reason": "question about school statistics, not a medical or safety emergency",
   "safety": {},
-  "seconds": 2.5373010999755934
+  "seconds": 2.1318093999871053
  },
  "lf03": {
   "kind": "correction",
@@ -1896,65 +1971,8 @@
   "name": "Dange Shuni",
   "time": "none",
   "years": [],
-  "measure": "number of schools at each level (primary, junior secondary, senior secondary, IQ",
-  "restatement": "How many schools (primary, junior secondary, senior secondary and IQS) are in Dange Shuni LGA at each level?",
-  "care": "",
-  "facility_level": "",
-  "ownership": "",
-  "satellite_context": false,
-  "exclude": "budget",
-  "urgent": false,
-  "urgent_reason": "no medical or safety emergency described",
-  "safety": {},
-  "seconds": 2.3111230000504293
- },
- "lf04": {
-  "kind": "new",
-  "capability": "statistics",
-  "level": "lga",
-  "name": "Dange Shuni",
-  "time": "none",
-  "years": [],
-  "measure": "count of schools, all levels, with the number at each level (primary, JSS, SSS, ",
-  "restatement": "How many schools are there in Dange Shuni LGA, counting all levels with breakdown by level?",
-  "care": "",
-  "facility_level": "",
-  "ownership": "",
-  "satellite_context": false,
-  "exclude": "",
-  "urgent": false,
-  "urgent_reason": "question about count of schools, no emergency",
-  "safety": {},
-  "seconds": 1.8689500000327826
- },
- "lf05": {
-  "kind": "clarification",
-  "capability": "statistics",
-  "level": "lga",
-  "name": "Dange Shuni",
-  "time": "none",
-  "years": [],
-  "measure": "count of schools, all levels, with the number at each level (primary, junior sec",
-  "restatement": "How many schools are there in total in Dange Shuni LGA, with the numbers for primary, junior secondary, senior secondary and IQS?",
-  "care": "",
-  "facility_level": "",
-  "ownership": "",
-  "satellite_context": false,
-  "exclude": "",
-  "urgent": false,
-  "urgent_reason": "no emergency described; request is for school statistics",
-  "safety": {},
-  "seconds": 2.170134500018321
- },
- "lf06": {
-  "kind": "correction",
-  "capability": "statistics",
-  "level": "lga",
-  "name": "Dange Shuni",
-  "time": "none",
-  "years": [],
-  "measure": "count of schools all levels, with the number at each level",
-  "restatement": "How many schools in total are there in Dange Shuni LGA, with the number at each level (primary, JSS, SSS and IQS)?",
+  "measure": "count of schools - all levels, with the number at each level (primary, junior se",
+  "restatement": "What is the total number of schools in my LGA (Dange Shuni LGA) broken down by primary, junior secondary, senior secondary and IQS?",
   "care": "",
   "facility_level": "",
   "ownership": "",
@@ -1963,14 +1981,71 @@
   "urgent": false,
   "urgent_reason": "",
   "safety": {},
-  "seconds": 1.9983640999998897
+  "seconds": 3.729303699976299
+ },
+ "lf04": {
+  "kind": "new",
+  "capability": "statistics",
+  "level": "lga",
+  "name": "Dange Shuni",
+  "time": "none",
+  "years": [],
+  "measure": "all levels, with the number at each level",
+  "restatement": "How many schools are there in total in Dange Shuni LGA, with breakdown by level?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "satellite_context": false,
+  "exclude": "",
+  "urgent": false,
+  "urgent_reason": "not a medical or safety emergency now",
+  "safety": {},
+  "seconds": 1.4288020999520086
+ },
+ "lf05": {
+  "kind": "clarification",
+  "capability": "statistics",
+  "level": "lga",
+  "name": "Dange Shuni",
+  "time": "none",
+  "years": [],
+  "measure": "count of schools, all levels (primary, JSS, SSS and IQS) with number at each lev",
+  "restatement": "How many schools are in Dange Shuni LGA in total, including primary, JSS, SSS and IQS, with the number at each level?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "satellite_context": false,
+  "exclude": "",
+  "urgent": false,
+  "urgent_reason": "question is about school counts, not a medical or safety emergency",
+  "safety": {},
+  "seconds": 2.0349565999931656
+ },
+ "lf06": {
+  "kind": "correction",
+  "capability": "statistics",
+  "level": "lga",
+  "name": "Dange Shuni",
+  "time": "none",
+  "years": [],
+  "measure": "all levels, with the number at each level",
+  "restatement": "How many schools in total at all levels (primary, JSS, SSS and IQS) are there in my LGA Dange Shuni?",
+  "care": "",
+  "facility_level": "",
+  "ownership": "",
+  "satellite_context": false,
+  "exclude": "budget",
+  "urgent": false,
+  "urgent_reason": "question about school counts, not a medical or safety emergency",
+  "safety": {},
+  "seconds": 1.9948381999856792
  },
  "lf07": {
   "kind": "correction",
   "capability": "statistics",
   "level": "state",
   "name": "Sokoto State",
-  "time": "past",
+  "time": "year",
   "years": [
    2024
   ],
@@ -1980,14 +2055,14 @@
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
-  "exclude": "land",
+  "exclude": "hectares of land",
   "urgent": false,
-  "urgent_reason": "",
+  "urgent_reason": "no emergency described; question is about past statistics",
   "safety": {},
-  "seconds": 3.8108066000277176
+  "seconds": 2.393486100016162
  },
  "lf08": {
-  "kind": "clarification",
+  "kind": "correction",
   "capability": "place_budget",
   "level": "lga",
   "name": "Wamakko",
@@ -1995,17 +2070,17 @@
   "years": [
    2025
   ],
-  "measure": "amount budgeted",
-  "restatement": "What is the government budgeting for my LGA (Wamakko LGA) in 2025?",
+  "measure": "amount allocated and projects in budget",
+  "restatement": "What does the 2025 budget allocate to my LGA?",
   "care": "",
   "facility_level": "",
   "ownership": "",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "no emergency described; informational budget question",
+  "urgent_reason": "no emergency described; request is about budget allocation",
   "safety": {},
-  "seconds": 2.3593040999840014
+  "seconds": 2.488132900034543
  },
  "lf09": {
   "kind": "clarification",
@@ -2014,17 +2089,17 @@
   "name": "Wamakko",
   "time": "none",
   "years": [],
-  "measure": "count all levels, with the number at each level",
-  "restatement": "How many health facilities in total (all levels including hospitals, PHCs and dispensaries) are in Wamakko LGA, with the number at each level?",
+  "measure": "all levels, with the number at each level",
+  "restatement": "How many health facilities at all levels (hospitals, PHCs, dispensaries, etc.) are in Wamakko LGA?",
   "care": "general",
   "facility_level": "any",
   "ownership": "any",
   "satellite_context": false,
   "exclude": "",
   "urgent": false,
-  "urgent_reason": "question about facility counts, not a medical or safety emergency happening now",
+  "urgent_reason": "user is clarifying scope of facility count, not a medical emergency",
   "safety": {},
-  "seconds": 2.151565700012725
+  "seconds": 2.1582229000050575
  },
  "lf10": {
   "kind": "follow_up",
@@ -2035,8 +2110,8 @@
   "years": [
    2025
   ],
-  "measure": "list of LGAs named as affected",
-  "restatement": "Which LGAs does NEMA's situation report of 26 September 2025 name as affected by floods in Sokoto State?",
+  "measure": "which LGAs named as affected",
+  "restatement": "Which LGAs in Sokoto State does the NEMA situation report of 26 September 2025 name as affected by floods?",
   "care": "",
   "facility_level": "",
   "ownership": "",
@@ -2045,6 +2120,6 @@
   "urgent": false,
   "urgent_reason": "no medical or safety emergency described",
   "safety": {},
-  "seconds": 2.20909209997626
+  "seconds": 2.042251800012309
  }
 }

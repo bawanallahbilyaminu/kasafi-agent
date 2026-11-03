@@ -2034,7 +2034,8 @@ async def checked_answer(a: Answer, question: str, lang: str, conn, kw: dict, t_
         note = answer_check.NOTE.get(lang, answer_check.NOTE["en"]).format(
             why="; ".join([*best_v.rules, *best_v.contradictions, *best_v.missing][:3]) or best_v.feedback)
         out = replace(best, text=text, partial=True, exact=text, found=supported,
-                      working=f"{best.working}\n\n{note}" if best.working else note)
+                      working=f"{best.working}\n\n{note}" if best.working else note,
+                      parts=[], deep=None)          # a deep analysis's sections aren't sent after a failed check
         log.info("check: sent an answer built from what is supported (round %d verdict %s)", best_v.round,
                  best_v.verdict)
         return out

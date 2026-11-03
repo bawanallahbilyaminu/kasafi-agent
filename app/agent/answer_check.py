@@ -38,7 +38,8 @@ yourself. Reply with JSON only:
  "subject": {"place": true|false, "time": true|false, "topic": true|false, "level": true|false, \
 "note": "<what differs from what was asked, or ''>"},
  "contradictions": ["<a statement and the statement that contradicts it>"],
- "missing": ["<each thing the user asked for that the draft doesn't give, naming place, time and measure>"],
+ "missing": ["<each thing the user asked for that the draft doesn't give, naming place, time and measure, with \
+no figures>"],
  "missing_stated": true|false,
  "unclear": ["<a sentence that misdescribes what a figure is or how two figures relate>"],
  "unsupported": ["<each figure or claim in the draft that the evidence doesn't contain>"],
@@ -281,12 +282,12 @@ def honest_partial(v: Verdict) -> bool:
 
 
 def should_check(a) -> bool:
-    """Every answer the document or place paths give, except questions back to the user (which reading, where is
-    the farm, its size) and deep analyses (each claim is already checked there). A document path's 'not found' is
-    checked too (3 Nov: the schools follow-up got 'not found' and a budget note while the census had the figures):
-    the check says what was asked, and a second round looks for it."""
-    if a is None or a.clarify or a.needs_pin or a.needs_size or getattr(a, "deep", None) is not None or \
-            not (a.text or "").strip():
+    """Every answer the document, place and deep paths give, except questions back to the user (which reading,
+    where is the farm, its size). A deep analysis is checked too: its claims are verified one by one, but on 3 Nov
+    one answered 'the gaps in child healthcare according to MICS' with poverty, staffing and budget claims. A
+    document path's 'not found' is checked too (3 Nov: the schools follow-up got 'not found' and a budget note while
+    the census had the figures): the check says what was asked, and a second round looks for it."""
+    if a is None or a.clarify or a.needs_pin or a.needs_size or not (a.text or "").strip():
         return False
     return bool(a.found or (a.plan is not None and not a.timings.get("place_area") and "place" not in a.timings
                             and "hazard" not in a.timings))
@@ -303,6 +304,19 @@ NOTHING = {
 
 MISSING = {"en": "Not found in the documents I read: {missing}.",
            "ha": "Ban samu waɗannan a takardun da na karanta ba: {missing}."}
+
+
+def truly_missing(missing: list[str], a) -> list[str]:
+    """What is missing, without any item that carries a figure printed in the cited pages (that one was found, the
+    check only described it), and without figures in the wording."""
+    from app.agent.answer import unverified_numbers
+    out = []
+    for m in missing:
+        figs = figures_in(m)
+        if figs and a.cited and len(unverified_numbers(" ".join(figs), a.cited)) < len(figs):
+            continue
+        out.append(re.sub(r"\s*[:(]?\s*\d[\d,.]*\s*%?\)?", "", m).strip(" ;:,"))
+    return [m for m in out if m]
 
 
 def supported(text: str, a, keep_lines: bool = False) -> str:
@@ -341,8 +355,12 @@ def safe_answer(a, v: Verdict, lang: str) -> tuple[str, bool]:
     isn't printed there is dropped), and the sources; when nothing is left, what wasn't found and which documents
     were read."""
     from app.agent.answer import NOT_READ, sources_line
-    only_gaps = not (v.wrong_subject or v.contradictions or v.unclear or v.unsupported or v.rules) and \
-        not any((v.subject or {}).get(k) is False for k in ("place", "time", "topic", "level"))
+    # a draft that refused ('couldn't verify the figures') has nothing of its own to keep: the rewrite, whose every
+    # figure is then checked against the cited pages (3 Nov: s11's refusal was kept, with the figures it had in a
+    # 'not found' line)
+    refused = a.verification == "unsupported" or not a.verified
+    only_gaps = not refused and not (v.wrong_subject or v.contradictions or v.unclear or v.unsupported or v.rules) \
+        and not any((v.subject or {}).get(k) is False for k in ("place", "time", "topic", "level"))
     text = ""
     if not only_gaps:
         # the draft says something wrong: the check's rewrite, its figures checked in code
@@ -350,15 +368,15 @@ def safe_answer(a, v: Verdict, lang: str) -> tuple[str, bool]:
                             if not ln.lstrip().startswith(("📄", "Sources:", "Madogara:")))   # code adds sources
         rewrite = re.sub(r"\s*\(?(?:COMPUTED OR WRITTEN IN CODE|EVIDENCE THE DRAFT CITES)\)?", "", rewrite)
         text = supported(rewrite, a, keep_lines=True)
-    if not text and not v.wrong_subject and not v.contradictions:
+    if not text and not v.wrong_subject and not v.contradictions and not refused:
         # only gaps (or no rewrite came back): the draft's own lines whose figures are printed in its cited pages or
         # computed in code, never a line about another subject, and what is missing (3 Nov: the right 173-school
         # total computed in code was lost when the rewrite was used for a draft whose only fault was a gap)
         draft = "\n".join(ln for ln in (a.text or "").splitlines()
                           if not ln.startswith(("📄", "_Reply")) and ln.strip() not in NOT_READ.values())
         text = supported(draft, a, keep_lines=True)
-        if text and v.missing and not v.missing_stated:
-            text += "\n\n" + MISSING.get(lang, MISSING["en"]).format(missing="; ".join(v.missing[:3]).rstrip("."))
+        if text and (gaps := truly_missing(v.missing, a)) and not v.missing_stated:
+            text += "\n\n" + MISSING.get(lang, MISSING["en"]).format(missing="; ".join(gaps[:3]).rstrip("."))
     if not text:
         docs = list(dict.fromkeys(e.title for e in (a.cited or [])))[:3]
         missing = "; ".join(v.missing[:3]) or v.feedback or "-"

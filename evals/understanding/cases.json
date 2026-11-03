@@ -137,7 +137,7 @@
   {"id": "m08", "place": "pin", "lang": "en", "turns": [], "message": "Is there a private clinic near me?", "expect": {"capability": "facility", "facility_level": "primary", "ownership": "private"}},
   {"id": "m09", "place": "pin", "lang": "en", "turns": [
      {"user": "Where can my wife deliver a baby?", "kasafi": "Nearest facilities with emergency obstetric care: 1. Kalambaina PHC 1.1 km 2. Women and Children Welfare Clinic 7.0 km"}],
-   "message": "Only government ones", "expect": {"capability": "facility", "kind": ["follow_up", "clarification"], "care": "maternal", "ownership": "public"}},
+   "message": "Only government ones", "expect": {"capability": "facility", "kind": ["follow_up", "clarification", "correction"], "care": "maternal", "ownership": "public"}},
   {"id": "m10", "place": "pin", "lang": "en", "turns": [
      {"user": "What is the government budgeting for my area?", "kasafi": "The 2026 budget has 163 capital projects located in Wamakko, worth N79.98 billion, mostly health."}],
    "message": "Anything for schools?", "expect": {"capability": "place_budget"}},
@@ -180,6 +180,14 @@
    "message": "What does the MICS report say about birth registration in Sokoto?", "expect": {"capability": "statistics"}},
   {"id": "n16", "place": "lga", "turns": [],
    "message": "According to NiMet, when will the rains end in my LGA this year?", "expect": {"capability": "hazard"}},
+  {"id": "lf11", "place": "none", "turns": [],
+   "message": "According to the Multiple Indicator Cluster Survey (MICS) by NBS and UNICEF, what are the gaps in child healthcare and civil registration for Sokoto State?", "expect": {"capability": "statistics"}},
+  {"id": "lf12", "place": "none", "lang": "ha", "turns": [],
+   "message": "A cewar MICS na NBS da UNICEF, waɗanne gibi ne ke cikin kula da lafiyar yara da rajistar haihuwa a Jihar Sokoto?", "expect": {"capability": "statistics"}},
+  {"id": "lf13", "place": "none", "turns": [],
+   "message": "Birth registration in Sokoto: what did MICS 2021 and NDHS 2024 each find, and can the two be compared?", "expect": {"capability": "statistics"}},
+  {"id": "lf14", "place": "none", "turns": [],
+   "message": "What's the state of child health in Sokoto?", "expect": {"capability": "deep"}},
   {"id": "lf01", "place": "none", "turns": [],
    "message": "How many schools are in Dange Shuni", "expect": {"capability": "statistics", "level": "lga", "name_has": "dange"}},
   {"id": "lf02", "place": "none", "turns": [

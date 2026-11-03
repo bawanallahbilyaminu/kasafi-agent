@@ -138,6 +138,14 @@ def test_a_numbered_table_row_and_a_dashboard_row_are_labelled_by_their_place() 
     assert att.ok and not any("national" in p for p in att.problems)
 
 
+def test_a_year_asked_matches_any_year_a_figure_is_for() -> None:
+    def card(ref):
+        return tp.Card(ASC, "d", "t", 1, "22.5", "%", "w", ref, "Sokoto")
+    assert tp.card_years(card("2021/22")) == {2021, 2022}            # 'MICS 2021' keeps Sokoto's 2021/22 card
+    assert tp.card_years(card("17/08/25")) == {2025}                 # a dashboard's date
+    assert tp.card_years(card("October 2024")) == {2024}
+
+
 def test_the_progress_line_names_what_is_checked_never_several_sources() -> None:
     for lang in ("en", "ha"):
         line = tp.PROGRESS[lang].format(n=2, names="ASC, NBS")

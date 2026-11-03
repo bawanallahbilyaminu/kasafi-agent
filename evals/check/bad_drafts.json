@@ -1,0 +1,148 @@
+{
+ "_about": "The 3 Nov live failures' drafts, as sent (traces 298-305 on the server; answers as stored, cited pages from the trace), with the user's exact messages and the conversation before them. The answer check must stop every one (evals/check/run.py).",
+ "drafts": [
+  {
+   "id": "A",
+   "trace": 303,
+   "question": "How many schools are in Dange Shuni",
+   "history": [],
+   "restatement": "How many schools are there in Dange Shuni LGA, at each level?",
+   "name": "Dange Shuni",
+   "level": "lga",
+   "text": "Dange Shuni LGA has 91 public primary schools in the 2023/2024 ASC, from the Sokoto State Annual School Census 23-24 Report.\n\n📊 Newest figure: *91 schools* – Number of Primary Schools in Public Primary School, DANGE SHUNI LGA (Sokoto State Annual School Census 23-24 Report, 2023/2024 ASC).\n\nBy source:\n• Sokoto State Annual School Census 23-24 Report: 91 schools – Number of Primary Schools in Public Primary School, DANGE SHUNI LGA; 2023/2024 ASC (p. 19)\n• Sokoto State Annual School Census 23-24 Report: 20 schools – public pre-primary schools, DANGE SHUNI LGA; 2023/2024 ASC (p. 26)\n• Sokoto State Annual School Census 23-24 Report: 28 schools – private pre-primary schools, DANGE SHUNI LGA; 2023/2024 ASC (p. 26)\n\n📄 *Sources:* Sokoto State Annual School Census 23-24 Report, p. 19, 26",
+   "found": true,
+   "verification": "figures checked",
+   "working": "Verification: figures checked (0 figure(s) found in the cited pages; which row, year or period each belongs to could not be fully established).",
+   "cited": [
+    [
+     1,
+     "asc-sokoto-2023-2024",
+     "Sokoto State Annual School Census 23-24 Report",
+     19,
+     "text"
+    ],
+    [
+     2,
+     "asc-sokoto-2023-2024",
+     "Sokoto State Annual School Census 23-24 Report",
+     26,
+     "text"
+    ]
+   ]
+  },
+  {
+   "id": "B",
+   "trace": 304,
+   "question": "I mean all the total schools primary, senior secondary and junior secondary and IQS",
+   "history": [
+    {
+     "question": "How many schools are in Dange Shuni",
+     "answer": "Dange Shuni LGA has 91 public primary schools in the 2023/2024 ASC, from the Sokoto State Annual School Census 23-24 Report.\n\n📊 Newest figure: *91 schools* – Number of Primary Schools in Public Primary School, DANGE SHUNI LGA (Sokoto State Annual School Census 23-24 Report, 2023/2024 ASC).\n\nBy source:\n• Sokoto State Annual School Census 23-24 Report: 91 schools – Number of Primary Schools in Public Primary School, DANGE SHUNI LGA; 2023/2024 ASC (p. 19)\n• Sokoto State Annual School Census 23-24 Report: 20 schools – public pre-primary schools, DANGE SHUNI LGA; 2023/2024 ASC (p. 26)\n• Sokoto State Annual School Census 23-24 Report: 28 schools – private pre-primary schools, DANGE SHUNI LGA; 2023/2024 ASC (p. 26)\n\n📄 *Sources:* Sokoto State Annual School Census 23-24 Report, p. 19, 26"
+    }
+   ],
+   "restatement": "How many schools of all levels (primary, junior secondary, senior secondary and IQS) are in Dange Shuni LGA?",
+   "name": "Dange Shuni",
+   "level": "lga",
+   "text": "The state budget doesn't show money allocated directly to Dange Shuni Local Government. State budget lines for institutions located in Dange Shuni (a hospital or a school, say) are state money, not the LGA's. LGAs get their statutory allocations from the Federation Account separately, and the documents I have don't show Dange Shuni's.",
+   "found": false,
+   "verification": "unsupported",
+   "working": "",
+   "cited": []
+  },
+  {
+   "id": "C",
+   "trace": 305,
+   "question": "Am talking about schools not budget",
+   "history": [
+    {
+     "question": "How many schools are in Dange Shuni",
+     "answer": "Dange Shuni LGA has 91 public primary schools in the 2023/2024 ASC, from the Sokoto State Annual School Census 23-24 Report.\n\n📊 Newest figure: *91 schools* – Number of Primary Schools in Public Primary School, DANGE SHUNI LGA (Sokoto State Annual School Census 23-24 Report, 2023/2024 ASC).\n\nBy source:\n• Sokoto State Annual School Census 23-24 Report: 91 schools – Number of Primary Schools in Public Primary School, DANGE SHUNI LGA; 2023/2024 ASC (p. 19)\n• Sokoto State Annual School Census 23-24 Report: 20 schools – public pre-primary schools, DANGE SHUNI LGA; 2023/2024 ASC (p. 26)\n• Sokoto State Annual School Census 23-24 Report: 28 schools – private pre-primary schools, DANGE SHUNI LGA; 2023/2024 ASC (p. 26)\n\n📄 *Sources:* Sokoto State Annual School Census 23-24 Report, p. 19, 26"
+    },
+    {
+     "question": "I mean all the total schools primary, senior secondary and junior secondary and IQS",
+     "answer": "The state budget doesn't show money allocated directly to Dange Shuni Local Government. State budget lines for institutions located in Dange Shuni (a hospital or a school, say) are state money, not the LGA's. LGAs get their statutory allocations from the Federation Account separately, and the documents I have don't show Dange Shuni's."
+    }
+   ],
+   "restatement": "How many schools of all levels (primary, junior secondary, senior secondary and IQS) are in Dange Shuni LGA?",
+   "name": "Dange Shuni",
+   "level": "lga",
+   "text": "Evidence shows Dange Shuni LGA has 91 public primary schools in 2023/2024.\n\n• 2023/2024 public primary schools in Dange Shuni LGA (total): 91\n\nI didn't find this in the pages I read.\n\n📄 *Sources:* Sokoto State Annual School Census 23-24 Report, p. 19",
+   "found": true,
+   "verification": "figures checked",
+   "working": "Verification: figures checked (0 figure(s) found in the cited pages; which row, year or period each belongs to could not be fully established).",
+   "cited": [
+    [
+     6,
+     "asc-sokoto-2023-2024",
+     "Sokoto State Annual School Census 23-24 Report",
+     19,
+     "text"
+    ]
+   ]
+  },
+  {
+   "id": "D",
+   "trace": 298,
+   "question": "Was Wamakko LGA affected by floods in 2025, according to NEMA?",
+   "history": [],
+   "restatement": "Was Wamakko LGA affected by floods in 2025, according to NEMA?",
+   "name": "Wamakko LGA",
+   "level": "lga",
+   "text": "Yes, Sokoto State is listed as affected by floods in 2025 with 4 LGAs affected. The provided pages do not name the specific LGAs in Sokoto State, so they do not show whether Wamakko is one of the 4. Wamakko does not appear in the top 30 most impacted LGAs list that is shown.\n\n• Sokoto State — 4 LGAs affected, 4 wards, 4,278 persons affected, 1,287 displaced, 8 injuries, 175 houses affected, 1,651 hectares of farmland affected\n• Top 30 most impacted LGAs table does not list Wamakko\n\n📎 Related: NATIONAL EMERGENCY MANAGEMENT AGENCY: 2025 FLOOD DASHBOARD also covers this (flood impact, displacement and affected population, humanitarian needs).\n\n📄 *Sources:* NATIONAL EMERGENCY MANAGEMENT AGENCY: 2025 FLOOD DASHBOARD, p. 1, 2; 2025 FLOOD DATA: IMPACT SEGREGATION BY LOCAL GOVERNMENT AREAS, p. 1",
+   "found": true,
+   "verification": "figures checked",
+   "working": "Verification: figures checked (4 figure(s) found in the cited pages; which row, year or period each belongs to could not be fully established).",
+   "cited": [
+    [
+     1,
+     "nema-flood-dashboard-2025-09-12",
+     "NATIONAL EMERGENCY MANAGEMENT AGENCY: 2025 FLOOD DASHBOARD",
+     1,
+     "text"
+    ],
+    [
+     2,
+     "nema-flood-lga-dashboard-2025-09-12",
+     "2025 FLOOD DATA: IMPACT SEGREGATION BY LOCAL GOVERNMENT AREAS",
+     1,
+     "text"
+    ],
+    [
+     3,
+     "nema-flood-dashboard-2025-09-12",
+     "NATIONAL EMERGENCY MANAGEMENT AGENCY: 2025 FLOOD DASHBOARD",
+     2,
+     "text"
+    ]
+   ]
+  },
+  {
+   "id": "E",
+   "trace": 302,
+   "question": "How many people in Sokoto State were affected by floods in October 2024?",
+   "history": [],
+   "restatement": "How many people in Sokoto State were affected by floods in October 2024?",
+   "name": "Sokoto State",
+   "level": "state",
+   "text": "*Flooding: Sokoto State* — experimental\n\nIn 2024, radar saw about 4,120 ha of Sokoto State under water on its biggest pass (27 August 2024), and 26,000 ha at some point in the season (18,590 ha on farmland, 4,880 ha in the river floodplain, 2,540 ha on other land).\n\nSatellite radar saw floodwater in Sokoto State in every rainy season 2015–2026 (12 seasons). The largest was in 2020: about 22,210 ha on its biggest pass (17 September 2020), and 58,430 ha under water at some point that season (41,290 ha on farmland, 10,320 ha in the river floodplain, 6,820 ha on other land).\n\nIn 2024, radar passes saw 26,000 ha under water at some point; UNOSAT's event map of 5–9 September 2024 and 9–13 November 2024, built from several days and sensors, shows 123,410 ha. UNOSAT's map covers several days, so it catches more of the flood than single passes.\n\nRadar can't judge 35% of Sokoto State (about 1,144,280 ha: built-up land, dense trees and dry sandy ground, where radar can't tell water from land), so floods there aren't counted. It can't see water between buildings: for built-up parts, flood reports are the source.\n\nThe river floodplain: water covered 47,650 ha of Sokoto State in some years between 1984 and 2020, and 21,640 ha in half the years or more (JRC Global Surface Water). Water there is partly the river's normal rise.\n\nKasafi's own radar check (Sentinel-1, normally dry farmland only) found floodwater in 2017, 2020, 2024; the most in 2020 (1.7% of that farmland).\n\nAcross the 23 LGAs of Sokoto State, the 2024 share of land under floodwater (radar) ranged from 0.0% (Sokoto South) to 8.5% (Sokoto North); the median was 0.6%. Most land under water: Sokoto North (8.5%), Kebbe (2.4%), Tambuwal (2.2%). Least: Sokoto South (0.0%), Dange Shuni (0.1%), Isa (0.2%).\n\n*Ranking (23 LGAs)*\nHighest:\n1. Sokoto North: 8.5% (24 obs)\n2. Kebbe: 2.4% (13 obs)\n3. Tambuwal: 2.2% (13 obs)\n4. Goronyo: 1.6% (11 obs)\n5. Kware: 1.4% (11 obs)\nLowest:\n19. Shagari: 0.2% (24 obs)\n20. Gudu: 0.2% (13 obs)\n21. Isa: 0.2% (11 obs)\n22. Dange Shuni: 0.1% (11 obs)\n23. Sokoto South: 0.0% (11 obs)\n\nThe map shows each LGA's share of land under water at some point in 2024.\n\nBudget lines are linked per LGA: ask about one LGA to see its lines.\n\nKasafi reports what the satellite record shows; it makes no judgement of causes or of anyone's work. This is information only, not an official flood warning.\n\nSources: Copernicus Global Flood Monitoring (Contains modified Copernicus Emergency Management Service information [2015–2026]); UNOSAT satellite-detected water extents (HDX); JRC Global Surface Water; Copernicus Sentinel-1 RTC (Kasafi's check); boundaries GRID3 wards and OCHA COD-AB LGAs.",
+   "found": true,
+   "verification": "calculation checked",
+   "working": "Per season (Sokoto State): passes, land under water at some point, biggest pass, farmland / floodplain, share radar can't judge, UNOSAT, Kasafi's radar check on normally dry farmland.\n2015: 5 passes; 40,080 ha; biggest 16,690 ha (15 August 2015); 26,870 ha / 9,140 ha; excluded 37%; UNOSAT –; check –\n2016: 13 passes; 18,910 ha; biggest 4,200 ha (28 July 2016); 12,400 ha / 4,730 ha; excluded 37%; UNOSAT –; check –\n2017: 12 passes; 12,770 ha; biggest 4,160 ha (11 July 2017); 5,570 ha / 1,850 ha; excluded 37%; UNOSAT –; check 0.7%\n2018: 13 passes; 22,380 ha; biggest 8,620 ha (18 July 2018); 13,050 ha / 7,390 ha; excluded 37%; UNOSAT –; check 0.3%\n2019: 13 passes; 4,460 ha; biggest 1,500 ha (30 August 2019); 1,590 ha / 1,870 ha; excluded 37%; UNOSAT –; check 0.1%\n2020: 13 passes; 58,430 ha; biggest 22,210 ha (17 September 2020); 41,290 ha / 10,320 ha; excluded 37%; UNOSAT –; check 1.7%\n2021: 12 passes; 19,220 ha; biggest 6,920 ha (2 July 2021); 14,750 ha / 2,510 ha; excluded 37%; UNOSAT –; check 0.2%\n2022: 12 passes; 9,630 ha; biggest 2,610 ha (21 July 2022); 5,620 ha / 2,440 ha; excluded 37%; UNOSAT 173,630 ha; check 0.1%\n2023: 12 passes; 9,320 ha; biggest 1,170 ha (4 July 2023); 5,770 ha / 730 ha; excluded 37%; UNOSAT –; check 0.1%\n2024: 11 passes; 26,000 ha; biggest 4,120 ha (27 August 2024); 18,590 ha / 4,880 ha; excluded 35%; UNOSAT 123,410 ha; check 0.7%\n2025: 12 passes; 27,990 ha; biggest 9,270 ha (15 September 2025); 20,300 ha / 4,550 ha; excluded 35%; UNOSAT –; check 0.5%\n2026: 10 passes; 4,020 ha; biggest 1,520 ha (7 July 2026); 2,690 ha / 630 ha; excluded 35%; UNOSAT –; check 0.0%\nAll LGAs, gfm_union_share, 2024: value (observations behind it; ~ low data; rain flag where fitted).\nSokoto North [NG034016]: 8.5% (24)\nKebbe [NG034010]: 2.4% (13)\nTambuwal [NG034018]: 2.2% (13)\nGoronyo [NG034006]: 1.6% (11)\nKware [NG034011]: 1.4% (11)\nWamakko [NG034021]: 1.3% (24)\nGada [NG034004]: 1.2% (11)\nSilame [NG034015]: 1.0% (13)\nWurno [NG034022]: 0.9% (11)\nIllela [NG034008]: 0.7% (11)\nSabon Birni [NG034013]: 0.6% (11)\nGwadabawa [NG034005]: 0.6% (11)\nBodinga [NG034002]: 0.6% (24)\nTureta [NG034020]: 0.4% (11)\nTangaza [NG034019]: 0.3% (24)\nYabo [NG034023]: 0.3% (13)\nRabah [NG034012]: 0.3% (11)\nBinji [NG034001]: 0.2% (13)\nShagari [NG034014]: 0.2% (24)\nGudu [NG034007]: 0.2% (13)\nIsa [NG034009]: 0.2% (11)\nDange Shuni [NG034003]: 0.1% (11)\nSokoto South [NG034017]: 0.0% (11)\n\nVerification: calculation checked (the rows and arithmetic were done in code).",
+   "cited": []
+  },
+  {
+   "id": "E0",
+   "trace": 300,
+   "question": "How many people were affected by floods in Sokoto State in 2024?",
+   "history": [],
+   "restatement": "How many people were affected by floods in Sokoto State in 2024?",
+   "name": "Sokoto State",
+   "level": "state",
+   "text": "*Flooding: Sokoto State* — experimental\n\nIn 2024, radar saw about 4,120 ha of Sokoto State under water on its biggest pass (27 August 2024), and 26,000 ha at some point in the season (18,590 ha on farmland, 4,880 ha in the river floodplain, 2,540 ha on other land).\n\nSatellite radar saw floodwater in Sokoto State in every rainy season 2015–2026 (12 seasons). The largest was in 2020: about 22,210 ha on its biggest pass (17 September 2020), and 58,430 ha under water at some point that season (41,290 ha on farmland, 10,320 ha in the river floodplain, 6,820 ha on other land).\n\nIn 2024, radar passes saw 26,000 ha under water at some point; UNOSAT's event map of 5–9 September 2024 and 9–13 November 2024, built from several days and sensors, shows 123,410 ha. UNOSAT's map covers several days, so it catches more of the flood than single passes.\n\nRadar can't judge 35% of Sokoto State (about 1,144,280 ha: built-up land, dense trees and dry sandy ground, where radar can't tell water from land), so floods there aren't counted. It can't see water between buildings: for built-up parts, flood reports are the source.\n\nThe river floodplain: water covered 47,650 ha of Sokoto State in some years between 1984 and 2020, and 21,640 ha in half the years or more (JRC Global Surface Water). Water there is partly the river's normal rise.\n\nKasafi's own radar check (Sentinel-1, normally dry farmland only) found floodwater in 2017, 2020, 2024; the most in 2020 (1.7% of that farmland).\n\nAcross the 23 LGAs of Sokoto State, the 2024 share of land under floodwater (radar) ranged from 0.0% (Sokoto South) to 8.5% (Sokoto North); the median was 0.6%. Most land under water: Sokoto North (8.5%), Kebbe (2.4%), Tambuwal (2.2%). Least: Sokoto South (0.0%), Dange Shuni (0.1%), Isa (0.2%).\n\n*Ranking (23 LGAs)*\nHighest:\n1. Sokoto North: 8.5% (24 obs)\n2. Kebbe: 2.4% (13 obs)\n3. Tambuwal: 2.2% (13 obs)\n4. Goronyo: 1.6% (11 obs)\n5. Kware: 1.4% (11 obs)\nLowest:\n19. Shagari: 0.2% (24 obs)\n20. Gudu: 0.2% (13 obs)\n21. Isa: 0.2% (11 obs)\n22. Dange Shuni: 0.1% (11 obs)\n23. Sokoto South: 0.0% (11 obs)\n\nThe map shows each LGA's share of land under water at some point in 2024.\n\nBudget lines are linked per LGA: ask about one LGA to see its lines.\n\nKasafi reports what the satellite record shows; it makes no judgement of causes or of anyone's work. This is information only, not an official flood warning.\n\nSources: Copernicus Global Flood Monitoring (Contains modified Copernicus Emergency Management Service information [2015–2026]); UNOSAT satellite-detected water extents (HDX); JRC Global Surface Water; Copernicus Sentinel-1 RTC (Kasafi's check); boundaries GRID3 wards and OCHA COD-AB LGAs.",
+   "found": true,
+   "verification": "calculation checked",
+   "working": "Per season (Sokoto State): passes, land under water at some point, biggest pass, farmland / floodplain, share radar can't judge, UNOSAT, Kasafi's radar check on normally dry farmland.\n2015: 5 passes; 40,080 ha; biggest 16,690 ha (15 August 2015); 26,870 ha / 9,140 ha; excluded 37%; UNOSAT –; check –\n2016: 13 passes; 18,910 ha; biggest 4,200 ha (28 July 2016); 12,400 ha / 4,730 ha; excluded 37%; UNOSAT –; check –\n2017: 12 passes; 12,770 ha; biggest 4,160 ha (11 July 2017); 5,570 ha / 1,850 ha; excluded 37%; UNOSAT –; check 0.7%\n2018: 13 passes; 22,380 ha; biggest 8,620 ha (18 July 2018); 13,050 ha / 7,390 ha; excluded 37%; UNOSAT –; check 0.3%\n2019: 13 passes; 4,460 ha; biggest 1,500 ha (30 August 2019); 1,590 ha / 1,870 ha; excluded 37%; UNOSAT –; check 0.1%\n2020: 13 passes; 58,430 ha; biggest 22,210 ha (17 September 2020); 41,290 ha / 10,320 ha; excluded 37%; UNOSAT –; check 1.7%\n2021: 12 passes; 19,220 ha; biggest 6,920 ha (2 July 2021); 14,750 ha / 2,510 ha; excluded 37%; UNOSAT –; check 0.2%\n2022: 12 passes; 9,630 ha; biggest 2,610 ha (21 July 2022); 5,620 ha / 2,440 ha; excluded 37%; UNOSAT 173,630 ha; check 0.1%\n2023: 12 passes; 9,320 ha; biggest 1,170 ha (4 July 2023); 5,770 ha / 730 ha; excluded 37%; UNOSAT –; check 0.1%\n2024: 11 passes; 26,000 ha; biggest 4,120 ha (27 August 2024); 18,590 ha / 4,880 ha; excluded 35%; UNOSAT 123,410 ha; check 0.7%\n2025: 12 passes; 27,990 ha; biggest 9,270 ha (15 September 2025); 20,300 ha / 4,550 ha; excluded 35%; UNOSAT –; check 0.5%\n2026: 10 passes; 4,020 ha; biggest 1,520 ha (7 July 2026); 2,690 ha / 630 ha; excluded 35%; UNOSAT –; check 0.0%\nAll LGAs, gfm_union_share, 2024: value (observations behind it; ~ low data; rain flag where fitted).\nSokoto North [NG034016]: 8.5% (24)\nKebbe [NG034010]: 2.4% (13)\nTambuwal [NG034018]: 2.2% (13)\nGoronyo [NG034006]: 1.6% (11)\nKware [NG034011]: 1.4% (11)\nWamakko [NG034021]: 1.3% (24)\nGada [NG034004]: 1.2% (11)\nSilame [NG034015]: 1.0% (13)\nWurno [NG034022]: 0.9% (11)\nIllela [NG034008]: 0.7% (11)\nSabon Birni [NG034013]: 0.6% (11)\nGwadabawa [NG034005]: 0.6% (11)\nBodinga [NG034002]: 0.6% (24)\nTureta [NG034020]: 0.4% (11)\nTangaza [NG034019]: 0.3% (24)\nYabo [NG034023]: 0.3% (13)\nRabah [NG034012]: 0.3% (11)\nBinji [NG034001]: 0.2% (13)\nShagari [NG034014]: 0.2% (24)\nGudu [NG034007]: 0.2% (13)\nIsa [NG034009]: 0.2% (11)\nDange Shuni [NG034003]: 0.1% (11)\nSokoto South [NG034017]: 0.0% (11)\n\nVerification: calculation checked (the rows and arithmetic were done in code).",
+   "cited": []
+  }
+ ]
+}

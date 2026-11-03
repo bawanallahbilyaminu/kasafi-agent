@@ -81,6 +81,21 @@ def test_the_partial_answer_keeps_only_sentences_whose_figures_are_printed() -> 
     assert not ok and nothing.startswith("I couldn't give a checked answer to that: the number of IQS")
 
 
+def test_a_refused_draft_gives_way_to_the_checked_rewrite() -> None:
+    a = _answer("I found documents about your question, but couldn't verify the figures.", verification="unsupported")
+    a.verified = False
+    v = ck.Verdict("fail", safe_answer="• public primary schools in Dange Shuni: 91 (p. 19)\n• JSS: 40",
+                   missing=["Dange Shuni public primary schools: 91"])
+    text, ok = ck.safe_answer(a, v, "en")
+    assert ok and "91 (p. 19)" in text and "40" not in text and "couldn't verify" not in text
+
+
+def test_a_missing_item_whose_figure_is_printed_is_not_called_missing() -> None:
+    a = _answer("x")
+    assert ck.truly_missing(["Dange Shuni primary schools: 91 (2023/24)", "IQS schools in Dange Shuni"], a) == \
+        ["IQS schools in Dange Shuni"]
+
+
 def test_a_draft_whose_only_fault_is_a_gap_is_kept_with_its_code_total_and_the_gap_said() -> None:
     a = _answer("• public primary schools: 91 (page 19)\n• public junior secondary schools: 14 (page 19)\n\n"
                 "Total (schools): *105*, added up by Kasafi from the 2 parts above.\n\n📄 *Sources:* ASC, p. 19")
@@ -105,13 +120,13 @@ def test_the_trace_says_how_the_check_ended() -> None:
     assert check_result([]) == ""
 
 
-def test_questions_back_to_the_user_and_deep_analyses_are_not_checked() -> None:
+def test_questions_back_to_the_user_are_not_checked_and_deep_analyses_are() -> None:
     assert ck.should_check(_answer("Dange Shuni has 91 schools."))
     assert not ck.should_check(ans.Answer("Which one?", False, True, clarify=[{"title": "a"}]))
     assert not ck.should_check(ans.Answer("Send your pin", False, True, needs_pin=True))
     deep = _answer("A long analysis.")
     deep.deep = object()
-    assert not ck.should_check(deep)
+    assert ck.should_check(deep)                    # 3 Nov: a deep answer about poverty for a child-health question
 
 
 def test_a_revise_round_reads_again_and_a_second_failure_sends_only_what_is_supported(monkeypatch) -> None:

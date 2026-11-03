@@ -77,7 +77,7 @@ def outcome(a) -> str:
 
 
 async def main(path: Path, ids: list[str] | None, out: Path, resume: bool = False, concurrency: int = 1,
-               drafts: Path | None = None) -> None:
+               drafts: Path | None = None, understand_all: bool = False) -> None:
     s = get_settings()
     qs = [q for q in json.loads(path.read_text(encoding="utf-8"))["questions"] if not ids or q["id"] in ids]
     checks_file = path.with_name(f"{path.stem}_checks.json")
@@ -97,7 +97,7 @@ async def main(path: Path, ids: list[str] | None, out: Path, resume: bool = Fals
                    for h in q.get("history") or []] or \
             ([{"question": q["previous"], "answer": "", "sources": []}] if q.get("previous") else None)
         reading = None
-        if q.get("understand"):              # the conversation-understanding step first, as live
+        if q.get("understand") or understand_all:     # the conversation-understanding step first, as live
             from app.agent.understand import understand_message
             reading = await understand_message(q["text"], history, None, s)
         try:
@@ -189,5 +189,8 @@ if __name__ == "__main__":
     p.add_argument("--resume", action="store_true", help="continue the stopped run with this --out")
     p.add_argument("--concurrency", type=int, default=1, choices=[1, 2])
     p.add_argument("--drafts", help="append each answer as JSON lines here, for replaying the answer check")
+    p.add_argument("--understand", action="store_true", help="every case through the understanding step first, as "
+                                                             "live (else only cases with \"understand\": true)")
     a = p.parse_args()
-    asyncio.run(main(Path(a.file), a.ids, Path(a.out), a.resume, a.concurrency, Path(a.drafts) if a.drafts else None))
+    asyncio.run(main(Path(a.file), a.ids, Path(a.out), a.resume, a.concurrency, Path(a.drafts) if a.drafts else None,
+                     a.understand))

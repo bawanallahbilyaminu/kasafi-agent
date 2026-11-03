@@ -941,6 +941,18 @@ def quoted_earlier(c: Card) -> bool:
     return bool(editions) and 0 < card_year(c) < max(editions)
 
 
+def card_years(c: Card) -> set[int]:
+    """Every year a figure is for: its date, the survey or report year (a '2021/22' survey is both), the edition.
+    A year the user asks about matches any of them (3 Nov: 'MICS 2021' had dropped Sokoto's card, dated 2022 by its
+    survey's end year, and kept only the national figure)."""
+    out: set[int] = set()
+    for text in (c.ref_date, c.based_on if cited_from_other(c) else "", c.edition):
+        text = re.sub(r"\b(20)(\d\d)\s*[/–-]\s*(\d\d)\b", r"\1\2 \g<1>\3", text or "")
+        text = re.sub(r"\b\d{1,2}/\d{1,2}/(\d\d)\b", r"20\1", text)        # a dashboard's '17/08/25'
+        out |= {int(y) for y in _YEAR.findall(text)}
+    return out or ({card_year(c)} - {0})
+
+
 def card_year(c: Card) -> int:
     """The year the figure refers to: its date, else the year of the report it is cited from, else the edition."""
     for text in (c.ref_date, c.based_on if cited_from_other(c) else "", c.edition):
@@ -1475,7 +1487,7 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
         asked = {int(y) for y in _YEAR.findall(f"{question} {english}")} if not across_sources(ask) else set()
         if asked:
             for s in sources + related:
-                s.cards = [c for c in s.cards if card_year(c) in asked]
+                s.cards = [c for c in s.cards if card_years(c) & asked]
             if not any(s.cards for s in sources):
                 log.info("topic %s: no figure for %s; the document path answers", topic_id, sorted(asked))
                 return TopicResult(topic_id, "", False, False, sources, related, [], {"topic": time.perf_counter() - t0})

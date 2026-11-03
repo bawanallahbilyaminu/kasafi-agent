@@ -80,4 +80,4 @@ def test_a_year_asked_keeps_only_that_years_figures_in_the_topic_sweep() -> None
     import inspect
     from app.agent import topics
     src = inspect.getsource(topics.topic_answer)
-    assert "card_year(c) in asked" in src and "the document path answers" in src
+    assert "card_years(c) & asked" in src and "the document path answers" in src

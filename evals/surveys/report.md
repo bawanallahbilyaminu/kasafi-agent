@@ -1,394 +1,428 @@
 # Open-question run: questions.json
 
-23 questions: answered 18, partial 5 | wrong 0 of 23 checked | median 7.8s
+23 questions: answered 18, partial 5 | wrong 2 of 23 checked (s11, s18) | median 20.0s
 
 ```
-plan          n=23 median   2.6s    34% of all time
-page_search   n=16 median   0.2s     2% of all time
-compose       n=16 median   2.8s    26% of all time
-answer        n=16 median   2.8s    28% of all time
+plan          n=23 median   3.6s    10% of all time
+page_search   n=12 median   3.3s     5% of all time
+compose       n=12 median   3.0s     5% of all time
+answer        n=12 median   3.1s     5% of all time
 ```
 
-## s01: answered (search, 7.4s)
+## s01: answered (search, 36.7s)
 
 **Q:** According to MICS 2021, what share of children under 5 in Sokoto have their birth registered, and what is the national figure?
 
 _MICS 2021 Table PR.1.1: Sokoto 22.5 (p337), Total 57.3 (p336)_
 
-```
-In the 2021 MICS, 22.5% of children under 5 in Sokoto had their birth registered with civil authorities. Nationally the figure was 57.3%.
+_Answer check: revise (national figure for share of children under 5 with birth registered (MICS 2021, national); Total registered share for Sokoto (22.5% = sum of Seen/Not seen/No birth certificate) if question meant any r) → pass_
 
-• Sokoto children under 5 registered: 22.5%
-• National children under 5 registered: 57.3%
+```
+In Sokoto State 22.5% of children under 5 are registered (Total registered) and 11.1% have their birth certificate Seen. Nationally, 57.3% of children under 5 are registered (Total registered).
+
+• Sokoto State children under 5 Total registered: 22.5%
+• Sokoto State children under 5 birth certificate Seen: 11.1%
+• National children under 5 Total registered: 57.3%
 
 📄 *Sources:* Nigeria 2021 Multiple Indicator Cluster Survey (MICS) and National Immunization Coverage Survey (NICS), p. 336, 337
 ```
 
-## s02: answered (search, 5.7s)
+## s02: answered (search, 30.8s)
 
 **Q:** A cewar MICS 2021, kashi nawa na yara 'yan ƙasa da shekara 5 a Sokoto aka yi wa rajistar haihuwa, kuma nawa ne na ƙasa baki ɗaya?
 
 _s01 in Hausa_
 
-```
-A cewar MICS 2021, kashi 22.5% na yara 'yan ƙasa da shekara 5 a Sokoto aka yi wa rajistar haihuwa. A matakin ƙasa baki ɗaya, kashi 57.3% na yara 'yan ƙasa da shekara 5 aka yi wa rajista.
+_Answer check: revise (MICS 2021 birth registration % for Sokoto State children under 5) → pass_
 
-• Sokoto - jimilla da aka yi wa rajista: 22.5%
-• Ƙasa baki ɗaya - jimilla da aka yi wa rajista: 57.3%
+```
+Bisa ga Binciken MICS na 2021, yaran da ke ƙasa da shekaru 5 a Jihar Sokoto da aka yi wa rijistar haihuwa gaba ɗaya 22.5% ne. A matakin ƙasa gaba ɗaya a Najeriya, adadin ya kai 57.3%.
+
+• Sokoto - yara ƙasa da shekaru 5 da aka yi wa rijista: 22.5%
+• Najeriya (matakin ƙasa) - yara ƙasa da shekaru 5 da aka yi wa rijista: 57.3%
 
 📄 *Madogara:* Nigeria 2021 Multiple Indicator Cluster Survey (MICS) and National Immunization Coverage Survey (NICS), shafi 336, 337
 ```
 
-## s03: answered (search, 6.6s)
+## s03: answered (search, 19.5s)
 
 **Q:** According to MICS 2021, what percentage of children aged 12-23 months in Sokoto received all basic vaccinations, and what percentage had no vaccinations?
 
 _Table TC.1.2 state rows p190: basic antigens 7.2, no vaccinations 50.7_
 
+_Answer check: pass_
+
 ```
-In Sokoto, 7.2% of children age 12-23 months received all basic vaccinations and 50.7% had no vaccinations in MICS 2021.
+According to the Nigeria 2021 MICS and NICS Table TC.1.2, among children age 12-23 months in Sokoto State, 7.2% received all basic vaccinations and 50.7% had received no vaccinations. Basic vaccinations are BCG, 3 doses of polio, 3 doses of DTP and 1 dose of measles.
 
-• Received all basic vaccinations (Basic antigens include BCG, OPV3, DTP3 and Measles 1): 7.2%
-• Received no vaccinations: 50.7%
+• Sokoto - received all basic vaccinations (Basic antigens): 7.2%
+• Sokoto - received no vaccinations: 50.7%
+• Number of children age 12-23 months in Sokoto sample: 141
 
-📄 *Sources:* Nigeria 2021 Multiple Indicator Cluster Survey (MICS) and National Immunization Coverage Survey (NICS), p. 190
+📄 *Sources:* Nigeria 2021 Multiple Indicator Cluster Survey (MICS) and National Immunization Coverage Survey (NICS), p. 27, 190, 192
 ```
 
-## s04: answered (search, 6.0s)
+## s04: answered (search, 14.4s)
 
 **Q:** What is the under-five mortality rate in Sokoto according to MICS 2021?
 
 _Table CS.2 p105: Sokoto under-five 202 per 1,000 (neonatal 34, infant 104)_
 
+_Answer check: pass_
+
 ```
-According to the Nigeria 2021 MICS, the under-five mortality rate in Sokoto is 202 deaths per 1,000 live births for the five-year period before the survey. This is the probability of dying between birth and the fifth birthday, expressed per 1,000 live births.
+According to the Nigeria 2021 MICS, the under-five mortality rate in Sokoto State is 202 deaths per 1,000 live births. This is for the five-year period preceding the survey. The rate is the probability of dying between birth and the fifth birthday.
 
-• Sokoto under-five mortality rate (5q0): 202 per 1,000 live births
-• Sokoto neonatal: 34, post-neonatal: 70, infant: 104, child: 109 per 1,000
+• Sokoto - under-five mortality rate (MICS 2021, 5 years before survey): 202
 
-📄 *Sources:* Nigeria 2021 Multiple Indicator Cluster Survey (MICS) and National Immunization Coverage Survey (NICS), p. 102, 105
+📄 *Sources:* Nigeria 2021 Multiple Indicator Cluster Survey (MICS) and National Immunization Coverage Survey (NICS), p. 102, 105; State Health Resource Optimization Plan (ROP) to Improve Healthcare Services in Sokoto, p. 8
 ```
 
-## s05: answered (search, 9.1s)
+## s05: answered (search, 17.1s)
 
 **Q:** According to MICS 2021, what share of Sokoto's household population experienced moderate or severe food insecurity in the previous 12 months?
 
 _Table SR.12.1 p101: Sokoto 60.8_
 
+_Answer check: pass_
+
 ```
-According to the 2021 MICS, 60.8% of Sokoto's household population experienced moderate or severe food insecurity in the previous 12 months. That is 44.1% moderate and 16.8% severe. For comparison, nationally the share was 73.4% and in the North West zone it was 73.8%.
+According to MICS 2021, 60.8% of Sokoto State's household population experienced moderate or severe food insecurity in the previous 12 months. This includes 44.1% moderate and 16.8% severe.
 
-• Sokoto - moderate or severe in previous 12 months: 60.8% (44.1% moderate, 16.8% severe)
-• Sokoto household members surveyed: 5,949
-• National (total) - moderate or severe in previous 12 months: 73.4%
-• North West zone - moderate or severe in previous 12 months: 73.8%
+• 12 months moderate or severe: 60.8%
+• 12 months moderate: 44.1%
+• 12 months severe: 16.8%
 
-📄 *Sources:* Nigeria 2021 Multiple Indicator Cluster Survey (MICS) and National Immunization Coverage Survey (NICS), p. 100, 101
+📄 *Sources:* Nigeria 2021 Multiple Indicator Cluster Survey (MICS) and National Immunization Coverage Survey (NICS), p. 101
 ```
 
-## s06: answered (search, 9.6s)
+## s06: answered (search, 20.1s)
 
 **Q:** What percentage of women aged 15-49 in Sokoto are literate according to MICS 2021?
 
 _Table SR.6.1W p61: Sokoto 11.5_
 
-```
-According to the Nigeria MICS 2021, 11.5% of women age 15-49 years in Sokoto are literate.
+_Answer check: pass_
 
-• Sokoto women age 15-49 literate (MICS 2021): 11.5
+```
+According to the Nigeria 2021 MICS, 11.5% of women age 15-49 years in Sokoto State are literate. This is the total percentage literate from Table SR.6.1W for 1,094 women surveyed in Sokoto.
+
+• Sokoto women 15-49 — total percentage literate: 11.5% (1,094 women surveyed)
 
 📄 *Sources:* Nigeria 2021 Multiple Indicator Cluster Survey (MICS) and National Immunization Coverage Survey (NICS), p. 61
 ```
 
-## s07: answered (search, 5.8s)
+## s07: answered (search, 17.1s)
 
 **Q:** According to MICS 2021, what share of women in Sokoto with a recent live birth were attended at least once by skilled health personnel during antenatal care?
 
 _Table TM.4.1 p130: Sokoto 30.5 (no antenatal care 58.8)_
 
-```
-In Sokoto, 30.5% of women age 15-49 with a live birth in the last 2 years were attended at least once by skilled health personnel during antenatal care for the most recent live birth, according to MICS 2021.
+_Answer check: pass_
 
-• Sokoto (MICS 2021) - attended at least once by skilled personnel during ANC: 30.5% (306 women with a live birth in last 2 years)
+```
+According to MICS 2021, 30.5% of women age 15-49 years in Sokoto State with a live birth in the last 2 years were attended at least once by skilled health personnel during antenatal care for the most recent live birth.
+
+• Sokoto State - attended at least once by skilled health personnel during ANC: 30.5% (306 women with a live birth in last 2 years)
 
 📄 *Sources:* Nigeria 2021 Multiple Indicator Cluster Survey (MICS) and National Immunization Coverage Survey (NICS), p. 130
 ```
 
-## s08: answered (search, 6.2s)
+## s08: answered (search, 16.1s)
 
 **Q:** What is the unmet need for family planning among married women in Sokoto according to MICS 2021?
 
 _Table TM.3.3 p125: Sokoto total unmet need 18.1_
 
-```
-According to the 2021 MICS, 18.1% of currently married women age 15-49 in Sokoto have an unmet need for family planning. This is 12.1% for spacing births and 6.0% for limiting births.
+_Answer check: pass_
 
-• Unmet need total: 18.1% (12.1% for spacing, 6.0% for limiting)
+```
+According to Nigeria MICS 2021, unmet need for family planning among women age 15-49 who are currently married or in union in Sokoto State was 18.1% in total. This was 12.1% for spacing births and 6.0% for limiting births.
+
+• Total unmet need (currently married/in union, Sokoto): 18.1%
+• For spacing births: 12.1%
+• For limiting births: 6.0%
 
 📄 *Sources:* Nigeria 2021 Multiple Indicator Cluster Survey (MICS) and National Immunization Coverage Survey (NICS), p. 125
 ```
 
-## s09: answered (search, 6.2s)
+## s09: answered (search, 22.3s)
 
 **Q:** According to MICS 2021, what share of Sokoto's population is in the poorest wealth quintile, compared with the North West and Nigeria?
 
 _Table SR.2.3 p45: Sokoto 47.5, North West 32.2, Total 20.0_
 
-```
-According to MICS 2021, 47.5% of Sokoto's household population is in the poorest wealth quintile. This is higher than the North West zone at 32.2% and the national average at 20.0%. The figures are from the distribution of the household population by wealth index quintile.
+_Answer check: pass_
 
-• Sokoto - poorest quintile: 47.5%
-• North West - poorest quintile: 32.2%
-• Nigeria (Total) - poorest quintile: 20.0%
+```
+According to the Nigeria 2021 MICS, 47.5% of the household population in Sokoto State is in the poorest wealth quintile, compared to 32.2% in the North West zone and 20.0% nationally in Nigeria. The figures are the percent distribution of the household population by the poorest wealth index quintile.
+
+• Sokoto State — poorest quintile: 47.5%
+• North West zone — poorest quintile: 32.2%
+• Nigeria (national) — poorest quintile: 20.0%
+
+📎 Related: Nigeria Demographic and Health Survey 2024 Final Report also covers this (housing characteristics and wealth quintiles, mass media and ICT access and skills).
 
 📄 *Sources:* Nigeria 2021 Multiple Indicator Cluster Survey (MICS) and National Immunization Coverage Survey (NICS), p. 45
 ```
 
-## s10: partial (search, 9.5s)
+## s10: answered (search, 82.7s)
 
 **Q:** According to the Multiple Indicator Cluster Survey (MICS) by NBS and UNICEF, what are the gaps in child healthcare and civil registration for Sokoto State?
 
 _the 1 Nov 2026 live question: Sokoto's figures beside the national ones, no refusal, no judgement words_
 
 ```
-For child civil registration, 22.5% of children under 5 in Sokoto are registered with civil authorities; nationally the figure is 57.3%. For child healthcare, 0.3% of children under 5 in Sokoto are covered by health insurance and 0.8% of children age 5-17 are covered. These Sokoto figures are from the Nigeria 2021 MICS sample.
-
-• Birth registration Sokoto (total registered, under 5): 22.5
-• Birth registration national (total registered, under 5): 57.3
-• Health insurance coverage Sokoto (under 5): 0.3
-• Health insurance coverage Sokoto (age 5-17): 0.8
-• Knowledge how to register among not registered Sokoto: 16.0
-
-📄 *Sources:* Nigeria 2021 Multiple Indicator Cluster Survey (MICS) and National Immunization Coverage Survey (NICS), p. 336, 337, 433, 435
+In Sokoto State 4.5% of children age 12–23 months had received all age-appropriate vaccines as of the 2025 report (Sokoto State Health Sector Medium-Term Sector Strategy (MTSS) 2025 –…, p. 18), up from 11% fully immunized in 2021, while 52% of children age 12–23 months had received no vaccinations at all as of the 2025 report.
+For determinants of child health, 14% of pregnant women delivered in health facilities in 2021 and 30.5% had access to skilled antenatal coverage in 2021, with 6.9 percent contraceptive use prevalence among women in 2024 (Emergency Obstetric and Newborn Care (EmONC) Assessment and…, p. 37).
+Birth registration was low, with 22.5% of children under age 5 registered as of the 2021 MICS (Nigeria 2021 Multiple Indicator Cluster Survey (MICS) and National…, p. 337) and 19.0% registered in the 2024 survey (Nigeria Demographic and Health Survey 2024 Final Report, p. 73), of whom 14.2% had a birth certificate and 4.8% were registered without a certificate.
+Among children without registration, 16.0% had mothers/caretakers who knew how to register births in 2021.
+Difficulties accessing healthcare were reported by 37% of IDP households who sought care (Durable Solutions for Displacement Affected Communities in Sokoto…, p. 44) and 30% of non-displaced households who sought care as of the 2026 report, after 68% of IDP households and 65% of non-displaced households tried to access services in the prior six months.
 ```
 
-## s11: answered (search, 7.2s)
+## s11: answered WRONG: none of [['22.5']] (search, 120.7s)
 
 **Q:** A cewar MICS na NBS da UNICEF, waɗanne gibi ne ke cikin kula da lafiyar yara da rajistar haihuwa a Jihar Sokoto?
 
 _s10 in Hausa_
 
 ```
-MICS 2021 ta NBS da UNICEF ta nuna gibi a Jihar Sokoto a bangarorin biyu: ɗaukar inshorar lafiya na yara ƙasa da ƙasa sosai, da kuma rajistar haihuwa da ta yi ƙasa da matsakaicin ƙasa. An ware tsakanin abin da aka kasafi da abin da aka kashe, amma waɗannan lambobin su ne na binciken, ba na kasafi ba.
-
-• Inshorar lafiya yara ƙasa da shekara 5 a Sokoto: 0.3%
-• Inshorar lafiya yara shekara 5-17 a Sokoto: 0.8%
-• Rajistar haihuwa da aka yi wa yara ƙasa da shekara 5 a Sokoto - jimilla da aka yi rajista: 22.5% daga cikin yara 972
-• Rajistar haihuwa a Sokoto - suna da takardar shaidar haihuwa: 11.1%
-
-📄 *Madogara:* Nigeria 2021 Multiple Indicator Cluster Survey (MICS) and National Immunization Coverage Survey (NICS), shafi 336, 337, 433, 435
+A cikin 2022, kashi 87% na al'ummar Jihar Sokoto suna rayuwa ƙasa da layin talauci (Emergency Obstetric and Newborn Care (EmONC) Assessment and…, p. 37), kuma kashi 52% na mazauna suna cikin rukunin mafi ƙarancin dukiya (Independent Evaluation of the United Nations Joint Programme to…, p. 41).
+Adadin ma'aikatan lafiya da ake buƙata don hidimar uwa da yaro ya kai ma'aikata 24,159 bisa ma'aunin 4.5 a kan kowace mutum 1,000 (State Health Resource Optimization Plan (ROP) to Improve Healthcare…, p. 30) da kuma ma'aikata 13,572 bisa ma'aunin 2.5 a kan 1,000 kamar yadda rahoton 2023 ya nuna, yayin da gwamnati ta tsara a shekarar 2025 ta samar da cibiyoyin kiwon lafiya 92 da aka tanadar kuma aka samar da ma'aikata a dukkan kananan hukumomi 23.
+Kasafin lafiya na jiha ya karu daga ₦15.81 billion a 2018 (State Health Resource Optimization Plan (ROP) to Improve Healthcare…, p. 6) zuwa ₦29.6 billion a 2022.
+Dangane da samun kulawa a shekarar 2022, kashi 59% na wadanda suka amfana da shirin ne aka taimaka masu daga kwararrun ma'aikatan lafiya (Independent Evaluation of the United Nations Joint Programme to…, p. 72) idan aka kwatanta da kashi 47% na wadanda ba su amfana ba.
+Yawan jama'ar jiha ya kai mutum 3,696,999 a ƙidayar 2006 kuma ana hasashen zai kai mutum 6,967,608 a 2026.
 ```
 
-## s12: answered (search, 8.0s)
+## s12: answered (search, 25.3s)
 
 **Q:** According to NDHS 2024, what percentage of children under 5 in Sokoto are stunted, and what is the national figure?
 
 _NDHS 2024 Table 11.1 p366: Sokoto 42.8, Total 39.5_
 
-```
-According to NDHS 2024, 42.8% of children under 5 in Sokoto are stunted (too short for age, below -2 SD). Nationally, 39.5% of children under 5 are stunted, reported as 40% in the text.
+_Answer check: pass_
 
-• Sokoto - stunted (below -2 SD): 14.8% severely, 42.8% total
-• National - stunted (below -2 SD): 18.4% severely, 39.5% total
-• National - stunted as summarized: 40% are stunted and 18% are severely stunted
+```
+In the NDHS 2024, 42.8% of children under 5 in Sokoto State are stunted (14.8% severely stunted). Nationally, 40% of children under 5 are stunted, with the detailed table showing 39.5% below -2 SD (18.4% below -3 SD).
 
 📄 *Sources:* Nigeria Demographic and Health Survey 2024 Final Report, p. 347, 366
 ```
 
-## s13: answered (search, 5.9s)
+## s13: partial (topic:population_geography, 20.4s)
 
 **Q:** According to NDHS 2024, what share of children under 5 in Sokoto have their birth registered, compared with the North West zone and Nigeria?
 
 _NDHS 2024 Table 2.10 p73: Sokoto 19.0, North West 32.7, Total 39.7_
 
-```
-According to NDHS 2024, 19.0% of children under 5 in Sokoto have their birth registered with the civil authorities. This compares with 32.7% in the North West zone and 39.7% nationally in Nigeria.
+_Answer check: pass_
 
-• North West zone – 32.7% registered (23.5% had birth certificate, 9.2% did not)
-• Nigeria (national) – 39.7% registered (27.5% had birth certificate, 12.2% did not)
+```
+According to the Nigeria Demographic and Health Survey 2024 Final Report, 19.0% of de jure children under age 5 in Sokoto State have their births registered with the civil authorities. This compares with 32.7% in the North West zone and 39.7% in Nigeria as a whole.
+
+📊 *19.0%* – percentage of de jure children under age 5 whose births are registered with the civil authorities, Sokoto State (Nigeria Demographic and Health Survey 2024 Final Report, 2024).
+
+In this document:
+• Nigeria Demographic and Health Survey 2024 Final Report: 19.0% – percentage of de jure children under age 5 whose births are registered with the civil authorities, Sokoto State; 2024 (p. 73)
+• Nigeria Demographic and Health Survey 2024 Final Report: 32.7% – percentage of de jure children under age 5 whose births are registered with the civil authorities, North West; 2024 (p. 73)
+• Nigeria Demographic and Health Survey 2024 Final Report: 39.7% – percentage of de jure children under age 5 whose births are registered with the civil authorities, Nigeria; 2024 (p. 73)
 
 📄 *Sources:* Nigeria Demographic and Health Survey 2024 Final Report, p. 73
 ```
 
-## s14: partial (topic:health, 7.8s)
+## s14: partial (topic:health, 21.1s)
 
 **Q:** According to NDHS 2024, what percentage of women in Sokoto received antenatal care from a skilled provider for their most recent birth?
 
 _Table 9.1 p256: Sokoto 26.4 (North West 49.0)_
 
+_Answer check: pass_
+
 ```
-According to the Nigeria Demographic and Health Survey 2024, 26.4% received antenatal care from a skilled provider for the most recent live birth or stillbirth in Sokoto State. This is for the 2 years preceding the survey.
+According to the Nigeria Demographic and Health Survey 2024 Final Report, 26.4% of women in Sokoto State received antenatal care from a skilled provider for their most recent live birth and/or stillbirth in the 2 years preceding the survey.
 
-📊 Newest figure: *26.4%* – receiving antenatal care from a skilled provider for the most recent live birth or stillbirth, Sokoto State (Nigeria Demographic and Health Survey 2024, 2 years preceding the survey, Nigeria DHS 2024).
+📊 *26.4%* – percentage receiving antenatal care from a skilled provider for the most recent live birth and/or stillbirth in the 2 years preceding the survey, Sokoto State (Nigeria Demographic and Health Survey 2024 Final Report, 2 years preceding the survey, Nigeria DHS 2024).
 
-By source:
-• Nigeria Demographic and Health Survey 2024: 26.4% – receiving antenatal care from a skilled provider for the most recent live birth or stillbirth, Sokoto State; 2 years preceding the survey, Nigeria DHS 2024 (Nigeria Demographic and Health Survey 2024 Final Report, p. 256)
+In this document:
+• Nigeria Demographic and Health Survey 2024 Final Report: 26.4% – percentage receiving antenatal care from a skilled provider for the most recent live birth and/or stillbirth in the 2 years preceding the survey, Sokoto State; 2 years preceding the survey, Nigeria DHS 2024 (p. 256)
 
-Couldn't get: MICS 2021, UNFPA Nigeria.
+Couldn't get: MICS 2021.
 
 📄 *Sources:* Nigeria Demographic and Health Survey 2024 Final Report, p. 256
 ```
 
-## s15: answered (topic:nutrition_food_security, 9.7s)
+## s15: partial (topic:health, 19.5s)
 
 **Q:** What is the prevalence of anaemia among children aged 6-59 months in Sokoto according to NDHS 2024?
 
 _Table 11.12 p382: Sokoto any anaemia 56.7_
 
+_Answer check: pass_
+
 ```
-According to NDHS 2024, 56.7% of children age 6-59 months in Sokoto State were classified as having anaemia (Any anaemia).
+According to the Nigeria Demographic and Health Survey 2024 Final Report, the prevalence of anaemia (any) among children age 6-59 months in Sokoto State is 56.7% (p. 382). The report also shows 56.6% based on 2011 WHO guidelines (p. 810).
 
-📊 Newest figure: *56.7%* – Percentage of children age 6-59 months classified as having anaemia (Any anaemia), Sokoto State (NDHS 2024, Nigeria DHS 2024).
+📊 *56.7%* – Prevalence of anaemia (any) among children age 6-59 months, Sokoto State (Nigeria Demographic and Health Survey 2024 Final Report, Nigeria DHS 2024).
 
-By source:
-• NDHS 2024: 56.7% – Percentage of children age 6-59 months classified as having anaemia (Any anaemia), Sokoto State; Nigeria DHS 2024 (Nigeria Demographic and Health Survey 2024 Final Report, p. 382)
+In this document:
+• Nigeria Demographic and Health Survey 2024 Final Report: 56.7% – Prevalence of anaemia (any) among children age 6-59 months, Sokoto State; Nigeria DHS 2024 (p. 382)
+• Nigeria Demographic and Health Survey 2024 Final Report: 56.6% – Prevalence of anaemia (any) among children age 6-59 months based on 2011 WHO guidelines, Sokoto State; Nigeria DHS 2024 (p. 810)
 
-📄 *Sources:* Nigeria Demographic and Health Survey 2024 Final Report, p. 382
+Couldn't get: MICS 2021.
+
+📄 *Sources:* Nigeria Demographic and Health Survey 2024 Final Report, p. 382, 810
 ```
 
-## s16: partial (topic:health, 8.2s)
+## s16: partial (topic:health, 17.7s)
 
 **Q:** According to NDHS 2024, what percentage of children aged 12-23 months in Sokoto ever had a vaccination card?
 
 _Table 10.2 p323: Sokoto 14.7 (card seen 11.9)_
 
+_Answer check: pass_
+
 ```
-📊 Newest figure: *14.7%* – Percentage who ever had a vaccination card, Sokoto State (Nigeria Demographic and Health Survey 2024, 2024).
+According to the Nigeria Demographic and Health Survey 2024 Final Report (p. 323), 14.7% of children age 12-23 months in Sokoto State ever had a vaccination card.
 
-By source:
-• Nigeria Demographic and Health Survey 2024: 14.7% – Percentage who ever had a vaccination card, Sokoto State; 2024 (Nigeria Demographic and Health Survey 2024 Final Report, p. 323)
+📊 *14.7%* – percentage of children age 12-23 months who ever had a vaccination card, Sokoto State (Nigeria Demographic and Health Survey 2024 Final Report, 2024).
 
-Couldn't get: MICS 2021, UNFPA Nigeria.
+In this document:
+• Nigeria Demographic and Health Survey 2024 Final Report: 14.7% – percentage of children age 12-23 months who ever had a vaccination card, Sokoto State; 2024 (p. 323)
+
+Couldn't get: MICS 2021.
 
 📄 *Sources:* Nigeria Demographic and Health Survey 2024 Final Report, p. 323
 ```
 
-## s17: partial (topic:health, 9.5s)
+## s17: partial (topic:health, 18.8s)
 
 **Q:** According to NDHS 2024, what share of women in Sokoto had four or more antenatal care visits, and what is the North West figure?
 
 _Table 9.2 p258: Sokoto 22.7, North West 40.6_
 
+_Answer check: pass_
+
 ```
-According to Nigeria Demographic and Health Survey 2024, 22.7% of women in Sokoto State had 4+ antenatal care visits during pregnancy for the most recent live birth or stillbirth, in the 2 years preceding the survey. The North West figure is 40.6%.
+According to the Nigeria Demographic and Health Survey 2024 Final Report, 22.7% in Sokoto State had 4+ ANC visits among women age 15-49 who had a live birth and/or stillbirth in the 2 years preceding the survey. For the North West, the figure was 40.6%.
 
-📊 Newest figure: *22.7%* – women with 4+ antenatal care visits during pregnancy for the most recent live birth or stillbirth, Sokoto State (Nigeria Demographic and Health Survey 2024, 2 years preceding the survey, Nigeria DHS 2024).
+📊 *22.7%* – 4+ ANC visits among women age 15-49 who had a live birth and/or stillbirth in the 2 years preceding the survey (most recent live birth or stillbirth), Sokoto State (Nigeria Demographic and Health Survey 2024 Final Report, 2024).
 
-By source:
-• Nigeria Demographic and Health Survey 2024: 22.7% – women with 4+ antenatal care visits during pregnancy for the most recent live birth or stillbirth, Sokoto State; 2 years preceding the survey, Nigeria DHS 2024 (Nigeria Demographic and Health Survey 2024 Final Report, p. 258)
-• Nigeria Demographic and Health Survey 2024: 40.6% – women with 4+ antenatal care visits during pregnancy for the most recent live birth or stillbirth, North West; 2 years preceding the survey, Nigeria DHS 2024 (Nigeria Demographic and Health Survey 2024 Final Report, p. 258)
+In this document:
+• Nigeria Demographic and Health Survey 2024 Final Report: 22.7% – 4+ ANC visits among women age 15-49 who had a live birth and/or stillbirth in the 2 years preceding the survey (most recent live birth or stillbirth), Sokoto State; 2024 (p. 258)
+• Nigeria Demographic and Health Survey 2024 Final Report: 40.6% – 4+ ANC visits among women age 15-49 who had a live birth and/or stillbirth in the 2 years preceding the survey (most recent live birth or stillbirth), North West; 2024 (p. 258)
 
-Couldn't get: MICS 2021, UNFPA Nigeria.
+Couldn't get: MICS 2021.
 
 📄 *Sources:* Nigeria Demographic and Health Survey 2024 Final Report, p. 258
 ```
 
-## s18: answered (search, 7.9s)
+## s18: answered WRONG: none of [['22.5', '19.0'], ['22.5', '19%']] (search, 136.3s)
 
 **Q:** Birth registration in Sokoto: what did MICS 2021 and NDHS 2024 each find, and can the two be compared?
 
 _MICS 22.5 (p337) and NDHS 19.0 (p73): different surveys, said so_
 
 ```
-MICS 2021 found 22.5% of children under 5 in Sokoto had births registered with civil authorities, of a national sample. NDHS 2024 found 19.0% of children under 5 in Sokoto had births registered, also from a sample. The two results come from different surveys in different years with different samples and methods, so the evidence presents them as separate sample estimates rather than a directly comparable trend.
-
-• MICS 2021 Sokoto under-5 birth registration (total registered): 22.5%
-• MICS 2021 Sokoto under-5 detailed: 11.1% have birth certificate seen, 8.7% not seen, 2.8% no birth certificate
-• NDHS 2024 Sokoto under-5 birth registration (total registered): 19.0%
-• NDHS 2024 Sokoto under-5 detailed: 14.2% had a birth certificate, 4.8% did not have a birth certificate
-• MICS 2021 national under-5 birth registration: 57.3%; North West: 47.4%
-
-📄 *Sources:* Nigeria Demographic and Health Survey 2024 Final Report, p. 73; Nigeria 2021 Multiple Indicator Cluster Survey (MICS) and National Immunization Coverage Survey (NICS), p. 336, 337
+In Sokoto State, the Nigeria Demographic and Health Survey 2024 found that 19.0% of de jure children under age 5 had their births registered with the civil authorities (Nigeria Demographic and Health Survey 2024 Final Report, p. 73).
+Of these, 14.2% had a birth certificate and 4.8% were registered without a birth certificate.
+The 2024 survey sample for this indicator in Sokoto was 1,051 de jure children under age 5.
+The checked figures do not include a comparable MICS 2021 percentage for Sokoto, so a direct trend between the two surveys cannot be stated from this list.
 ```
 
-## s19: answered (topic:poverty_welfare, 9.4s)
+## s19: answered (topic:poverty_welfare, 17.1s)
 
 **Q:** According to the NBS Nigeria MPI 2022, what are Sokoto's MPI value, incidence and intensity?
 
 _NBS MPI 2022 Appendix D p123: MPI 0.409, incidence 90.5%, intensity 45.2%_
 
+_Answer check: pass_
+
 ```
-According to the NBS Nigeria Multidimensional Poverty Index 2022, Sokoto State has an MPI value of 0.409, incidence of 90.5% and intensity of 45.2%.
+According to the Nigeria Multidimensional Poverty Index (2022) (p. 123), for Sokoto State the MPI value is 0.409, the Incidence (H) is 90.5% and the Intensity (A) is 45.2%.
 
-📊 Newest figure: *0.409* – MPI value (index value, 0–1), Sokoto State (NBS Nigeria Multidimensional Poverty Index, 2022).
+📊 *0.409* – MPI value (index value, 0–1), Sokoto State (Nigeria Multidimensional Poverty Index (2022), 2022).
 
-By source:
-• NBS Nigeria Multidimensional Poverty Index: 0.409 – MPI value (index value, 0–1), Sokoto State; 2022 (Nigeria Multidimensional Poverty Index (2022), p. 123)
-• NBS Nigeria Multidimensional Poverty Index: 90.5% – Incidence (H, %) - percentage of the population who are multidimensionally poor (headcount, % of people), Sokoto State; 2022 (Nigeria Multidimensional Poverty Index (2022), p. 123)
-• NBS Nigeria Multidimensional Poverty Index: 45.2% – Intensity (A, %) - average percentage of weighted deprivations which poor people are experiencing, Sokoto State; 2022 (Nigeria Multidimensional Poverty Index (2022), p. 123)
+In this document:
+• Nigeria Multidimensional Poverty Index (2022): 0.409 – MPI value (index value, 0–1), Sokoto State; 2022 (p. 123)
+• Nigeria Multidimensional Poverty Index (2022): 90.5% – Incidence (H) - percentage of population who are multidimensionally poor (headcount, % of people), Sokoto State; 2022 (p. 123)
+• Nigeria Multidimensional Poverty Index (2022): 45.2% – Intensity (A) - average percentage of weighted deprivations poor people experience, Sokoto State; 2022 (p. 123)
 
 ℹ️ These are different measures (index value, 0–1; headcount, % of people; intensity, %); a change or comparison is made only between the same measure.
 
 📄 *Sources:* Nigeria Multidimensional Poverty Index (2022), p. 123
 ```
 
-## s20: answered (topic:poverty_welfare, 8.5s)
+## s20: answered (topic:poverty_welfare, 14.5s)
 
 **Q:** A cewar rahoton MPI na NBS na 2022, kashi nawa na mutanen Sokoto ne talakawa ta fuskoki da dama?
 
 _s19 in Hausa: incidence 90.5%_
 
+_Answer check: pass_
+
 ```
-A cewar rahoton MPI na NBS na 2022, 90.5% na mutanen Sokoto ne talakawa ta fuskoki da dama.
+A cewar rahoton NBS na Multidimensional Poverty Index (MPI) na 2022, kashi 90.5% na mutane a Jihar Sokoto suna cikin talauci mai fuskoki da dama.
 
-📊 Alƙaluma mafi sabo: *90.5%* – Incidence (H, %) - The percentage of the population who are multidimensionally poor (kason mutane, %), Sokoto State (NBS Nigeria Multidimensional Poverty Index, 2022).
+📊 *90.5%* – multidimensionally poor - Incidence (H) / headcount ratio (percentage of population who are multidimensionally poor) (kason mutane, %), Sokoto State (Nigeria Multidimensional Poverty Index (2022), 2022).
 
-Daga kowace majiya:
-• NBS Nigeria Multidimensional Poverty Index: 90.5% – Incidence (H, %) - The percentage of the population who are multidimensionally poor (kason mutane, %), Sokoto State; 2022 (Nigeria Multidimensional Poverty Index (2022), shafi 123)
+A cikin wannan takarda:
+• Nigeria Multidimensional Poverty Index (2022): 90.5% – multidimensionally poor - Incidence (H) / headcount ratio (percentage of population who are multidimensionally poor) (kason mutane, %), Sokoto State; 2022 (shafi 123)
 
 📄 *Madogara:* Nigeria Multidimensional Poverty Index (2022), shafi 123
 ```
 
-## s21: answered (topic:poverty_welfare, 9.8s)
+## s21: answered (topic:poverty_welfare, 14.3s)
 
 **Q:** What is Sokoto's multidimensional poverty headcount according to the SBS MPI 2025 report?
 
 _SBS MPI 2025 p13/p33: headcount 59.1%, MPI 0.239_
 
+_Answer check: pass_
+
 ```
-The multidimensional poverty headcount for Sokoto State is 59.1%. This is the Headcount Ratio (H) of multidimensional poverty from the Sokoto State Multi-dimensional Poverty Index (MPI) Report 2025, p. 33.
+According to the Sokoto State Multi-dimensional Poverty Index (MPI) Report 2025, the multidimensional poverty headcount ratio (H) for Sokoto State is *59.1%* — the share of citizens deprived in at least 26% of weighted indicators.
 
-📊 Newest figure: *59.1%* – Headcount Ratio (H) of multidimensional poverty - share deprived in at least 26% of the weighted indicators spanning Health, Education, Standard of Living, Empl, Sokoto State (Sokoto State Bureau of Statistics, 2025).
+📊 *59.1%* – multidimensional poverty headcount ratio (H) - share of citizens deprived in at least 26% of weighted indicators, Sokoto State (Sokoto State Multi-dimensional Poverty Index (MPI) Report 2025, 2025).
 
-By source:
-• Sokoto State Bureau of Statistics: 59.1% – Headcount Ratio (H) of multidimensional poverty - share deprived in at least 26% of the weighted indicators spanning Health, Education, Standard of Living, Empl, Sokoto State; 2025 (Sokoto State Multi-dimensional Poverty Index (MPI) Report 2025, p. 33)
+In this document:
+• Sokoto State Multi-dimensional Poverty Index (MPI) Report 2025: 59.1% – multidimensional poverty headcount ratio (H) - share of citizens deprived in at least 26% of weighted indicators, Sokoto State; 2025 (p. 33)
 
 📄 *Sources:* Sokoto State Multi-dimensional Poverty Index (MPI) Report 2025, p. 33
 ```
 
-## s22: partial (search, 7.6s)
+## s22: answered (search, 20.0s)
 
 **Q:** What did UNFPA find out about health facilities in Wamakko
 
 _the 1 Nov 2026 live misroute: the EmONC assessment (emonc-sokoto), never a facility card_
 
+_Answer check: pass_
+
 ```
-⚠️ Emergency Obstetric and Newborn Care (EmONC) Assessment and Improvement Plan of Action, Sokoto State isn't a primary source for this figure (those are Nigeria Demographic and Health Survey 2024, MICS 2021, cholera, Lassa, meningitis, diphtheria, mpox, National Malaria Elimination Programme); treat it as related context.
+The 2026 EmONC Assessment supported by UNFPA assessed 8 public facilities in Wamakko LGA. All 8 were Basic EmONC (BEmONC) and 0 were Comprehensive EmONC (CEmONC). By basic signal functions, 7 were partially functioning and 1 was fully functioning, read from Figure 2 on page 46. Wamakko was in the high-access central belt with travel time within 1 hour to EmONC facilities.
 
-The UNFPA assessment (EmONC Assessment for Sokoto State 2026) listed 9 public primary facilities in Wamakko that were designated as Primary BEmONC and 1 facility in Wamakko that was not assessed due to insecurity.
+• Wamakko assessed EmONC facilities: 8 total - 8 BEmONC 100.0% and 0 CEmONC 0.0%
+• BEmONC signal-function performance in Wamakko: Partially functioning 7 and Fully functioning 1, read from Figure 2 on page 46
+• BEmONC 24 hours a day 7 days a week in Wamakko: obstetric services 75.0%, neonatal services 37.5%
+• Beds in Wamakko BEmONC facilities: 1,385 deliveries, 91 total maternity beds, 18.1 labour beds per 1,000 deliveries and 65.7 total beds per 1,000 deliveries
+• Infrastructure readiness in Wamakko BEmONC facilities: Not ready 0.0%, Fairly ready 25.0%, Almost ready 50.0%, Fully ready 25.0%
 
-• Wamakko facilities listed as Primary BEmONC: Arkilla Primary Health Centre, Bakin Kusu Health Clinic, Gidan Bubu Primary Health Centre, Gidan Hamme Health Clinic, Guiwa Primary Health Centre, Gumbi Primary Health Centre, Kasarawa Primary Health Centre, Samalo Health Post, Wamakko Primary Health Centre
-• Not assessed due to insecurity in Wamakko: Gedawa Health Post (Kaura Gedawa ward, Wamakko LGA)
-
-📄 *Sources:* Emergency Obstetric and Newborn Care (EmONC) Assessment and Improvement Plan of Action, Sokoto State, p. 320, 322
+📄 *Sources:* Emergency Obstetric and Newborn Care (EmONC) Assessment and Improvement Plan of Action, Sokoto State, p. 18, 40, 46, 50, 54, 221, 262
 ```
 
-## s23: answered (search, 7.4s)
+## s23: answered (search, 36.6s)
 
 **Q:** Me rahoton UNFPA ya gano game da asibitocin Wamakko?
 
 _s22 in Hausa_
 
+_Answer check: revise (Wamakko LGA jimillar cibiyoyin EmONC da aka tantance (8) da rabon BEmONC/CEmONC (8 BEmONC, 0 CEmONC) daga Table 4 shafi 40; Wamakko LGA aikin alamomin BEmONC: 0 marasa aiki, 7 masu aiki kaɗan, 1 mai c) → pass_
+
 ```
-⚠️ Emergency Obstetric and Newborn Care (EmONC) Assessment and Improvement Plan of Action, Sokoto State ba babbar majiyar wannan adadi ba ce (manyan majiyoyin su ne Nigeria Demographic and Health Survey 2024, MICS 2021, cholera, Lassa, meningitis, diphtheria, mpox, National Malaria Elimination Programme); ɗauke shi a matsayin bayani mai alaƙa.
+Rahoton UNFPA na EmONC 2026 ya gano cewa Wamakko LGA na da jimillar cibiyoyin kiwon lafiya 8 da aka tantance, dukkansu BEmONC ne (ba ta da ko ɗaya CEmONC). Daga cikin waɗannan 8, 7 suna aiki kaɗan (partial functioning) kuma 1 na aiki cikakke (fully functioning) bisa aikin basic signal functions. Saboda rashin CEmONC, rahoton ya nuna Wamakko ba ta da gado ko cibiya na CEmONC kwata-kwata.
 
-Rahoton UNFPA na 2026 game da EmONC a Jahar Sokoto ya gano cewa an tantance cibiyoyin lafiya 8 a ƙaramar hukumar Wamakko. Dukkansu 8 100.0% cibiyoyin BEmONC ne na asali, babu ko ɗaya ta CEmONC 0.0%. A duk faɗin jaha, cibiyoyi 210 90.5% BEmONC ne, 22 9.5% kuma CEmONC ne daga cikin 232 da aka tantance.
+• Jimilla a Wamakko: 8 (BEmONC 8, CEmONC 0)
+• Basic signal functions: 7 partial, 1 fully (daga cikin 8)
+• CEmONC gadaje a Wamakko: 0
 
-• Wamakko – jimilla da aka tantance: 8
-• Wamakko – BEmONC: 8 100.0%
-• Wamakko – CEmONC: 0 0.0%
-• Jaha baki ɗaya – BEmONC: 210 90.5% daga cikin 232
-• Jaha baki ɗaya – CEmONC: 22 9.5% daga cikin 232
-
-📄 *Madogara:* Emergency Obstetric and Newborn Care (EmONC) Assessment and Improvement Plan of Action, Sokoto State, shafi 40
+📄 *Madogara:* Emergency Obstetric and Newborn Care (EmONC) Assessment and Improvement Plan of Action, Sokoto State, shafi 40, 44, 46, 56
 ```
