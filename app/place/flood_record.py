@@ -41,7 +41,8 @@ T = {
         "so_far": " ({year} so far)",
         "where_crop": "{ha} on farmland", "where_plain": "{ha} in the river floodplain", "where_other": "{ha} on other land",
         "compare": "In {year}, radar passes saw {g}; UNOSAT's event map of {period}, built from several days and "
-                   "sensors, shows {u}. They measure differently; the larger is closer to what people experienced.",
+                   "sensors, shows {u}. UNOSAT's map covers several days, so it catches more of the flood than single "
+                   "passes.",
         "g_none": "no floodwater", "g_some": "{ha} under water at some point", "g_nodata": "nothing (no passes on file)",
         "excluded": "Radar can't judge {pct} of {name} (about {ha}: built-up land, dense trees and dry sandy ground, "
                     "where radar can't tell water from land), so floods there aren't counted. It can't see water "
@@ -89,8 +90,8 @@ T = {
         "so_far": " ({year} har zuwa yanzu)",
         "where_crop": "{ha} a gonaki", "where_plain": "{ha} a fadamar kogi", "where_other": "{ha} a sauran ƙasa",
         "compare": "A {year}, hotunan radar sun ga {g}; taswirar UNOSAT ta {period}, wadda aka haɗa daga kwanaki da "
-                   "na'urori da dama, ta nuna {u}. Suna aunawa ta hanyoyi daban-daban; mafi girma ya fi kusa da abin da "
-                   "mutane suka fuskanta.",
+                   "na'urori da dama, ta nuna {u}. Taswirar UNOSAT ta haɗa kwanaki da dama, don haka tana kama yawancin "
+                   "ambaliyar fiye da hotunan radar ɗaya-ɗaya.",
         "g_none": "babu ruwan ambaliya", "g_some": "{ha} ƙarƙashin ruwa a wani lokaci",
         "g_nodata": "babu komai (babu hotunan radar a bayanai)",
         "excluded": "Radar ba za ta iya tantance kashi {pct} na {name} ba (kusan {ha}: wuraren gine-gine, bishiyoyi "

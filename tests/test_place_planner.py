@@ -127,7 +127,7 @@ def test_flood_answers_lead_with_gfm_over_the_record_and_quote_unosat_beside_it(
     parts = a.text.split("\n\n")
     assert parts[1].startswith("In 2022, radar saw about") or parts[1].startswith("No floodwater was seen on Sokoto State")
     assert "In 2022, radar passes saw" in a.text and "UNOSAT's event map of 1–25 October 2022" in a.text
-    assert "They measure differently; the larger is closer to what people experienced." in a.text
+    assert "UNOSAT's map covers several days, so it catches more of the flood than single passes." in a.text
     assert "Radar can't judge" in a.text and "Kasafi's own radar check" in a.text
     assert "Contains modified Copernicus Emergency Management Service information [2015–" in a.text
     assert "not an official flood warning" in a.text and "against its usual" not in a.text

@@ -159,7 +159,7 @@ def main() -> None:
             for lang, q, must in (("en", "How has farming evolved in my ward over the years",
                                    [f"{ward} ward, {name_of(pcode)} LGA", f"Your pin is in {ward} ward", "Since 20", f"In {year} {ward} was"]),
                                   ("ha", "Yaya noma ya canza a unguwata tun shekaru?",
-                                   [f"gundumar {ward}", "Wurinka yana gundumar", "Tun 20"])):
+                                   [f"gundumar {ward}", "Wurinku yana gundumar", "Tun 20"])):
                 n += 1
                 cases.append({"id": f"a{n:03d}", "family": "scope_ward", "lang": lang, "level": "ward", "unit": code, "year": year,
                               "question": q, "place": place,

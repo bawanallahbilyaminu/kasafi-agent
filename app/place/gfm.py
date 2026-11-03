@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
@@ -128,9 +129,17 @@ def season(grid, units, crop: np.ndarray, plain: np.ndarray, year: int, workers:
 
     def read(f):
         a = f["assets"]
-        fl = read_on_grid(a["ensemble_flood_extent"]["href"], grid)
-        ex = read_on_grid(a["exclusion_mask"]["href"], grid) if "exclusion_mask" in a else None
-        return fl, ex
+        for attempt in range(3):           # a COG block read can fail transiently: twice more, then the tile is left out
+            try:
+                fl = read_on_grid(a["ensemble_flood_extent"]["href"], grid)
+                ex = read_on_grid(a["exclusion_mask"]["href"], grid) if "exclusion_mask" in a else None
+                return fl, ex
+            except Exception as e:         # noqa: BLE001 - rasterio raises several kinds
+                if attempt == 2:
+                    log.warning("gfm: tile %s left out: %s", f.get("id", "?")[:70], type(e).__name__)
+                    return None, None
+                time.sleep(3 * (attempt + 1))
+        return None, None
 
     def sums(values: np.ndarray, valid: np.ndarray):
         def fn(labels):

@@ -42,7 +42,7 @@ def test_the_largest_season_and_where_farmland_floodplain_other() -> None:
 def test_radar_and_unosat_quoted_side_by_side_with_the_reason_never_averaged() -> None:
     lines = F.compare_lines(DRY, "en")
     assert len(lines) == 1 and lines[0].startswith("In 2024, radar passes saw no floodwater; UNOSAT's event map of ")
-    assert "shows 52 ha. They measure differently; the larger is closer to what people experienced." in lines[0]
+    assert "shows 52 ha. UNOSAT's map covers several days, so it catches more of the flood than single passes." in lines[0]
     wet = F.compare_lines(WET, "en")
     assert [x[:8] for x in wet] == ["In 2022,", "In 2024,"]          # 2022: radar saw none, UNOSAT 1,610 ha: both said
     assert F.compare_lines(WET, "en", [2022])[0].startswith("In 2022, radar passes saw no floodwater")
