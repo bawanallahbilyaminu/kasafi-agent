@@ -516,7 +516,55 @@ def flood_sentence(h: H.History, lang: str) -> str:
             extent = t["water_maps"].format(periods=", ".join(period_text(m["period_start"], m["period_end"], lang)
                                                                for m in ev.official)).lstrip("; ")
             s += " " + extent[0].upper() + extent[1:] + "."
-    return s + nearest_sentence(h, lang)
+    # GFM counts floods on land that is normally dry: a water body's own water is never a GFM line
+    return s + (gfm_sentence(h, lang) if kind not in ("permanent", "seasonal") else "") + nearest_sentence(h, lang)
+
+
+GFM_WORDS = {
+    "en": {"some": " Copernicus GFM radar ({first}–{last}) saw floodwater within about 300 m of this spot in {years}; "
+                   "the most in {y}: about {ha} of the {area} around it.",
+           "none": " Copernicus GFM radar saw no floodwater within about 300 m of this spot in {n} rainy seasons "
+                   "({first}–{last}).",
+           "excluded": " GFM can't judge most of the land around this spot (built-up land, dense trees or dry sand look "
+                       "the same to radar with or without water).",
+           "built": " Radar can't see water between buildings: for a built-up place, flood reports are the source."},
+    "ha": {"some": " Radar ta Copernicus GFM ({first}–{last}) ta ga ruwan ambaliya cikin kusan mita 300 daga wannan wuri "
+                   "a {years}; mafi yawa a {y}: kusan {ha} cikin {area} da ke kewaye da shi.",
+           "none": " Radar ta Copernicus GFM ba ta ga ruwan ambaliya ba cikin kusan mita 300 daga wannan wuri a damina "
+                   "{n} ({first}–{last}).",
+           "excluded": " GFM ba za ta iya tantance mafi yawan ƙasar da ke kewaye da wannan wuri ba (wuraren gine-gine, "
+                       "bishiyoyi masu yawa ko busasshen yashi suna kama da juna ga radar, da ruwa ko babu).",
+           "built": " Radar ba ta ganin ruwa tsakanin gine-gine: ga wurin gine-gine, rahotannin ambaliya ne madogara."},
+}
+
+
+def gfm_sentence(h: H.History, lang: str) -> str:
+    """Copernicus GFM in the 600 m square around the pin (app/place/gfm.py rasters), with what radar can't judge."""
+    from app.place.flood_record import ha_text
+    from app.place.gfm import at_pin
+    w = GFM_WORDS["ha" if lang == "ha" else "en"]
+    try:
+        rows = at_pin(h.lat, h.lon)
+    except Exception as e:                          # noqa: BLE001 - an extra line, never the answer's failure
+        log.warning("place: GFM at pin failed: %s", type(e).__name__)
+        return ""
+    if not rows:
+        return ""
+    ys = sorted(y for y, r in rows.items() if r["passes"] > 0)
+    if not ys:
+        return ""
+    wet = [y for y in ys if rows[y]["flood_ha"] >= 1.0]
+    if wet:
+        y = max(wet, key=lambda k: rows[k]["flood_ha"])
+        s = w["some"].format(first=ys[0], last=ys[-1], years=", ".join(map(str, wet)), y=y,
+                             ha=ha_text(rows[y]["flood_ha"], lang), area=ha_text(rows[y]["area_ha"], lang))
+    else:
+        s = w["none"].format(n=len(ys), first=ys[0], last=ys[-1])
+    if rows[ys[-1]]["excluded"] >= 0.5:
+        s += w["excluded"]
+    if h.kind == "built-up area":
+        s += w["built"]
+    return s
 
 
 def radar_text(rows: dict, lang: str) -> str:

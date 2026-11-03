@@ -249,8 +249,8 @@ TEXTS = {
         "en": "Kasafi can't confirm who owns land, where a farm's boundary runs, or issue any certificate.\n\nI can show what the satellite images say about a farm's greenness, water or bare soil over the years, for example: «How green was my farm in 2024?»",
     },
     "searching_satellite": {          # a place-history question: satellite images, not documents
-        "ha": "🛰️ Ina duba hotunan tauraron ɗan adam…",
-        "en": "🛰️ Checking the satellite images…",
+        "ha": "🛰️ Ina duba bayanan tauraron ɗan adam…",
+        "en": "🛰️ Checking satellite records…",
     },
     "images_off": {
         "ha": "To, daga yanzu ba zan riƙa aiko da hotunan shaida ba.\n\nKu rubuta *kunna hotuna* idan kuna so a dawo da su.",

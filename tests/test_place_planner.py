@@ -117,22 +117,23 @@ def test_no_budget_line_for_the_lga_gives_the_statewide_totals_never_just_no_lin
     assert totals and totals[0]["agriculture"][0] > 0 and totals[2] == 2026
 
 
-def test_flood_answers_lead_with_the_un_map_and_give_radar_as_a_lower_bound(conn) -> None:
+def test_flood_answers_lead_with_gfm_over_the_record_and_quote_unosat_beside_it(conn) -> None:
+    from app.place import flood_record
+    if not flood_record.loaded(conn):
+        pytest.skip("no GFM rows (scripts/precompute_area.py --layers gfm)")
     a = P.area_answer(conn, "Share of cropland flooded in 2022 across Sokoto State", "", "en", "state", "NG034", TODAY)
-    assert a.found and a.level == "lga" and a.year == 2022
-    assert a.text.startswith("*Share of cropland inside the UN flood map: the 23 LGAs of Sokoto State, 2022* — experimental")
-    assert a.working.startswith("Measure: UN satellite flood map of 1–25 October 2022 (UNOSAT, VIIRS 375 m)")
-    assert a.text.split("\n\n")[1].startswith("The UN satellite flood map of 1–25 October 2022 covered")
-    assert "*Open floodwater seen by radar, a lower bound*" in a.text and "misses water under crops" in a.text
-    assert "The two differ because" in a.text
-    assert a.text.index("UN satellite flood map") < a.text.index("lower bound")
-    assert [s["key"] for s in a.specs] == ["flood_map", "flood"] and a.measure == "unosat_share"
-    assert "s1_flood_share" in a.working and "unosat_share" in a.working
-    b = P.area_answer(conn, "Which LGAs flooded most in 2020?", "", "en", "state", "NG034", TODAY)
-    assert b.text.startswith("*Open-floodwater share of normally dry cropland (radar): the 23 LGAs of Sokoto State, 2020*")
-    assert "No UN satellite flood map covers Sokoto for 2020" in b.text and [s["key"] for s in b.specs] == ["flood"]
+    assert a.found and a.level == "lga" and a.year == 2022 and a.measure == "gfm_union_share"
+    assert a.text.startswith("*Flooding: Sokoto State* — experimental")
+    parts = a.text.split("\n\n")
+    assert parts[1].startswith("In 2022, radar saw about") or parts[1].startswith("No floodwater was seen on Sokoto State")
+    assert "In 2022, radar passes saw" in a.text and "UNOSAT's event map of 1–25 October 2022" in a.text
+    assert "They measure differently; the larger is closer to what people experienced." in a.text
+    assert "Radar can't judge" in a.text and "Kasafi's own radar check" in a.text
+    assert "Contains modified Copernicus Emergency Management Service information [2015–" in a.text
+    assert "not an official flood warning" in a.text and "against its usual" not in a.text
+    assert [s["key"] for s in a.specs] == ["gfm"]
     c = P.area_answer(conn, "Which LGAs flood most?", "", "en", "state", "NG034", TODAY)
-    assert c.year == 2024 and c.specs[0]["key"] == "flood_map"          # no year: the latest year with an official map
+    assert c.specs and c.specs[0]["key"] == "gfm" and "too few clear images" not in c.text
 
 
 def test_rain_by_ward_says_the_wards_share_the_lga_figure(conn) -> None:

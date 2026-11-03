@@ -42,11 +42,23 @@ QUESTIONS = {
 STATE_QUESTIONS = {
     "flood_map": {"en": "Share of cropland inside the UN flood map in {year} across Sokoto State",
                   "ha": "Kashin gonaki a cikin taswirar ambaliya ta MDD a {year} a faɗin Jihar Sokoto"},
-    "flood": {"en": "Which LGAs had the largest share of cropland flooded in {year}?",
-              "ha": "Waɗanne ƙananan hukumomi ne suka fi kashin gonakin da ambaliya ta rufe a {year}?"},
+    "flood": {"en": "Which LGAs had the largest share of land flooded in {year}?",
+              "ha": "Waɗanne ƙananan hukumomi ne suka fi kashin ƙasar da ambaliya ta rufe a {year}?"},
     "greenness": {"en": "Which LGAs were greenest in the {year} rainy season?",
                   "ha": "Waɗanne ƙananan hukumomi ne suka fi koriya a daminar {year}?"},
 }
+
+
+def flood_spec(key: str, spec: dict) -> dict:
+    """Flood questions are answered from Copernicus GFM (app/place/flood_record.py): the ranking is its measure."""
+    return P.MEASURES["gfm"] if key == "flood" else spec
+
+
+def latest_flood_year(years: list[int], today: date) -> int:
+    """The radar season rule, not MODIS's: the latest season whose floods are in (flood_record.complete)."""
+    from app.place.flood_record import complete
+    done = [y for y in years if complete(y, today)]
+    return max(done) if done else max(years)
 
 
 def main() -> None:
@@ -63,11 +75,15 @@ def main() -> None:
         picked = rnd.sample(lgas, min(a.lgas, len(lgas)))
         n = 0
         for key, spec in P.MEASURES.items():
+            if key == "gfm":
+                continue
+            spec = flood_spec(key, spec)
             years = P.years_loaded(conn, spec["measure"], "ward")
             if not years:
                 continue
             for pcode in picked:
-                year = 0 if spec["first"] == 0 else P.headline_year(conn, spec["measure"], "ward", years, today)[0]
+                year = 0 if spec["first"] == 0 else latest_flood_year(years, today) if key == "flood" else \
+                    P.headline_year(conn, spec["measure"], "ward", years, today)[0]
                 rows = P.rows_for(conn, spec["measure"], "ward", year, pcode)
                 cut = P.low_data_cut(rows, spec["measure"])
                 ranked = sorted([r for r in rows if r[2] is not None and (r[3] is None or r[3] > cut)], key=lambda r: -r[2])
@@ -86,7 +102,7 @@ def main() -> None:
                                              "must_not": ["never flooded", "ba ta taɓa", "NDVI index"]}})
         # the state: LGAs compared
         for key, qs in STATE_QUESTIONS.items():
-            spec = P.MEASURES[key]
+            spec = flood_spec(key, P.MEASURES[key])
             years = P.years_loaded(conn, spec["measure"], "lga")
             for year in [y for y in (2022, 2024) if y in years][:2]:
                 rows = P.rows_for(conn, spec["measure"], "lga", year, None)
@@ -116,7 +132,7 @@ def main() -> None:
                     break
         # low data: a measure-year where some wards fall under the cut
         for key in ("greenness", "flood", "bare"):
-            spec = P.MEASURES[key]
+            spec = flood_spec(key, P.MEASURES[key])
             for year in P.years_loaded(conn, spec["measure"], "ward"):
                 for pcode in picked:
                     rows = P.rows_for(conn, spec["measure"], "ward", year, pcode)

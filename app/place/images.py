@@ -319,7 +319,7 @@ def area_map(conn, s: dict, lang: str, today: date | None = None) -> MapImage | 
         recs = conn.execute("SELECT pcode, name, ST_AsBinary(geom) FROM lga").fetchall()
     gdf = gpd.GeoDataFrame({"code": [r[0] for r in recs], "name": [r[1] for r in recs]},
                            geometry=[wkb.loads(bytes(r[2])) for r in recs], crs="EPSG:4326")
-    ramp = {"greenness": AREA_RAMP, "flood": FLOOD_RAMP, "flood_map": FLOOD_RAMP, "water": FLOOD_RAMP,
+    ramp = {"greenness": AREA_RAMP, "flood": FLOOD_RAMP, "gfm": FLOOD_RAMP, "flood_map": FLOOD_RAMP, "water": FLOOD_RAMP,
             "bare": BARE_RAMP, "rain": RAIN_RAMP}[key]
     have = sorted(v for c, v in vals.items() if c in set(gdf["code"]))
     if not have:

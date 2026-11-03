@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from app.place import fit as fitting
+from app.place import flood_record
 from app.place.area import STATE
 
 log = logging.getLogger(__name__)
@@ -37,6 +38,13 @@ MEASURES = {
               "ha": "ruwan ambaliya a fili da radar ta gani a gonakin da a kullum suka bushe, ƙaramin kiyasi (Sentinel-1, "
                     "mita 200, hotunan Agusta–Oktoba: yana rasa ruwa a ƙarƙashin shuke-shuke da ambaliya tsakanin hotuna)",
               "high_en": "most open floodwater", "low_en": "least", "high_ha": "mafi yawan ruwan ambaliya a fili", "low_ha": "mafi ƙaranci"},
+    "gfm": {"measure": "gfm_union_share", "first": 2015, "pct": True, "fmt": "{:.1%}",
+            "en": "share of land under floodwater at some point in the season (Copernicus GFM, Sentinel-1 radar, "
+                  "read at 200 m; built-up land, dense trees and dry sand are excluded by GFM)",
+            "ha": "kashin ƙasar da ruwan ambaliya ya rufe a wani lokaci a daminar (Copernicus GFM, radar Sentinel-1, "
+                  "mita 200; GFM ba ta tantance wuraren gine-gine, bishiyoyi masu yawa da yashi)",
+            "high_en": "most land under water", "low_en": "least", "high_ha": "mafi yawan ƙasa ƙarƙashin ruwa",
+            "low_ha": "mafi ƙaranci"},
     "flood_map": {"measure": "unosat_share", "first": 2022, "pct": True, "fmt": "{:.0%}",
                   "en": "share of cropland inside the UN satellite flood map (UNOSAT, VIIRS 375 m)",
                   "ha": "kashin gonakin da ke cikin taswirar ambaliya ta tauraron ɗan adam ta MDD (UNOSAT, mita 375)",
@@ -110,6 +118,7 @@ W = {
         "summary_noyear": "Across {area}, the {short} ranges from {lo} ({lo_unit}) to {hi} ({hi_unit}); the median is "
                           "{med}. {high_word}: {top}. {low_word}: {bottom}.",
         "short": {"greenness": "peak greenness", "flood": "open-floodwater share of normally dry cropland (radar)",
+                  "gfm": "share of land under floodwater (radar)",
                   "flood_map": "share of cropland inside the UN flood map", "water": "share of cropland often under water",
                   "bare": "bare-soil share of cropland", "rain": "June–October rain"},
         # the plain first sentence
@@ -213,6 +222,7 @@ W = {
         "summary_noyear": "A {area}, {short} ya tashi daga {lo} ({lo_unit}) zuwa {hi} ({hi_unit}); matsakaici {med}. "
                           "{high_word}: {top}. {low_word}: {bottom}.",
         "short": {"greenness": "koriyar ƙololuwa", "flood": "kashin gonakin da radar ta ga ruwan ambaliya a fili",
+                  "gfm": "kashin ƙasar da ruwan ambaliya ya rufe (radar)",
                   "flood_map": "kashin gonaki a cikin taswirar ambaliya ta MDD", "water": "kashin gonakin da ruwa ke yawan rufewa",
                   "bare": "kashin ƙasa mara ciyayi a gonaki", "rain": "ruwan sama na Yuni–Oktoba"},
         "plain_green": "Mafi yawan gonakin {of} sun kasance {how} a {year}; {low} ce {unit} mafi ƙarancin koriya{rain}.",
@@ -718,6 +728,9 @@ def area_answer(conn, question: str, english: str, lang: str, level: str, unit: 
     area = (t["area_lga"].format(lga=name_of(unit)) if level == "lga" else
             t["area_state_wards"] if compare == "ward" else t["area_state"])
     of = t["of_lga"].format(lga=name_of(unit)) if level == "lga" else t["of_state"]
+    if key == "flood" and flood_record.loaded(conn):
+        return area_flood_answer(conn, lang, level, unit, compare, within, area, what=t["wards"] if compare == "ward" else
+                                 t["lgas"], today=today, year=year if year is not None else year_asked(text, today))
     loaded = years_loaded(conn, measure, compare)
     map_years = years_loaded(conn, "unosat_share", compare) if key == "flood" else []
     if not loaded:
@@ -788,6 +801,34 @@ def area_answer(conn, question: str, english: str, lang: str, level: str, unit: 
     lines.append(t["sources"].format(source="; ".join(dict.fromkeys(sources))))
     return AreaAnswer("\n\n".join(x for x in lines if x), True, "\n".join(working), partial=partial, specs=specs,
                       level=compare, unit=unit, measure=MEASURES[lead_key]["measure"], year=y)
+
+
+def area_flood_answer(conn, lang: str, level: str, unit: str, compare: str, within: str | None, area: str, what: str,
+                      today: date, year: int | None) -> AreaAnswer:
+    """An LGA's or the state's floods: its own record over all seasons (flood_record.py), then its wards (or LGAs)
+    ranked by the share of land under water at some point in the year asked or the largest flood season, with the
+    map. No MODIS season rule: the radar season has its own."""
+    from app.place.gfm import attribution
+    from app.sources.lga_names import name_of
+    t, ft = _t(lang), flood_record._t(lang)
+    head = ft["head_area"].format(area=ft["area_lga"].format(lga=name_of(unit)) if level == "lga" else ft["area_state"])
+    lines, working, y = flood_record.area_flood_lines(conn, lang, level, unit, today, year)
+    lines = [head] + lines
+    specs: list[dict] = []
+    b = block_for(conn, "gfm", compare, within, y, with_usual=False) if y else None
+    if b is not None and b.ranked:
+        lines += summary_lines(b, lang, area, what)
+        lines.append(ranking_lines(b, lang, what))
+        working += working_lines(b, lang, what, str(y))
+        specs.append({"kind": "area_map", "measure": "gfm_union_share", "key": "gfm", "year": y, "level": compare,
+                      "unit": unit})
+        lines.append(ft["map_note"].format(year=y, unit=ft["unit"][compare]))
+    lines += [budget_block(conn, lang, level, unit, today), ft["neutral"]]
+    years = [int(r[0]) for r in conn.execute("SELECT DISTINCT year FROM ward_history WHERE measure = 'gfm_union_ha' AND "
+                                             "value IS NOT NULL ORDER BY year").fetchall()]
+    lines.append(ft["sources"].format(attribution=attribution(years)))
+    return AreaAnswer("\n\n".join(x for x in lines if x), True, "\n".join(working), specs=specs, level=compare, unit=unit,
+                      measure="gfm_union_share", year=y or 0)
 
 
 def skipped_line(t: dict, lang: str, y: int, thin: list[int], unfinished: list[tuple[int, int]]) -> str:
@@ -877,6 +918,11 @@ def ward_answer(conn, question: str, english: str, lang: str, wardcode: str, tod
     ward, lga_pcode = row
     lga = name_of(lga_pcode)
     likely = t["likely"] if place.get("ward_likely") else ""
+    if key == "flood" and flood_record.loaded(conn):       # GFM first, over the whole record (flood_record.py)
+        want = year if year is not None else year_asked(text, today)
+        body, work, specs, my = flood_record.ward_flood_answer(conn, lang, wardcode, ward, lga_pcode, lga, likely, today,
+                                                               want, budget_block(conn, lang, "lga", lga_pcode, today))
+        return AreaAnswer(body, True, work, specs=specs, level="ward", unit=wardcode, measure="gfm_union_share", year=my)
     loaded = years_loaded(conn, measure, "ward")
     if not loaded:
         return AreaAnswer(t["none"].format(area=f"{ward}, {lga}"), False, level="ward", unit=wardcode, measure=measure)
