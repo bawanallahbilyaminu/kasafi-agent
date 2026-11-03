@@ -71,8 +71,8 @@ def test_parts_are_added_up_in_code_and_pre_primary_is_shown_not_added() -> None
         {"label": "public junior secondary schools", "value": "18", "cited": 2},
         {"label": "private junior secondary schools", "value": "17", "cited": 2}]}
     text, working, plain = ans.parts_block(d, _evidence(), ["Dange Shuni"], "en")
-    assert "Total (schools in Dange Shuni LGA): *154*, added up by Kasafi from the 4 parts above." in text
-    assert "public pre-primary schools: 20 (page 26) – counted with primary: not added" in text
+    assert text.startswith("Total (schools in Dange Shuni LGA): *154*, added up by Kasafi from the 4 parts below.")
+    assert "Not added (counted with primary: not added):\n• public pre-primary schools: 20 (page 26)" in text
     assert working == "Total, calculated in code: 91 + 28 + 18 + 17 = 154" and plain.endswith("total 154")
     d["parts"][1]["label"] = "public primary schools (includes pre-primary)"        # a note, not a pre-primary part
     assert "*154*" in ans.parts_block(d, _evidence(), ["Dange Shuni"], "en")[0]
@@ -93,7 +93,8 @@ def test_the_documents_own_per_level_note_keeps_private_parts_out_of_the_sum_wha
                    {"label": "private junior secondary schools", "value": "17", "cited": 2}]}
     text, working, _ = ans.parts_block(d, ev, ["Dange Shuni"], "en")
     assert working == "Total, calculated in code: 91 + 18 = 109"
-    assert "private primary schools: 28 (page 31) – not added: the census counts a private school at each level" in text
+    assert "Not added (the census counts a private school at each level it offers):\n• private primary schools: 28 (page 31)\n" in text
+    assert text.count("counts a private school") == 1                 # the reason once, not on every line
     del ev[4]                                       # no such note in the evidence: the writer's parts are added
     assert ans.parts_block(d, ev, ["Dange Shuni"], "en")[1].endswith("= 154")
 
@@ -107,8 +108,8 @@ def test_the_same_school_counted_at_each_level_is_shown_not_added() -> None:
         {"label": "private schools with junior secondary classes", "value": "17", "cited": 2, "add": False,
          "why": "a private school offering several levels is counted at each"}]}
     text, working, _ = ans.parts_block(d, _evidence(), ["Dange Shuni"], "en")
-    assert "Total (public schools in Dange Shuni LGA): *109*, added up by Kasafi from the 2 parts above." in text
-    assert "private schools with primary classes: 28 (page 31) – not added: a private school offering" in text
+    assert text.startswith("Total (public schools in Dange Shuni LGA): *109*, added up by Kasafi from the 2 parts below.")
+    assert "Not added (a private school offering several levels is counted at each):\n• private schools with primary classes: 28" in text
     assert working == "Total, calculated in code: 91 + 18 = 109"
 
 
@@ -154,10 +155,31 @@ def test_each_change_has_its_own_switch(monkeypatch) -> None:
     q = "How many total primary, junior secondary, senior secondary and IQS schools are in Dange Shuni LGA?"
     assert ans._not_found(None, _plan(q), "en", None, {}, gap=False).text.startswith("The state budget doesn't show")
     assert "X not Y" not in U.system_prompt(off) and "X not Y" in U.system_prompt(make_settings())
-    assert "rain fell in a past season" not in U.system_prompt(make_settings())        # held back: off by default
-    assert "rain fell in a past season" in U.system_prompt(make_settings(kasafi_past_rain_rule=True))
+    assert "rain fell in a past season" not in U.system_prompt(make_settings(kasafi_past_rain_rule=False))
+    assert "rain fell in a past season" in U.system_prompt(make_settings())
     assert "6o." in ans.ANSWER_SYSTEM and "6o." not in ans.RULE_6O.sub("", ans.ANSWER_SYSTEM)
-    assert not make_settings().kasafi_past_rain_rule and make_settings().kasafi_answer_check
+    assert make_settings().kasafi_past_rain_rule and make_settings().kasafi_answer_check
+
+
+def test_counts_by_category_lead_with_the_total_in_the_writers_sentence_with_codes_figure() -> None:
+    sn = "Table 3.6\nLGA\nSOKOTO NORTH 23 45,939 23,652 51% 14 1,759 787 45% 47,698 51%"
+    jss = "Table 3.10\nLGA\nSOKOTO NORTH 23 30,866 17,914 58% 8 642 327 51% 31,508 58%"
+    sss = "Table 3.14\nLGA\nSOKOTO NORTH 14 26,096 14,784 57% 6 459 170 37%"
+    note = "Table 2.2: Number of Private schools by level\nSchools with primary classes 203"
+    ev = {n: ans.Evidence(n, "asc", ASC.name, 2024, p, "text", t)
+          for n, (p, t) in enumerate(((31, sn), (44, jss), (53, sss), (21, note)), start=1)}
+    d = {"total_of": "public schools", "total_sentence": "Sokoto North had {total} public schools in 2023/24.",
+         "parts": [{"label": "public primary", "value": "23", "cited": 1},
+                   {"label": "public junior secondary", "value": "23", "cited": 2},
+                   {"label": "public senior secondary", "value": "14", "cited": 3},
+                   {"label": "private primary", "value": "14", "cited": 1},
+                   {"label": "private junior secondary", "value": "8", "cited": 2},
+                   {"label": "private senior secondary", "value": "6", "cited": 3}]}
+    text, working, _ = ans.parts_block(d, ev, ["Sokoto North"], "en")
+    lines = text.splitlines()
+    assert lines[0] == "Sokoto North had *60* public schools in 2023/24." and lines[2].startswith("• public primary: 23")
+    assert text.index("public senior secondary: 14") < text.index("Not added") < text.index("private primary: 14")
+    assert text.count("counts a private school") == 1 and working.endswith("23 + 23 + 14 = 60")
 
 
 def test_the_progress_line_names_what_is_checked_never_several_sources() -> None:

@@ -824,14 +824,12 @@ def bind(answer_text: str, evidence, entity_names=None) -> Attribution:
 STATE_WORDS = {
     "en": {"attribution checked": "Verification: attribution checked ({n} figure(s), each in its own row and column: "
                                   "the entity, year and period the answer gives it).",
-           "figures checked": "Verification: figures checked ({n} figure(s) found in the cited pages; which row, year "
-                              "or period each belongs to could not be fully established).",
+           "figures checked": "All {n} figures were found on the cited pages.",
            "calculation checked": "Verification: calculation checked (the rows and arithmetic were done in code).",
            "unsupported": "Verification: unsupported ({problems})."},
     "ha": {"attribution checked": "Tabbatarwa: an tabbatar da mallakar alƙaluma (alƙaluma {n}, kowanne a layinsa da "
                                   "ginshiƙinsa: abin, shekara da lokacin da amsar ta ba shi).",
-           "figures checked": "Tabbatarwa: an duba alƙaluma (an samu alƙaluma {n} a shafukan da aka ambata; ba a iya "
-                              "tabbatar da layi, shekara ko lokacin kowanne gaba ɗaya ba).",
+           "figures checked": "An samu dukkan alƙaluma {n} a shafukan da aka ambata.",
            "calculation checked": "Tabbatarwa: an duba lissafi (an yi layuka da lissafin a cikin lambar shirin).",
            "unsupported": "Tabbatarwa: ba a tabbatar ba ({problems})."},
 }

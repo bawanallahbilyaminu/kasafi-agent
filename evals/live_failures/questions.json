@@ -24,6 +24,21 @@
    "history": [{"question": "How many people were affected by floods in Sokoto State in 2024?", "answer": "*Flooding: Sokoto State* — experimental\n\nIn 2024, radar saw about 4,120 ha of Sokoto State under water on its biggest pass (27 August 2024), and 26,000 ha at some point in the season."}],
    "text": "I asked about people, not hectares of land",
    "note": "E as a correction"},
-  {"id": "lfA_ha", "lang": "ha", "understand": true, "text": "Makarantu nawa ne a Dange Shuni?", "note": "A in Hausa"}
+  {"id": "lfA_ha", "lang": "ha", "understand": true, "text": "Makarantu nawa ne a Dange Shuni?", "note": "A in Hausa"},
+  {"id": "lfB_ha", "lang": "ha", "understand": true,
+   "history": [{"question": "Makarantu nawa ne a Dange Shuni?", "answer": "Ƙaramar Hukumar Dange Shuni tana da makarantun gwamnati 117 a 2023/24: firamare 91, ƙaramar sakandare 18, babbar sakandare 8."}],
+   "text": "Ina nufin duka makarantun: firamare, ƙaramar sakandare, babbar sakandare da IQS",
+   "note": "B in Hausa: IQS only statewide (123 primary, p22), said in one line"},
+  {"id": "lfSN", "lang": "en", "understand": true, "text": "How many schools are in Sokoto North",
+   "note": "Live after the 3 Nov deploy: the main answer listed only private JSS 8 and SSS 6; the total was in show working. ASC: public 23 (p31) + 23 (p44) + 14 (p53) = 60; private 14, 8, 6 not added"},
+  {"id": "lfSN_ha", "lang": "ha", "understand": true, "text": "Makarantu nawa ne a Sokoto North?", "note": "Sokoto North in Hausa"},
+  {"id": "lfSNB", "lang": "en", "understand": true,
+   "history": [{"question": "How many schools are in Sokoto North", "answer": "Sokoto North had 60 public schools in 2023/24: 23 primary, 23 junior secondary and 14 senior secondary."}],
+   "text": "I mean all the schools, primary, junior secondary, senior secondary and IQS",
+   "note": "The check stopped an invented IQS figure for Sokoto North: the census has IQS only for the whole state (123 primary, p22)"},
+  {"id": "lfSNB_ha", "lang": "ha", "understand": true,
+   "history": [{"question": "Makarantu nawa ne a Sokoto North?", "answer": "Sokoto North tana da makarantun gwamnati 60 a 2023/24: firamare 23, ƙaramar sakandare 23, babbar sakandare 14."}],
+   "text": "Ina nufin duka makarantun: firamare, ƙaramar sakandare, babbar sakandare da IQS",
+   "note": "The same in Hausa"}
  ]
 }

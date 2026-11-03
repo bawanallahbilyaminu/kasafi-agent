@@ -297,7 +297,10 @@ ANSWER_SYSTEM = (
     "asked in \"parts\": {\"label\": \"<what it is, e.g. public junior secondary schools>\", \"value\": \"<copied "
     "exactly from that place's row>\", \"cited\": <evidence number>}, and say in \"total_of\" what they add up "
     "to (e.g. 'schools in Dange Shuni LGA: primary, junior and senior secondary, public and private'). Never write "
-    "the total yourself: code adds the parts marked \"add\": true and shows the sum. Don't list the parts again in "
+    "the total yourself: code adds the parts marked \"add\": true and shows the sum; give \"total_sentence\", one "
+    "sentence with {total} where the sum goes (e.g. 'Sokoto North had {total} public schools in 2023/24'). The reply "
+    "is built as: that sentence, the parts, then your summary, so the summary says only what the parts can't "
+    "(a level given only for the state, what isn't counted), never their figures again. Don't list the parts again in "
     "items. Never count a thing twice: a table that combines levels is not another part; pre-primary (ECCD, "
     "kindergarten, nursery) is counted with primary in school censuses ('Pre-Primary and Primary' schools); and "
     "when the document counts the same school at each level it offers (e.g. private 'schools with primary "
@@ -351,7 +354,7 @@ ANSWER_SYSTEM = (
     "Reply with JSON only: {\"summary\": \"<one line, in the requested language>\", \"items\": [\"<...>\"], "
     "\"found\": \"full\"|\"partial\"|\"none\", \"cited\": [<evidence numbers used>], "
     "\"parts\": [{\"label\": \"<...>\", \"value\": \"<...>\", \"cited\": <n>, \"add\": true|false, \"why\": \"<if "
-    "not added>\"}], \"total_of\": \"<what the added parts add up to>\", "
+    "not added>\"}], \"total_of\": \"<what the added parts add up to>\", \"total_sentence\": \"<with {total}>\", "
     "\"calculation\": null or {\"description\": \"<what it is, e.g. Sokoto year-on-year All Items inflation, "
     "September 2026>\", \"formula\": \"<arithmetic over the input names only: a growth rate is (new / old - 1) * 100, e.g. "
     "(sep26 / sep25 - 1) * 100; a share is part / whole * 100, with no - 1; a ratio is a / b>\", "
@@ -541,6 +544,7 @@ class Answer:
     deep: object | None = None                              # a deep analysis (app/agent/deep.py): its brief on request
     understanding: object | None = None                     # the understanding step's reading, for the trace
     checks: list[dict] = field(default_factory=list)        # the answer check's verdicts, round by round (trace)
+    code_block: str = ""                                    # code's total and parts: always kept in the main answer
 
 
 CONVERTED: dict[str, str] = {}       # doc id -> original format, for documents converted from Word-type files
@@ -2031,7 +2035,9 @@ async def checked_answer(a: Answer, question: str, lang: str, conn, kw: dict, t_
                 a2.understanding = u2 if u2 is not None else a2.understanding
                 if v2.verdict in ("pass", "skipped"):
                     return a2
-                if a2.found or not a.found:          # the second draft, unless it found nothing and the first did
+                # the second draft is the base, unless it found nothing or refused and the first didn't (3 Nov: s01's
+                # answer from the topic sweep was lost when the second round's page path refused)
+                if (a2.found and a2.verified) or not (a.found and a.verified):
                     best, best_v = a2, v2
                 best.checks = a2.checks
             elif a2 is not None and not a2.found and not a.found:
@@ -2046,8 +2052,7 @@ async def checked_answer(a: Answer, question: str, lang: str, conn, kw: dict, t_
         # attachments that belong to them: the path's maps (a code answer's map is its data), the cited pages still
         # carrying a kept figure (their crops), the calculation offer; nothing when the subject was wrong
         text, supported, kept = answer_check.partial_answer(best, best_v, lang)
-        note = answer_check.NOTE.get(lang, answer_check.NOTE["en"]).format(
-            why="; ".join([*best_v.rules, *best_v.contradictions, *best_v.missing][:3]) or best_v.feedback)
+        note = answer_check.working_note(best, best_v, lang, supported)
         keep_all = supported and not best_v.wrong_subject
         out = replace(best, text=text, partial=True, exact=text, found=supported, cited=kept,
                       maps=best.maps if keep_all else [], offer=best.offer if keep_all else None,
@@ -2876,15 +2881,22 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
             nums = re.findall(r"\d[\d,]*(?:\.\d+)?", body)
             return bool(nums) and set(nums) <= values
         items = [i for i in items if not repeats(i)]
-    shown = {**d, "summary": drop_verdicts(str(d.get("summary") or d.get("answer") or ""), q_all), "items": items}
+    summary_text = drop_verdicts(str(d.get("summary") or d.get("answer") or ""), q_all)
+    if parts_text and parts_working:   # a total leads: the summary keeps only what the parts don't already say
+        values = {p.value for p in checked_parts(d, by_n, [])} | set(re.findall(r"= ([\d,.]+)", parts_working))
+        summary_text = " ".join(s for s in _SENTENCE.split(summary_text) if s.strip() and not repeats(s))
+    shown = {**d, "summary": summary_text, "items": items}
     rendered = no_back_reference(plain(render_answer(shown, lang)))
     if budget is None:          # 'doesn't print X' only after the whole document was searched for X
         rendered, softened = checked_absence(conn, plan, evidence, cited, rendered, lang)
         if softened:
             log.info("absence claim softened: other pages of the cited documents may cover it")
     if parts_text:              # code's own lines: after the absence filter, which must never drop the total
-        head, _, rest = rendered.partition("\n\n")
-        rendered = f"{head}\n\n{parts_text}" + (f"\n\n{rest}" if rest else "")
+        if parts_working:       # counts by category: the total, the breakdown, what isn't added, then the rest
+            rendered = parts_text + (f"\n\n{rendered}" if rendered.strip() else "")
+        else:
+            head, _, rest = rendered.partition("\n\n")
+            rendered = f"{head}\n\n{parts_text}" + (f"\n\n{rest}" if rest else "")
         cited = list({e.n: e for e in cited + [p.ev for p in checked_parts(d, by_n, []) if p.ev is not None]}.values())
         cited.sort(key=lambda e: e.n)
         sources = cited_sources(conn, cited)
@@ -2919,14 +2931,15 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
     state = "calculation checked" if budget is not None else ("figures checked" if partly or names_bad else att.state)
     return Answer(f"{body}\n\n{tail}", True, True, cited, plan, t,
                   partial=found == "partial" or partly, exact=exact, acquired=acq, latest=latest, sources=sources,
-                  offer=offer, budget=budget, working=working, verification=state, attribution=problems)
+                  offer=offer, budget=budget, working=working, verification=state, attribution=problems,
+                  code_block=parts_text)
 
 
 PARTS_WORDS = {
-    "en": {"total": "Total ({what}): *{total}*, added up by Kasafi from the {n} parts above.",
+    "en": {"total": "Total ({what}): *{total}*, added up by Kasafi from the {n} parts below.",
            "unchecked": "No total: {labels} could not be found in the cited row, so the parts aren't added up.",
            "working": "Total, calculated in code: {sum} = {total}"},
-    "ha": {"total": "Jimilla ({what}): *{total}*, Kasafi ya haɗa daga sassa {n} da ke sama.",
+    "ha": {"total": "Jimilla ({what}): *{total}*, Kasafi ya haɗa daga sassa {n} da ke ƙasa.",
            "unchecked": "Babu jimilla: ba a samu {labels} a layin da aka ambata ba, don haka ba a haɗa sassan ba.",
            "working": "Jimilla, an lissafa a lambar shirin: {sum} = {total}"},
 }
@@ -2937,7 +2950,7 @@ PARTS_WORDS = {
 NOT_ADDED = re.compile(r"(?i)pre[\s-]*primary|\beccd\b|\becce\b|kindergarten|nursery|early\s+child|"
                        r"kafin\s+firamare|reno")
 NOT_ADDED_WORDS = {"en": "counted with primary: not added", "ha": "an ƙidaya su tare da firamare: ba a haɗa ba"}
-NOT_ADDED_WHY = {"en": "not added: {why}", "ha": "ba a haɗa ba: {why}"}
+NOT_ADDED_HEAD = {"en": "Not added ({why}):", "ha": "Ba a haɗa ba ({why}):"}
 PER_LEVEL_NOTE = re.compile(r"(?i)\bschools?\s+with\s+(?:pre[\s-]*primary|primary|junior|senior)[\w\s-]{0,30}classes\b")
 PRIVATE = re.compile(r"(?i)\bprivate\b|masu\s+zaman\s+kansu|na\s+kashin\s+kai")
 PER_LEVEL_WHY = {"en": "the census counts a private school at each level it offers",
@@ -3016,28 +3029,34 @@ def parts_block(d: dict, by_n: dict, names: list[str], lang: str) -> tuple[str, 
             elif not pre_primary_only(p.label):
                 p.add, p.why = True, ""
 
-    def aside(p: Part) -> str:
-        if p.add:
-            return ""
-        if not p.why:
-            return " – " + NOT_ADDED_WORDS.get(lang, NOT_ADDED_WORDS["en"])
-        return " – " + NOT_ADDED_WHY.get(lang, NOT_ADDED_WHY["en"]).format(why=p.why.rstrip("."))
-    bullets = [f"• {p.label}: {p.value}" + (f" ({page} {p.ev.page})" if p.ev is not None else "") + aside(p)
-               for p in parts]
-    plain_parts = "; ".join(f"{p.label}: {p.value}" for p in parts)
+    def bullet(p: Part) -> str:
+        return f"• {p.label}: {p.value}" + (f" ({page} {p.ev.page})" if p.ev is not None else "")
     added = [p for p in parts if p.add]
+    # the parts not added, grouped: each reason said once, above its lines, never on every line
+    groups: dict[str, list[Part]] = {}
+    for p in parts:
+        if not p.add:
+            groups.setdefault(p.why.rstrip(".") or NOT_ADDED_WORDS.get(lang, NOT_ADDED_WORDS["en"]), []).append(p)
+    aside = "\n\n".join(NOT_ADDED_HEAD.get(lang, NOT_ADDED_HEAD["en"]).format(why=why) + "\n"
+                        + "\n".join(bullet(p) for p in ps) for why, ps in groups.items())
+    breakdown = "\n".join(bullet(p) for p in added)
+    plain_parts = "; ".join(f"{p.label}: {p.value}" for p in parts)
     bad = [p.label for p in added if not p.ok]
     if bad:
-        return "\n".join(bullets) + "\n\n" + w["unchecked"].format(labels=", ".join(bad)), "", plain_parts
+        return "\n\n".join(x for x in (breakdown, w["unchecked"].format(labels=", ".join(bad)), aside) if x), "", plain_parts
     if len(added) < 2:
-        return "\n".join(bullets), "", plain_parts
+        return "\n\n".join(x for x in (breakdown, aside) if x), "", plain_parts
     nums = [_as_number(p.value) for p in added]
     total = sum(nums)
     shown = f"{total:,.0f}" if all(n == int(n) for n in nums) else f"{total:,.2f}"
     what = str(d.get("total_of") or "").strip()[:160] or "-"
     working = w["working"].format(sum=" + ".join(p.value for p in added), total=shown)
-    return ("\n".join(bullets) + "\n\n" + w["total"].format(what=what, total=shown, n=len(added)), working,
-            f"{plain_parts}; total {shown}")
+    # the total first, in the writer's sentence with code's figure ('Sokoto North had {total} public schools in
+    # 2023/24'): the writer never computes it; then the breakdown, then what isn't added and why
+    sentence = str(d.get("total_sentence") or "").strip()[:200]
+    lead = sentence.replace("{total}", f"*{shown}*") if "{total}" in sentence else \
+        w["total"].format(what=what, total=shown, n=len(added))
+    return ("\n\n".join(x for x in (lead, breakdown, aside) if x), working, f"{plain_parts}; total {shown}")
 
 
 ACRONYM = re.compile(r"(?<![\w-])[A-Z][A-Z0-9]*[A-Z](?:[&/-][A-Z0-9]+)*(?:['’]?s)?(?![\w-])")
@@ -3120,11 +3139,15 @@ def settle_verification(a: "Answer", lang: str) -> None:
             a.verification = "calculation checked" if a.found else "unsupported"
     if a.found and a.verification:
         n = len([b for b in attribution.claims_from(a.exact or a.text)]) if a.verification != "calculation checked" else 0
-        if a.verification == "figures checked":        # the figures actually found in the cited pages (3 Nov: '0
-            figs, found = answer_check.found_count(a)  # figure(s) found' was shown under a correct figure)
-            n = found if figs else n
         line = attribution.state_line(a.verification, lang, n, a.attribution)
-        a.working = f"{a.working}\n\n{line}" if a.working else line
+        if a.verification == "figures checked":        # the figures actually found on the cited pages, in plain words
+            figs, found = answer_check.found_count(a)
+            n = found if figs else n
+            line = attribution.state_line(a.verification, lang, n, a.attribution) if n else ""
+            if figs and found < figs:
+                line = answer_check.FOUND_SOME.get(lang, answer_check.FOUND_SOME["en"]).format(found=found, figs=figs)
+        if line:
+            a.working = f"{a.working}\n\n{line}" if a.working else line
     titles = list(dict.fromkeys(e.title for e in (a.cited or []) if e.doc_id in CONVERTED))
     if titles:                             # a converted Word original: its page numbers are the PDF's
         note = CONVERTED_WORKING.get(lang, CONVERTED_WORKING["en"]).format(titles="; ".join(titles))

@@ -119,6 +119,42 @@ def test_a_missing_item_whose_figure_is_printed_is_not_called_missing() -> None:
         ["IQS schools in Dange Shuni"]
 
 
+def test_one_bad_claim_goes_and_codes_total_and_parts_stay_first_in_the_main_answer() -> None:
+    """Live, Sokoto North: the check stopped an invented IQS figure and the fallback left only private 8 and 6: the
+    public 23, 23, 14 and the total 60 shared figures with the check's complaint, and 60 stayed in show working."""
+    block = ("Sokoto North had *60* public schools in 2023/24.\n\n• public primary: 23 (page 19)\n"
+             "• public junior secondary: 23 (page 44)\n• public senior secondary: 14 (page 53)\n\n"
+             "Not added (the census counts a private school at each level it offers):\n• private junior secondary: 8 "
+             "(page 44)\n• private senior secondary: 6 (page 53)")
+    page = "SOKOTO NORTH 23 45,939 14\nSOKOTO NORTH 23 30,866 8\nSOKOTO NORTH 14 26,096 6"
+    a = _answer(f"{block}\n\nSokoto North has 31 IQS schools.\n\n📄 *Sources:* ASC, p. 19", cited_text=page)
+    a.code_block, a.working = block, "Total, calculated in code: 23 + 23 + 14 = 60"
+    v = ck.Verdict("fail", unsupported=["31 IQS schools, set against the 23, 23, 14 and 60 public schools"],
+                   missing=["IQS schools in Sokoto North"], round=2)
+    text, ok, _ = ck.partial_answer(a, v, "en")
+    assert ok and text.startswith("Sokoto North had *60* public schools in 2023/24.")
+    assert "public primary: 23" in text and "public senior secondary: 14" in text and "private senior secondary: 6" in text
+    assert "31" not in text and "Not found in the documents I read: IQS schools in Sokoto North." in text
+    assert ck.working_note(a, v, "en", True).endswith("One part, IQS schools in Sokoto North, isn't in the documents, "
+                                                      "so it was left out.")
+
+
+def test_the_writer_gets_a_try_before_any_fallback_and_code_answers_keep_place_and_level() -> None:
+    v = ck.settle(_answer("x"), ck.Verdict("fail", unsupported=["y"]), [], 1)
+    assert v.verdict == "revise"
+    place = ans.Answer("Bodinga wards …", True, True, exact="x", verification="calculation checked")
+    v = ck.settle(place, ck.Verdict("revise", subject={"place": False, "level": False, "topic": True}), [], 1)
+    assert v.verdict == "pass" and not v.wrong_subject
+    v = ck.settle(place, ck.Verdict("revise", subject={"topic": False}), [], 1)
+    assert v.verdict == "revise" and v.wrong_subject
+
+
+def test_show_working_says_it_in_plain_words() -> None:
+    from app.agent.attribution import state_line
+    assert state_line("figures checked", "en", 4) == "All 4 figures were found on the cited pages."
+    assert ck.FOUND_SOME["en"].format(found=3, figs=4) == "3 of the 4 figures were found on the cited pages."
+
+
 def test_a_draft_whose_only_fault_is_a_gap_is_kept_with_its_code_total_and_the_gap_said() -> None:
     a = _answer("• public primary schools: 91 (page 19)\n• public junior secondary schools: 14 (page 19)\n\n"
                 "Total (schools): *105*, added up by Kasafi from the 2 parts above.\n\n📄 *Sources:* ASC, p. 19")
@@ -191,7 +227,7 @@ def test_a_revise_round_reads_again_and_a_second_failure_sends_only_what_is_supp
     # both drafts were about another place: nothing of them is sent, only what is missing, in code's words
     assert a.text == "I couldn't give a checked answer to that: whether Wamakko is listed. The documents I read were " \
                      "Sokoto State Annual School Census 23-24 Report."
-    assert a.partial and "Answer check: the draft wasn't sent as written" in a.working and not a.maps
+    assert a.partial and "wasn't about what you asked, so it wasn't sent" in a.working and not a.maps
     assert [c["verdict"] for c in a.checks] == ["revise", "fail"]
 
 

@@ -119,10 +119,10 @@ class Settings(BaseSettings):
     # added in code from separate counts and the place's figures on the page path; the follow-up rules in the
     # understanding prompt (a clarification keeps the subject, 'X not Y', 'how many' = all levels, what one named
     # report finds = statistics) with the money-only LGA note and 'a correction is never a recheck'; past rain as
-    # place history (held back until the old-vs-new comparison is done)
+    # place history (on since the old-vs-new comparison: without it, ward rain rankings went to the forecasts)
     kasafi_read_wide: bool = True
     kasafi_followup_rules: bool = True
-    kasafi_past_rain_rule: bool = False
+    kasafi_past_rain_rule: bool = True
     # every part the user names ('primary, JSS, SSS and IQS') is answered: its figure, or one line giving the higher
     # level's figure when the documents have it only for the state, or saying it isn't there (compose rule 6p; the
     # answer check's named_part_missing rule)

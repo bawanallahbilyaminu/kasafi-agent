@@ -750,7 +750,8 @@ def area_answer(conn, question: str, english: str, lang: str, level: str, unit: 
     of = t["of_lga"].format(lga=name_of(unit)) if level == "lga" else t["of_state"]
     if key == "flood" and flood_record.loaded(conn):
         return area_flood_answer(conn, lang, level, unit, compare, within, area, what=t["wards"] if compare == "ward" else
-                                 t["lgas"], today=today, year=year if year is not None else year_asked(text, today))
+                                 t["lgas"], today=today, year=year if year is not None else year_asked(text, today),
+                                 which=bool(WHICH_Q.search(text)))
     loaded = years_loaded(conn, measure, compare)
     map_years = years_loaded(conn, "unosat_share", compare) if key == "flood" else []
     if not loaded:
@@ -823,8 +824,11 @@ def area_answer(conn, question: str, english: str, lang: str, level: str, unit: 
                       level=compare, unit=unit, measure=MEASURES[lead_key]["measure"], year=y)
 
 
+WHICH_Q = re.compile(r"(?i)\b(?:which|what\s+wards?|what\s+lgas?|rank\w*|wa[dɗ]anne|wace|wane|mafi)\b")
+
+
 def area_flood_answer(conn, lang: str, level: str, unit: str, compare: str, within: str | None, area: str, what: str,
-                      today: date, year: int | None) -> AreaAnswer:
+                      today: date, year: int | None, which: bool = False) -> AreaAnswer:
     """An LGA's or the state's floods: its own record over all seasons (flood_record.py), then its wards (or LGAs)
     ranked by the share of land under water at some point in the year asked or the largest flood season, with the
     map. No MODIS season rule: the radar season has its own."""
@@ -835,10 +839,12 @@ def area_flood_answer(conn, lang: str, level: str, unit: str, compare: str, with
     short, long, y = flood_record.area_flood_lines(conn, lang, level, unit, today, year)
     # the main answer: head, 3–5 sentences, one source line, the map; the ranking, budget lines, methods and full
     # sources are in show working (3 Nov: the answer was too long for WhatsApp)
-    lines = [head, " ".join(short), ft["source_short"]]
     work = list(long)
     specs: list[dict] = []
     b = block_for(conn, "gfm", compare, within, y, with_usual=False) if y else None
+    # 'which wards flooded most': the answer names them (the full ranking stays in show working)
+    names = summary_lines(b, lang, area, what)[0] if which and b is not None and b.ranked else ""
+    lines = [head, names, " ".join(short), ft["source_short"]]
     if b is not None and b.ranked:
         work += summary_lines(b, lang, area, what) + [ranking_lines(b, lang, what)] + working_lines(b, lang, what, str(y))
         specs.append({"kind": "area_map", "measure": "gfm_union_share", "key": "gfm", "year": y, "level": compare,

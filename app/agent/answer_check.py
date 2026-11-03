@@ -300,10 +300,14 @@ def settle(a, v: Verdict, rules: list[str], round_: int) -> Verdict:
     """The model's verdict, settled by the rules code decides: a broken code rule never passes; an answer computed
     in code is judged on its subject alone; an honest partial answer passes."""
     v.rules = rules
-    if computed_in_code(a) and (v.subject or {}).get("level") is False:
-        # code chose the level from the reading, and a short code answer keeps its full ranking in show working
-        # (3 Nov: 'which wards flooded most' was judged 'not ward-level' and rewritten, its map lost)
-        v.subject["level"] = None
+    if round_ == 1 and v.verdict == "fail":      # the writer always gets one more try with the feedback before a fallback
+        v.verdict = "revise"
+    if computed_in_code(a):
+        # code chose the place and level from the reading, and a short code answer keeps its full ranking in show
+        # working (3 Nov: 'which wards flooded most' was judged 'not ward-level', and the answer and its map lost)
+        for k in ("level", "place"):
+            if (v.subject or {}).get(k) is False:
+                v.subject[k] = None
     if computed_in_code(a) and v.verdict in ("revise", "fail") and not rules and not v.wrong_subject:
         # an answer written in code from the data (place history, hazards, budget tools): its figures and wording
         # are tested in code and the check sees only part of what code read, so it judges the subject alone (3 Nov:
@@ -411,24 +415,50 @@ NOTE = {"en": "Answer check: the draft wasn't sent as written ({why}); this answ
 def flagged_bits(v: Verdict) -> tuple[set[str], list[str]]:
     """What the check found wrong, as figures and quoted sentences: a draft line carrying one of them goes."""
     items = [*v.contradictions, *v.unclear, *v.unsupported]
-    figs = {f for i in items for f in figures_in(i)}
+    # only an unsupported item's own figures: a contradiction also names the good figure it is set against (3 Nov:
+    # Sokoto North's public 23, 23 and 14 and its total 60 went with an invented IQS figure)
+    figs = {f for i in v.unsupported for f in figures_in(i)}
     quotes = [q.strip() for i in items for q in re.findall(r"[\"“'‘]([^\"”'’]{15,})[\"”'’]", i)]
     return figs, quotes
+
+
+FOUND_SOME = {"en": "{found} of the {figs} figures were found on the cited pages.",
+              "ha": "An samu alƙaluma {found} cikin {figs} a shafukan da aka ambata."}
+WORKING_GAP = {"en": "One part, {what}, isn't in the documents, so it was left out.",
+               "ha": "Wani sashe, {what}, ba ya cikin takardun, don haka an bar shi."}
+WORKING_FIGS = {"en": "A figure that isn't on the cited pages was left out.",
+                "ha": "An cire wani adadi da ba ya cikin shafukan da aka ambata."}
+WORKING_OFF = {"en": "The first answer wasn't about what you asked, so it wasn't sent.",
+               "ha": "Amsar farko ba ta kan abin da ka tambaya ba ce, don haka ba a aika ta ba."}
+
+
+def working_note(a, v: Verdict, lang: str, kept: bool) -> str:
+    """What the check changed, in plain words for 'show working'."""
+    lines = []
+    if v.wrong_subject or not kept:
+        lines.append(WORKING_OFF.get(lang, WORKING_OFF["en"]))
+    if v.unsupported or v.contradictions or v.unclear:
+        lines.append(WORKING_FIGS.get(lang, WORKING_FIGS["en"]))
+    lines += [WORKING_GAP.get(lang, WORKING_GAP["en"]).format(what=m.rstrip(".")) for m in truly_missing(v.missing, a)[:2]]
+    return " ".join(lines)
 
 
 def partial_answer(a, v: Verdict, lang: str) -> tuple[str, bool, list]:
     """The answer sent when no draft passed, built in code (the check never writes user-facing text): the draft's
     own lines, without any line the check flagged (a figure or sentence it named as contradicted, unclear or
     unsupported) and without any figure not printed in the cited pages or computed in code, then what is missing,
-    then the sources of what is kept. Returns (text, anything supported kept, the cited pages kept: their crops go
+    then the sources of what is kept. Code's own total and parts (`code_block`) always stay, first: they are computed
+    from rows checked on their pages. Returns (text, anything supported kept, the cited pages kept: their crops go
     with it). A draft about another subject, or one that refused, keeps nothing."""
     from app.agent.answer import NOT_READ, sources_line
     refused = a.verification == "unsupported" or not a.verified
     text = ""
+    block = getattr(a, "code_block", "") or ""
     if not v.wrong_subject and not refused:
         figs, quotes = flagged_bits(v)
+        figs -= set(figures_in(block)) | set(figures_in(a.working or ""))
         keep = []
-        for ln in (a.text or "").splitlines():
+        for ln in ((a.text or "").replace(block, "") if block else (a.text or "")).splitlines():
             if ln.startswith(("📄", "_Reply", "_Ku rubuta")) or ln.strip() in NOT_READ.values():
                 continue
             parts = re.split(r"(?<!\bp\.)(?<=[.!?])\s+", ln) if not ln.lstrip().startswith("•") else [ln]
@@ -436,6 +466,7 @@ def partial_answer(a, v: Verdict, lang: str) -> tuple[str, bool, list]:
             if parts or not ln.strip():
                 keep.append(" ".join(parts))
         text = supported("\n".join(keep), a, keep_lines=True)
+        text = "\n\n".join(x for x in (block.strip(), text) if x)
         if text and (gaps := truly_missing(v.missing, a)) and not v.missing_stated:
             text += "\n\n" + MISSING.get(lang, MISSING["en"]).format(missing="; ".join(gaps[:3]).rstrip("."))
     if not text:
