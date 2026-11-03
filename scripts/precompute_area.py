@@ -1,7 +1,7 @@
 """The ward / LGA / state precompute (app/place/area.py) into ward_history. Resumable: a layer-year already in
 the table is skipped unless --force. Logs the time per layer.
 
-Usage: uv run python scripts/precompute_area.py [--layers cropland,jrc,unosat,rain,modis,s1,bsi]
+Usage: uv run python scripts/precompute_area.py [--layers cropland,jrc,unosat,rain,modis,s1,bsi,gfm]
                                                 [--years 2001-2026] [--force] [--workers 6]
 """
 
@@ -23,9 +23,9 @@ sys.stdout.reconfigure(encoding="utf-8")
 import psycopg  # noqa: E402
 
 from app.config import get_settings  # noqa: E402
-from app.place import area  # noqa: E402
+from app.place import area, gfm  # noqa: E402
 
-LAYERS = ["cropland", "jrc", "unosat", "rain", "modis", "season", "s1", "bsi"]
+LAYERS = ["cropland", "jrc", "unosat", "rain", "modis", "season", "s1", "bsi"]      # 'gfm' on request (--layers gfm)
 FIRST = {"modis": 2001, "s1": 2017, "bsi": 2017, "rain": 2001}
 
 
@@ -59,8 +59,8 @@ def main() -> None:
                       + [(u, lvl, "cropland_cells", 0, float(round(s * n)), n, area.SOURCES["cropland"])
                          for (lvl, u), (s, n) in shares.items()], today)
         logging.info("cropland: %.0fs", time.perf_counter() - t0)
-        dry = s1_ref = None
-        if "jrc" in layers or "s1" in layers:
+        dry = s1_ref = occ = rec = None
+        if "jrc" in layers or "s1" in layers or "gfm" in layers:
             t0 = time.perf_counter()
             got = area.jrc(grid)
             if got is None:
@@ -76,6 +76,23 @@ def main() -> None:
                     rows += [(u, lvl, "jrc_occurrence_median", 0, v, None, area.SOURCES["jrc"]) for (lvl, u), v in s2.items()]
                     area.save(conn, rows, today)
             logging.info("jrc: %.0fs", time.perf_counter() - t0)
+        if "gfm" in layers:                    # Copernicus GFM, the primary observed-flood source (app/place/gfm.py)
+            t_layer = time.perf_counter()
+            plain = gfm.floodplain(occ) if occ is not None else np.zeros(grid.shape, bool)
+            if a.force or not area.have(conn, "land_ha"):
+                area.save(conn, gfm.static_rows(grid, units, occ, rec, gfm.unosat_masks(grid)), today)
+            lo = max(gfm.FIRST_YEAR, yr[0]) if yr else gfm.FIRST_YEAR
+            hi = min(today.year, yr[1]) if yr else today.year
+            for year in range(lo, hi + 1):
+                # the current season is redone on every run until it has ended
+                if not a.force and area.have(conn, "gfm_union_ha", year) and (gfm.GFM_DIR / f"{year}.tif").exists() \
+                        and not (year == today.year and today < date(year, 12, 1)):
+                    continue
+                t0 = time.perf_counter()
+                rows = gfm.season(grid, units, crop, plain, year, a.workers)
+                area.save(conn, rows, today)
+                logging.info("gfm %d: %.0fs (%d rows)", year, time.perf_counter() - t0, len(rows))
+            logging.info("gfm total: %.0f min", (time.perf_counter() - t_layer) / 60)
         if "unosat" in layers and (a.force or not area.have(conn, "unosat_share")):
             t0 = time.perf_counter()
             for year, shares_y in area.unosat_shares(grid, units, crop).items():
