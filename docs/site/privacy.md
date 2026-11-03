@@ -77,6 +77,14 @@ keeps a record of each alert by hazard and LGA (what it said and how many people
 To **answer your questions about public documents**, such as Sokoto State budgets, plans and reports. That means turning
 voice notes into text, searching the documents and replying to you. Our legal basis is your **consent**. The first time
 you message Kasafi, you get a short notice, and **nothing you send goes to any AI service until you tap OK / Na yarda**.
+If you send a question before you accept, Kasafi keeps that first message **in our server's working memory only, for up
+to 30 minutes**, so it can answer it once you tap OK (checking first whether it is an emergency). It is not sent to any
+AI service before then and never written to disk; it is deleted when it is answered, after 30 minutes, or when you send
+GOGE BAYANAI NA.
+*A Hausa:* Idan kuka aiko da tambaya kafin ku amince, Kasafi yana riƙe saƙonku na farko **a ƙwaƙwalwar sabarmu kawai,
+har zuwa minti 30**, don ya amsa shi bayan kun danna OK / Na yarda (yana fara duba ko gaggawa ce). Ba a tura shi ga
+wata manhajar AI kafin nan ba, kuma ba a rubuta shi a ko'ina ba; ana goge shi idan an amsa shi, bayan minti 30, ko idan
+kuka aika GOGE BAYANAI NA.
 You can withdraw your consent at any time by sending GOGE BAYANAI NA. We also review questions Kasafi could not answer, after separating
 them from your phone number, to make it more accurate (**legitimate interest**).
 
@@ -106,6 +114,7 @@ protection terms and the NDPA's rules on transfers.
   number or ID linked to you**, so our team can check that answers are accurate.
 - **Daily usage counts:** 30 days. **Consent and language settings:** until you ask us to delete them.
 - **Location:** the exact location for up to 30 minutes, in memory only; your LGA for 90 days.
+- **A first message sent before you accept:** up to 30 minutes, in memory only (see "Why").
 - **Alert sign-ups, with your encrypted number:** until you send STOP / DAINA or DELETE MY DATA, or 90 days after
   your last message. The record of alerts sent (by hazard and LGA, with no number) is kept 90 days. When a send fails
   for some subscribers, that record also lists their **coded IDs** (not numbers) so the next round can retry only
