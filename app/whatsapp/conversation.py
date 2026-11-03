@@ -1176,6 +1176,7 @@ def _change_place(key: str, store: UserStore) -> dict:
 
 
 async def _change_draw(measure: str, area: str, place: dict, lang: str, settings: Settings) -> list[Out]:
+    from app.agent.answer import lagos_today
     from app.place import change
 
     def draw() -> list:

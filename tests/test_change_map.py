@@ -123,3 +123,26 @@ def test_the_change_rows_and_maps(conn) -> None:
         assert img is not None and img.jpeg[:2] == b"\xff\xd8"
     green = draw(conn, change.spec_for(conn, "green", "state", {}), "en")
     assert "brown = less green than usual, green = greener" in green.caption and "darkest" not in green.caption
+
+
+def test_the_draw_step_itself_runs(monkeypatch) -> None:
+    """3 Nov smoke: _change_draw failed with a NameError the mocked tests above couldn't see."""
+    from types import SimpleNamespace
+    s, store, key = _user("en")
+    seen = []
+
+    class Conn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+    monkeypatch.setattr("psycopg.connect", lambda *a, **k: Conn())
+    monkeypatch.setattr(change, "spec_for", lambda conn, m, a, p: {"kind": "area_map", "m": m, "a": a})
+
+    def render(settings, specs, lang, today):
+        seen.append((specs, today))
+        return [SimpleNamespace(caption="CAPTION", jpeg=b"jpeg")]
+    monkeypatch.setattr(C, "render_specs", render)
+    outs = asyncio.run(C._change_draw("drought", "state", {}, "en", s))
+    assert outs[0].image == b"jpeg" and outs[0].text == "CAPTION" and seen[0][0][0]["a"] == "state"
