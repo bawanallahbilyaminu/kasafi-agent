@@ -481,7 +481,8 @@ def test_a_broad_question_gets_a_deep_analysis_in_several_messages_and_the_brief
     sends = h.turn(text("Whats the state of PHCs in sokoto state", me),
                    lambda s: len([x for x in s if x[0] == "text"]) >= 5, "deep question")
     bodies = [p for k, _, p in sends if k == "text"]
-    assert any(b.startswith("📚 Reading") for b in bodies) and any(b.startswith("*facilities") for b in bodies)
+    assert any(b.startswith("📚 Reading") for b in bodies) and \
+        any(b.lower().startswith("*facilities") for b in bodies)     # headings are capitalised (4 Nov proofread)
     assert not any("health facilities" in b and b.strip().endswith(".") and len(b) < 80 for b in bodies[:2])
     assert any("full brief" in b for b in bodies)
     assert store.usage(h.key(me))[1] - before == 2                     # a deep answer counts double
