@@ -135,8 +135,12 @@ def restore(snap: dict) -> None:
 
 
 def eval_settings(settings, *, fetch: bool):
-    """An eval case's settings: fetching new documents and the open web only for the cases that need them."""
-    return settings.model_copy(update={"kasafi_fetch_enabled": fetch, "kasafi_open_web": fetch})
+    """An eval case's settings: fetching new documents and the open web only for the cases that need them, and
+    Muse Spark Open on Fireworks for the answer path unless KASAFI_BATCH_PROVIDER says otherwise (4 Nov 2026:
+    evals and batch jobs never spend Meta credit by default; KASAFI_BATCH_PROVIDER=meta keeps Muse Spark)."""
+    provider = settings.kasafi_batch_provider or "fireworks"
+    return settings.model_copy(update={"kasafi_fetch_enabled": fetch, "kasafi_open_web": fetch,
+                                       "kasafi_batch_provider": "" if provider == "meta" else provider})
 
 
 def dollars(t: Tokens, price_in: float, price_cached: float, price_out: float) -> float:

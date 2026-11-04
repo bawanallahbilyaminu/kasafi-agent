@@ -555,11 +555,12 @@ async def _second_reading(messages: list[dict], lines: list[Line], client: ChatC
     if second is not None:
         t0 = time.perf_counter()
         try:
+            open_id = getattr(second, "default_model", None) or settings.fireworks_model
             r, d = await asyncio.wait_for(
-                _read_once(messages, lines, second, settings.baseten_model, extra_numbers, chat_json),
+                _read_once(messages, lines, second, open_id, extra_numbers, chat_json),
                 timeout=settings.kasafi_open_read_timeout_s)
-            log.info("second reading by %s in %.1fs", settings.baseten_model, time.perf_counter() - t0)
-            return r, d, settings.baseten_model
+            log.info("second reading by %s in %.1fs", open_id, time.perf_counter() - t0)
+            return r, d, open_id
         except Exception as e:     # timeout, provider error, unusable reply: Muse Spark reads instead
             log.warning("Muse Spark Open reading fell back to Muse Spark after %.1fs: %s",
                         time.perf_counter() - t0, type(e).__name__ if isinstance(e, TimeoutError) else str(e)[:200])

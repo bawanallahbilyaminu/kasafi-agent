@@ -117,7 +117,7 @@ def test_trace_page_shows_both_models_side_by_side_and_escapes_text(db) -> None:
         c = TestClient(app)
         r = c.get(f"/admin/traces/{tid}", auth=AUTH)
         assert r.status_code == 200 and r.headers["x-frame-options"] == "DENY"
-        assert "Muse Spark · Meta Model API" in r.text and "Muse Spark Open · Baseten" in r.text
+        assert "Muse Spark · Meta Model API" in r.text and "Muse Spark Open · Fireworks" in r.text
         assert "<script>" not in r.text and "&lt;script&gt;" in r.text
         assert "How much for counterpart funds?" in c.get("/admin/traces", auth=AUTH).text
         ok = c.post(f"/admin/traces/{tid}/review?review=wrong", auth=AUTH, headers={"origin": "http://testserver"},

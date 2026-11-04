@@ -1,9 +1,11 @@
-"""Fireworks AI client for Muse Spark Open, the fallback host when Baseten fails (credits, errors).
+"""Fireworks AI client for Muse Spark Open, and the hosts that serve Muse Spark Open (`open_hosts`).
 
 OpenAI-compatible at https://api.fireworks.ai/inference/v1; serverless model
 `accounts/fireworks/models/muse-spark-open` (Fireworks' model page, Oct 30 2026: $1.25 / $0.15 cached / $4.25 per
-1M tokens, reasoning, function calling). Like Baseten's, it always reasons: pass an explicit effort and a
-generous max_tokens.
+1M tokens, reasoning, function calling). It always reasons: pass an explicit effort and a generous max_tokens.
+
+Since 4 Nov 2026 Fireworks is the only host by default: Baseten's credit ran out (every call a 402), so it serves
+nothing unless KASAFI_OPEN_HOSTS names it again.
 """
 
 from __future__ import annotations
@@ -31,22 +33,43 @@ class FireworksClient(ChatClient):
                          max_retries=max_retries)
 
 
+def open_hosts(settings: Settings, *, timeout: float | None = None, max_retries: int | None = None,
+               first: str = "") -> list["ChatClient"]:
+    """The hosts that serve Muse Spark Open, in order, from KASAFI_OPEN_HOSTS (default "fireworks"): a host is
+    used only when it is named there and its key is set. `first` moves one named host to the front. [] when no
+    host can be made (no key): the callers then stay on Muse Spark or skip the step."""
+    kw = {k: v for k, v in (("timeout", timeout), ("max_retries", max_retries)) if v is not None}
+    names = [n.strip().lower() for n in (settings.kasafi_open_hosts or "").split(",") if n.strip()]
+    if first and first.lower() in names:
+        names.remove(first.lower())
+        names.insert(0, first.lower())
+    out: list[ChatClient] = []
+    for name in names:
+        if name == "fireworks" and settings.fireworks_api_key:
+            out.append(FireworksClient(settings, **kw))
+        elif name == "baseten" and settings.baseten_api_key:
+            from app.providers.baseten import BasetenClient
+            out.append(BasetenClient(settings, **kw))
+    return out
+
+
+def open_model(settings: Settings, **kw) -> "OpenModel | None":
+    """Muse Spark Open from the configured hosts, or None when none can be made."""
+    hosts = open_hosts(settings, **kw)
+    return OpenModel(hosts) if hosts else None
+
+
 class BatchModel:
     """Muse Spark Open standing in for Muse Spark in eval runs and batch jobs (settings.kasafi_batch_provider).
-    Open always reasons and its max_tokens counts the reasoning too (Baseten docs), so every call gets at least
-    MIN_TOKENS and a low effort; calls written for Muse Spark (400-3000 tokens) would otherwise end empty."""
+    Open always reasons and its max_tokens counts the reasoning too, so every call gets at least MIN_TOKENS and a
+    low effort; calls written for Muse Spark (400-3000 tokens) would otherwise end empty."""
 
     MIN_TOKENS = 8000
 
     def __init__(self, settings: Settings) -> None:
-        from app.providers.baseten import BasetenClient
-        order = [BasetenClient, FireworksClient]
-        if settings.kasafi_batch_provider.lower() == "fireworks":
-            order.reverse()
-        keys = {BasetenClient: settings.baseten_api_key, FireworksClient: settings.fireworks_api_key}
-        hosts = [cls(settings) for cls in order if keys[cls]]
+        hosts = open_hosts(settings, first=settings.kasafi_batch_provider.lower())
         if not hosts:
-            raise RuntimeError("KASAFI_BATCH_PROVIDER is set but neither BASETEN_API_KEY nor FIREWORKS_API_KEY is")
+            raise RuntimeError("no Muse Spark Open host: FIREWORKS_API_KEY is not set (KASAFI_OPEN_HOSTS)")
         self.open = OpenModel(hosts)
         self.provider = self.open.provider
         self.default_model = self.open.default_model
@@ -69,12 +92,12 @@ class BatchModel:
 
 def batch_factory(settings: Settings):
     """The client class to use instead of Muse Spark for this run, or None (live: Muse Spark)."""
-    return BatchModel if settings.kasafi_batch_provider.lower() in ("baseten", "fireworks") else None
+    return BatchModel if settings.kasafi_batch_provider.lower() in ("open", "fireworks", "baseten") else None
 
 
 class OpenModel:
-    """Muse Spark Open from whichever host answers, in order (Baseten, then Fireworks); each call uses the
-    host's own model ID, whatever `model` the caller passed. Usage is recorded under the host that answered."""
+    """Muse Spark Open from whichever host answers, in order (open_hosts); each call uses the host's own model
+    ID, whatever `model` the caller passed. Usage is recorded under the host that answered."""
 
     provider = "Muse Spark Open"
 

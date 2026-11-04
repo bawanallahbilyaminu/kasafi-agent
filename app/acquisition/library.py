@@ -409,16 +409,15 @@ async def _ocr_head(pdf: Path, pages: list[str], settings: Settings) -> list[str
     step sees its title page; a page the reader can't read keeps its (empty) text layer."""
     out_dir = pdf.parent / f"{pdf.stem}-head"
     pages = list(pages)
-    batch = settings.kasafi_batch_provider.lower() in ("baseten", "fireworks") and settings.baseten_api_key
+    from app.providers.fireworks import batch_factory, open_model
+    batch = (open_model(settings) if batch_factory(settings) else None)      # a batch run reads on Muse Spark Open
     try:
         images = await render_pages_sandboxed(pdf, list(range(1, min(HEAD_PAGES, len(pages)) + 1)), out_dir)
-        if batch:
-            from app.providers.baseten import BasetenClient
-        async with (BasetenClient(settings) if batch else MetaClient(settings, timeout=240)) as client:
+        async with (batch or MetaClient(settings, timeout=240)) as client:
             for page, jpg in sorted(images.items()):
                 try:
                     pages[page - 1] = await ocr_image(client, jpg.read_bytes(),
-                                                      model=settings.baseten_model if batch else settings.meta_model)
+                                                      model=client.default_model if batch else settings.meta_model)
                 except ProviderError as e:
                     log.warning("head OCR failed for %s p%d: %s", pdf.name, page, type(e).__name__)
     except Exception:              # noqa: BLE001 - the text layer as it is
@@ -437,15 +436,14 @@ async def ocr_pages(doc_id: str, path: Path, pages: list[int], settings: Setting
     try:
         images = await render_pages_sandboxed(path, pages, out_dir)
         # a batch run (the bulk import) reads on Muse Spark Open; live fetches keep Muse Spark
-        batch = settings.kasafi_batch_provider.lower() in ("baseten", "fireworks") and settings.baseten_api_key
-        if batch:
-            from app.providers.baseten import BasetenClient
-        async with (BasetenClient(settings) if batch else MetaClient(settings, timeout=240)) as client:
+        from app.providers.fireworks import batch_factory, open_model
+        batch = (open_model(settings) if batch_factory(settings) else None)
+        async with (batch or MetaClient(settings, timeout=240)) as client:
             with psycopg.connect(settings.db_url(), autocommit=True) as conn:
                 for page, jpg in sorted(images.items()):
                     try:
                         text = await ocr_image(client, jpg.read_bytes(),
-                                               model=settings.baseten_model if batch else settings.meta_model)
+                                               model=client.default_model if batch else settings.meta_model)
                     except ProviderError as e:
                         log.warning("background OCR failed for %s p%d: %s", doc_id, page, type(e).__name__)
                         continue

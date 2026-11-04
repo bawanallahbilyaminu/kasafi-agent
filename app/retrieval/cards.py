@@ -424,10 +424,12 @@ def estimate(conn: psycopg.Connection, doc_ids: list[str] | None = None, setting
 
 
 def baseten(settings: Settings):
-    from app.providers.baseten import BasetenClient
-    if settings.baseten_api_key is None:
-        raise RuntimeError("cards need BASETEN_API_KEY (Muse Spark Open on Baseten)")
-    return BasetenClient(settings)
+    """Muse Spark Open for the cards, from the hosts in KASAFI_OPEN_HOSTS (Fireworks since 4 Nov 2026; the name
+    is the function's from when Baseten served it)."""
+    from app.providers.fireworks import open_model
+    if (c := open_model(settings)) is None:
+        raise RuntimeError("cards need a Muse Spark Open host: FIREWORKS_API_KEY (KASAFI_OPEN_HOSTS)")
+    return c
 
 
 async def build_card(conn: psycopg.Connection, doc_id: str, settings: Settings | None = None, client=None) -> bool:
@@ -450,7 +452,7 @@ async def build_card(conn: psycopg.Connection, doc_id: str, settings: Settings |
     if not card["summary"]:
         log.warning("%s: no document card from the model", doc_id)
         return False
-    store(conn, doc_id, row[0], card, cards, s.baseten_model)
+    store(conn, doc_id, row[0], card, cards, client.default_model)
     log.info("%s: card and %d section cards", doc_id, len(cards))
     return True
 

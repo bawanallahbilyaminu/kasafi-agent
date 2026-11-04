@@ -7,7 +7,7 @@ import pytest
 from pydantic import SecretStr
 
 from app.providers.chat import ChatResult
-from app.providers.fireworks import BatchModel, batch_factory
+from app.providers.fireworks import BatchModel, batch_factory, open_hosts, open_model
 from tests.helpers import make_settings
 
 
@@ -22,9 +22,20 @@ def keys(**kw):
     return make_settings(baseten_api_key=SecretStr("b"), fireworks_api_key=SecretStr("f"), **kw)
 
 
+def test_baseten_serves_nothing_unless_the_hosts_setting_names_it() -> None:
+    """4 Nov 2026: Baseten's credit ran out (every call a 402). With its key still set, no path uses it."""
+    m = BatchModel(keys(kasafi_batch_provider="baseten"))
+    assert [h.provider for h in m.open.hosts] == ["Fireworks"]
+    asyncio.run(m.aclose())
+    assert [h.provider for h in open_hosts(keys())] == ["Fireworks"]
+    assert [h.provider for h in open_hosts(keys(kasafi_open_hosts="fireworks, baseten"))] == ["Fireworks", "Baseten"]
+    assert open_hosts(make_settings(baseten_api_key=SecretStr("b"))) == []        # no Fireworks key: no host
+    assert open_model(make_settings()) is None
+
+
 @pytest.mark.parametrize("choice, first", [("baseten", "Baseten"), ("fireworks", "Fireworks")])
-def test_host_order_follows_the_setting(choice: str, first: str) -> None:
-    m = BatchModel(keys(kasafi_batch_provider=choice))
+def test_host_order_follows_the_setting_among_the_named_hosts(choice: str, first: str) -> None:
+    m = BatchModel(keys(kasafi_batch_provider=choice, kasafi_open_hosts="fireworks,baseten"))
     assert m.open.hosts[0].provider == first and len(m.open.hosts) == 2
     asyncio.run(m.aclose())
 

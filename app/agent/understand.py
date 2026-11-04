@@ -55,7 +55,8 @@ written or as its usual short form: 'primary', 'JSS', 'SSS', 'IQS'; [] when none
  "urgent": true|false,
  "urgent_reason": "<one short line: why it is or isn't an emergency now>",
  "restatement": "<the full question in one English line, standalone, using these place words: 'my farm (the pin)' \
-for the pin's exact spot, 'my ward', 'my LGA', 'Sokoto State', or the place or facility the user named in full>"}
+for the pin's exact spot, 'my ward', 'my LGA', 'Sokoto State', or the place or facility the user named in full>",
+ "parts": [«PARTS»]}
 In the restatement, the user's own places are 'my farm (the pin)', 'my ward' or 'my LGA' alone: never add the \
 ward's or LGA's name to them (a name there reads as a different place).
 
@@ -147,10 +148,23 @@ each find on birth registration?"). deep is only for a broad subject with no sou
 """, ""),
     "RAIN": (""", how much rain fell in a past season ("which wards got the most June-October rain in 2024", "ruwan \
 sama nawa ya sauka a 2023"); rain now or coming is hazard""", ""),
+    # 4 Nov: a message that asks for two or three different things ("Has this area flooded before, and what is the
+    # state spending on erosion here?") is read as parts, each answered by its own capability (KASAFI_MULTI_PART)
+    "PARTS": ("""{"capability": "<as above>", "subject": {"level": "<as above>", "name": "<as named>"}, \
+"time": {"kind": "<as above>", "years": []}, "measure": "<as above>", "label": "<2-5 words in the user's own \
+language naming this part: 'Flood history', 'Tarihin ambaliya', 'Erosion spending'>", "restatement": "<this part \
+alone, as a full standalone question in one English line, with the same place words and the same rule: 'my farm \
+(the pin)', 'my ward' and 'my LGA' stand alone, never with a ward's or LGA's name added>"}, ...\
+<one entry per part, in the order asked, ONLY when the message asks for two or three different things that need \
+different capabilities or different subjects (a satellite flood history AND a budget; a budget AND the nearest \
+facility; the state budget AND the ward's). [] for one thing asked, however long, and for one comparison, \
+ranking, breakdown by level, or what two reports each say about ONE measure (those are one question)>""",
+              ""),
 }
 SWITCH = {"FOLLOWUPS": "kasafi_followup_rules", "CORRECTION_CAP": "kasafi_followup_rules",
           "NAMED_SOURCE": "kasafi_followup_rules", "NAMED_REPORT": "kasafi_followup_rules",
-          "RAIN": "kasafi_past_rain_rule"}
+          "RAIN": "kasafi_past_rain_rule", "PARTS": "kasafi_multi_part"}
+MOST_PARTS = 3
 
 
 def system_prompt(settings: Settings | None = None) -> str:
@@ -182,9 +196,33 @@ class Understanding:
     urgent_reason: str = ""
     safety: dict = field(default_factory=dict)   # what the fast path's layers said (phrase, classifier), for the trace
     seconds: float = 0.0
+    # a message asking for two or three different things (4 Nov): one reading per part, in the order asked, each
+    # answered by its own capability and joined into one reply; [] for one thing asked (KASAFI_MULTI_PART)
+    parts: list[dict] = field(default_factory=list)
+    label: str = ""             # a part's short heading in the user's language ('Flood history', 'Tarihin ambaliya')
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+    def part_readings(self) -> list["Understanding"]:
+        """The parts as readings of their own: what a part leaves unsaid comes from the whole message's reading
+        (kind, place level, the facility filters, the exclusion); two or more, else []."""
+        out = []
+        for p in self.parts[:MOST_PARTS]:
+            if not isinstance(p, dict) or not str(p.get("restatement") or "").strip():
+                continue
+            r = Understanding(kind=self.kind, capability=p.get("capability") if p.get("capability") in CAPABILITIES
+                              else self.capability,
+                              level=p.get("level") if p.get("level") in LEVELS else self.level,
+                              name=str(p.get("name") or self.name)[:120],
+                              time=p.get("time") if p.get("time") in TIMES else self.time,
+                              years=[int(y) for y in p.get("years") or self.years][:6],
+                              measure=str(p.get("measure") or "")[:80],
+                              restatement=str(p.get("restatement")).strip()[:400],
+                              care=self.care, facility_level=self.facility_level, ownership=self.ownership,
+                              exclude=self.exclude, safety=self.safety, label=str(p.get("label") or "")[:60])
+            out.append(r)
+        return out if len(out) >= 2 else []
 
 
 def parse(d: dict) -> Understanding | None:
@@ -209,12 +247,48 @@ def parse(d: dict) -> Understanding | None:
     u.exclude = str(d.get("exclude") or "").strip()[:80]
     parts = d.get("asked_parts") if isinstance(d.get("asked_parts"), list) else []
     u.asked_parts = [str(p).strip()[:40] for p in parts if str(p).strip()][:8]
+    u.parts = parse_parts(d.get("parts"))
     fac = d.get("facility") if isinstance(d.get("facility"), dict) else {}
     if (u.capability == "facility" or u.urgent) and fac:
         u.care = fac.get("care") if fac.get("care") in CARE else "general"
         u.facility_level = fac.get("level") if fac.get("level") in FACILITY_LEVELS else "any"
         u.ownership = fac.get("ownership") if fac.get("ownership") in OWNERSHIP else "any"
     return u if u.restatement else None
+
+
+def parse_parts(raw) -> list[dict]:
+    """The model's parts, flattened and checked: capability, level, name, time, years, measure, label and
+    restatement; fewer than two usable parts is no split (the whole message's reading answers)."""
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for p in raw[:MOST_PARTS]:
+        if not isinstance(p, dict) or not str(p.get("restatement") or "").strip():
+            continue
+        subj = p.get("subject") if isinstance(p.get("subject"), dict) else {}
+        tm = p.get("time") if isinstance(p.get("time"), dict) else {}
+        cap = ALIASES.get(p.get("capability"), p.get("capability"))
+        out.append({"capability": cap if cap in CAPABILITIES else "other",
+                    "level": subj.get("level") if subj.get("level") in LEVELS else "none",
+                    "name": str(subj.get("name") or "").strip()[:120],
+                    "time": tm.get("kind") if tm.get("kind") in TIMES else "none",
+                    "years": [int(y) for y in tm.get("years") or [] if str(y).isdigit() and 1990 < int(y) < 2100][:6],
+                    "measure": str(p.get("measure") or "").strip()[:80],
+                    "label": str(p.get("label") or "").strip()[:60],
+                    "restatement": own_place_words(str(p.get("restatement")).strip())[:400]})
+    return out if len(out) >= 2 else []
+
+
+# the user's own places with a name the model added ('my farm (the pin) in Gumbi ward', 'my ward (Gumbi, Wamakko
+# LGA)', 'my LGA, Wamakko'): the name reads as a different place downstream (4 Nov: the pin's flood part asked for
+# the pin again, and 'nearest clinic … in Gumbi' matched a facility called Gumbi)
+_OWN_PLACE = re.compile(r"(my farm \(the pin\)|my (?:ward|LGA|local government))"
+                        r"(?:\s*\([^)]*\)|,?\s+in\s+[A-Z][\w'’-]*(?:\s+(?:ward|LGA|State))?(?:,\s*[A-Z][\w'’-]*\s+(?:LGA|State))?"
+                        r"|,\s*[A-Z][\w'’-]*(?:\s+(?:ward|LGA|State))?)")
+
+
+def own_place_words(restatement: str) -> str:
+    return _OWN_PLACE.sub(r"\1", restatement or "")
 
 
 def summary(answer: str, most: int = 420) -> str:
@@ -325,17 +399,17 @@ async def understand_message(message: str, history: list[dict] | None, place: di
     """The step for the conversation: Muse Spark (or Muse Spark Open with KASAFI_UNDERSTAND_PROVIDER=open), then
     once on the other model when the first fails; None when both fail (the keyword routing then decides), with
     the reasons appended to `fallbacks` for the trace."""
-    from app.providers.baseten import BasetenClient
+    from app.providers.fireworks import open_model
     from app.providers.meta import MetaClient
-    order = [("meta", MetaClient, None), ("open", BasetenClient, settings.baseten_model)]
+    order = [("meta", lambda: MetaClient(settings)), ("open", lambda: open_model(settings))]
     if settings.kasafi_understand_provider == "open":
         order.reverse()
     why: list[str] = []
-    for name, client_cls, model in order:
-        if name == "open" and not settings.baseten_api_key:
+    for name, make in order:
+        if (client_obj := make()) is None:          # no Muse Spark Open host (no key)
             continue
-        async with client_cls(settings) as client:
-            if (u := await understand(message, history, place, client, settings, model=model, why=why,
+        async with client_obj as client:
+            if (u := await understand(message, history, place, client, settings, model=None, why=why,
                                       feedback=feedback)) is not None:
                 if why:
                     log.info("understood on %s after: %s", name, "; ".join(why))

@@ -72,8 +72,9 @@ async def main() -> int:
     kept = json.loads((HERE / "recorded.json").read_text(encoding="utf-8")) if only else {}
     s = get_settings()
     if a.provider == "open":
-        from app.providers.baseten import BasetenClient as Client
-        model = s.baseten_model
+        from app.providers.fireworks import open_model
+        Client = lambda settings: open_model(settings)      # noqa: E731 - Muse Spark Open from KASAFI_OPEN_HOSTS
+        model = None
     else:
         from app.providers.meta import MetaClient as Client
         model = None

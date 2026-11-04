@@ -127,6 +127,10 @@ class Settings(BaseSettings):
     # level's figure when the documents have it only for the state, or saying it isn't there (compose rule 6p; the
     # answer check's named_part_missing rule)
     kasafi_named_parts: bool = True
+    # a message asking for two or three different things (a flood history and the erosion budget) is read as parts,
+    # each answered by its own capability, in parallel, and joined into one reply (4 Nov; off: one capability per
+    # message as before)
+    kasafi_multi_part: bool = True
     kasafi_check_provider: str = "open"
     kasafi_check_timeout_s: float = 30.0
     # a revise round starts only with at least this many seconds left of kasafi_answer_timeout_s
@@ -163,10 +167,15 @@ class Settings(BaseSettings):
     # Fernet key that encrypts the WhatsApp number of people signed up for alerts (app/alerts/recipients.py); without
     # it, sign-ups are stored with no number and live alerts can't be sent
     kasafi_alerts_number_key: SecretStr | None = None
-    # Fireworks serves Muse Spark Open too: the fallback host when Baseten fails (app/providers/fireworks.py)
+    # Fireworks serves Muse Spark Open (app/providers/fireworks.py): since 4 Nov 2026 the only host by default,
+    # Baseten's credit having run out (every call a 402)
     fireworks_api_key: SecretStr | None = None
     fireworks_base_url: str = "https://api.fireworks.ai/inference/v1"
     fireworks_model: str = "accounts/fireworks/models/muse-spark-open"
+    # the hosts that serve Muse Spark Open, in order (comma list of fireworks, baseten); a host is used only when
+    # named here and its key is set. Every Open step (the second row reading, compose, the answer check, deep
+    # readers, cards, charts, OCR in batch runs, the Meta credit guard's fallback) takes them from here
+    kasafi_open_hosts: str = "fireworks"
     # The second of the two independent row readings runs on Muse Spark Open (app/agent/line_answer.py); slower
     # than this, or failing, and Muse Spark reads instead
     kasafi_open_reader: bool = True
@@ -174,12 +183,15 @@ class Settings(BaseSettings):
     # Other stages run on Muse Spark Open too, to spend Baseten's credits rather than Meta's (comma list of plan,
     # compose; app/agent/answer.stage_json). Slower than the timeout, or failing, and Muse Spark answers instead.
     # Oct 30, the 39: compose on Open 0 wrong, median 2.9 s vs 6.2 s; the planner on Open missed m21's rank
-    # query 2 of 3 times (Muse Spark ~1 of 5), so it stays on Muse Spark
-    kasafi_open_stages: str = "compose"
+    # query 2 of 3 times (Muse Spark ~1 of 5), so it stays on Muse Spark. 4 Nov, Fireworks as the only Open host:
+    # compose took 22.7 s there on both test questions against 6.8 and 18.2 s on Muse Spark, so compose is back on
+    # Muse Spark (empty); the second row reading (7.1 s vs 6.0 s) and the answer check stay on Fireworks
+    kasafi_open_stages: str = ""
     kasafi_open_stage_timeout_s: float = 15.0
     # Eval runs and batch jobs on Muse Spark Open instead of Muse Spark (1 Nov 2026: Meta credits kept for live users
-    # and the demo): "baseten" (then Fireworks) or "fireworks" (then Baseten). Set per run in the shell
-    # (KASAFI_BATCH_PROVIDER=baseten uv run python evals/...), never on the server; empty = Muse Spark as live.
+    # and the demo): "fireworks" (or "open"; "baseten" puts Baseten first when KASAFI_OPEN_HOSTS names it). The eval
+    # runtime sets "fireworks" when nothing is set (evals/runtime.py); never on the server; empty = Muse Spark as
+    # live.
     kasafi_batch_provider: str = ""
 
     # Web search

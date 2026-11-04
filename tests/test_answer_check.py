@@ -100,7 +100,23 @@ def test_the_partial_answer_is_the_drafts_supported_lines_built_in_code() -> Non
     assert "Sokoto State Annual School Census 23-24 Report" in text            # the sources line
     flagged = ck.Verdict("fail", contradictions=["\"Dange Shuni has 91 public primary schools\" contradicts p. 19"])
     nothing, ok, kept = ck.partial_answer(_answer("Dange Shuni has 91 public primary schools."), flagged, "en")
-    assert not ok and not kept and nothing.startswith("I couldn't give a checked answer to that")
+    assert not ok and not kept
+    assert nothing == "I couldn't find a checked figure for what you asked in the documents I have. The figures I " \
+                      "found weren't on the pages they were cited to, so I left them out."
+    # plain words: one sentence per part that couldn't be found (repeats dropped), the reason once, no checker
+    # wording and no list of document titles
+    v = ck.Verdict("fail", missing=["Erosion spending in Wamakko LGA approved/spent",
+                                    "erosion spending in Wamakko LGA approved/spent", "Whether Wamakko was listed"],
+                   subject={"place": False}, why="place")
+    assert v.wrong_subject
+    text = ck.nothing_text(_answer("Sokoto State spent ₦1bn on roads."), v, "en")
+    assert text == "I couldn't find erosion spending in Wamakko LGA approved/spent in the documents I have. " \
+                   "I couldn't find whether Wamakko was listed in the documents I have. " \
+                   "What I read was about something else, so I didn't send it."
+    assert "Census" not in text and "documents I read were" not in text
+    ha = ck.nothing_text(_answer("x"), ck.Verdict("fail", missing=["IQS counts for Sokoto North"]), "ha")
+    assert ha == "Ban samu IQS counts for Sokoto North a cikin takardun da nake da su ba. Shafukan da na karanta ba " \
+                 "su buga shi ba."
 
 
 def test_a_refused_or_wrong_subject_draft_keeps_nothing() -> None:
@@ -249,8 +265,8 @@ def test_a_revise_round_reads_again_and_a_second_failure_sends_only_what_is_supp
     assert seen[1]["review"]["feedback"] == "asked about Wamakko"            # the second round got the feedback
     assert seen[1]["understanding"].capability == "statistics"              # and the message read again
     # both drafts were about another place: nothing of them is sent, only what is missing, in code's words
-    assert a.text == "I couldn't give a checked answer to that: whether Wamakko is listed. The documents I read were " \
-                     "Sokoto State Annual School Census 23-24 Report."
+    assert a.text == "I couldn't find whether Wamakko is listed in the documents I have. What I read was about " \
+                     "something else, so I didn't send it."
     assert a.partial and "wasn't about what you asked, so it wasn't sent" in a.working and not a.maps
     assert [c["verdict"] for c in a.checks] == ["revise", "fail"]
 

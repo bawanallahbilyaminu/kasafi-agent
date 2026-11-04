@@ -24,7 +24,7 @@ def main() -> int:
     ap.add_argument("--force", action="store_true", help="re-index even if the file is unchanged")
     ap.add_argument("--pdf-dir", type=Path, help="where the PDFs are (the server: /data/pdfs, named <id>.pdf)")
     ap.add_argument("--no-cards", action="store_true",  # charts and cards both
-                    help="don't build document and section cards (Muse Spark Open on Baseten) for indexed documents")
+                    help="don't build document and section cards (Muse Spark Open on Fireworks) for indexed documents")
     args = ap.parse_args()
     t0 = time.perf_counter()
     with psycopg.connect(get_settings().db_url(), connect_timeout=10) as conn:
