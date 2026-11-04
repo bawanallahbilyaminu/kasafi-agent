@@ -431,12 +431,6 @@ def lga_projects(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
             res.count("hb_n", hb_n, rdoc, mpage)
             res.money("match_spent", sum((r.amount for r in res.matched), Decimal(0)), rdoc, mpage)
             res.match_tables = ", ".join(sorted(set(labels.values()), key=lambda t: int(t.split()[1]))) if labels else ""
-            res.working.append(f"Project-level spending: the {res.report} report's by-project tables "
-                               f"({res.match_tables or 'none parsed'}) cover {hb_n} of the LGA's lines by agency; "
-                               f"{len(res.matched)} matched by agency code and exact description, "
-                               f"{sum((r.amount for r in res.matched), Decimal(0)):,.2f} spent to date on them"
-                               + ("; matched: " + "; ".join(f"{r.name[:60]} {r.amount:,.2f} ({r.detail['table']} p{r.page})"
-                                                             for r in res.matched[:8]) if res.matched else ""))
     # statewide programmes that may serve the LGA: sector lines (schools, PHCs, water, roads, farm inputs) only,
     # never administrative items (aircraft, vehicles, offices, residences, Government House); the asked sector only
     sw = [(name, amt, pg) for name, amt, pg, fn, mda in conn.execute(
@@ -459,8 +453,16 @@ def lga_projects(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
                    f"{sum((r[1] for r in sw), Decimal(0)):,.2f}"]
     if res.report:
         res.working.append(f"Progress: {res.report} implementation report, capital of the {len(agencies)} agencies "
-                           f"that run these lines (the report doesn't split spending by project or LGA): revised "
+                           f"that run these lines (the report gives spending by project only for primary healthcare "
+                           f"and basic education; other sectors by ministry): revised "
                            f"budget {res.facts['rep_budget'].value:,.2f}, spent {res.facts['rep_spent'].value:,.2f}")
+        hb = res.facts["hb_n"].value if "hb_n" in res.facts else 0
+        res.working.append(f"Project-level spending: the {res.report} report's by-project tables "
+                           f"({res.match_tables or 'none parsed'}) cover {hb} of the LGA's lines by agency; "
+                           f"{len(res.matched)} matched by agency code and exact description, "
+                           f"{sum((r.amount for r in res.matched), Decimal(0)):,.2f} spent to date on them"
+                           + ("; matched: " + "; ".join(f"{r.name[:60]} {r.amount:,.2f} ({r.detail['table']} p{r.page})"
+                                                         for r in res.matched[:8]) if res.matched else ""))
     return res
 
 

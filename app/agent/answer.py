@@ -4854,7 +4854,8 @@ def lga_text(res: AnalysisResult, w: dict, v: dict, lang: str, spent_focus: bool
         month = QUARTER_END[lang if lang in QUARTER_END else "en"][f["rep_quarter"].value]
         progress.append(w["lga_progress"].format(month=month, report=res.report, **v))
     if spent_focus:                # the follow-up 'how much has been spent?': spending first, nothing repeated
-        return lead + ("\n\n" + " ".join(progress) if progress else ""), ""
+        detail = " ".join(progress).replace(" " + w["lga_spent"], "")      # the lead already says it
+        return lead + ("\n\n" + detail if detail else ""), ""
     if progress:
         paras.append(" ".join(progress))
     if f["statewide_n"].value and res.statewide:
