@@ -75,6 +75,43 @@ def valid_edition(key: str | None) -> bool:
     return bool(key) and any(p.match(key) for p in _KEY.values())
 
 
+# the series a wanted document's description names, by the words that name it (4 Nov 2026: "Sokoto State Budget
+# Implementation Report Q4 2025" had been taken as 'known' because the library held 2026 Q3 of the same series)
+_SERIES_WORDS = {
+    "sokoto_bir": re.compile(r"(?i)\bbudget\s+(?:implementation|performance)\s+report\b"),
+    "sokoto_budget": re.compile(r"(?i)\bapproved\s+budget\b|\bbudget\s+(?:book|estimates?)\b"),
+    "sokoto_audited_fs": re.compile(r"(?i)\baudited\s+financial\s+statements?\b|accountant[-\s]general"),
+    "sokoto_asc": re.compile(r"(?i)\bschool\s+census\b"),
+    "nbs_cpi": re.compile(r"(?i)\b(?:cpi|consumer\s+price\s+index|inflation\s+report)\b"),
+}
+_QUARTER = re.compile(r"(?i)\bq([1-4])\b\W{0,6}(20\d\d)|(20\d\d)\W{0,10}\bq([1-4])\b|"
+                      r"\b(first|second|third|fourth)\s+quarter\b\W{0,8}(?:of\s+)?(20\d\d)")
+_MONTHS = ("january", "february", "march", "april", "may", "june", "july", "august", "september", "october",
+           "november", "december")
+_MONTH = re.compile(r"(?i)\b(" + "|".join(_MONTHS) + r")\b\W{0,6}(20\d\d)")
+_YEAR = re.compile(r"\b(20\d\d)\b")
+
+
+def wanted_edition(description: str) -> tuple[str, str] | None:
+    """(series key, edition key) a description names exactly, else None: a report series by its words and the
+    period in the series' own key form ("2025-Q4", "2026-03", "2024"). A description that names a series without
+    a period gives None (the newest edition then answers, as before)."""
+    text = description or ""
+    for key, words in _SERIES_WORDS.items():
+        if not words.search(text):
+            continue
+        freq = SERIES[key].frequency
+        if freq == "quarterly" and (m := _QUARTER.search(text)):
+            q = m.group(1) or m.group(4) or str(("first", "second", "third", "fourth").index(m.group(5).lower()) + 1)
+            return key, f"{m.group(2) or m.group(3) or m.group(6)}-Q{q}"
+        if freq == "monthly" and (m := _MONTH.search(text)):
+            return key, f"{m.group(2)}-{_MONTHS.index(m.group(1).lower()) + 1:02d}"
+        if freq == "yearly" and (m := _YEAR.search(text)):
+            return key, m.group(1)
+        return None
+    return None
+
+
 def generic_series(name: str, frequency: str) -> Series:
     """A recurring report we have no registry entry for (the planner names it)."""
     lag = {"monthly": 20, "quarterly": 30, "yearly": 60}.get(frequency, 30)

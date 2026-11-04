@@ -172,7 +172,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                  answer_fn: AnswerFn | None | object = _DEFAULT, locate_fn: LocateFn = locate_point,
                  place_fn: PlaceFn = place_from_text, facility_fn: FacilityFn = search_replies,
                  emergency_fn: EmergencyFn = emergency_lookup, classify_fn: ClassifyFn = em.classify,
-                 understand_fn=understand_message, heard: bool = False) -> list[Out]:
+                 understand_fn=understand_message, heard: bool = False, spoken_lang: str | None = None) -> list[Out]:
     """Returns the replies to send. `notify` sends a message right away (the "listening" ack). `understand_fn`:
     the conversation-understanding step (app/agent/understand.py), on with KASAFI_UNDERSTANDING. `heard`: this
     text is a voice note's transcript re-entering the text path (already counted and checked as voice)."""
@@ -260,7 +260,9 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         return _notice(user.lang, user.lang_source)
 
     # 5. Consented: limits (skipped for our own test numbers), then work
-    lang = user.lang or "ha"
+    # a voice note is answered in the language it was spoken in (4 Nov: a Hausa note had got English, the saved
+    # preference); typed messages keep the saved language
+    lang = spoken_lang if spoken_lang in ("ha", "en") else (user.lang or "ha")
     resume = ""                                  # a place-history question that waited for this pin or shape
     resume_reading = None                        # … or a place-budget reading that waited for a location
     before: list[Out] = []                       # the replies that go out before the resumed question's answer
@@ -729,7 +731,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         store.add_spend(settings.kasafi_cost_per_voice_usd)
         await notify(Out(t("listening", lang)))   # transcription takes ~10 s; say we're on it
         outcome = await voice_fn(msg, wa, lang=lang, settings=settings)
-        if pending and outcome.result:            # a spoken Eh / A'a / correction
+        # a clearly heard note that is itself a whole question is a new question, never a correction of the
+        # pending read-back (4 Nov: a full Hausa question got "Corrected: …" instead of "I heard: …")
+        if pending and outcome.result and not (not outcome.result.needs_confirmation and
+                                               len(outcome.result.transcript.split()) >= 6):
             res = await _resolve_safely(pending[0], outcome.result.transcript, resolve_fn, settings)
             if res.kind != "new":
                 if res.kind != "ambiguous":
@@ -752,11 +757,12 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             # (understanding, multi-part, every shortcut and capability, the shared pin), after "I heard: …".
             # 4 Nov: a three-part voice note had gone straight to the document search as one question
             heard_msg = {**msg, "id": f"{msg.get('id', '')}-heard", "type": "text", "text": {"body": r.transcript[:1000]}}
+            spoken = r.language if r.language in ("ha", "en") else None        # answered in the note's language
             outs = await handle(heard_msg, wa, store=store, settings=settings, voice_fn=voice_fn, notify=notify,
                                 resolve_fn=resolve_fn, guard_fn=guard_fn, answer_fn=answer_fn, locate_fn=locate_fn,
                                 place_fn=place_fn, facility_fn=facility_fn, emergency_fn=emergency_fn,
-                                classify_fn=classify_fn, understand_fn=understand_fn, heard=True)
-            return [Out(t("heard_prefix", lang, transcript=r.transcript[:1000]))] + outs
+                                classify_fn=classify_fn, understand_fn=understand_fn, heard=True, spoken_lang=spoken)
+            return [Out(t("heard_prefix", spoken or lang, transcript=r.transcript[:1000]))] + outs
         return [Out(outcome.text)]                # emergency referral, not heard, too long
 
     if kind == "text":

@@ -33,7 +33,7 @@ from app.acquisition.personal import record_withheld, screen_pages
 from app.acquisition.find import find_local, rank_candidates, search_candidates
 from app.acquisition.policy import USER_AGENT, Robots, host_allowed
 from app.acquisition.review import open_web_candidates, open_web_trusted, queue_domain
-from app.acquisition.editions import SERIES, valid_edition
+from app.acquisition.editions import SERIES, local_edition, valid_edition, wanted_edition
 from app.acquisition.registry import registry
 from app.acquisition.fetch import MAX_BYTES
 from app.acquisition.sandbox import ParseError, extract_pages_sandboxed, render_pages_sandboxed, unzip_pdf_sandboxed
@@ -319,6 +319,13 @@ async def find_and_fetch(conn: psycopg.Connection, description: str, *, settings
                          check_local: bool = True, open_web: bool = False, question: str = "") -> Acquired:
     """open_web: when nothing allowlisted matches, search the open web (review.py); `question` is what's queued
     with a domain awaiting approval."""
+    # a description naming a series AND an exact period (4 Nov 2026: "Budget Implementation Report Q4 2025"): only
+    # that edition counts as held; another edition of the series never stands in for it, and a download must be it
+    if series is None and edition is None and (wanted := wanted_edition(description)):
+        series, edition = wanted
+        if local := local_edition(conn, series, edition):
+            return Acquired("local", local, detail=f"the {edition} edition is in the library")
+        check_local = False
     if check_local and (local := find_local(conn, description)):
         return Acquired("local", local)
     if not settings.kasafi_fetch_enabled:           # an eval run that doesn't need fetching (not a failed search,

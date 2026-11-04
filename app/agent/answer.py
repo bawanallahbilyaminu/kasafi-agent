@@ -39,7 +39,8 @@ import httpx
 import psycopg
 
 from app.acquisition.editions import (SERIES, Latest, Series, doc_edition, editions_back, find_latest,
-                                     generic_series, label, month_label, release_date, series_doc_ids)
+                                     generic_series, label, month_label, newest_local, release_date, series_doc_ids,
+                                     wanted_edition)
 from app.acquisition.library import Acquired, fetch_and_index, find_and_fetch, log_gap
 from app.acquisition.registry import detect_topic, registry
 from app.agent.analysis import TOOLS, AnalysisResult, run_analysis
@@ -474,6 +475,7 @@ class Plan:
     assumption: str = ""
     assumption_ha: str = ""
     missing_document: str = ""
+    edition_note: str = ""      # "I don't have the Q4 2025 report; the latest before it is Q3 2025": said first
     latest: dict = field(default_factory=dict)      # {"series", "name", "frequency"} for "latest" questions
     followup: str = "none"                          # none | recheck | more (refers to the previous turn)
     recheck_doc_id: str = ""
@@ -1839,7 +1841,27 @@ async def acquire_missing(conn: psycopg.Connection, plan: Plan, lang: str, clien
         reason = {"not_found": "not_found", "limit": "limit", "awaiting": "awaiting_domain",
                   "off": "fetch_off"}.get(acq.status, "fetch_failed")
         log_gap(conn, plan.english_question, plan.missing_document, reason, {"detail": acq.detail, "url": acq.url})
+        # an exact edition that really isn't available (4 Nov): said plainly, and the latest earlier edition of
+        # the series answers, named as what it is; never "no line is exactly that" for a period that doesn't exist
+        if conn is not None and (wanted := wanted_edition(plan.missing_document)):
+            series, edition = wanted
+            earlier = newest_local(conn, series, before=edition)
+            w = EDITION_NOTE.get(lang, EDITION_NOTE["en"])
+            if earlier:
+                plan.doc_ids = [earlier[0]] + [d for d in plan.doc_ids if d != earlier[0]][:MAX_DOCS - 1]
+                plan.edition_note = w["earlier"].format(wanted=label(edition, lang), got=label(earlier[1], lang))
+            else:
+                plan.edition_note = w["none"].format(wanted=label(edition, lang))
     return acq
+
+
+EDITION_NOTE = {
+    "en": {"earlier": "I don't have the {wanted} report; the latest I have before it is {got}, used below.",
+           "none": "I don't have the {wanted} report."},
+    "ha": {"earlier": "Ba ni da rahoton {wanted}; sabon da nake da shi kafin wannan shi ne na {got}, an yi amfani da "
+                      "shi a ƙasa.",
+           "none": "Ba ni da rahoton {wanted}."},
+}
 
 
 def plan_series(plan: Plan) -> Series:
@@ -1998,10 +2020,14 @@ async def answer_question(question: str, lang: str, conn: psycopg.Connection, **
     t_start = time.perf_counter()
     a = await _answer_finished(question, lang, conn, **kw)
     try:
-        return await checked_answer(a, question, lang, conn, kw, t_start)
+        a = await checked_answer(a, question, lang, conn, kw, t_start)
     except Exception as e:                  # noqa: BLE001 - a check that breaks never loses the answer
         log.warning("answer check failed: %s", type(e).__name__)
-        return a
+    # an exact edition that isn't available: said first, before the earlier edition's figures
+    if a is not None and getattr(a, "plan", None) is not None and getattr(a.plan, "edition_note", "") and \
+            (a.text or "").strip() and not getattr(a, "clarify", None):
+        a.text = f"{a.plan.edition_note}\n\n{a.text}"
+    return a
 
 
 @asynccontextmanager

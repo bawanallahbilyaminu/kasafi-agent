@@ -315,6 +315,43 @@ def test_a_voice_note_takes_exactly_the_text_path_so_a_three_part_question_is_sp
     assert voice == 1 and questions == 0                                   # counted once, as voice
 
 
+def test_a_hausa_voice_note_is_answered_in_hausa_and_echoed_as_i_heard_even_with_a_read_back_pending(monkeypatch) -> None:
+    """4 Nov live: a Hausa note from a number saved as English got an English answer, and 'Corrected: …' because a
+    read-back was pending. A note is answered in the language it was spoken in; a clearly heard whole question is a
+    new question, never a correction."""
+    from app.providers.stt import SpeechResult
+    from app.whatsapp.voice import VoiceOutcome
+    from app.whatsapp.messages import t
+    s, store, key = _setup(lang="en")
+    store.set_pending(key, "Nawa aka ware wa ilimi?", "How much for education?")      # an earlier unclear note
+    heard = "Nawa aka ware wa ma'aikatar lafiya a kasafin kuɗi na shekarar 2026?"
+    seen: dict = {}
+
+    async def voice_fn(msg, wa, *, lang, settings):
+        return VoiceOutcome("echo", SpeechResult(heard, "How much for the health ministry in 2026?", "ha", "high", False))
+
+    async def resolve_fn(pending, reply, *, settings):
+        seen["resolved"] = True
+        from app.whatsapp.corrections import Resolution
+        return Resolution("correction", reply)
+
+    async def answer(question, lang, **kw):
+        seen["lang"] = lang
+        return SimpleNamespace(text=f"AMSA[{lang}]", found=True, sources=[], working="", quotes="")
+    one = U.parse({**TWO, "capability": "budget", "restatement": "How much for the health ministry in 2026?", "parts": []})
+
+    async def understand_fn(message, history, place, settings, fallbacks=None):
+        return one
+    monkeypatch.setattr(s.__class__, "has_database", property(lambda self: False))
+    msg = {"from": SENDER, "id": "w-voice-ha", "type": "audio", "audio": {"id": "a2"}}
+    outs = asyncio.run(C.handle(msg, None, store=store, settings=s, answer_fn=answer, guard_fn=_ok, place_fn=_none,
+                                understand_fn=understand_fn, emergency_fn=_quiet, classify_fn=_quiet, voice_fn=voice_fn,
+                                resolve_fn=resolve_fn))
+    assert "resolved" not in seen                                      # a whole question: never a correction
+    assert outs[0].text == t("heard_prefix", "ha", transcript=heard) and "Corrected" not in outs[0].text
+    assert seen["lang"] == "ha" and outs[1].text.startswith("AMSA[ha]")
+
+
 def test_a_single_part_question_is_answered_exactly_as_before(monkeypatch) -> None:
     s, store, key = _setup()
     calls: list = []
