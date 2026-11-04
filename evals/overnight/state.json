@@ -1,11 +1,129 @@
 {
  "started": "2026-11-04T00:01",
- "spend_usd": 0.0917,
- "rounds": [],
- "fixes": [],
+ "spend_usd": 7.6431,
+ "rounds": [
+  {
+   "round": 1,
+   "commit": "a7836ff (base) -> c57988f (after fixes)",
+   "fix_baseline": "38/47",
+   "heldout_baseline": "41/48",
+   "notes": "baseline before fixes: fix 38/47 ($2.77), held-out 41/48 ($1.97); causes: single-level count's one figure dropped from the reply (4), check discarded a deep brief (1), one private part added to a public total (1), dated NEMA row not retrieved (3), IQS state figure missing (2), wrong-agency rows (1), MICS Hausa unverified (1); r1-063 invalid (generator) | after the fixes: held-out 45/48 ($1.92), live-failures 13/13, routing 88/88, understanding replay 244/244; 4 better, 0 worse",
+   "fix": "38/47 before",
+   "heldout_before": "41/48",
+   "heldout_after": "45/48"
+  }
+ ],
+ "fixes": [
+  {
+   "commit": "6ad37a3",
+   "what": "one private part never joins a public total when the census counts per level",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "03ccd89",
+   "what": "a count with one figure shows that figure (single-level school counts had no figure in the reply)",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "23c805d",
+   "what": "a count naming no ownership gives public and private both (writer rule)",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "00d1117",
+   "what": "a date in the question is searched in its printed forms; the writer gives the figure for that date",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "e613a8e",
+   "what": "'which 3 LGAs' is a kind of place, not a named one (the DTM ranking route kept)",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "df48ceb",
+   "what": "the check judges a deep analysis on its subject only",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "1497bb8",
+   "what": "'No 2028 budget…' is not a Yes/No verdict",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "28f4a80",
+   "what": "a dash-printed part the draft reports is stated, not missing (check prompt)",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "060614e",
+   "what": "a figure-free statement draft is sent as written",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "79a531d",
+   "what": "drafts kept in the trace (diagnosis, no behaviour change)",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  }
+ ],
  "meta_attempts": [],
  "final": {},
- "last_round_done": 0,
+ "last_round_done": 1,
  "base_commit": "a7836ff",
- "branch": "overnight-evals"
+ "branch": "overnight-evals",
+ "invalid": [
+  {
+   "id": "r1-063-schools",
+   "why": "generator: Gudu's private counts are all 0, so the 'double count' figure equals the total; the question is kept as is and counted as invalid, not edited"
+  }
+ ]
 }

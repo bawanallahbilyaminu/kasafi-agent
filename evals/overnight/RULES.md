@@ -58,4 +58,6 @@ Re-read this file at the start of every round. It is the whole contract for the 
 
 - 00:03 round 1 (95 questions: 47 fix, 48 held-out) started on the fix half at `41af978` (harness) = app code of
   `a7836ff`.
+- 01:08 round 1 done: fix 38/47, held-out 41/48 before and 45/48 after the 10 fixes (one commit each, 6ad37a3..c57988f);
+  live-failures 13/13, routing 88/88, understanding replay unchanged. Spend $7.64. Next: round 2.
 - Spend and rounds: see `state.json`; the log: `progress.log`.
