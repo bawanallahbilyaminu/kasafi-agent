@@ -1846,7 +1846,7 @@ async def acquire_missing(conn: psycopg.Connection, plan: Plan, lang: str, clien
         if conn is not None and (wanted := wanted_edition(plan.missing_document)):
             series, edition = wanted
             earlier = newest_local(conn, series, before=edition)
-            w = EDITION_NOTE.get(lang, EDITION_NOTE["en"])
+            w = MISSING_EDITION_NOTE.get(lang, MISSING_EDITION_NOTE["en"])
             if earlier:
                 plan.doc_ids = [earlier[0]] + [d for d in plan.doc_ids if d != earlier[0]][:MAX_DOCS - 1]
                 plan.edition_note = w["earlier"].format(wanted=label(edition, lang), got=label(earlier[1], lang))
@@ -1855,7 +1855,7 @@ async def acquire_missing(conn: psycopg.Connection, plan: Plan, lang: str, clien
     return acq
 
 
-EDITION_NOTE = {
+MISSING_EDITION_NOTE = {
     "en": {"earlier": "I don't have the {wanted} report; the latest I have before it is {got}, used below.",
            "none": "I don't have the {wanted} report."},
     "ha": {"earlier": "Ba ni da rahoton {wanted}; sabon da nake da shi kafin wannan shi ne na {got}, an yi amfani da "
