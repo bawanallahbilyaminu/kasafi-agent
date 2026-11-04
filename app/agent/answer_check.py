@@ -337,8 +337,11 @@ def settle(a, v: Verdict, rules: list[str], round_: int) -> Verdict:
 
 def computed_in_code(a) -> bool:
     """Written in code from data, not composed by a model from pages: the place, hazard and structured paths
-    ('calculation checked', or an answer with code's exact text and no cited pages)."""
-    return a.found and (a.verification == "calculation checked" or (bool(a.exact) and not a.cited))
+    ('calculation checked', or an answer with code's exact text and no cited pages); and a deep analysis, whose
+    claims are each verified against their own pages in app/agent/deep.py (the check sees only the cited pages, and
+    called a brief's verified figures unsupported: 4 Nov overnight)."""
+    return a.found and (a.verification == "calculation checked" or (bool(a.exact) and not a.cited)
+                        or getattr(a, "deep", None) is not None)
 
 
 def honest_partial(v: Verdict) -> bool:
