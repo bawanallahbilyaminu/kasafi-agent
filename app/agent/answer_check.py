@@ -61,7 +61,8 @@ Wamakko is one" is a contradiction AND a subject mismatch.
 - Every one of the PARTS THE USER NAMED must be in the draft: its figure for the place, or one line saying the \
 documents give it only for a higher level (with that figure), or that they don't give it. A named part left out is \
 missing, and missing_stated is false for it. So is one the draft says isn't given when the EVIDENCE prints it for \
-a higher level (the state's figure) and the draft doesn't give that figure.
+a higher level (the state's figure) and the draft doesn't give that figure. A part the table prints as a dash, '…' \
+or blank, which the draft reports as 'no figure printed', is stated, not missing.
 - missing: what was asked for and isn't in the draft. A question for a total, or for all levels or types \
 ("how many schools" means every level), answered with one part: list the other parts. missing_stated: true when \
 the draft says plainly, for every missing thing, that the documents don't give it (e.g. "the census doesn't \
