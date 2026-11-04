@@ -2,7 +2,7 @@
 
 Branch `overnight-evals`, from the deployed commit `a7836ff`. Muse Spark Open on Baseten only; the Meta key in the environment was deliberately invalid and every Muse Spark client was served by Muse Spark Open (`evals/overnight/common.py`, `meta_guard`). Caps in code: $20 Baseten, stop 06:30.
 
-**Spend:** $14.36 on Baseten (every model call priced from its token usage, `kasafi_price_baseten_*`). **Meta attempts:** 0 (none: $0 Meta spend).
+**Spend:** $19.29 on Baseten (every model call priced from its token usage, `kasafi_price_baseten_*`). **Meta attempts:** 0 (none: $0 Meta spend).
 
 ## Rounds
 
@@ -53,7 +53,13 @@ Branch `overnight-evals`, from the deployed commit `a7836ff`. Muse Spark Open on
 
 ## Final comparison: deployed vs branch
 
-Not run (the night ended first).
+| Set | Deployed | Branch | Changed |
+|---|---|---|---|
+| place (103, full live path) | 79/103 on 8eedd7f, 80/103 on 3e4e58b (a7836ff itself not rerun: budget) | 95/103 on 3137cda | +16: the rain, flood and water ward rankings reach the satellite record and keep their maps; still wrong: a016, a033, a075, a093, a097, a098, a099, a102 (ward-scope wording, one Hausa flood ranking, one state flood-map ranking) |
+| surveys (23) | 21/23 on 61fba8b (s02, s18 wrong); 21/23 on 3e4e58b (s09, s18) | 19/23 (s05, s07, s09, s18); s05 and s07 answered on an immediate rerun, so 21/23 with the reruns | none beyond run-to-run variance; s09 and s18 wrong on every version |
+| newdocs (12) | 8/12 on 8eedd7f and 3e4e58b (d02, d04, d08, d11) | 8/12 (the same four) | none |
+| prose (7) | 2/7 on 8eedd7f (p02, p05 right); 1/7 on 3e4e58b (p02) | 1/7 (p02) | p05 within variance (it flipped between runs on the deployed code too) |
+| live-failures (13) | 11/13 on 61fba8b, then 5/5 on the rerun of the five affected cases at a7836ff | 13/13 (01:40, e9fa528 = same code), 12/13 (02:40, lfB; passed on rerun), 11/13 (02:49, 3137cda: lfC total not in the first line, lfSNB_ha IQS line omitted) | writer variance on the IQS state-level line and the total sentence; no case fails on every run |
 
 ## Top remaining failures
 

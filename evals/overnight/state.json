@@ -1,6 +1,6 @@
 {
  "started": "2026-11-04T00:01",
- "spend_usd": 14.3604,
+ "spend_usd": 19.2904,
  "rounds": [
   {
    "round": 1,
@@ -155,7 +155,33 @@
   }
  ],
  "meta_attempts": [],
- "final": {},
+ "final": {
+  "place (103, full live path)": {
+   "deployed": "79/103 on 8eedd7f, 80/103 on 3e4e58b (a7836ff itself not rerun: budget)",
+   "branch": "95/103 on 3137cda",
+   "changed": "+16: the rain, flood and water ward rankings reach the satellite record and keep their maps; still wrong: a016, a033, a075, a093, a097, a098, a099, a102 (ward-scope wording, one Hausa flood ranking, one state flood-map ranking)"
+  },
+  "surveys (23)": {
+   "deployed": "21/23 on 61fba8b (s02, s18 wrong); 21/23 on 3e4e58b (s09, s18)",
+   "branch": "19/23 (s05, s07, s09, s18); s05 and s07 answered on an immediate rerun, so 21/23 with the reruns",
+   "changed": "none beyond run-to-run variance; s09 and s18 wrong on every version"
+  },
+  "newdocs (12)": {
+   "deployed": "8/12 on 8eedd7f and 3e4e58b (d02, d04, d08, d11)",
+   "branch": "8/12 (the same four)",
+   "changed": "none"
+  },
+  "prose (7)": {
+   "deployed": "2/7 on 8eedd7f (p02, p05 right); 1/7 on 3e4e58b (p02)",
+   "branch": "1/7 (p02)",
+   "changed": "p05 within variance (it flipped between runs on the deployed code too)"
+  },
+  "live-failures (13)": {
+   "deployed": "11/13 on 61fba8b, then 5/5 on the rerun of the five affected cases at a7836ff",
+   "branch": "13/13 (01:40, e9fa528 = same code), 12/13 (02:40, lfB; passed on rerun), 11/13 (02:49, 3137cda: lfC total not in the first line, lfSNB_ha IQS line omitted)",
+   "changed": "writer variance on the IQS state-level line and the total sentence; no case fails on every run"
+  }
+ },
  "last_round_done": 2,
  "base_commit": "a7836ff",
  "branch": "overnight-evals",
@@ -164,5 +190,6 @@
    "id": "r1-063-schools",
    "why": "generator: Gudu's private counts are all 0, so the 'double count' figure equals the total; the question is kept as is and counted as invalid, not edited"
   }
- ]
+ ],
+ "ended": "02:52: the Baseten cap was reached ($19.29 of $20 after the last run); nothing ran after this"
 }

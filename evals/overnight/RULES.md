@@ -64,4 +64,7 @@ Re-read this file at the start of every round. It is the whole contract for the 
   rerun; routing 88/88. Spend $14.36 of $20. No further round is affordable (a round costs about $4.50 plus $1.60 to
   measure each fix on the held-out half), so the final comparison starts now rather than at 05:15, on the branch
   commit 3137cda, with about $5.60 left; the other eval runners are capped through EVAL_DAILY_USD.
+- 02:52 final comparison done on 3137cda (place 95/103, surveys 19/23 with s05/s07 answered on rerun, newdocs 8/12,
+  prose 1/7, live-failures 11/13 with the same code at 13/13 and 12/13 earlier). Spend $19.29: the cap ends the night;
+  nothing runs after this. Report: docs/overnight-report.md.
 - Spend and rounds: see `state.json`; the log: `progress.log`.
