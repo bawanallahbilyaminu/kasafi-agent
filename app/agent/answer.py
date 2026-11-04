@@ -3059,7 +3059,7 @@ def parts_block(d: dict, by_n: dict, names: list[str], lang: str) -> tuple[str, 
     # across levels are never added, whatever the writer said (3 Nov: Open added them on some runs, 173 for 117)
     note = next((m for e in by_n.values() if (m := PER_LEVEL_NOTE.search(e.text or ""))), None)
     private = [p for p in parts if PRIVATE.search(p.label)]
-    if note is not None and len(private) >= 2:
+    if note is not None and private:      # 3-4 Nov overnight: one private part had been added (Tangaza 93 for 90)
         why = PER_LEVEL_WHY.get(lang, PER_LEVEL_WHY["en"])
         for p in parts:             # code decides both ways: private parts out, the other levels' schools in
             if p in private:
