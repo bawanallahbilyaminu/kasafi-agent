@@ -584,11 +584,15 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         t_route = time.perf_counter()
         if _sender(notify) is not None:
             await notify(Out(parts_progress(lang, readings), lang=lang))
+        # the point the parts share, read once: a part that starts a wait (the farm's size, a pin) must not change
+        # what another part sees (4 Nov: the clinic part lost the pin to the flood part's size request)
+        spot = location_memory.recall(key)
 
         async def one(r) -> list[Out]:
             try:
                 if r.capability == "facility" and settings.has_database and settings.kasafi_shortcut_facilities and \
-                        (outs := await _facility_reading(r.restatement, r, key, lang, settings, facility_fn)) is not None:
+                        (outs := await _facility_reading(r.restatement, r, key, lang, settings, facility_fn,
+                                                         spot)) is not None:
                     _remember_turn(store, key, lang, r.restatement, outs)
                     return outs
                 return await respond(r.restatement[:1000], "", Out(t("echo", lang, text=r.restatement[:500])),
