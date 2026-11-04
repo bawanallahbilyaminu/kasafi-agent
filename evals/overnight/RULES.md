@@ -60,4 +60,8 @@ Re-read this file at the start of every round. It is the whole contract for the 
   `a7836ff`.
 - 01:08 round 1 done: fix 38/47, held-out 41/48 before and 45/48 after the 10 fixes (one commit each, 6ad37a3..c57988f);
   live-failures 13/13, routing 88/88, understanding replay unchanged. Spend $7.64. Next: round 2.
+- 02:05 round 2 done: fix 52/59, held-out 34/37 before and 34/37 after (3 fixes, 80440bf..3137cda); live-failures 13/13 on
+  rerun; routing 88/88. Spend $14.36 of $20. No further round is affordable (a round costs about $4.50 plus $1.60 to
+  measure each fix on the held-out half), so the final comparison starts now rather than at 05:15, on the branch
+  commit 3137cda, with about $5.60 left; the other eval runners are capped through EVAL_DAILY_USD.
 - Spend and rounds: see `state.json`; the log: `progress.log`.

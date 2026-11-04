@@ -1,6 +1,6 @@
 {
  "started": "2026-11-04T00:01",
- "spend_usd": 7.6431,
+ "spend_usd": 14.3604,
  "rounds": [
   {
    "round": 1,
@@ -11,6 +11,15 @@
    "fix": "38/47 before",
    "heldout_before": "41/48",
    "heldout_after": "45/48"
+  },
+  {
+   "round": 2,
+   "commit": "c57988f (base) -> 3137cda (after fixes)",
+   "fix_baseline": "52/59",
+   "heldout_baseline": "34/37",
+   "notes": "baseline: fix 52/59 ($2.30), held-out 34/37 ($1.60); causes: dated NEMA questions answered from the newest card (3), an LGA's wards answered statewide (1), the IQS state figure omitted by the writer (1), MICS wealth/anaemia unverified (2), a budget comparison missing one year (1) | after the fixes: held-out 34/37 (first rerun 33/37: r2-008 passed on rerun, r2-035 failed twice on the writer omitting the IQS state figure; r2-070 fixed), live-failures 12/13 then 13/13 (lfB rerun), routing 88/88, understanding replay unchanged",
+   "heldout_before": "34/37",
+   "heldout_after": "34/37 (33/37 on the first rerun)"
   }
  ],
  "fixes": [
@@ -113,11 +122,41 @@
    "routing": "88/88",
    "understanding": "244/244",
    "kept": true
+  },
+  {
+   "commit": "80440bf",
+   "what": "the reading's LGA beats the words in the area route (Tambuwal's wards, not the state's 244)",
+   "before": "34/37",
+   "after": "34/37 (33/37 first rerun)",
+   "lf": "13/13 -> 12/13, 13/13 on rerun",
+   "routing": "88/88",
+   "understanding": "unchanged",
+   "kept": true
+  },
+  {
+   "commit": "0e34ea1",
+   "what": "a topic figure must carry the day asked (the 17 August 2025 dashboard, not the newest)",
+   "before": "34/37",
+   "after": "34/37 (33/37 first rerun)",
+   "lf": "13/13 -> 12/13, 13/13 on rerun",
+   "routing": "88/88",
+   "understanding": "unchanged",
+   "kept": true
+  },
+  {
+   "commit": "3137cda",
+   "what": "the 'not found' line keeps its spaces when figures are removed (wording only)",
+   "before": "34/37",
+   "after": "34/37 (33/37 first rerun)",
+   "lf": "13/13 -> 12/13, 13/13 on rerun",
+   "routing": "88/88",
+   "understanding": "unchanged",
+   "kept": true
   }
  ],
  "meta_attempts": [],
  "final": {},
- "last_round_done": 1,
+ "last_round_done": 2,
  "base_commit": "a7836ff",
  "branch": "overnight-evals",
  "invalid": [
