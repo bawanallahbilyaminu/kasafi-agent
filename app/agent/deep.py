@@ -1091,7 +1091,12 @@ def short_name(title: str, year: int | None = None) -> str:
         name = m.group(1)
     else:
         words = [w for w in re.findall(r"[\w'-]+", t) if w.lower() not in _STOP]
-        name = " ".join(words[:4]) or short_title(t, 40)
+        caps = [w for w in words if w[:1].isupper() and not w[:1].isdigit()]
+        marks = [w for w in words if re.fullmatch(r"(?:Q[1-4]|(?:19|20)\d\d(?:-\d{2,4})?)", w)]
+        if len(caps) >= 3 and len(words) >= 5:             # a long name: its initials ('MSP'), with Q4 2025 kept
+            name = " ".join(["".join(w[0] for w in caps[:3]), *marks[:2]])
+        else:
+            name = " ".join(words[:4]) or short_title(t, 40)
     has_year = bool(re.search(r"\b(?:19|20)\d\d\b", name)) or bool(year and str(year) in t and len(name) > 12)
     return f"{name}, {year}" if year and not has_year else name
 
@@ -1287,7 +1292,9 @@ async def deep_answer(conn: psycopg.Connection, question: str, english: str, lan
         readings += extra
         unread += [d for d in more_unread if d not in unread]
     log.info("deep: %d verified claims%s", len(claims), f" (stopped: {stopped})" if stopped else "")
-    unread = [next((r.title for r in readings if r.doc_id == d and r.title), d) for d in unread]
+    read_after_all = {c.doc_id for c in claims}               # a later round read it: not 'not read in time'
+    unread = [next((r.title for r in readings if r.doc_id == d and r.title), d) for d in unread
+              if d not in read_after_all]
     if unread:
         log.warning("deep: %d documents not read in time: %s", len(unread), "; ".join(unread))
     chosen = select_claims(claims, dims, question)
