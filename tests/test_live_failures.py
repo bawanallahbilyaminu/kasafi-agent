@@ -207,3 +207,42 @@ def test_a_part_without_a_number_never_blocks_the_total_and_the_double_count_is_
     assert ans.restates_parts("Dange Shuni has 137 schools when public and private are added.", parts)
     assert ans.restates_parts("Private schools are counted at each level they offer, so they can't be added.", parts)
     assert not ans.restates_parts("The census gives IQS only for the whole state: 123 (p. 22).", parts)
+
+
+def test_one_private_part_is_not_added_when_the_census_counts_per_level() -> None:
+    """4 Nov overnight: Tangaza got 93 (public 77 + 9 + 4 plus private primary 3) because the per-level rule needed
+    two private parts."""
+    ev = _evidence()
+    ev[4] = ans.Evidence(4, "asc-sokoto-2023-2024", ASC.name, 2024, 21, "text",
+                         "Table 2.2: Number of Private schools by level\nSchools with primary classes 203")
+    d = {"parts": [{"label": "public primary", "value": "91", "cited": 1},
+                   {"label": "public junior secondary", "value": "18", "cited": 2},
+                   {"label": "private primary", "value": "28", "cited": 1}]}
+    text, working, _ = ans.parts_block(d, ev, ["Dange Shuni"], "en")
+    assert working == "Total, calculated in code: 91 + 18 = 109" and "Not added" in text
+
+
+def test_a_single_part_is_still_shown_dates_are_searched_in_their_printed_forms_and_a_kind_of_place_is_no_place() -> None:
+    """4 Nov overnight, round 1: 'How many public primary schools are in Kebbe?' put its one figure in parts, which
+    were dropped below two; 'as of 17 August 2025' never found the page printing '17/08/25'; 'which 3 LGAs have the
+    most IDPs' was read as a named place and lost the DTM ranking."""
+    d = {"parts": [{"label": "public primary schools in Kebbe", "value": "66", "cited": 1}]}
+    ev = {1: ans.Evidence(1, "asc", ASC.name, 2024, 31, "text", "Table 3.6\nKEBBE 66 28,639 12,326 43% - - - -")}
+    text, working, plain = ans.parts_block(d, ev, ["Kebbe"], "en")
+    assert text == "• public primary schools in Kebbe: 66 (page 31)" and working == "" and plain.endswith("66")
+    assert ans.date_forms("as of 17 August 2025")[:2] == ["17/08/25", "17/08/2025"]
+    assert "1 October 2024" in ans.date_forms("as of 01/10/2024") and "1st October 2024" in ans.date_forms("01/10/2024")
+    assert ans.date_forms("in 2024") == []
+    p = ans.Plan(english_question="q", search_queries=[], doc_ids=[], need=None)
+    assert ans.place_names(p, "Which 3 LGAs in Sokoto State have the most IDPs?") == []
+    assert ans.place_names(p, "How many schools are in Kebbe LGA?") == ["Kebbe"]
+    assert not ans.GENERIC_PLACE.search("Dange Shuni") and ans.GENERIC_PLACE.search("Sokoto State LGAs")
+
+
+def test_a_topic_figure_must_carry_the_day_asked() -> None:
+    """4 Nov overnight, round 2: 'displaced as of 17 August 2025' got the newest dashboard's 24/09/25 figure."""
+    from app.agent.answer import date_forms
+    forms = date_forms("how many people were displaced as of 17 August 2025?")
+    aug = tp.Card(ASC, "d", "t", 2, "626", "people", "displaced persons", "17/08/25", "Sokoto")
+    sep = tp.Card(ASC, "d", "t", 3, "4,566", "people", "displaced persons", "24/09/25", "Sokoto")
+    assert tp.card_on_date(aug, forms) and not tp.card_on_date(sep, forms)

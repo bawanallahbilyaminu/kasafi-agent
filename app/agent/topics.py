@@ -953,6 +953,12 @@ def card_years(c: Card) -> set[int]:
     return out or ({card_year(c)} - {0})
 
 
+def card_on_date(c: Card, forms: list[str]) -> bool:
+    """The figure is dated one of these printed forms of the day asked ('17/08/25', '17 August 2025')."""
+    text = f"{c.ref_date or ''} {c.edition or ''}"
+    return any(f in text for f in forms)
+
+
 def card_year(c: Card) -> int:
     """The year the figure refers to: its date, else the year of the report it is cited from, else the edition."""
     for text in (c.ref_date, c.based_on if cited_from_other(c) else "", c.edition):
@@ -1490,6 +1496,16 @@ async def topic_answer(conn: psycopg.Connection, topic_id: str, question: str, e
                 s.cards = [c for c in s.cards if card_years(c) & asked]
             if not any(s.cards for s in sources):
                 log.info("topic %s: no figure for %s; the document path answers", topic_id, sorted(asked))
+                return TopicResult(topic_id, "", False, False, sources, related, [], {"topic": time.perf_counter() - t0})
+        # a full date asked ('as of 17 August 2025'): only the figures dated that day (4 Nov overnight: the newest
+        # dashboard's 4,566 of 24/09/25 answered for 17 August); none of them, and the document path answers
+        from app.agent.answer import date_forms
+        if (forms := date_forms(f"{question} {english}")) and not across_sources(ask):
+            if any(card_on_date(c, forms) for s in sources for c in s.cards):
+                for s in sources + related:
+                    s.cards = [c for c in s.cards if card_on_date(c, forms)]
+            else:
+                log.info("topic %s: no figure dated %s; the document path answers", topic_id, forms[0])
                 return TopicResult(topic_id, "", False, False, sources, related, [], {"topic": time.perf_counter() - t0})
         text, partial = compose(topic, sources, related, lang, ask)
         # API figures have no document page to cite or crop: the sources line names them

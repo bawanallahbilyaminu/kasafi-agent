@@ -1,0 +1,2122 @@
+{
+ "round": 1,
+ "questions": [
+  {
+   "feature": "nema",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "Could you please tell me, according to NEMA, how many people were displaced by floods in Sokoto State as of 17 August 2025?"
+   ],
+   "expect": {
+    "figures": [
+     "626"
+    ],
+    "docs": [
+     "nema-flood-dashboard-2025-08-17"
+    ],
+    "pages": [
+     2
+    ]
+   },
+   "source": "charts dashboard row, nema-flood-dashboard-2025-08-17 p2",
+   "lga": "",
+   "form": "long",
+   "id": "r1-001-nema",
+   "set": "heldout"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "Good afternoon sir, please I would like to ask how many schools are in Kware? Thank you very much."
+   ],
+   "expect": {
+    "figures": [
+     "104",
+     "85",
+     "10",
+     "9"
+    ],
+    "lead_figure": "104",
+    "must_not_figures": [
+     "117"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC p31/44/53, total in code",
+   "lga": "Kware",
+   "form": "long",
+   "id": "r1-002-schools",
+   "set": "heldout"
+  },
+  {
+   "feature": "nearest",
+   "difficulty": "multi",
+   "lang": "en",
+   "turns": [
+    {
+     "pin": [
+      12.997606624000042,
+      5.767558221514122
+     ]
+    },
+    "Which health facility is nearest to me?"
+   ],
+   "expect": {
+    "must_any": [
+     "Gandi Primary Health Center",
+     "Warwanna Health Clinic",
+     "Rabkwanni Up Greaded Health Post",
+     "Rakwamni Health Clinic"
+    ],
+    "route": "facility"
+   },
+   "source": "registry, straight-line nearest 4",
+   "lga": "Rabah",
+   "id": "r1-003-nearest",
+   "set": "heldout"
+  },
+  {
+   "feature": "deep",
+   "difficulty": "combine",
+   "lang": "ha",
+   "turns": [
+    "Yaya yanayin kiwon lafiya a Jihar Sokoto?"
+   ],
+   "expect": {
+    "found": true,
+    "min_sources": 2,
+    "route": "deep"
+   },
+   "source": "hand-written prompt",
+   "lga": "",
+   "id": "r1-004-deep",
+   "set": "fix"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "multi",
+   "lang": "en",
+   "turns": [
+    "How many schools are in Shagari?",
+    "I mean all of them: primary, JSS, SSS and IQS"
+   ],
+   "expect": {
+    "figures": [
+     "131",
+     "123"
+    ],
+    "lead_figure": "131",
+    "must_any": [
+     "IQS",
+     "Islamiyya"
+    ],
+    "must_not_figures": [
+     "133"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC + IQS statewide p22",
+   "lga": "Shagari",
+   "id": "r1-005-schools",
+   "set": "fix"
+  },
+  {
+   "feature": "surveys",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "What is the unmet need for famly planing among married women in Sokoto according to MICS 2021?"
+   ],
+   "expect": {
+    "any": [
+     [
+      "18.1"
+     ]
+    ],
+    "docs": [
+     "mics-2021"
+    ]
+   },
+   "source": "evals/surveys s08 (figure confirmed in mics-2021)",
+   "lga": "",
+   "form": "typo",
+   "id": "r1-006-surveys",
+   "set": "heldout"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "direct",
+   "lang": "ha",
+   "turns": [
+    "Makarantun firamare na gwamnati nawa ne a Sabon Birni?"
+   ],
+   "expect": {
+    "figures": [
+     "175"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC p31",
+   "lga": "Sabon Birni",
+   "form": "hausa",
+   "id": "r1-007-schools",
+   "set": "heldout"
+  },
+  {
+   "feature": "place",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "Which wards of Kware LGA flooded most in 2026?"
+   ],
+   "expect": {
+    "must_any": [
+     "Basansan"
+    ],
+    "must_not": [
+     "never flooded",
+     "ba ta taɓa",
+     "NDVI index"
+    ],
+    "route": "place_area"
+   },
+   "source": "ward_history (flood, a013)",
+   "lga": "",
+   "id": "r1-008-place",
+   "set": "heldout"
+  },
+  {
+   "feature": "place",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "Which LGAs had the largest share of land flooded in 2024?"
+   ],
+   "expect": {
+    "must_any": [
+     "Sokoto North"
+    ],
+    "must_not": [
+     "never flooded"
+    ],
+    "route": "place_area"
+   },
+   "source": "ward_history (state_flood, a079)",
+   "lga": "",
+   "id": "r1-009-place",
+   "set": "fix"
+  },
+  {
+   "feature": "budget_lga",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "What is the government budgeting for Yabo LGA in 2026?"
+   ],
+   "expect": {
+    "amounts": [
+     760000000.0
+    ],
+    "route": "analysis:lga_projects"
+   },
+   "source": "lga_projects tool, 2026",
+   "lga": "Yabo",
+   "id": "r1-010-budget_lga",
+   "set": "fix"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How much is the Shehu Shagari University of Education's approved budget for 2028?"
+   ],
+   "expect": {
+    "figures": [],
+    "any": [],
+    "docs": []
+   },
+   "source": "budget core (not_in_data)",
+   "lga": "",
+   "id": "r1-011-budget",
+   "set": "fix"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "Which 3 LGAs in Sokoto have the most IDPs?"
+   ],
+   "expect": {
+    "figures": [
+     "40,729",
+     "19,151",
+     "17,143"
+    ],
+    "any": [],
+    "docs": []
+   },
+   "source": "budget core (rank_lga)",
+   "lga": "",
+   "id": "r1-012-budget",
+   "set": "heldout"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "Abeg how many public primary schools dey for Kebbe?"
+   ],
+   "expect": {
+    "figures": [
+     "66"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC p31",
+   "lga": "Kebbe",
+   "form": "casual",
+   "id": "r1-013-schools",
+   "set": "heldout"
+  },
+  {
+   "feature": "facilities",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How many health facilities are in Binji LGA?"
+   ],
+   "expect": {
+    "figures": [
+     "32"
+    ],
+    "exact": true,
+    "route": "facility"
+   },
+   "source": "facility registry",
+   "lga": "Binji",
+   "id": "r1-014-facilities",
+   "set": "heldout"
+  },
+  {
+   "feature": "conversation",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "Can you speak Hausa?"
+   ],
+   "expect": {
+    "must_not": [
+     "couldn't find",
+     "Ban sami amsar"
+    ]
+   },
+   "source": "fixed",
+   "lga": "",
+   "id": "r1-015-conversation",
+   "set": "heldout"
+  },
+  {
+   "feature": "deep",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "Tell me about basic education in Sokoto State."
+   ],
+   "expect": {
+    "found": true,
+    "min_sources": 2,
+    "route": "deep"
+   },
+   "source": "hand-written prompt",
+   "lga": "",
+   "id": "r1-016-deep",
+   "set": "heldout"
+  },
+  {
+   "feature": "place",
+   "difficulty": "combine",
+   "lang": "ha",
+   "turns": [
+    "Waɗanne gundumomin Ƙaramar Hukumar Dange Shuni ne suka fi samun ruwan sama na Yuni–Oktoba a 2024?"
+   ],
+   "expect": {
+    "must_any": [
+     "Bodai"
+    ],
+    "must_not": [
+     "never flooded",
+     "ba ta taɓa",
+     "NDVI index"
+    ],
+    "route": "place_area"
+   },
+   "source": "ward_history (rain, a070)",
+   "lga": "",
+   "id": "r1-017-place",
+   "set": "heldout"
+  },
+  {
+   "feature": "place",
+   "difficulty": "combine",
+   "lang": "ha",
+   "turns": [
+    "Kashin gonaki a cikin taswirar ambaliya ta MDD a gundumomin Ƙaramar Hukumar Dange Shuni, 2024"
+   ],
+   "expect": {
+    "must_any": [
+     "Bodai"
+    ],
+    "must_not": [
+     "never flooded",
+     "ba ta taɓa",
+     "NDVI index"
+    ],
+    "route": "place_area"
+   },
+   "source": "ward_history (flood_map, a034)",
+   "lga": "",
+   "id": "r1-018-place",
+   "set": "heldout"
+  },
+  {
+   "feature": "surveys",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "According to MICS 2021, what share of women in Sokoto with a recent live birth were attended at least once by skilled health personnel during antenatal care?"
+   ],
+   "expect": {
+    "any": [
+     [
+      "30.5"
+     ]
+    ],
+    "docs": [
+     "mics-2021"
+    ]
+   },
+   "source": "evals/surveys s07 (figure confirmed in mics-2021)",
+   "lga": "",
+   "id": "r1-019-surveys",
+   "set": "heldout"
+  },
+  {
+   "feature": "nearest",
+   "difficulty": "multi",
+   "lang": "en",
+   "turns": [
+    {
+     "pin": [
+      13.458931693500062,
+      4.446270440812315
+     ]
+    },
+    "Which health facility is nearest to me?"
+   ],
+   "expect": {
+    "must_any": [
+     "Bare Bari Basic Health Clinic",
+     "Katsura Health Post",
+     "Illela Kiso Basic Health Clinic",
+     "Tullon Doya Health Post"
+    ],
+    "route": "facility"
+   },
+   "source": "registry, straight-line nearest 4",
+   "lga": "Gudu",
+   "id": "r1-020-nearest",
+   "set": "heldout"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How much had the Community and Social Development Agency spent by the end of Q3 2025, against its revised budget?"
+   ],
+   "expect": {
+    "figures": [
+     "1,800,000.00",
+     "630,000,000.00"
+    ],
+    "any": [],
+    "docs": []
+   },
+   "source": "budget core (spend_quarter)",
+   "lga": "",
+   "id": "r1-021-budget",
+   "set": "heldout"
+  },
+  {
+   "feature": "emergency",
+   "difficulty": "direct",
+   "lang": "ha",
+   "turns": [
+    "Leɓen jaririna suna yin shuɗi"
+   ],
+   "expect": {
+    "emergency": true
+   },
+   "source": "evals/emergency e39",
+   "lga": "",
+   "id": "r1-022-emergency",
+   "set": "heldout"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "What share of the Ministry for Religious Affairs's 2026 approved budget is capital?"
+   ],
+   "expect": {
+    "figures": [],
+    "any": [
+     [
+      "79.5%"
+     ],
+     [
+      "79.5 %"
+     ],
+     [
+      "9,938,200,000.00",
+      "12,497,557,198.38"
+     ],
+     [
+      "74.2%"
+     ],
+     [
+      "74.2 %"
+     ],
+     [
+      "13,389,400,000.00",
+      "18,046,979,352.88"
+     ]
+    ],
+    "docs": []
+   },
+   "source": "budget core (share)",
+   "lga": "",
+   "id": "r1-023-budget",
+   "set": "fix"
+  },
+  {
+   "feature": "deep",
+   "difficulty": "combine",
+   "lang": "ha",
+   "turns": [
+    "Me ke faruwa game da ilimi a Sokoto?"
+   ],
+   "expect": {
+    "found": true,
+    "min_sources": 2,
+    "route": "deep"
+   },
+   "source": "hand-written prompt",
+   "lga": "",
+   "id": "r1-024-deep",
+   "set": "fix"
+  },
+  {
+   "feature": "nema",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "According to NEMA, how many LGAs were affected by floods in Sokoto State as of 17 August 2025?"
+   ],
+   "expect": {
+    "figures": [
+     "3"
+    ],
+    "docs": [
+     "nema-flood-dashboard-2025-08-17"
+    ],
+    "pages": [
+     2
+    ]
+   },
+   "source": "charts dashboard row, nema-flood-dashboard-2025-08-17 p2",
+   "lga": "",
+   "id": "r1-025-nema",
+   "set": "fix"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "Why Ministry for Special Duties budget drop from 2025 to 2026?"
+   ],
+   "expect": {
+    "figures": [],
+    "any": [
+     [
+      "423,000,138.00",
+      "829,500,000.00"
+     ],
+     [
+      "423,000,138.00",
+      "829,500,000.00"
+     ]
+    ],
+    "docs": []
+   },
+   "source": "budget core (false_premise)",
+   "lga": "",
+   "form": "casual",
+   "id": "r1-026-budget",
+   "set": "fix"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How much is the State Emergency Management Agency (SEMA)'s approved budget for 2028?"
+   ],
+   "expect": {
+    "figures": [],
+    "any": [],
+    "docs": []
+   },
+   "source": "budget core (not_in_data)",
+   "lga": "",
+   "id": "r1-027-budget",
+   "set": "fix"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "What are the personnel, overhead and capital allocations of the Sokoto Urban & Reg. Planning Department in 2025?"
+   ],
+   "expect": {
+    "figures": [
+     "79,944,390.00",
+     "49,000,000.00",
+     "914,000,000.00"
+    ],
+    "any": [],
+    "docs": []
+   },
+   "source": "budget core (split)",
+   "lga": "",
+   "id": "r1-028-budget",
+   "set": "fix"
+  },
+  {
+   "feature": "conversation",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "What can you do?"
+   ],
+   "expect": {
+    "must_not": [
+     "couldn't find",
+     "Ban sami amsar"
+    ],
+    "must_any": [
+     "budget",
+     "kasafi"
+    ]
+   },
+   "source": "fixed",
+   "lga": "",
+   "id": "r1-029-conversation",
+   "set": "heldout"
+  },
+  {
+   "feature": "conversation",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "Who are you?"
+   ],
+   "expect": {
+    "must_not": [
+     "couldn't find",
+     "Ban sami amsar"
+    ],
+    "must_any": [
+     "Kasafi"
+    ]
+   },
+   "source": "fixed",
+   "lga": "",
+   "id": "r1-030-conversation",
+   "set": "fix"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "What are the personnel, overhead and capital allocations of the Ministry of Science and Technology in 2026?"
+   ],
+   "expect": {
+    "figures": [],
+    "any": [
+     [
+      "1,650,000,230.00",
+      "1,013,000,000.00",
+      "9,023,000,000.00"
+     ],
+     [
+      "1,650,000,230.00",
+      "1,013,000,000.00",
+      "9,023,000,000.00"
+     ]
+    ],
+    "docs": []
+   },
+   "source": "budget core (split)",
+   "lga": "",
+   "id": "r1-031-budget",
+   "set": "heldout"
+  },
+  {
+   "feature": "emergency",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "Flood water has trapped us on the roof"
+   ],
+   "expect": {
+    "emergency": true
+   },
+   "source": "evals/emergency e09",
+   "lga": "",
+   "id": "r1-032-emergency",
+   "set": "fix"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "Compare the Local Government Service Commission's approved budget in 2025 and 2026."
+   ],
+   "expect": {
+    "figures": [],
+    "any": [
+     [
+      "555,668,620.68",
+      "746,518,620.68"
+     ],
+     [
+      "147,992,129.68",
+      "398,842,129.68"
+     ]
+    ],
+    "docs": []
+   },
+   "source": "budget core (compare)",
+   "lga": "",
+   "id": "r1-033-budget",
+   "set": "heldout"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "Compare the Ministry of Environment's approved budget in 2025 and 2026."
+   ],
+   "expect": {
+    "figures": [],
+    "any": [
+     [
+      "24,523,772,920.28",
+      "20,769,471,936.00"
+     ],
+     [
+      "18,718,870,000.00",
+      "15,350,870,000.00"
+     ]
+    ],
+    "docs": []
+   },
+   "source": "budget core (compare)",
+   "lga": "",
+   "id": "r1-034-budget",
+   "set": "fix"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "Compare the Ministry of Transport's approved budget in 2025 and 2026."
+   ],
+   "expect": {
+    "figures": [],
+    "any": [
+     [
+      "3,653,300,000.00",
+      "50,867,000,000.00"
+     ],
+     [
+      "3,653,300,000.00",
+      "50,867,000,000.00"
+     ]
+    ],
+    "docs": []
+   },
+   "source": "budget core (compare)",
+   "lga": "",
+   "id": "r1-035-budget",
+   "set": "heldout"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "How many schools are in Gada?"
+   ],
+   "expect": {
+    "figures": [
+     "136",
+     "120",
+     "11",
+     "5"
+    ],
+    "lead_figure": "136",
+    "must_not_figures": [
+     "139"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC p31/44/53, total in code",
+   "lga": "Gada",
+   "id": "r1-036-schools",
+   "set": "heldout"
+  },
+  {
+   "feature": "conversation",
+   "difficulty": "direct",
+   "lang": "ha",
+   "turns": [
+    "Na gode"
+   ],
+   "expect": {
+    "must_not": [
+     "couldn't find",
+     "Ban sami amsar"
+    ]
+   },
+   "source": "fixed",
+   "lga": "",
+   "id": "r1-037-conversation",
+   "set": "heldout"
+  },
+  {
+   "feature": "emergency",
+   "difficulty": "direct",
+   "lang": "ha",
+   "turns": [
+    "Ma'aikatan jinya nawa ne a cibiyoyin lafiya?"
+   ],
+   "expect": {
+    "emergency": false
+   },
+   "source": "evals/emergency y18",
+   "lga": "",
+   "id": "r1-038-emergency",
+   "set": "heldout"
+  },
+  {
+   "feature": "facilities",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How many health facilities are in Shagari LGA?"
+   ],
+   "expect": {
+    "figures": [
+     "40"
+    ],
+    "exact": true,
+    "route": "facility"
+   },
+   "source": "facility registry",
+   "lga": "Shagari",
+   "id": "r1-039-facilities",
+   "set": "heldout"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How many junior secondary schools does Tambuwal have?"
+   ],
+   "expect": {
+    "figures": [
+     "24"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC p44",
+   "lga": "Tambuwal",
+   "id": "r1-040-schools",
+   "set": "fix"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How much had the Bureau for Public Procurement and Price Intelligence spent by the end of Q2 2025, against its revised budget?"
+   ],
+   "expect": {
+    "figures": [
+     "33,644,555.93",
+     "217,608,005.00"
+    ],
+    "any": [],
+    "docs": []
+   },
+   "source": "budget core (spend_quarter)",
+   "lga": "",
+   "id": "r1-041-budget",
+   "set": "fix"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "Good evening please, could you kindly assist me with information on how many junior secondary schools does Rabah have? Thank you very much."
+   ],
+   "expect": {
+    "figures": [
+     "9"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC p44",
+   "lga": "Rabah",
+   "form": "long",
+   "id": "r1-042-schools",
+   "set": "heldout"
+  },
+  {
+   "feature": "nearest",
+   "difficulty": "multi",
+   "lang": "en",
+   "turns": [
+    {
+     "pin": [
+      11.914105488500041,
+      4.753506811650942
+     ]
+    },
+    "Which health facility is nearest to me?"
+   ],
+   "expect": {
+    "must_any": [
+     "Ungushi Health Post",
+     "Ungushi Health Clinic",
+     "Jigawa Primary Health Care",
+     "Jigawa Health Post"
+    ],
+    "route": "facility"
+   },
+   "source": "registry, straight-line nearest 4",
+   "lga": "Kebbe",
+   "id": "r1-043-nearest",
+   "set": "fix"
+  },
+  {
+   "feature": "facilities",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How many hospitals are in Goronyo LGA?"
+   ],
+   "expect": {
+    "figures": [
+     "1"
+    ],
+    "exact": true,
+    "route": "facility"
+   },
+   "source": "facility registry",
+   "lga": "Goronyo",
+   "id": "r1-044-facilities",
+   "set": "heldout"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "Abeg how much Agency for Persons Living With Disabilities spend for Q1 2027?"
+   ],
+   "expect": {
+    "figures": [],
+    "any": [],
+    "docs": []
+   },
+   "source": "budget core (not_in_data)",
+   "lga": "",
+   "form": "casual",
+   "id": "r1-045-budget",
+   "set": "fix"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "Good morning sir, please I would like to kindly ask how many schools are in Sokoto North? Thank you very much for your assistance."
+   ],
+   "expect": {
+    "figures": [
+     "60",
+     "23",
+     "23",
+     "14"
+    ],
+    "lead_figure": "60",
+    "must_not_figures": [
+     "88"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC p31/44/53, total in code",
+   "lga": "Sokoto North",
+   "form": "long",
+   "id": "r1-046-schools",
+   "set": "heldout"
+  },
+  {
+   "feature": "emergency",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How much did the state spend on primary health care in 2025?"
+   ],
+   "expect": {
+    "emergency": false
+   },
+   "source": "evals/emergency n10",
+   "lga": "",
+   "id": "r1-047-emergency",
+   "set": "heldout"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "How many schools are in Gwadabawa?"
+   ],
+   "expect": {
+    "figures": [
+     "111",
+     "92",
+     "12",
+     "7"
+    ],
+    "lead_figure": "111",
+    "must_not_figures": [
+     "124"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC p31/44/53, total in code",
+   "lga": "Gwadabawa",
+   "id": "r1-048-schools",
+   "set": "fix"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "multi",
+   "lang": "en",
+   "turns": [
+    "How mnay schools are in Binji?",
+    "I mean all of them: primary, JSS, SSS and IQS"
+   ],
+   "expect": {
+    "figures": [
+     "77",
+     "123"
+    ],
+    "lead_figure": "77",
+    "must_any": [
+     "IQS",
+     "Islamiyya"
+    ],
+    "must_not_figures": [
+     "79"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC + IQS statewide p22",
+   "lga": "Binji",
+   "form": "typo",
+   "id": "r1-049-schools",
+   "set": "fix"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "multi",
+   "lang": "ha",
+   "turns": [
+    "Makarantu nawa ne suke a Tangaza?",
+    "I mean all of them: primary, JSS, SSS and IQS"
+   ],
+   "expect": {
+    "figures": [
+     "90",
+     "123"
+    ],
+    "lead_figure": "90",
+    "must_any": [
+     "IQS",
+     "Islamiyya"
+    ],
+    "must_not_figures": [
+     "93"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC + IQS statewide p22",
+   "lga": "Tangaza",
+   "form": "hausa",
+   "id": "r1-050-schools",
+   "set": "fix"
+  },
+  {
+   "feature": "surveys",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "What's anaemia rate for kids 6-59 months in Sokoto from NDHS 2024?"
+   ],
+   "expect": {
+    "any": [
+     [
+      "56.7"
+     ],
+     [
+      "57%"
+     ]
+    ],
+    "docs": [
+     "mics-2021"
+    ]
+   },
+   "source": "evals/surveys s15 (figure confirmed in mics-2021)",
+   "lga": "",
+   "form": "casual",
+   "id": "r1-051-surveys",
+   "set": "heldout"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "multi",
+   "lang": "en",
+   "turns": [
+    "How many schools are in Sokoto South?",
+    "I mean all of them: primary, JSS, SSS and IQS"
+   ],
+   "expect": {
+    "figures": [
+     "82",
+     "123"
+    ],
+    "lead_figure": "82",
+    "must_any": [
+     "IQS",
+     "Islamiyya"
+    ],
+    "must_not_figures": [
+     "196"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC + IQS statewide p22",
+   "lga": "Sokoto South",
+   "id": "r1-052-schools",
+   "set": "fix"
+  },
+  {
+   "feature": "facilities",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "Good morning sir, please I would like to know how many health facilities are in Gada LGA? Thank you."
+   ],
+   "expect": {
+    "figures": [
+     "51"
+    ],
+    "exact": true,
+    "route": "facility"
+   },
+   "source": "facility registry",
+   "lga": "Gada",
+   "form": "long",
+   "id": "r1-053-facilities",
+   "set": "heldout"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How mnay junior secondry schools does Wurno have?"
+   ],
+   "expect": {
+    "figures": [
+     "9"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC p44",
+   "lga": "Wurno",
+   "form": "typo",
+   "id": "r1-054-schools",
+   "set": "heldout"
+  },
+  {
+   "feature": "nearest",
+   "difficulty": "multi",
+   "lang": "en",
+   "turns": [
+    {
+     "pin": [
+      12.832573021500025,
+      5.424377615722849
+     ]
+    },
+    "Which health facility is nearest to me?"
+   ],
+   "expect": {
+    "must_any": [
+     "Hausare Primary Health Clinic",
+     "Wababe Health Post",
+     "Fajaldu Primary Health Clinic",
+     "Prison Clinic"
+    ],
+    "route": "facility"
+   },
+   "source": "registry, straight-line nearest 4",
+   "lga": "Dange Shuni",
+   "id": "r1-055-nearest",
+   "set": "fix"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "What share of the College of Nursing Sciences's 2026 approved budget is capital?"
+   ],
+   "expect": {
+    "figures": [],
+    "any": [
+     [
+      "66.5%"
+     ],
+     [
+      "66.5 %"
+     ],
+     [
+      "1,100,000,000.00",
+      "1,653,338,250.00"
+     ]
+    ],
+    "docs": []
+   },
+   "source": "budget core (share)",
+   "lga": "",
+   "id": "r1-056-budget",
+   "set": "heldout"
+  },
+  {
+   "feature": "emergency",
+   "difficulty": "direct",
+   "lang": "ha",
+   "turns": [
+    "Ƙanwata mai ciki tana zubar da jini"
+   ],
+   "expect": {
+    "emergency": true
+   },
+   "source": "evals/emergency e36",
+   "lga": "",
+   "id": "r1-057-emergency",
+   "set": "fix"
+  },
+  {
+   "feature": "place",
+   "difficulty": "combine",
+   "lang": "ha",
+   "turns": [
+    "Waɗanne gundumomin Ƙaramar Hukumar Tambuwal ne ambaliya ta fi rufewa a 2026?"
+   ],
+   "expect": {
+    "must_any": [
+     "Romo Sarki"
+    ],
+    "must_not": [
+     "never flooded",
+     "ba ta taɓa",
+     "NDVI index"
+    ],
+    "route": "place_area"
+   },
+   "source": "ward_history (flood, a024)",
+   "lga": "",
+   "id": "r1-058-place",
+   "set": "heldout"
+  },
+  {
+   "feature": "surveys",
+   "difficulty": "direct",
+   "lang": "ha",
+   "turns": [
+    "A cewar MICS 2021, kashi nawa cikin 100 na yara masu watanni 12-23 a Sokoto ne suka samu dukkan rigakafin asali, kuma kashi nawa ne ba su samu ko ɗaya ba?"
+   ],
+   "expect": {
+    "any": [
+     [
+      "7.2",
+      "50.7"
+     ]
+    ],
+    "docs": [
+     "mics-2021"
+    ]
+   },
+   "source": "evals/surveys s03 (figure confirmed in mics-2021)",
+   "lga": "",
+   "form": "hausa",
+   "id": "r1-059-surveys",
+   "set": "heldout"
+  },
+  {
+   "feature": "budget_lga",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "What is the government budgeting for Illela LGA in 2026?"
+   ],
+   "expect": {
+    "amounts": [
+     418053124.67
+    ],
+    "route": "analysis:lga_projects"
+   },
+   "source": "lga_projects tool, 2026",
+   "lga": "Illela",
+   "id": "r1-060-budget_lga",
+   "set": "fix"
+  },
+  {
+   "feature": "nema",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "According to NEMA, how many LGAs were affected by floods in Sokoto State as of 24/09/25?"
+   ],
+   "expect": {
+    "figures": [
+     "7"
+    ],
+    "docs": [
+     "nema-flood-sitrep-2025-09-26"
+    ],
+    "pages": [
+     3
+    ]
+   },
+   "source": "charts dashboard row, nema-flood-sitrep-2025-09-26 p3",
+   "lga": "",
+   "id": "r1-061-nema",
+   "set": "heldout"
+  },
+  {
+   "feature": "surveys",
+   "difficulty": "direct",
+   "lang": "ha",
+   "turns": [
+    "Menene adadin mace-macen yara ƙasa da shekara biyar a Sokoto bisa ga MICS 2021?"
+   ],
+   "expect": {
+    "any": [
+     [
+      "202"
+     ]
+    ],
+    "docs": [
+     "mics-2021"
+    ]
+   },
+   "source": "evals/surveys s04 (figure confirmed in mics-2021)",
+   "lga": "",
+   "form": "hausa",
+   "id": "r1-062-surveys",
+   "set": "fix"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "How many schools are in Gudu?"
+   ],
+   "expect": {
+    "figures": [
+     "69",
+     "61",
+     "5",
+     "3"
+    ],
+    "lead_figure": "69",
+    "must_not_figures": [
+     "69"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC p31/44/53, total in code",
+   "lga": "Gudu",
+   "id": "r1-063-schools",
+   "set": "fix"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "Why did the Government House's approved budget fall from 2025 to 2026?"
+   ],
+   "expect": {
+    "figures": [
+     "14,028,166,805.41",
+     "18,527,180,961.21"
+    ],
+    "any": [],
+    "docs": []
+   },
+   "source": "budget core (false_premise)",
+   "lga": "",
+   "id": "r1-064-budget",
+   "set": "heldout"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How much was approved for Ministry of Information in 2024 budget?"
+   ],
+   "expect": {
+    "figures": [],
+    "any": [
+     [
+      "2,935,604,652.14"
+     ],
+     [
+      "2,452,392,988.02"
+     ]
+    ],
+    "docs": []
+   },
+   "source": "budget core (lookup)",
+   "lga": "",
+   "form": "casual",
+   "id": "r1-065-budget",
+   "set": "fix"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "direct",
+   "lang": "ha",
+   "turns": [
+    "Nawa Ministry of Commerce and Industry ta kashe har zuwa ƙarshen Q4 2024 idan aka kwatanta da revised budget ɗinta?"
+   ],
+   "expect": {
+    "figures": [],
+    "any": [
+     [
+      "289,095,188.84",
+      "1,487,580,973.77"
+     ],
+     [
+      "2,857,655,908.31",
+      "5,068,871,690.05"
+     ]
+    ],
+    "docs": []
+   },
+   "source": "budget core (spend_quarter)",
+   "lga": "",
+   "form": "hausa",
+   "id": "r1-066-budget",
+   "set": "fix"
+  },
+  {
+   "feature": "budget_lga",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "What is the government budgeting for Wamakko LGA in 2026?"
+   ],
+   "expect": {
+    "amounts": [
+     79975895408.62
+    ],
+    "route": "analysis:lga_projects"
+   },
+   "source": "lga_projects tool, 2026",
+   "lga": "Wamakko",
+   "id": "r1-067-budget_lga",
+   "set": "fix"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How many junoir secondary shcools does Isa have?"
+   ],
+   "expect": {
+    "figures": [
+     "13"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC p44",
+   "lga": "Isa",
+   "form": "typo",
+   "id": "r1-068-schools",
+   "set": "fix"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How many public primary schools dey for Bodinga?"
+   ],
+   "expect": {
+    "figures": [
+     "105"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC p31",
+   "lga": "Bodinga",
+   "form": "casual",
+   "id": "r1-069-schools",
+   "set": "heldout"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "Why did the Ministry of Transport's approved budget fall from 2025 to 2026?"
+   ],
+   "expect": {
+    "figures": [],
+    "any": [
+     [
+      "3,653,300,000.00",
+      "50,867,000,000.00"
+     ],
+     [
+      "3,653,300,000.00",
+      "50,867,000,000.00"
+     ]
+    ],
+    "docs": []
+   },
+   "source": "budget core (false_premise)",
+   "lga": "",
+   "id": "r1-070-budget",
+   "set": "heldout"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How much was approved for Department of Establishment and Pensions in 2025 budget?"
+   ],
+   "expect": {
+    "figures": [],
+    "any": [
+     [
+      "16,170,725,333.27"
+     ],
+     [
+      "16,170,725,333.27"
+     ]
+    ],
+    "docs": []
+   },
+   "source": "budget core (lookup)",
+   "lga": "",
+   "form": "casual",
+   "id": "r1-071-budget",
+   "set": "heldout"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "multi",
+   "lang": "ha",
+   "turns": [
+    "Makarantu nawa ne a Dange Shuni?",
+    "I mean all of them: primary, JSS, SSS and IQS"
+   ],
+   "expect": {
+    "figures": [
+     "117",
+     "123"
+    ],
+    "lead_figure": "117",
+    "must_any": [
+     "IQS",
+     "Islamiyya"
+    ],
+    "must_not_figures": [
+     "173"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC + IQS statewide p22",
+   "lga": "Dange Shuni",
+   "form": "hausa",
+   "id": "r1-072-schools",
+   "set": "heldout"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "What are the personel, overhead and capial allocations of the POVERTY REDUCTION PROGRAMME in 2025?"
+   ],
+   "expect": {
+    "figures": [
+     "30,982,614.54",
+     "181,000,000.00",
+     "2,353,500,000.00"
+    ],
+    "any": [],
+    "docs": []
+   },
+   "source": "budget core (split)",
+   "lga": "",
+   "form": "typo",
+   "id": "r1-073-budget",
+   "set": "fix"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How many junioor secondary scools does Yabo have?"
+   ],
+   "expect": {
+    "figures": [
+     "14"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC p44",
+   "lga": "Yabo",
+   "form": "typo",
+   "id": "r1-074-schools",
+   "set": "fix"
+  },
+  {
+   "feature": "nema",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "Please, could you kindly assist me with the figure from NEMA regarding how many people were affected by floods in Sokoto State as of 24/09/25?"
+   ],
+   "expect": {
+    "figures": [
+     "15,675"
+    ],
+    "docs": [
+     "nema-flood-sitrep-2025-09-26"
+    ],
+    "pages": [
+     3
+    ]
+   },
+   "source": "charts dashboard row, nema-flood-sitrep-2025-09-26 p3",
+   "lga": "",
+   "form": "long",
+   "id": "r1-075-nema",
+   "set": "heldout"
+  },
+  {
+   "feature": "facilities",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How many Primary Health Centres are in Tangaza LGA?"
+   ],
+   "expect": {
+    "figures": [
+     "5"
+    ],
+    "exact": true,
+    "route": "facility"
+   },
+   "source": "facility registry",
+   "lga": "Tangaza",
+   "id": "r1-076-facilities",
+   "set": "fix"
+  },
+  {
+   "feature": "facilities",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How many Primary Health Centres are in Sokoto South LGA?"
+   ],
+   "expect": {
+    "figures": [
+     "23"
+    ],
+    "exact": true,
+    "route": "facility"
+   },
+   "source": "facility registry",
+   "lga": "Sokoto South",
+   "id": "r1-077-facilities",
+   "set": "fix"
+  },
+  {
+   "feature": "emergency",
+   "difficulty": "direct",
+   "lang": "ha",
+   "turns": [
+    "Yara nawa ne suka kamu da kyanda a bara?"
+   ],
+   "expect": {
+    "emergency": false
+   },
+   "source": "evals/emergency y14",
+   "lga": "",
+   "id": "r1-078-emergency",
+   "set": "fix"
+  },
+  {
+   "feature": "facilities",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How many hospitals are in Tureta LGA?"
+   ],
+   "expect": {
+    "figures": [
+     "1"
+    ],
+    "exact": true,
+    "route": "facility"
+   },
+   "source": "facility registry",
+   "lga": "Tureta",
+   "id": "r1-079-facilities",
+   "set": "heldout"
+  },
+  {
+   "feature": "conversation",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "menu"
+   ],
+   "expect": {
+    "must_any": [
+     "[list"
+    ]
+   },
+   "source": "fixed",
+   "lga": "",
+   "id": "r1-080-conversation",
+   "set": "fix"
+  },
+  {
+   "feature": "place",
+   "difficulty": "combine",
+   "lang": "ha",
+   "turns": [
+    "Kashin gonaki a cikin taswirar ambaliya ta MDD a gundumomin Ƙaramar Hukumar Tambuwal, 2024"
+   ],
+   "expect": {
+    "must_any": [
+     "Romo Sarki"
+    ],
+    "must_not": [
+     "never flooded",
+     "ba ta taɓa",
+     "NDVI index"
+    ],
+    "route": "place_area"
+   },
+   "source": "ward_history (flood_map, a036)",
+   "lga": "",
+   "id": "r1-081-place",
+   "set": "fix"
+  },
+  {
+   "feature": "conversation",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "thanks"
+   ],
+   "expect": {
+    "must_not": [
+     "couldn't find",
+     "Ban sami amsar"
+    ]
+   },
+   "source": "fixed",
+   "lga": "",
+   "id": "r1-082-conversation",
+   "set": "heldout"
+  },
+  {
+   "feature": "nema",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "According to NEMA, how many people were affected by floods in Sokoto State as of 12/09/25?"
+   ],
+   "expect": {
+    "figures": [
+     "4,278"
+    ],
+    "docs": [
+     "nema-flood-dashboard-2025-09-12"
+    ],
+    "pages": [
+     2
+    ]
+   },
+   "source": "charts dashboard row, nema-flood-dashboard-2025-09-12 p2",
+   "lga": "",
+   "id": "r1-083-nema",
+   "set": "heldout"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "What share of the State Agency for Normadic Education1's 2026 approved budget is capital?"
+   ],
+   "expect": {
+    "figures": [],
+    "any": [
+     [
+      "49.5%"
+     ],
+     [
+      "49.5 %"
+     ],
+     [
+      "383,422,807.00",
+      "774,418,689.05"
+     ]
+    ],
+    "docs": []
+   },
+   "source": "budget core (share)",
+   "lga": "",
+   "id": "r1-084-budget",
+   "set": "fix"
+  },
+  {
+   "feature": "surveys",
+   "difficulty": "direct",
+   "lang": "ha",
+   "turns": [
+    "A cewar NDHS 2024, kaso nawa na mata a Sokoto ne suka samu ziyarar antenatal care har sau huɗu ko fiye, kuma menene adadin na North West?"
+   ],
+   "expect": {
+    "any": [
+     [
+      "22.7",
+      "40.6"
+     ],
+     [
+      "23%",
+      "41%"
+     ]
+    ],
+    "docs": [
+     "mics-2021"
+    ]
+   },
+   "source": "evals/surveys s17 (figure confirmed in mics-2021)",
+   "lga": "",
+   "form": "hausa",
+   "id": "r1-085-surveys",
+   "set": "heldout"
+  },
+  {
+   "feature": "place",
+   "difficulty": "combine",
+   "lang": "en",
+   "turns": [
+    "Which wards of Bodinga LGA were greenest in 2024?"
+   ],
+   "expect": {
+    "must_any": [
+     "Bodinga Tauma"
+    ],
+    "must_not": [
+     "never flooded",
+     "ba ta taɓa",
+     "NDVI index"
+    ],
+    "route": "place_area"
+   },
+   "source": "ward_history (greenness, a007)",
+   "lga": "",
+   "id": "r1-086-place",
+   "set": "fix"
+  },
+  {
+   "feature": "emergency",
+   "difficulty": "direct",
+   "lang": "ha",
+   "turns": [
+    "Ruwan matata ya fashe kuma tana jijjiga"
+   ],
+   "expect": {
+    "emergency": true
+   },
+   "source": "evals/emergency e43",
+   "lga": "",
+   "id": "r1-087-emergency",
+   "set": "fix"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How many public primary schools are in Silame?"
+   ],
+   "expect": {
+    "figures": [
+     "62"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC p31",
+   "lga": "Silame",
+   "id": "r1-088-schools",
+   "set": "fix"
+  },
+  {
+   "feature": "facilities",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How many hospitlas are ni Wamakko LGA?"
+   ],
+   "expect": {
+    "figures": [
+     "2"
+    ],
+    "exact": true,
+    "route": "facility"
+   },
+   "source": "facility registry",
+   "lga": "Wamakko",
+   "form": "typo",
+   "id": "r1-089-facilities",
+   "set": "heldout"
+  },
+  {
+   "feature": "emergency",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "What did NiMet predict for the rainy season?"
+   ],
+   "expect": {
+    "emergency": false
+   },
+   "source": "evals/emergency n16",
+   "lga": "",
+   "id": "r1-090-emergency",
+   "set": "heldout"
+  },
+  {
+   "feature": "budget",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "How mch was aproved for the Ministry for Higher Education in the 2025 budget?"
+   ],
+   "expect": {
+    "figures": [],
+    "any": [
+     [
+      "19,154,879,215.06"
+     ],
+     [
+      "1,090,169,221.96"
+     ]
+    ],
+    "docs": []
+   },
+   "source": "budget core (lookup)",
+   "lga": "",
+   "form": "typo",
+   "id": "r1-091-budget",
+   "set": "fix"
+  },
+  {
+   "feature": "nema",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "According to NEMA, how many people were displaced by floods in Sokoto State as of 01/10/2024?"
+   ],
+   "expect": {
+    "figures": [
+     "56K"
+    ],
+    "docs": [
+     "nema-flood-sitrep-2024-10-02"
+    ],
+    "pages": [
+     2
+    ]
+   },
+   "source": "charts dashboard row, nema-flood-sitrep-2024-10-02 p2",
+   "lga": "",
+   "id": "r1-092-nema",
+   "set": "fix"
+  },
+  {
+   "feature": "place",
+   "difficulty": "combine",
+   "lang": "ha",
+   "turns": [
+    "Waɗanne gundumomin Ƙaramar Hukumar Sabon Birni ne suka fi samun ruwan sama na Yuni–Oktoba a 2024?"
+   ],
+   "expect": {
+    "must_any": [
+     "Gangara"
+    ],
+    "must_not": [
+     "never flooded",
+     "ba ta taɓa",
+     "NDVI index"
+    ],
+    "route": "place_area"
+   },
+   "source": "ward_history (rain, a066)",
+   "lga": "",
+   "id": "r1-093-place",
+   "set": "fix"
+  },
+  {
+   "feature": "schools",
+   "difficulty": "direct",
+   "lang": "en",
+   "turns": [
+    "Good morning sir, please I would like to ask, how many public primary schools are in Tureta? Thank you."
+   ],
+   "expect": {
+    "figures": [
+     "57"
+    ],
+    "docs": [
+     "asc-sokoto-2023-2024"
+    ]
+   },
+   "source": "ASC p31",
+   "lga": "Tureta",
+   "form": "long",
+   "id": "r1-094-schools",
+   "set": "fix"
+  },
+  {
+   "feature": "budget_lga",
+   "difficulty": "combine",
+   "lang": "ha",
+   "turns": [
+    "Menene kasafin kuɗin gwamnati na Ƙaramar Hukumar Binji a shekarar 2026?"
+   ],
+   "expect": {
+    "amounts": [
+     3000000000.0
+    ],
+    "route": "analysis:lga_projects"
+   },
+   "source": "lga_projects tool, 2026",
+   "lga": "Binji",
+   "form": "hausa",
+   "id": "r1-095-budget_lga",
+   "set": "fix"
+  }
+ ]
+}

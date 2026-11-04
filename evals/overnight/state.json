@@ -1,0 +1,195 @@
+{
+ "started": "2026-11-04T00:01",
+ "spend_usd": 19.2904,
+ "rounds": [
+  {
+   "round": 1,
+   "commit": "a7836ff (base) -> c57988f (after fixes)",
+   "fix_baseline": "38/47",
+   "heldout_baseline": "41/48",
+   "notes": "baseline before fixes: fix 38/47 ($2.77), held-out 41/48 ($1.97); causes: single-level count's one figure dropped from the reply (4), check discarded a deep brief (1), one private part added to a public total (1), dated NEMA row not retrieved (3), IQS state figure missing (2), wrong-agency rows (1), MICS Hausa unverified (1); r1-063 invalid (generator) | after the fixes: held-out 45/48 ($1.92), live-failures 13/13, routing 88/88, understanding replay 244/244; 4 better, 0 worse",
+   "fix": "38/47 before",
+   "heldout_before": "41/48",
+   "heldout_after": "45/48"
+  },
+  {
+   "round": 2,
+   "commit": "c57988f (base) -> 3137cda (after fixes)",
+   "fix_baseline": "52/59",
+   "heldout_baseline": "34/37",
+   "notes": "baseline: fix 52/59 ($2.30), held-out 34/37 ($1.60); causes: dated NEMA questions answered from the newest card (3), an LGA's wards answered statewide (1), the IQS state figure omitted by the writer (1), MICS wealth/anaemia unverified (2), a budget comparison missing one year (1) | after the fixes: held-out 34/37 (first rerun 33/37: r2-008 passed on rerun, r2-035 failed twice on the writer omitting the IQS state figure; r2-070 fixed), live-failures 12/13 then 13/13 (lfB rerun), routing 88/88, understanding replay unchanged",
+   "heldout_before": "34/37",
+   "heldout_after": "34/37 (33/37 on the first rerun)"
+  }
+ ],
+ "fixes": [
+  {
+   "commit": "6ad37a3",
+   "what": "one private part never joins a public total when the census counts per level",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "03ccd89",
+   "what": "a count with one figure shows that figure (single-level school counts had no figure in the reply)",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "23c805d",
+   "what": "a count naming no ownership gives public and private both (writer rule)",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "00d1117",
+   "what": "a date in the question is searched in its printed forms; the writer gives the figure for that date",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "e613a8e",
+   "what": "'which 3 LGAs' is a kind of place, not a named one (the DTM ranking route kept)",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "df48ceb",
+   "what": "the check judges a deep analysis on its subject only",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "1497bb8",
+   "what": "'No 2028 budget…' is not a Yes/No verdict",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "28f4a80",
+   "what": "a dash-printed part the draft reports is stated, not missing (check prompt)",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "060614e",
+   "what": "a figure-free statement draft is sent as written",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "79a531d",
+   "what": "drafts kept in the trace (diagnosis, no behaviour change)",
+   "before": "41/48",
+   "after": "45/48",
+   "lf": "11/13 -> 13/13",
+   "routing": "88/88",
+   "understanding": "244/244",
+   "kept": true
+  },
+  {
+   "commit": "80440bf",
+   "what": "the reading's LGA beats the words in the area route (Tambuwal's wards, not the state's 244)",
+   "before": "34/37",
+   "after": "34/37 (33/37 first rerun)",
+   "lf": "13/13 -> 12/13, 13/13 on rerun",
+   "routing": "88/88",
+   "understanding": "unchanged",
+   "kept": true
+  },
+  {
+   "commit": "0e34ea1",
+   "what": "a topic figure must carry the day asked (the 17 August 2025 dashboard, not the newest)",
+   "before": "34/37",
+   "after": "34/37 (33/37 first rerun)",
+   "lf": "13/13 -> 12/13, 13/13 on rerun",
+   "routing": "88/88",
+   "understanding": "unchanged",
+   "kept": true
+  },
+  {
+   "commit": "3137cda",
+   "what": "the 'not found' line keeps its spaces when figures are removed (wording only)",
+   "before": "34/37",
+   "after": "34/37 (33/37 first rerun)",
+   "lf": "13/13 -> 12/13, 13/13 on rerun",
+   "routing": "88/88",
+   "understanding": "unchanged",
+   "kept": true
+  }
+ ],
+ "meta_attempts": [],
+ "final": {
+  "place (103, full live path)": {
+   "deployed": "79/103 on 8eedd7f, 80/103 on 3e4e58b (a7836ff itself not rerun: budget)",
+   "branch": "95/103 on 3137cda",
+   "changed": "+16: the rain, flood and water ward rankings reach the satellite record and keep their maps; still wrong: a016, a033, a075, a093, a097, a098, a099, a102 (ward-scope wording, one Hausa flood ranking, one state flood-map ranking)"
+  },
+  "surveys (23)": {
+   "deployed": "21/23 on 61fba8b (s02, s18 wrong); 21/23 on 3e4e58b (s09, s18)",
+   "branch": "19/23 (s05, s07, s09, s18); s05 and s07 answered on an immediate rerun, so 21/23 with the reruns",
+   "changed": "none beyond run-to-run variance; s09 and s18 wrong on every version"
+  },
+  "newdocs (12)": {
+   "deployed": "8/12 on 8eedd7f and 3e4e58b (d02, d04, d08, d11)",
+   "branch": "8/12 (the same four)",
+   "changed": "none"
+  },
+  "prose (7)": {
+   "deployed": "2/7 on 8eedd7f (p02, p05 right); 1/7 on 3e4e58b (p02)",
+   "branch": "1/7 (p02)",
+   "changed": "p05 within variance (it flipped between runs on the deployed code too)"
+  },
+  "live-failures (13)": {
+   "deployed": "11/13 on 61fba8b, then 5/5 on the rerun of the five affected cases at a7836ff",
+   "branch": "13/13 (01:40, e9fa528 = same code), 12/13 (02:40, lfB; passed on rerun), 11/13 (02:49, 3137cda: lfC total not in the first line, lfSNB_ha IQS line omitted)",
+   "changed": "writer variance on the IQS state-level line and the total sentence; no case fails on every run"
+  }
+ },
+ "last_round_done": 2,
+ "base_commit": "a7836ff",
+ "branch": "overnight-evals",
+ "invalid": [
+  {
+   "id": "r1-063-schools",
+   "why": "generator: Gudu's private counts are all 0, so the 'double count' figure equals the total; the question is kept as is and counted as invalid, not edited"
+  }
+ ],
+ "ended": "02:52: the Baseten cap was reached ($19.29 of $20 after the last run); nothing ran after this"
+}
