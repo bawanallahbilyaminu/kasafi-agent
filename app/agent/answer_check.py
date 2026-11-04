@@ -40,8 +40,10 @@ yourself. Reply with JSON only:
  "subject": {"place": true|false, "time": true|false, "topic": true|false, "level": true|false, \
 "note": "<what differs from what was asked, or ''>"},
  "contradictions": ["<a statement and the statement that contradicts it>"],
- "missing": ["<each thing the user asked for that the draft doesn't give, naming place, time and measure, with \
-no figures>"],
+ "missing": ["<each thing the user asked for that the draft doesn't give, as one short plain phrase of at most \
+eight words naming the measure, place and time as the user would say it ('whether my farm has ever flooded', \
+'the nearest clinic and how far it is', 'IQS schools in Sokoto North'): no figures, no slashes, no dashes, no \
+description of the evidence>"],
  "missing_stated": true|false,
  "unclear": ["<a sentence that misdescribes what a figure is or how two figures relate>"],
  "unsupported": ["<each figure or claim in the draft that the evidence doesn't contain>"],
@@ -370,12 +372,41 @@ def should_check(a) -> bool:
 # --- the honest partial answer -----------------------------------------------------------------------------------
 
 PARTIAL_HEAD = {"en": "Here is what I could check:", "ha": "Ga abin da na iya tabbatarwa:"}
-NOTHING = {
-    "en": "I couldn't give a checked answer to that: {missing}.{docs}",
-    "ha": "Ban iya ba da amsar da aka tabbatar ba: {missing}.{docs}",
+# nothing could be sent (4 Nov rewrite): one short sentence per part that couldn't be answered, then why in one
+# more; never the checker's own words, and never a list of document titles as if that were an answer
+NOTHING_ITEM = {"en": "I couldn't find {what} in the documents I have.",
+                "ha": "Ban samu {what} a cikin takardun da nake da su ba."}
+NOTHING_ASKED = {"en": "a checked figure for what you asked", "ha": "adadin da aka tabbatar na abin da ka tambaya"}
+NOTHING_WHY = {
+    "off": {"en": "What I read was about something else, so I didn't send it.",
+            "ha": "Abin da na karanta ba kan wannan ba ne, don haka ban aika shi ba."},
+    "figs": {"en": "The figures I found weren't on the pages they were cited to, so I left them out.",
+             "ha": "Alƙaluman da na samu ba sa cikin shafukan da aka ambata, don haka na bar su."},
+    "none": {"en": "The pages I read don't print it.", "ha": "Shafukan da na karanta ba su buga shi ba."},
 }
-NOTHING_ASKED = {"en": "what you asked", "ha": "abin da ka tambaya"}
-NOTHING_DOCS = {"en": " The documents I read were {docs}.", "ha": " Takardun da na karanta: {docs}."}
+
+
+def nothing_text(a, v: Verdict, lang: str) -> str:
+    """The reply when no part of the draft could be sent: what couldn't be found, one sentence each (at most
+    three, repeats dropped), and why in one more."""
+    item = NOTHING_ITEM.get(lang, NOTHING_ITEM["en"])
+    gaps = list({m.lower(): m for m in (m.strip().rstrip(".") for m in truly_missing(v.missing, a))}.values())[:3]
+    lines = [item.format(what=_lower_first(g)) for g in gaps] or \
+        [item.format(what=NOTHING_ASKED.get(lang, NOTHING_ASKED["en"]))]
+    why = "off" if v.wrong_subject else "figs" if (v.unsupported or v.contradictions or v.unclear) else "none"
+    return " ".join([*lines, NOTHING_WHY[why].get(lang, NOTHING_WHY[why]["en"])])
+
+
+def _lower_first(s: str) -> str:
+    """'Whether Wamakko…' -> 'whether Wamakko…' inside a sentence; an acronym ('IQS counts') or a place name
+    followed by its kind ('Wamakko LGA', 'Sokoto State') keeps its capital."""
+    words = s.split()
+    if not words or words[0].isupper() or (len(words) > 1 and words[1].rstrip("'s") in _PLACE_KINDS):
+        return s
+    return s[0].lower() + s[1:]
+
+
+_PLACE_KINDS = {"LGA", "State", "ward", "Ward", "LGAs", "town", "village"}
 
 
 MISSING = {"en": "Not found in the documents I read: {missing}.",
@@ -493,11 +524,8 @@ def partial_answer(a, v: Verdict, lang: str) -> tuple[str, bool, list]:
         text = "\n".join(ln for ln in (a.text or "").splitlines()
                          if not ln.startswith(("📄", "_Reply", "_Ku rubuta"))).strip()
     if not text:
-        docs = list(dict.fromkeys(e.title for e in (a.cited or [])))[:3]
         # never the check's feedback: that is written for the writer, not the user (3 Nov: it reached a reply)
-        missing = "; ".join(truly_missing(v.missing, a)[:3]) or NOTHING_ASKED.get(lang, NOTHING_ASKED["en"])
-        read = NOTHING_DOCS.get(lang, NOTHING_DOCS["en"]).format(docs="; ".join(docs)) if docs else ""
-        return NOTHING.get(lang, NOTHING["en"]).format(missing=missing.rstrip("."), docs=read), False, []
+        return nothing_text(a, v, lang), False, []
     kept_figs = set(figures_in(text))
     cited = [e for e in (a.cited or []) if not kept_figs or any(re.search(rf"(?<![\d.,]){re.escape(f)}(?!\d)",
                                                                           e.text or "") for f in kept_figs)]

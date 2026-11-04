@@ -375,7 +375,8 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         return await _conversational(text, key, lang, store, settings, u)
     # a claim about a named facility ('But UDUTH is closer to me'), after a list or cold: checked by road from the
     # pin, or from the LGA on file (said so), or the location asked for; never the document search
-    if kind == "text" and text and settings.has_database and (
+    parts = multi_parts(u, settings) if kind == "text" and text else []   # two or three things asked at once
+    if kind == "text" and text and settings.has_database and not parts and (
             (u is not None and u.capability == "facility" and
              (u.kind == "correction" or CLOSER.search(f"{text} {u.restatement}"))) or
             (u is None and CLOSER.search(text))):
@@ -386,13 +387,14 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             await _trace_route(settings, text, lang, "facility_check", u, outs, time.perf_counter() - t_route)
             return outs
     # no route fits and it isn't a request for information ('ok', 'hmm'): what Kasafi can help with, and a question
-    if kind == "text" and text and u is not None and u.capability == "other" and not looks_like_request(text):
+    if kind == "text" and text and u is not None and u.capability == "other" and not parts and \
+            not looks_like_request(text):
         from app.agent.conversational import help_text
         outs = [Out(help_text(lang, _place_for(key, store)), lang=lang)]
         await _trace_route(settings, text, lang, "help", u, outs, 0.0)
         return outs
     # "nearest hospital?" and its follow-ups ("next", "route?", "only government hospitals"): PostGIS and ORS, no model
-    if text and settings.has_database and settings.kasafi_shortcut_facilities and \
+    if text and settings.has_database and settings.kasafi_shortcut_facilities and not parts and \
             (u is None or (u.capability == "facility" and u.kind != "correction")) and \
             ((outs := await _facilities(text, key, lang, store, settings, place_fn, facility_fn, u)) is not None or
              (u is not None and u.restatement and
@@ -404,7 +406,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     # UDTH?'): the registry and the nearest search, the location asked for when there is none; never the documents.
     # Staff, equipment, services and money at facilities, and a report named, stay with the documents (the registry
     # holds none of them)
-    if text and settings.has_database and settings.kasafi_shortcut_facilities and u is not None and \
+    if text and settings.has_database and settings.kasafi_shortcut_facilities and u is not None and not parts and \
             u.capability == "facility" and u.kind != "correction" and not document_question(text) and \
             not (other_subject(f"{text} {u.restatement}") and not is_facility_query(f"{text} {u.restatement}")):
         t_route = time.perf_counter()
@@ -442,13 +444,18 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         return not exempt and store.spent_today() + cost > settings.kasafi_daily_spend_cap_usd
 
     answer = (answer_from_documents if settings.has_database else None) if answer_fn is _DEFAULT else answer_fn
+    outer_notify = notify
 
-    async def respond(question: str, prefix: str, fallback: Out, understanding=None, announced: bool = False) -> list[Out]:
+    async def respond(question: str, prefix: str, fallback: Out, understanding=None, announced: bool = False,
+                      sink: NotifyFn | None = None, closing: bool = True) -> list[Out]:
         """Answer an in-scope, confirmed question from the documents, after `prefix` (what we heard).
 
         With no document store (dev, tests), the old acknowledgement `fallback` is sent instead. `announced`: the
         location acknowledgement already said what is being checked, so the first progress line is not sent again.
+        `sink`: where this answer's progress lines and early text go instead of the user (a part of a multi-part
+        question: the runner speaks for all the parts).
         """
+        notify = sink or outer_notify
         if answer is None:
             return [fallback]
         if over_cap(settings.kasafi_cost_per_question_usd):
@@ -539,9 +546,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         crops = (plan_crops(result, settings.kasafi_max_images)
                  if result is not None and settings.kasafi_evidence_images and store.images_on(key) else None)
         answered = result is not None and getattr(result, "found", True) is not False
-        if answered and understanding is not None and understanding.capability not in ("conversation", "other") \
-                and not offer and (closing := menu.closing_offer(lang, understanding, text_out)):
-            text_out = f"{text_out}\n\n{closing}"          # one short next step tied to this answer
+        if answered and closing and understanding is not None and \
+                understanding.capability not in ("conversation", "other") \
+                and not offer and (closing_line := menu.closing_offer(lang, understanding, text_out)):
+            text_out = f"{text_out}\n\n{closing_line}"     # one short next step tied to this answer
         if understanding is not None:
             _remember_reading(key, understanding)          # for 'Hausa / English' and 'Send location' buttons
         outs = [Out(text_out, CALC_BUTTONS.get(lang, CALC_BUTTONS["en"]) if offer else None, crops or None, lang)]
@@ -567,6 +575,33 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                 outs.append(Out(t("map_failed", lang), lang=lang))
         if result is not None and not offer:
             _add_buttons(outs, lang, result, understanding, question, _place_for(key, store))
+        return outs
+
+    async def multi_part(readings: list) -> list[Out]:
+        """Two or three things asked at once (KASAFI_MULTI_PART): each part answered by its own capability with the
+        shared pin, LGA and language, in parallel, then joined in the order asked under a short heading each; a
+        part's crops and maps follow its text; a part that fails gets its honest line and the others still go."""
+        t_route = time.perf_counter()
+        if _sender(notify) is not None:
+            await notify(Out(parts_progress(lang, readings), lang=lang))
+
+        async def one(r) -> list[Out]:
+            try:
+                if r.capability == "facility" and settings.has_database and settings.kasafi_shortcut_facilities and \
+                        (outs := await _facility_reading(r.restatement, r, key, lang, settings, facility_fn)) is not None:
+                    _remember_turn(store, key, lang, r.restatement, outs)
+                    return outs
+                return await respond(r.restatement[:1000], "", Out(t("echo", lang, text=r.restatement[:500])),
+                                     understanding=r, announced=True, sink=_no_notify, closing=False)
+            except Exception as e:              # noqa: BLE001 - one part's failure never drops the others
+                log.exception("a part of a multi-part question failed: %s", type(e).__name__)
+                return [Out(t("answer_failed", lang), lang=lang)]
+        results = await asyncio.gather(*(one(r) for r in readings))
+        store.set_pending_calc(key, None)       # a part's calculation offer has no button in the joined reply
+        outs = join_parts(readings, list(results), lang, settings.kasafi_max_images)
+        if u is not None:
+            _remember_reading(key, u)
+        await _trace_route(settings, text, lang, "multi_part", u, outs, time.perf_counter() - t_route)
         return outs
 
     if resume:                                   # the pin or the shape arrived: the place-history question goes on
@@ -733,10 +768,46 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             store.clear_pending(key)
         if refusal := await _guarded([text], lang, guard_fn, settings):
             return [refusal]
+        if parts:
+            return await multi_part(parts)
         return await respond(text[:1000], "", Out(t("echo", lang, text=text[:500])), understanding=u)
     if button == "consent_ok":
         return [Out(t("consent_thanks", lang))]
     return [Out(t("other", lang))]
+
+
+MULTI_WORDS = {
+    "en": {"progress": "Checking {n} things: {labels}…", "none": "I couldn't answer this part."},
+    "ha": {"progress": "Ina duba abubuwa {n}: {labels}…", "none": "Ban iya amsa wannan ɓangaren ba."},
+}
+
+
+def multi_parts(u, settings: Settings) -> list:
+    """The readings of a message that asks for two or three different things (app/agent/understand.py `parts`),
+    with KASAFI_MULTI_PART on; [] otherwise, and the whole message's reading answers as before."""
+    return u.part_readings() if u is not None and settings.kasafi_multi_part else []
+
+
+def parts_progress(lang: str, readings: list) -> str:
+    w = MULTI_WORDS.get(lang, MULTI_WORDS["en"])
+    labels = ", ".join((r.label or r.restatement[:40]) for r in readings)
+    return w["progress"].format(n=len(readings), labels=labels)
+
+
+def join_parts(readings: list, results: list[list[Out]], lang: str, max_images: int = 3) -> list[Out]:
+    """One reply from the parts' replies: each part's text under a numbered heading, in the order asked, then
+    every part's attachments (page crops with the first message, then maps, pins and documents) in the same
+    order. A part with no reply at all gets one honest line; no part is ever dropped."""
+    w = MULTI_WORDS.get(lang, MULTI_WORDS["en"])
+    heads, crops, rest, location_request = [], [], [], False
+    for i, (r, outs) in enumerate(zip(readings, results), 1):
+        first = outs[0] if outs else Out(w["none"], lang=lang)
+        label = (r.label or r.restatement[:60]).strip().rstrip(".?:")
+        heads.append(f"*{i}. {label}*\n{first.text.strip()}")
+        crops += first.crops or []
+        location_request = location_request or first.location_request
+        rest += [o for o in outs[1:] if o.text or o.image or o.document or o.location]
+    return [Out("\n\n".join(heads), None, crops[:max_images] or None, lang, location_request=location_request)] + rest
 
 
 async def _note_failure(settings: Settings, question: str, lang: str, reason: str, seconds: float, apology: str) -> None:

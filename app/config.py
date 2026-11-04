@@ -127,6 +127,10 @@ class Settings(BaseSettings):
     # level's figure when the documents have it only for the state, or saying it isn't there (compose rule 6p; the
     # answer check's named_part_missing rule)
     kasafi_named_parts: bool = True
+    # a message asking for two or three different things (a flood history and the erosion budget) is read as parts,
+    # each answered by its own capability, in parallel, and joined into one reply (4 Nov; off: one capability per
+    # message as before)
+    kasafi_multi_part: bool = True
     kasafi_check_provider: str = "open"
     kasafi_check_timeout_s: float = 30.0
     # a revise round starts only with at least this many seconds left of kasafi_answer_timeout_s
