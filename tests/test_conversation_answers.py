@@ -72,7 +72,10 @@ def test_clear_voice_question_is_answered_with_what_was_heard() -> None:
     calls = []
     outs, _ = run_handle(voice(), store=consented(), spoken=heard(Q, confirm=False), answer_calls=calls)
     assert calls == [(Q, "ha")]
-    assert outs[0].text == f"{t('heard_prefix', 'ha', transcript=Q)}\n\nANSWER[ha]: {Q}"
+    # 4 Nov: the transcript takes exactly the text path (understanding, multi-part, every capability), so what was
+    # heard goes first as its own message and the answer follows as the text path writes it
+    assert outs[0].text == t("heard_prefix", "ha", transcript=Q)
+    assert outs[1].text.startswith(f"ANSWER[ha]: {Q}")
 
 
 def test_unclear_voice_waits_for_eh_then_answers() -> None:
