@@ -285,7 +285,9 @@ ANSWER_SYSTEM = (
     "table's figure and say the chart shows a different value.\n"
     "6m. A '[Table printed on page N]' line is a dashboard or summary page read as a table: each line is "
     "'place: measure value (printed on the page)' with the page's date. Give these figures with the place, the "
-    "measure and the date exactly as printed (e.g. 'Sokoto: 102K persons affected, as of 21 October 2024').\n"
+    "measure and the date exactly as printed (e.g. 'Sokoto: 102K persons affected, as of 21 October 2024'). When the "
+    "question names a date, give the figure printed for that date (the page whose 'as of' line carries it); only "
+    "when no excerpt prints that date, say so and give the nearest dated figure, named with its own date.\n"
     "6n. When the question names an LGA, ward or town and the evidence gives figures only for the state (or for "
     "other places), never reply that nothing was found: say the documents give no figure for that place, give the "
     "state's figures with their date and source, and name any places in the state the evidence does list (e.g. "
@@ -1318,6 +1320,32 @@ def summary_sections(conn: psycopg.Connection, docs: set[str], most_pages: int =
     return [(d, p0, p1) for d, p0, p1, title in rows if SUMMARY_TITLE.search(title or "")]
 
 
+_DATE_NUM = re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{2}|\d{4})\b")
+_DATE_WORDS = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|"
+                         r"October|November|December)\s+(\d{4})\b", re.I)
+MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
+          "November", "December")
+
+
+def date_forms(text: str) -> list[str]:
+    """Every way a date in the question may be printed ('17 August 2025' -> '17/08/25', '17/08/2025', '17th August
+    2025'; '01/10/2024' -> '1 October 2024' …), for a phrase search of the page that carries it (4 Nov overnight: a
+    dashboard's 'as of 17/08/25' row was never retrieved for 'as of 17 August 2025')."""
+    found: list[tuple[int, int, int]] = []
+    for d, m, y in _DATE_NUM.findall(text or ""):
+        y = int(y) + (2000 if len(y) == 2 else 0)
+        if 1 <= int(m) <= 12 and 1 <= int(d) <= 31:
+            found.append((int(d), int(m), y))
+    for d, mon, y in _DATE_WORDS.findall(text or ""):
+        found.append((int(d), MONTHS.index(mon.capitalize()) + 1, int(y)))
+    out: list[str] = []
+    for d, m, y in found[:2]:
+        suffix = "th" if 11 <= d % 100 <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(d % 10, "th")
+        out += [f"{d:02d}/{m:02d}/{y % 100:02d}", f"{d:02d}/{m:02d}/{y}", f"{d}/{m}/{y}", f"{d} {MONTHS[m - 1]} {y}",
+                f"{d}{suffix} {MONTHS[m - 1]} {y}"]
+    return list(dict.fromkeys(out))
+
+
 def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
     """Search the planned documents first; widen to all documents only if nothing is found. A question naming a
     survey or a publisher searches that source's documents, and budget rows join only when money is asked."""
@@ -1337,6 +1365,8 @@ def gather_evidence(conn: psycopg.Connection, plan: Plan) -> list[Evidence]:
     if not money and (counts := count_queries(asked)):  # 'how many X in Y': the 'Number of X' column or table
         key_hits = [count_table_pages(conn, scope, asked)] + \
             [phrase_search(conn, q, k=2, doc_ids=scope) for q in counts] + key_hits
+    if dates := date_forms(asked):          # 'as of 17 August 2025': the page printing that date, in any of its forms
+        key_hits = [phrase_search(conn, f, k=2, doc_ids=scope) for f in dates] + key_hits
     if narrative_asked(plan):
         # what a report corrected, changed, explained or noted is in its narrative, not its tables: the running
         # text leads (the tables still follow). The planner's key terms search the prose too: its long queries
