@@ -486,6 +486,11 @@ def partial_answer(a, v: Verdict, lang: str) -> tuple[str, bool, list]:
         text = "\n\n".join(x for x in (block.strip(), text) if x)
         if text and (gaps := truly_missing(v.missing, a)) and not v.missing_stated:
             text += "\n\n" + MISSING.get(lang, MISSING["en"]).format(missing="; ".join(gaps[:3]).rstrip("."))
+    if not text and not v.wrong_subject and not refused and not figures_in(a.text or ""):
+        # a draft with no figures is a statement (what the documents don't hold, which years they cover): nothing
+        # in it can be unsupported, so it is sent as written (4 Nov: 'No 2028 budget is in the library' was replaced)
+        text = "\n".join(ln for ln in (a.text or "").splitlines()
+                         if not ln.startswith(("📄", "_Reply", "_Ku rubuta"))).strip()
     if not text:
         docs = list(dict.fromkeys(e.title for e in (a.cited or [])))[:3]
         # never the check's feedback: that is written for the writer, not the user (3 Nov: it reached a reply)
