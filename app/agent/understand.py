@@ -399,17 +399,17 @@ async def understand_message(message: str, history: list[dict] | None, place: di
     """The step for the conversation: Muse Spark (or Muse Spark Open with KASAFI_UNDERSTAND_PROVIDER=open), then
     once on the other model when the first fails; None when both fail (the keyword routing then decides), with
     the reasons appended to `fallbacks` for the trace."""
-    from app.providers.baseten import BasetenClient
+    from app.providers.fireworks import open_model
     from app.providers.meta import MetaClient
-    order = [("meta", MetaClient, None), ("open", BasetenClient, settings.baseten_model)]
+    order = [("meta", lambda: MetaClient(settings)), ("open", lambda: open_model(settings))]
     if settings.kasafi_understand_provider == "open":
         order.reverse()
     why: list[str] = []
-    for name, client_cls, model in order:
-        if name == "open" and not settings.baseten_api_key:
+    for name, make in order:
+        if (client_obj := make()) is None:          # no Muse Spark Open host (no key)
             continue
-        async with client_cls(settings) as client:
-            if (u := await understand(message, history, place, client, settings, model=model, why=why,
+        async with client_obj as client:
+            if (u := await understand(message, history, place, client, settings, model=None, why=why,
                                       feedback=feedback)) is not None:
                 if why:
                     log.info("understood on %s after: %s", name, "; ".join(why))

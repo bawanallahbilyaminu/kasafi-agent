@@ -1,7 +1,7 @@
 """Bulk import of a publisher's public documents into the dev library (app/acquisition/bulk.py).
 
-    KASAFI_BATCH_PROVIDER=baseten python scripts/bulk_import.py --site mof.sk.gov.ng --discover
-    KASAFI_BATCH_PROVIDER=baseten python scripts/bulk_import.py --site mof.sk.gov.ng --ingest --max-usd 8
+    KASAFI_BATCH_PROVIDER=fireworks python scripts/bulk_import.py --site mof.sk.gov.ng --discover
+    KASAFI_BATCH_PROVIDER=fireworks python scripts/bulk_import.py --site mof.sk.gov.ng --ingest --max-usd 8
 
 --discover lists the site (public media listing and its pages' links), classifies and dedupes, saves the plan to
 data/bulk/<site>.json and prints the report. --ingest indexes the new documents in class order (budgets, BIRs,
@@ -76,8 +76,8 @@ async def discover_reliefweb(topic: str, since: str, until: str, state: Path) ->
 async def ingest(state: Path, max_usd: float, limit: int | None, retry: bool = False,
                  classes: set[str] | None = None) -> None:
     s = get_settings()
-    if s.kasafi_batch_provider.lower() not in ("baseten", "fireworks"):
-        sys.exit("set KASAFI_BATCH_PROVIDER=baseten: the import runs on Muse Spark Open only")
+    if s.kasafi_batch_provider.lower() not in ("open", "fireworks", "baseten"):
+        sys.exit("set KASAFI_BATCH_PROVIDER=fireworks: the import runs on Muse Spark Open only")
     loaded = bulk.load_state(state)
     if not loaded:
         sys.exit(f"no plan at {state}: run --discover first")

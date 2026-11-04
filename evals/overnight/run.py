@@ -247,7 +247,7 @@ if __name__ == "__main__":
     ap.add_argument("--only", default="")
     a = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
-    for k, v in (("KASAFI_BATCH_PROVIDER", "baseten"), ("KASAFI_UNDERSTAND_PROVIDER", "open")):
+    for k, v in (("KASAFI_BATCH_PROVIDER", "fireworks"), ("KASAFI_UNDERSTAND_PROVIDER", "open")):
         if os.environ.get(k) != v:
             raise SystemExit(f"{k}={v} must be set (Muse Spark Open only)")
     meta_guard()

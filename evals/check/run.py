@@ -5,7 +5,7 @@ revise or fail). Good drafts: answers an eval scored right (JSON lines written b
 --drafts with KASAFI_ANSWER_CHECK=false): a revise or fail on one of them is a false alarm; under 10% is the bar.
 Each draft is rebuilt with its cited pages read from the library, and checked once (round 1), as live.
 
-    KASAFI_BATCH_PROVIDER=baseten python evals/check/run.py --provider open --good evals/check/good_drafts.jsonl
+    KASAFI_BATCH_PROVIDER=fireworks python evals/check/run.py --provider open --good evals/check/good_drafts.jsonl
     python evals/check/run.py --provider meta --good evals/check/good_drafts.jsonl     # Muse Spark (Meta credit)
 """
 

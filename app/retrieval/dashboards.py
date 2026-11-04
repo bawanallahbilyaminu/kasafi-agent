@@ -126,7 +126,7 @@ async def build_dashboards(conn: psycopg.Connection, doc_id: str, settings: Sett
                 continue
             jpeg = files[p].read_bytes()
             try:
-                d = await read_page(client, jpeg, s.baseten_model)
+                d = await read_page(client, jpeg, client.default_model)
             except Exception as e:      # noqa: BLE001 - one page must not stop the document
                 log.warning("%s p%d: dashboard read failed: %s", doc_id, p, type(e).__name__)
                 continue
@@ -134,7 +134,7 @@ async def build_dashboards(conn: psycopg.Connection, doc_id: str, settings: Sett
                 log.info("%s p%d: no rows read", doc_id, p)
                 continue
             store_chart(conn, doc_id, {"page": p, "box": [0, 0, 0, 0], "kind": KIND, "label": f"Table on page {p}"},
-                        d, jpeg, s.baseten_model)
+                        d, jpeg, client.default_model)
             counts["read"] += 1
             counts["rows"] += len(d.values)
     finally:

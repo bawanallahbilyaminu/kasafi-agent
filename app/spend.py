@@ -166,7 +166,7 @@ def refresh(settings, conn=None) -> State:
     if new.low and not state.low:
         new.since = datetime.now(timezone.utc).isoformat(timespec="minutes")
         log.warning("META CREDIT LOW: about $%.2f left (reading $%.2f at %s, $%.2f spent since)%s: Muse Spark calls "
-                    "now go to Muse Spark Open (Baseten, then Fireworks)", new.remaining_usd or 0, new.balance_usd,
+                    "now go to Muse Spark Open (Fireworks)", new.remaining_usd or 0, new.balance_usd,
                     new.as_of, new.spent_usd, " - Meta returned 402" if new.exhausted else "")
     elif state.low and not new.low:
         log.warning("Meta credit guard: back on Muse Spark (about $%.2f left)", new.remaining_usd or 0)

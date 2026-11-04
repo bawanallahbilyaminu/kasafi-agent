@@ -47,9 +47,13 @@ def test_a_reply_that_isnt_the_json_asked_for_is_no_reading() -> None:
 class _Client:
     """A model client that fails (an exception) or answers with a reading's JSON."""
     replies: dict = {}
+    default_model = "fake-model"
 
     def __init__(self, settings, *a, **k):
         self.name = type(self).__name__
+
+    async def aclose(self):
+        return None
 
     async def __aenter__(self):
         return self
@@ -78,11 +82,11 @@ GOOD = json.dumps({"kind": "new", "capability": "place_history", "subject": {"le
 
 
 def test_when_muse_spark_fails_muse_spark_open_reads_it_and_when_both_fail_the_fallback_is_recorded(monkeypatch):
-    import app.providers.baseten as B
+    import app.providers.fireworks as F
     import app.providers.meta as M
     monkeypatch.setattr(M, "MetaClient", Meta)
-    monkeypatch.setattr(B, "BasetenClient", Open)
-    s = make_settings(baseten_api_key="b")
+    monkeypatch.setattr(F, "FireworksClient", Open)          # the Muse Spark Open host (KASAFI_OPEN_HOSTS)
+    s = make_settings(fireworks_api_key="f")
     _Client.replies = {"Meta": TimeoutError(), "Open": GOOD}
     fallbacks: list = []
     u = asyncio.run(U.understand_message("Has this land ever flooded?", [], None, s, fallbacks=fallbacks))

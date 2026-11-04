@@ -118,7 +118,7 @@ def test_the_second_reading_runs_on_muse_spark_open() -> None:
     s = make_settings()
     res = asyncio.run(read_lines("q", "q", "en", LINES, meta, s, [], ans.chat_json, spark_open))
     assert len(meta.calls) == 1 and len(spark_open.calls) == 1
-    assert res.readers == [s.meta_model, "meta-models/muse-spark-open-1026"] and res.selections
+    assert res.readers == [s.meta_model, s.fireworks_model] and res.selections     # a fake with no default_model
 
 
 def test_a_slow_or_failing_muse_spark_open_falls_back_to_muse_spark(caplog) -> None:

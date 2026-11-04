@@ -73,7 +73,7 @@ class MetaClient(ChatClient):
 
     async def chat(self, messages: list[dict[str, Any]], *, model: str | None = None, **params: Any) -> ChatResult:
         """Muse Spark, unless the Meta credit guard (app/spend.py) says the credit is low or Meta refused for
-        billing (402): then Muse Spark Open answers (Baseten, then Fireworks). Audio stays on Meta."""
+        billing (402): then Muse Spark Open answers (the hosts in KASAFI_OPEN_HOSTS: Fireworks). Audio stays on Meta."""
         from app import spend
         audio = _has_audio(messages)
         if not audio and await _diverted(self._settings) and (open_ := self._open_model()) is not None:
@@ -93,7 +93,7 @@ class MetaClient(ChatClient):
             from app.providers.fireworks import BatchModel
             try:
                 self._open = BatchModel(self._settings)
-            except RuntimeError:          # no Baseten or Fireworks key: Meta it stays
+            except RuntimeError:          # no Muse Spark Open host (no Fireworks key): Meta it stays
                 return None
         return self._open
 

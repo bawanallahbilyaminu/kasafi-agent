@@ -31,10 +31,11 @@ CHUNK_BASE = 1000            # idx of a page's chart chunks: after its text chun
 
 
 def vision_client(settings: Settings):
-    from app.providers.baseten import BasetenClient
-    if settings.baseten_api_key is None:
-        raise RuntimeError("charts need BASETEN_API_KEY (Muse Spark Open on Baseten reads images)")
-    return BasetenClient(settings)
+    """Muse Spark Open reading images, from the hosts in KASAFI_OPEN_HOSTS (Fireworks since 4 Nov 2026)."""
+    from app.providers.fireworks import open_model
+    if (c := open_model(settings)) is None:
+        raise RuntimeError("charts need a Muse Spark Open host: FIREWORKS_API_KEY (KASAFI_OPEN_HOSTS)")
+    return c
 
 
 def store_chart(conn: psycopg.Connection, doc_id: str, region: dict, d: ChartData, crop: bytes, model: str) -> str:
@@ -110,7 +111,7 @@ async def build_charts(conn: psycopg.Connection, doc_id: str, settings: Settings
             page_text = (conn.execute("SELECT text FROM pages WHERE doc_id = %s AND page = %s",
                                       (doc_id, r["page"])).fetchone() or [""])[0]
             d = snap_labels(d, page_text, r.get("caption", ""))
-            store_chart(conn, doc_id, r, d, crop, s.baseten_model)
+            store_chart(conn, doc_id, r, d, crop, client.default_model)
             counts["read"] += 1
             counts["charts"] += d.is_chart
             counts["printed"] += len(d.printed)

@@ -96,7 +96,7 @@ def page(title: str, body: str, on: str = "") -> HTMLResponse:
               f'{e(s.since or "-")} UTC: '
               + (e("Meta refused a call for billing (402). ") if s.exhausted else
                  e(f"about ${s.remaining_usd:.2f} left by Kasafi's estimate. "))
-              + 'Muse Spark calls are going to Muse Spark Open (Baseten, then Fireworks). '
+              + 'Muse Spark calls are going to Muse Spark Open (Fireworks). '
               '<a href="/admin/status">Status</a></div>') if s.low else ""
     doc = (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" '
            f'content="width=device-width,initial-scale=1"><title>{e(title)} · Kasafi admin</title>'
@@ -111,7 +111,7 @@ def _cls(outcome: str) -> str:
 
 def _model_label(model: str) -> str:
     if OPEN_MODEL in model:
-        return "Muse Spark Open · Baseten" + (" (fell back)" if "fallback" in model else "")
+        return "Muse Spark Open · Fireworks" + (" (fell back)" if "fallback" in model else "")
     return "Muse Spark · Meta Model API" + (" (fallback for Open)" if "fallback" in model else "")
 
 

@@ -81,11 +81,11 @@ def test_a_stage_on_muse_spark_open_falls_back_to_muse_spark(monkeypatch) -> Non
     msgs = [{"role": "user", "content": "q"}]
     assert asyncio.run(ans.stage_json("plan", Client("meta"), Client("open"), s, msgs, reasoning_effort="minimal",
                                       max_tokens=3000)) == {"ok": 1}
-    assert calls == [("open", s.baseten_model)]
+    assert calls == [("open", s.fireworks_model)]           # a fake client with no default_model: Fireworks' ID
     calls.clear()
     asyncio.run(ans.stage_json("plan", Client("meta"), Client("open", fail=True), s, msgs,
                                reasoning_effort="minimal", max_tokens=3000))
-    assert calls == [("open", s.baseten_model), ("meta", s.meta_model)]
+    assert calls == [("open", s.fireworks_model), ("meta", s.meta_model)]
     calls.clear()
     asyncio.run(ans.stage_json("scope", Client("meta"), Client("open"), s, msgs, reasoning_effort="low",
                                max_tokens=100))

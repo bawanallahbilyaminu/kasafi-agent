@@ -71,8 +71,7 @@ from app.retrieval import pool
 from app.retrieval.line_search import (MAX_LINES, name_key, names_a_kind, nearest, project_lines, project_named,
                                        project_phrases, search_lines)
 from app.config import Settings, get_settings
-from app.providers.baseten import BasetenClient
-from app.providers.fireworks import BatchModel, FireworksClient, OpenModel, batch_factory
+from app.providers.fireworks import BatchModel, batch_factory
 from app.providers.chat import ChatClient
 from app.providers.meta import MetaClient
 from app.providers.stt import parse_json_reply
@@ -1699,18 +1698,16 @@ RULE_6O = re.compile(r"6o\. When the question asks for a total.*?empty when noth
 
 @asynccontextmanager
 async def open_reader(settings: Settings) -> AsyncIterator[ChatClient | None]:
-    """Muse Spark Open for the second row reading (and the stages in kasafi_open_stages): Baseten, then
-    Fireworks if Baseten fails; None when it's off or neither key is set."""
+    """Muse Spark Open for the second row reading (and the stages in kasafi_open_stages), from the hosts in
+    KASAFI_OPEN_HOSTS (Fireworks); None when it's off or no host has a key."""
     if not settings.kasafi_open_reader:
         yield None
         return
-    hosts = [cls(settings, timeout=settings.kasafi_open_read_timeout_s, max_retries=1)
-             for cls, key in ((BasetenClient, settings.baseten_api_key), (FireworksClient, settings.fireworks_api_key))
-             if key]
-    if not hosts:
+    from app.providers.fireworks import open_model
+    if (c := open_model(settings, timeout=settings.kasafi_open_read_timeout_s, max_retries=1)) is None:
         yield None
         return
-    async with OpenModel(hosts) as c:
+    async with c:
         yield c
 
 
@@ -1728,7 +1725,8 @@ async def stage_json(stage: str, client: ChatClient, second: ChatClient | None, 
             try:
                 # Open always reasons and its max_tokens counts the reasoning too (Baseten docs): headroom
                 return await asyncio.wait_for(
-                    chat_json(second, messages, model=settings.baseten_model, reasoning_effort="low",
+                    chat_json(second, messages, model=getattr(second, "default_model", None) or settings.fireworks_model,
+                              reasoning_effort="low",
                               max_tokens=max(max_tokens, 8000)),
                     timeout=settings.kasafi_open_stage_timeout_s)
             except Exception as e:      # noqa: BLE001 - any Baseten failure falls back to Meta
