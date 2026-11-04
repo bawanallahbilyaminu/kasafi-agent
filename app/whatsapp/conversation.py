@@ -497,13 +497,14 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                 from app.agent.deep import TIME_BUDGET_S, deep_question
                 limit = max(settings.kasafi_answer_timeout_s, TIME_BUDGET_S + 30) if deep_question(question) \
                     else settings.kasafi_answer_timeout_s                    # a deep analysis: 180 s
-                result = await asyncio.wait_for(
-                    # an exact location typed or spoken into the question never reaches a model (app/privacy.py);
-                    # the history is read back from the store, where it was removed before writing
+                # an exact location typed or spoken into the question never reaches a model (app/privacy.py);
+                # the history is read back from the store, where it was removed before writing
+                job = asyncio.ensure_future(
                     answer(strip_location(question), lang, settings=settings, notify=send_now,
                            history=store.recent_turns(key),
                            **({"place": place} if place else {}),
-                           **({"understanding": understanding} if understanding is not None else {})), timeout=limit)
+                           **({"understanding": understanding} if understanding is not None else {})))
+                result = await _await_answer(job, limit, sent, lang, notify)
             finally:
                 slow.cancel()
             body = result if isinstance(result, str) else result.text
@@ -522,6 +523,14 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             # Keep the turn for follow-ups ("check again", "what about 2024?"): 5 turns, 90 days, no number.
             store.add_turn(key, lang, question, body, getattr(result, "sources", []), working,
                            getattr(result, "quotes", ""))
+        except FetchStillRunning as fsr:
+            # the fetch outran even the long limit: the job goes on and its answer is sent when ready (never
+            # 'took too long' while a fetch is running)
+            seconds = time.perf_counter() - started
+            log.warning("fetch still running after %.0fs: the answer will follow on its own", seconds)
+            asyncio.get_running_loop().create_task(
+                _deliver_later(fsr.job, sender, key, lang, strip_location(question), store, settings))
+            body, result = FETCH_WORDS.get(lang, FETCH_WORDS["en"])["later"], None
         except asyncio.TimeoutError:
             closed = True
             seconds = time.perf_counter() - started
@@ -858,6 +867,76 @@ def join_parts(readings: list, results: list[list[Out]], lang: str, max_images: 
         location_request = location_request or first.location_request
         rest += [o for o in outs[1:] if o.text or o.image or o.document or o.location]
     return [Out("\n\n".join(heads), None, crops[:max_images] or None, lang, location_request=location_request)] + rest
+
+
+FETCH_LIMIT_S = 300.0        # a turn that started a document fetch gets this long (download, index, then answer)
+FETCH_PROGRESS_S = 45.0      # a progress line this often while the fetch runs
+FETCH_WORDS = {
+    "en": {"progress": ["⬇️ Downloading the report…", "📖 Reading the tables…", "📖 Still indexing the report…"],
+           "later": "The report is still being indexed. I'll send the answer here as soon as it's ready."},
+    "ha": {"progress": ["⬇️ Ina sauke rahoton…", "📖 Ina karanta teburinsa…", "📖 Har yanzu ina shigar da rahoton…"],
+           "later": "Har yanzu ana shigar da rahoton. Zan aiko da amsar a nan da zarar ta shirya."},
+}
+
+
+class FetchStillRunning(Exception):
+    """The turn's fetch ran past FETCH_LIMIT_S: the job goes on and the answer is sent when it finishes."""
+
+    def __init__(self, job: asyncio.Task) -> None:
+        super().__init__("fetch still running")
+        self.job = job
+
+
+def fetch_started(sent: list[str]) -> bool:
+    return any(x.startswith("📥") for x in sent)
+
+
+async def _await_answer(job: asyncio.Task, limit: float, sent: list[str], lang: str, notify: NotifyFn):
+    """The answer within `limit`; when the job has started a document fetch (its progress line went out), the
+    turn runs on to FETCH_LIMIT_S with a progress line every FETCH_PROGRESS_S (4 Nov: a live fetch finished after
+    the 2-minute limit and the user got 'took too long', then the answer only on asking again). Past that, the
+    job keeps running and FetchStillRunning carries it to the caller, which sends the answer when it's done."""
+    t0 = asyncio.get_running_loop().time()
+    words = FETCH_WORDS.get(lang, FETCH_WORDS["en"])["progress"]
+    n = 0
+    while True:
+        elapsed = asyncio.get_running_loop().time() - t0
+        budget = FETCH_LIMIT_S if fetch_started(sent) else limit
+        if elapsed >= budget:
+            if fetch_started(sent):
+                raise FetchStillRunning(job)
+            job.cancel()
+            raise asyncio.TimeoutError()
+        step = min(budget - elapsed, FETCH_PROGRESS_S if fetch_started(sent) else max(0.05, limit - elapsed))
+        try:
+            return await asyncio.wait_for(asyncio.shield(job), step)
+        except asyncio.TimeoutError:
+            if job.done():
+                return job.result()
+            if fetch_started(sent) and asyncio.get_running_loop().time() - t0 < FETCH_LIMIT_S:
+                await notify(Out(words[min(n, len(words) - 1)], lang=lang))
+                n += 1
+
+
+async def _deliver_later(job: asyncio.Task, sender: str, key: str, lang: str, question: str, store: UserStore,
+                         settings: Settings) -> None:
+    """The answer of a fetch that outran the turn, sent on its own when the job finishes (inside the 24-hour
+    window); kept as a turn for follow-ups. Never raises."""
+    from app.whatsapp.client import WhatsAppClient
+    try:
+        result = await job
+        body = result if isinstance(result, str) else result.text
+        store.add_turn(key, lang, question, body, getattr(result, "sources", []), getattr(result, "working", ""),
+                       getattr(result, "quotes", ""))
+        client = WhatsAppClient()
+        try:
+            await client.send_text(sender, body)
+        finally:
+            await client.aclose()
+        log.info("late answer sent after a fetch for %s", mask_phone(sender))
+    except Exception as e:              # noqa: BLE001
+        log.exception("late answer after a fetch failed: %s", type(e).__name__)
+        await _note_failure(settings, question, lang, f"late answer after a fetch: {type(e).__name__}", 0.0, "")
 
 
 async def _note_failure(settings: Settings, question: str, lang: str, reason: str, seconds: float, apology: str) -> None:

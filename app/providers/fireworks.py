@@ -112,6 +112,9 @@ class OpenModel:
         for h in self.hosts:
             await h.aclose()
 
+    async def aclose(self) -> None:        # the card and chart builders close their client this way (4 Nov)
+        await self.__aexit__()
+
     async def chat(self, messages: list[dict], *, model: str | None = None, **params) -> ChatResult:
         last: Exception | None = None
         for h in self.hosts:
