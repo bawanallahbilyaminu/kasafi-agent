@@ -58,6 +58,56 @@ def test_q4_2025_is_fetched_when_the_library_holds_the_other_quarters(monkeypatc
     assert got.status == "local" and got.doc_id == "bir-2026-q3"
 
 
+def test_the_librarys_other_documents_never_answer_in_place_of_a_missing_exact_edition(monkeypatch) -> None:
+    """4 Nov live (18:13): 'library first' answered Q4 2025 social protection from the UN social-protection report
+    and the citizens' budget, and logged 'no fetch'. An exact edition the library doesn't hold is fetched."""
+    from app.agent import answer as A
+    monkeypatch.setattr(A, "local_edition", lambda conn, s, e: "bir-2026-q2" if e == "2026-Q2" else None)
+    conn = object()
+    assert A.exact_edition_missing(conn, "Sokoto State Budget Implementation Report Q4 2025")
+    assert not A.exact_edition_missing(conn, "Sokoto State Budget Implementation Report Q2 2026")   # held
+    assert not A.exact_edition_missing(conn, "UN Joint Programme on Social Protection report")        # no edition
+    assert not A.exact_edition_missing(None, "Sokoto State Budget Implementation Report Q4 2025")
+
+
+def test_a_typed_whole_question_is_new_even_with_a_read_back_pending(monkeypatch) -> None:
+    """4 Nov live (18:17): the typed 'How much did Sokoto spend on social protection in Q3 2026?' after an unclear
+    voice note was resolved as a correction and answered with 'Corrected: …'."""
+    from types import SimpleNamespace
+    from app.users import UserStore, user_key
+    from app.whatsapp import conversation as C
+    from app.guardrails.scope import Verdict
+    s = make_settings(kasafi_understanding=False)
+    store, sender = UserStore(":memory:"), "2348000000081"
+    key = user_key(sender, s)
+    store.create(key, "en")
+    store.give_consent(key)
+    store.set_pending(key, "Nawa aka ware wa ilimi?", "How much for education?")
+    seen: dict = {}
+
+    async def resolve_fn(pending, reply, *, settings):
+        seen["resolved"] = True
+        from app.whatsapp.corrections import Resolution
+        return Resolution("correction", reply)
+
+    async def answer(question, lang, **kw):
+        seen["question"] = question
+        return SimpleNamespace(text="ANSWER", found=True, sources=[], working="", quotes="")
+
+    async def ok(*a, **k):
+        return Verdict("ok", "none")
+
+    async def none(*a, **k):
+        return None
+    monkeypatch.setattr(s.__class__, "has_database", property(lambda self: False))
+    q = "How much did Sokoto spend on social protection in Q3 2026?"
+    outs = asyncio.run(C.handle({"from": sender, "id": "w-typed", "type": "text", "text": {"body": q}}, None, store=store,
+                                settings=s, answer_fn=answer, guard_fn=ok, place_fn=none, resolve_fn=resolve_fn,
+                                emergency_fn=none, classify_fn=none))
+    assert "resolved" not in seen and seen["question"] == q and outs[0].text.startswith("ANSWER")
+    assert store.get_pending(key, 60) is None                      # the old read-back lapsed
+
+
 def test_a_period_that_isnt_available_is_said_plainly_and_the_latest_earlier_edition_answers(monkeypatch) -> None:
     from app.agent import answer as A
     plan = A.Plan(english_question="How much was spent on health in Q4 2025?", search_queries=[],

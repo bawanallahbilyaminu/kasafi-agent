@@ -773,7 +773,9 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             from app.agent.deep import deep_question
             if deep_question(text):               # a deep analysis counts double against the daily limit
                 store.count(key, "questions")
-        if pending:                               # a typed correction, or a new question
+        # a typed message that is itself a whole question is a new question, never a correction of the pending
+        # read-back (4 Nov live: 'How much did Sokoto spend on social protection in Q3 2026?' got 'Corrected: …')
+        if pending and not (len(text.split()) >= 6 and text.rstrip().endswith("?")):   # a typed correction, or new
             if over_cap(settings.kasafi_cost_per_question_usd):
                 return [Out(t("busy", lang))]
             store.add_spend(settings.kasafi_cost_per_question_usd)
@@ -782,6 +784,8 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                 if res.kind != "ambiguous":
                     store.clear_pending(key)
                 return await resolution_reply(res, pending[0], text)
+            store.clear_pending(key)
+        elif pending:
             store.clear_pending(key)
         if not heard and (refusal := await _guarded([text], lang, guard_fn, settings)):   # voice: guarded already
             return [refusal]

@@ -39,8 +39,8 @@ import httpx
 import psycopg
 
 from app.acquisition.editions import (SERIES, Latest, Series, doc_edition, editions_back, find_latest,
-                                     generic_series, label, month_label, newest_local, release_date, series_doc_ids,
-                                     wanted_edition)
+                                     generic_series, label, local_edition, month_label, newest_local, release_date,
+                                     series_doc_ids, wanted_edition)
 from app.acquisition.library import Acquired, fetch_and_index, find_and_fetch, log_gap
 from app.acquisition.registry import detect_topic, registry
 from app.agent.analysis import TOOLS, AnalysisResult, run_analysis
@@ -1298,6 +1298,19 @@ def intention_docs(conn: psycopg.Connection, question: str, plan: Plan) -> list[
     return list(dict.fromkeys(h.hit.doc_id for h in hits if cats.get(h.hit.doc_id) in PLAN_CATEGORIES))[:2]
 
 
+def exact_edition_missing(conn: psycopg.Connection, description: str) -> bool:
+    """The planner's missing document names a series and an exact period that the library doesn't hold (4 Nov
+    live: 'Budget Implementation Report Q4 2025'): then no other document answers in its place, and the fetch runs;
+    False when no exact edition is named, or it is held."""
+    if conn is None or not (wanted := wanted_edition(description)):
+        return False
+    try:
+        return local_edition(conn, *wanted) is None
+    except Exception:              # noqa: BLE001 - the library's own documents then answer, as before
+        conn.rollback()
+        return False
+
+
 def library_first(conn: psycopg.Connection, plan: Plan, question: str) -> list[str]:
     """Before fetching a document from the web: the library's own documents with strong hits for the question
     that the plan didn't choose (a phrase of the question printed there, or a close meaning)."""
@@ -2422,7 +2435,8 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
                 text = NO_EDITION.get(lang, NO_EDITION["en"]).format(
                     name=latest.series.name, tried=", ".join(label(k, lang) for k in latest.tried) or "-")
                 return Answer(text, False, True, plan=plan, timings=t, latest=latest)
-        elif plan.missing_document and conn is not None and (local := library_first(conn, plan, question)) and \
+        elif plan.missing_document and conn is not None and not exact_edition_missing(conn, plan.missing_document) \
+                and (local := library_first(conn, plan, question)) and \
                 (a := await _page_path(conn, replace(plan, doc_ids=[*local, *plan.doc_ids], missing_document=""),
                                        question, lang, client, settings, t, acq=None, latest=None, prev=prev,
                                        context="", recheck_note="", second=second)).found:
