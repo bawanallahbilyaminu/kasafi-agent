@@ -300,6 +300,21 @@ def _words(text: str) -> set[str]:
             and not w.isdigit()}
 
 
+MANIFEST = Path(__file__).resolve().parents[2] / "data" / "manifest.json"
+
+
+def manifest_urls(series: str, edition: str, path: Path = MANIFEST) -> list[str]:
+    """The seed manifest's own address for an exact edition of a series (4 Nov 2026: a seed removed from the
+    library is fetched back from where it came, before any search); [] when the manifest isn't on this machine."""
+    try:
+        m = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    docs = m.get("documents", []) if isinstance(m, dict) else m
+    return [d["source_url"] for d in docs if isinstance(d, dict) and d.get("series") == series
+            and d.get("edition") == edition and d.get("source_url")]
+
+
 def registry_urls(description: str) -> list[str]:
     """Addresses the registry already knows for the wanted document: a publisher's `urls` whose own words (its
     name, document types and the address) share at least two with the description, the most shared first."""
@@ -356,8 +371,9 @@ async def find_and_fetch(conn: psycopg.Connection, description: str, *, settings
                 tried.append(f"{url}: {res.detail[:120]}")
             return None
 
-        # 1. the registry's own address for this document, before any search
-        if got := await first_confirmed(registry_urls(description)[:2], host_allowed):
+        # 1. the manifest's address for an exact edition, then the registry's own addresses, before any search
+        known_urls = (manifest_urls(series, edition) if series and edition else []) + registry_urls(description)[:2]
+        if got := await first_confirmed(list(dict.fromkeys(known_urls)), host_allowed):
             return got
         # 2. the publishers' listings, partner APIs and allowlisted web search, ranked; each confirmed by content
         candidates = await search_candidates(http, description, settings)

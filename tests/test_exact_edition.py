@@ -36,6 +36,7 @@ def test_q4_2025_is_fetched_when_the_library_holds_the_other_quarters(monkeypatc
     monkeypatch.setattr(L, "local_edition", lambda conn, s, e: f"bir-{e.lower()}" if (s, e) in held else None)
     monkeypatch.setattr(L, "find_local", lambda conn, d: seen.setdefault("find_local", True) and "bir-2026-q3")
     monkeypatch.setattr(L, "fetches_today", lambda conn: 0)
+    monkeypatch.setattr(L, "manifest_urls", lambda s_, e_, path=None: [])     # the registry path, not the manifest's
     monkeypatch.setattr(L, "registry_urls", lambda d: ["https://mof.sk.gov.ng/bir-2025-q4.pdf"])
 
     async def allowed(self, url):
@@ -56,6 +57,37 @@ def test_q4_2025_is_fetched_when_the_library_holds_the_other_quarters(monkeypatc
     got = asyncio.run(L.find_and_fetch(object(), "Sokoto State Budget Implementation Report Q3 2026", settings=s,
                                        client=None))
     assert got.status == "local" and got.doc_id == "bir-2026-q3"
+
+
+def test_a_removed_seed_is_fetched_back_from_the_manifests_own_address_first(monkeypatch, tmp_path) -> None:
+    """The seed manifest knows where each edition came from: a seed removed for the live-fetch demo is fetched from
+    that address before any search; without a manifest on the machine, the search runs as before."""
+    m = tmp_path / "manifest.json"
+    m.write_text('{"documents": [{"id": "bir-2025-q4", "series": "sokoto_bir", "edition": "2025-Q4", '
+                 '"source_url": "https://sokotostate.gov.ng/wp-content/uploads/2026/01/BIR-Q4-2025.pdf"}, '
+                 '{"id": "x", "series": "sokoto_bir", "edition": "2026-Q2", "source_url": "https://e/q2.pdf"}]}',
+                 encoding="utf-8")
+    assert L.manifest_urls("sokoto_bir", "2025-Q4", m) == ["https://sokotostate.gov.ng/wp-content/uploads/2026/01/BIR-Q4-2025.pdf"]
+    assert L.manifest_urls("sokoto_bir", "2024-Q4", m) == [] and L.manifest_urls("sokoto_bir", "2025-Q4", tmp_path / "none") == []
+    seen: dict = {}
+    real = L.manifest_urls
+    monkeypatch.setattr(L, "manifest_urls", lambda s_, e_, path=m: real(s_, e_, m))     # this test's manifest
+    monkeypatch.setattr(L, "local_edition", lambda conn, s_, e_: None)
+    monkeypatch.setattr(L, "fetches_today", lambda conn: 0)
+    monkeypatch.setattr(L, "registry_urls", lambda d: ["https://mof.sk.gov.ng/other.pdf"])
+
+    async def allowed(self, url):
+        return True, ""
+    monkeypatch.setattr(L.Robots, "allowed", allowed)
+
+    async def fetch_and_index(conn, url, description, *, settings, client, http, robots, series, edition, allowed):
+        seen.setdefault("urls", []).append(url)
+        return Acquired("fetched", "bir-2025-q4-fetched", url=url)
+    monkeypatch.setattr(L, "fetch_and_index", fetch_and_index)
+    got = asyncio.run(L.find_and_fetch(object(), "Sokoto State Budget Implementation Report Q4 2025",
+                                       settings=make_settings(kasafi_fetch_enabled=True), client=None))
+    assert got.status == "fetched"
+    assert seen["urls"][0] == "https://sokotostate.gov.ng/wp-content/uploads/2026/01/BIR-Q4-2025.pdf"
 
 
 def test_the_librarys_other_documents_never_answer_in_place_of_a_missing_exact_edition(monkeypatch) -> None:
