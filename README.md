@@ -6,7 +6,7 @@ WhatsApp, and get an answer checked against its source page.**
 | Try it | |
 | --- | --- |
 | **WhatsApp:** [wa.me/2348039539665](https://wa.me/2348039539665) (username **@kasafibyhnq**). The first message gets a short consent notice: reply *OK* or *Na yarda*. | <img src="docs/kasafi-whatsapp-qr.png" width="150" alt="QR code for https://wa.me/2348039539665"> |
-| **Demo video (3 min):** https://youtu.be/l5p5kypJkoU *(link to be confirmed at submission)* | |
+| **Demo video (3 min):** https://youtu.be/fWoFrXX14hg | |
 
 Messages that work on the live service today (4 Nov 2026; each was run on the server this week, the first and the
 Hausa ones at every deploy by [`scripts/live_smoke.py`](scripts/live_smoke.py)):
