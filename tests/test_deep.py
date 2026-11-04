@@ -134,7 +134,7 @@ def test_render_gives_a_summary_then_a_message_per_dimension_and_the_brief_offer
     r = D.DeepResult("Summary.", [("facilities", "1,234 PHCs."), ("staffing", "500 nurses.")], "Different years.",
                      "No LGA data.", [], ["doc0"], 0.05, 40.0)
     summary, parts = D.render(r, "en")
-    assert summary == "Summary." and parts[0].startswith("*facilities*") and parts[1].startswith("*staffing*")
+    assert summary == "Summary." and parts[0].startswith("*Facilities*") and parts[1].startswith("*Staffing*")
     assert "Where sources differ" in parts[2] and "full brief" in parts[2]
 
 
@@ -188,10 +188,10 @@ def test_citations_are_given_once_per_message_without_a_page_for_the_registry_an
                       "Healthcare Services in Sokoto", 9)]
     text = D.cite("15,000,000.00 NGN for renovation [C1]. 150,000,000.00 NGN for solar [C1]. 934 facilities [C2]. "
                   "Readiness [C3].", claims)
-    assert text.count("(Sokoto State Government 2025 Approved Budget, p. 45)") == 1
+    assert text.count("(2025 Approved Budget, p. 45)") == 1          # short source tags (4 Nov proofread)
     assert "(GRID3/NHFR registry, Nov 2024)" in text and "p. 0" not in text
     assert "₦15 million for renovation" in text and "NGN" not in text
-    assert "Improve Healthcare…" in text or "Improve…" in text and "Hea," not in text
+    assert "(ROP, p. 9)" in text and "Hea," not in text          # a title's own acronym is its short tag (4 Nov)
 
 
 # --- the 2 Nov brief review: measures, selection, years, differences, amounts -----------------------------------
@@ -290,11 +290,12 @@ def test_how_a_plan_is_organised_is_not_a_finding(statement, unit) -> None:
 
 def test_a_figure_without_its_own_year_carries_its_documents_date_and_no_year_is_invented() -> None:
     c = C("f", "Number of PHC facilities", "798", "aggregate", "fac_count")
-    assert c.when == "as of the 2020 report"
+    assert c.when == ""                                    # the year lives in the source tag: '(MSP, 2020, p. 7)'
+    assert "2020" in D.source_ref(c)
     assert D.Claim("f", "s", "934", "", "", "", "registry:facilities", D.REGISTRY_REF, 0).when == "Nov 2024"
-    text = D.keep_verified("Sokoto had 798 PHC facilities as of the 2020 report [C1]. In 2016 assessment, 798 "
+    text = D.keep_verified("Sokoto had 798 PHC facilities [C1]. In 2016 assessment, 798 "
                            "facilities were counted [C1]. There were 798 facilities, with year not stated [C1].", [c])
-    assert "as of the 2020 report" in text and "2016" not in text and "not stated" not in text
+    assert "798 PHC facilities" in text and "2016" not in text and "not stated" not in text
 
 
 def test_a_national_surveys_figures_are_never_given_as_sokotos() -> None:
@@ -380,7 +381,7 @@ def test_kasafis_own_wording_prints_large_counts_with_separators() -> None:
 def test_the_share_swing_is_cited_with_both_budgets() -> None:
     c = D.Claim("funding", "share moved", "92,523,418,285.85", "NGN", "2026", "Sokoto State", "budget-2026-approved",
                 "Sokoto State FY 2026 Budget", 27, refs=[("Sokoto State Government 2025 Approved Budget", 19)])
-    assert D.source_ref(c) == "Sokoto State FY 2026 Budget, p. 27; Sokoto State Government 2025 Approved Budget, p. 19"
+    assert D.source_ref(c) == "FY 2026 Budget, p. 27; 2025 Approved Budget, p. 19"      # short tags (4 Nov)
 
 
 def test_amounts_keep_their_space_and_house_style() -> None:
@@ -398,7 +399,7 @@ def test_the_synthesis_is_told_to_compare_like_with_like_and_what_a_difference_i
     assert "never write that a year is not stated" in s
     dims = D.phc_checklist().dimensions
     block = D.claims_block([C("staffing", "Nurses required", "244", "target", "staff_need")], dims)
-    assert "## staffing" in block and "measure: staff required" in block and "when: as of the 2020 report" in block
+    assert "## staffing" in block and "measure: staff required" in block and "as of the 2020 report" not in block
 
 
 def test_the_agencys_money_comes_from_the_budget_and_bir_rows(conn) -> None:

@@ -119,12 +119,13 @@ class Claim:
 
     @property
     def when(self) -> str:
-        """The figure's own year, else its document's date: '(2020 report)', never 'year not stated'."""
+        """The figure's own year, else nothing: a figure without its own year carries its document's year in the
+        source tag ('(MSP, 2020, p. 7)'), never 'as of the 2020 report' in the sentence (4 Nov proofread)."""
         if self.year.strip():
             return self.year.strip()
         if self.doc_id.startswith("registry:"):
             return "Nov 2024"
-        return f"as of the {self.doc_year} report" if self.doc_year else ""
+        return ""
 
 
 @dataclass
@@ -542,6 +543,14 @@ def money_claims(conn: psycopg.Connection, cl: Checklist, dim_name: str) -> list
                                        f"{period_of(c, year)} (₦{_naira(c.amount)} of ₦{_naira(f.amount)}, "
                                        f"calculated)", f"{pct:.1f}%", "", str(year), "Sokoto State", c.doc_id,
                              c.title, c.page, "money_actual", "gap", c.doc_year, True, True))
+        # the current year too: the share of its budget spent so far (4 Nov proofread: every year gets its share)
+        if what == "so_far" and (year, "actual") not in agency and \
+                (f := agency.get((year, "final")) or agency.get((year, "approved"))) and f.amount:
+            pct = c.amount / f.amount * 100
+            out.append(Claim(dim_name, f"{name}: share of its {year} budget spent so far, {when} "
+                                       f"(₦{_naira(c.amount)} of ₦{_naira(f.amount)}, calculated)", f"{pct:.1f}%",
+                             "", when, "Sokoto State", c.doc_id, c.title, c.page, "money_actual", "gap", c.doc_year,
+                             True, True))
     if swing := share_swing(conn, cl, agency, sector, dim_name):
         out.append(swing)
     return out
@@ -979,6 +988,14 @@ SYNTH_SYSTEM = (
     "'the documents state').\n"
     "Compare like with like: required against available for the same cadre or item, an allocation against the "
     "spending of the same budget, a target against the current figure of the same indicator.\n"
+    "When a requirement or target is set against a count, say in the same sentence what the requirement means "
+    "(e.g. 'one functional PHC per ward, 244 wards') and what the count includes (e.g. 'all 894 primary-level "
+    "facilities in the registry, functional or not'; whether a facility count covers all levels), as the figures' "
+    "labels state it; never let a reader take two counts as the same thing.\n"
+    "A share that moved between two years is stated first as the two shares with their years ('26.6% in 2025 to "
+    "5.9% in 2026'), then explained in one plain sentence.\n"
+    "Each year's spending gets its share of that year's budget when the list gives it, the current year's "
+    "spending so far included.\n"
     "WRITING: plain sentences in your own words. Each WHAT is a label for you to read, not text to paste: never "
     "copy a label or its colons and brackets into the answer (write 'the PHC agency's approved budget was ₦13.20 "
     "billion in 2025', never 'Primary Health Care Development Agency: approved budget, 2025 (...) of').\n"
@@ -1062,12 +1079,30 @@ def short_title(title: str, most: int = 70) -> str:
     return t if len(t) <= most else t[:most].rsplit(" ", 1)[0].rstrip(" ,;:-(") + "…"
 
 
+_ACRONYM = re.compile(r"\(([A-Z][A-Za-z]{1,9})\)")
+_STOP = {"the", "of", "for", "and", "a", "an", "in", "on", "to", "state", "sokoto", "report", "nigeria", "government"}
+
+
+def short_name(title: str, year: int | None = None) -> str:
+    """A short source tag (4 Nov proofread): the acronym a title gives itself ('MSP', 'EmONC'), else its first
+    telling words; with the document's year when the title doesn't carry one: 'MSP, 2020'."""
+    t = (title or "").strip()
+    if m := _ACRONYM.search(t):
+        name = m.group(1)
+    else:
+        words = [w for w in re.findall(r"[\w'-]+", t) if w.lower() not in _STOP]
+        name = " ".join(words[:4]) or short_title(t, 40)
+    has_year = bool(re.search(r"\b(?:19|20)\d\d\b", name)) or bool(year and str(year) in t and len(name) > 12)
+    return f"{name}, {year}" if year and not has_year else name
+
+
 def source_ref(c: Claim, page: bool = True) -> str:
-    """'Title, p. 12'; the registry by its name and date, never 'p. 0'."""
+    """'MSP, 2020, p. 12'; the registry by its name and date, never 'p. 0'."""
     if c.doc_id.startswith("registry:"):
         return REGISTRY_REF
-    own = f"{short_title(c.title)}, p. {c.page}" if page and c.page else short_title(c.title)
-    return "; ".join([own] + [f"{short_title(t)}, p. {pg}" for t, pg in c.refs]) if page and c.refs else own
+    tag = short_name(c.title, c.doc_year)
+    own = f"{tag}, p. {c.page}" if page and c.page else tag
+    return "; ".join([own] + [f"{short_name(t)}, p. {pg}" for t, pg in c.refs]) if page and c.refs else own
 
 
 def house_amounts(text: str) -> str:
@@ -1264,12 +1299,20 @@ async def deep_answer(conn: psycopg.Connection, question: str, english: str, lan
     if notify:
         await notify(w["writing"].format(n=len(chosen)))
     d = await synthesise(client, question, lang, chosen, dims, settings)
-    sections = [(str(s.get("dimension") or "")[:60], cite(keep_verified(str(s.get("text") or ""), chosen), chosen))
-                for s in d.get("sections") or [] if isinstance(s, dict)]
+    raw_summary = keep_verified(str(d.get("summary") or ""), chosen)
+    raw_sections = [(str(s.get("dimension") or "")[:60], keep_verified(str(s.get("text") or ""), chosen))
+                    for s in d.get("sections") or [] if isinstance(s, dict)]
+    raw_differ = keep_verified(VERDICT.sub("", str(d.get("differ") or "")).strip(), chosen)
+    # what the brief actually reports (4 Nov proofread): a dimension counts as found only for figures the text
+    # cites, and the checked-figures list holds those figures only
+    cited = {int(n) - 1 for n in re.findall(r"\[C(\d+)\]", " ".join([raw_summary, raw_differ, *(t for _, t in raw_sections)]))}
+    used = [c for i, c in enumerate(chosen) if i in cited] or chosen
+    cov = coverage(used, dims)
+    sections = [(n, cite(t, chosen)) for n, t in raw_sections]
     sections = [(n, t) for n, t in sections if t]
-    differ = cite(keep_verified(VERDICT.sub("", str(d.get("differ") or "")).strip(), chosen), chosen)
-    return DeepResult(cite(keep_verified(str(d.get("summary") or ""), chosen), chosen), sections, differ,
-                      missing_line(cov, lang, dims), chosen, list(dict.fromkeys(r.doc_id for r in readings)),
+    differ = cite(raw_differ, chosen)
+    return DeepResult(cite(raw_summary, chosen), sections, differ,
+                      missing_line(cov, lang, dims), used, list(dict.fromkeys(r.doc_id for r in readings)),
                       usage.total_dollars(settings) - start_cost, time.perf_counter() - t0, stopped, cov,
                       unread=unread)
 
@@ -1277,7 +1320,7 @@ async def deep_answer(conn: psycopg.Connection, question: str, english: str, lan
 def render(r: DeepResult, lang: str) -> tuple[str, list[str]]:
     """(the first message: the summary; then one short message per dimension, the differences and the gaps)."""
     w = WORDS.get(lang, WORDS["en"])
-    parts = [f"{w['head'].format(name=name)}\n{text}" for name, text in r.sections]
+    parts = [f"{w['head'].format(name=name[:1].upper() + name[1:])}\n{text}" for name, text in r.sections]
     tail = []
     if r.differ:
         tail.append(w["differ"].format(text=r.differ))
@@ -1303,7 +1346,7 @@ def brief_pdf(question: str, r: DeepResult) -> bytes:
     from matplotlib.backends.backend_pdf import PdfPages
     lines = [("title", "Kasafi brief"), ("h", question), ("p", ""), ("h", "Summary"), ("p", r.summary)]
     for name, text in r.sections:
-        lines += [("h", name), ("p", text)]
+        lines += [("h", name[:1].upper() + name[1:]), ("p", text)]
     if r.differ:
         lines += [("h", "Where sources differ"), ("p", r.differ)]
     if r.coverage:
