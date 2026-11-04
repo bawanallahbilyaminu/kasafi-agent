@@ -172,3 +172,21 @@ subject ('X not Y' excludes Y, an 'exclude' field in the reading). The check fou
 expected 173 double-counted private schools, and the check cited p21. `tests/test_live_failures.py`,
 `tests/test_answer_check.py`, `evals/live_failures/` (8/8), `evals/check/` (Open: 6/6 bad drafts stopped, 3/37 right
 answers sent back = 8%).
+
+**L43 (4 Nov 2026): the implementation reports do give spending by project, for two sectors.** Kasafi had been
+writing "spending isn't reported project by project". From the source: the 2025-2026 Budget Implementation Reports
+print Table 24 "Primary Healthcare Capital Expenditure by Project" and Table 29 "Basic Education Capital Expenditure
+by Project" (pp. 53-58 in 2025 Q4 and 2026 Q2); other sectors are by administrative, programme, functional and
+economic classification only. None of the seven reports had those tables as structured rows: their header starts
+with "Administrative Code and Description Project Description …" (the labeller expected "Code" or "Item"), and every
+row ends with two 0/1 flag columns the header doesn't name, so the value count never matched. Now the header is
+recognised and trailing 0/1 flags are dropped only when they are exactly what makes the count exceed the columns
+(`app/retrieval/indexer.py`); the rows reach `perf_items` as classification `project` with the agency code, the
+agency's name followed by the project description, the original and revised budget, the quarter's and the
+year-to-date spending. "What is being spent in this area" matches the LGA's budget lines to those rows by agency code
+and exact description only (no guessing, two candidates = no match; `app/agent/analysis.match_lines`), reports the
+matched lines' spending to date with the table and page, and says the other lines have no project-level spending
+reported. The wording everywhere is now "The implementation reports give spending by project only for primary
+healthcare and basic education; other sectors are reported by ministry." `tests/test_bir_by_project.py`,
+`tests/test_lga_budget.py`. The seven reports were re-indexed on dev (`scripts/index_docs.py --only bir-… --force
+--no-cards`) and need `--sync-index`.

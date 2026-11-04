@@ -300,8 +300,10 @@ def accounting_negatives(text: str) -> str:
 # counting it as a value left the BIRs' "22" row unlabelled (found by the totals quality check).
 _VALUE = re.compile(r"^(?:-|-?[\d,]+(?:\.\d+)?%?|\(-?[\d,]+(?:\.\d+)?%?\))$")
 _COLUMN_SPLIT = re.compile(r"(?<!against)(?<!to)\s(?=20\d\d\b)|\s(?=%)|\s(?=Balance\b)")
-# Detail tables start their header with "Code ..."; summary tables with "Item ..." (2024/2025 budgets).
-_HEADER_START = re.compile(r"^(Code|Item)\b")
+# Detail tables start their header with "Code ..."; summary tables with "Item ..." (2024/2025 budgets); the
+# implementation reports' by-project tables (Tables 24 and 29, 2025-2026) with "Administrative Code and
+# Description Project Description ..." (4 Nov 2026: those tables had no rows)
+_HEADER_START = re.compile(r"^(Code|Item|Administrative Code)\b")
 # A data row starts with a 2-digit sector code ("04 Health") or a 5+-digit code ("010101"); header
 # lines may start with a 4-digit year ("2026 Approved"), which must not end the header.
 _ROW_CODE = re.compile(r"^(\d{2}|\d{5,})\s")
@@ -325,6 +327,13 @@ def label_row(line: str, columns: list[str]) -> str:
     values: list[str] = []
     while tokens and _VALUE.match(tokens[-1]):
         values.insert(0, tokens.pop())
+    # trailing 0/1 flag columns the header doesn't name (the BIRs' by-project tables end each row "… 1 0"): dropped
+    # only when they are exactly what makes the count exceed the columns
+    flags = 0
+    while flags < len(values) and values[-1 - flags] in ("0", "1"):
+        flags += 1
+    if columns and flags and len(values) - flags == len(columns):
+        values = values[:-flags]
     if not columns or not tokens or len(values) != len(columns) or not any(v != "-" for v in values):
         return line
     # A bare 5+-digit number is a budget code (economic code 23020105), not an amount: amounts have commas.

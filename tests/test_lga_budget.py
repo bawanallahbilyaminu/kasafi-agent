@@ -93,6 +93,32 @@ def test_the_reply_names_the_sector_progress_and_the_statewide_lines_never_a_bar
     assert "statewide agriculture lines" in note
 
 
+def test_budget_lines_match_the_reports_by_project_rows_only_by_agency_code_and_exact_description() -> None:
+    """4 Nov, from the source: BIR Tables 24 and 29 give capital spending by project for primary healthcare and
+    basic education. A line matches a row by its agency code and its exact description (case, spacing and
+    punctuation aside); a near match or two candidates is no match; other agencies' lines aren't candidates."""
+    from app.agent.analysis import match_lines
+    rows = [("Primary Health Care Development Agency Rehabilitation of PHC Bazza area Sokoto", "052100300100", 53,
+             "T24", Decimal("14700000"), Decimal("30000000")),
+            ("Primary Health Care Development Agency Rehabilitation of PHC Bazza Area, Sokoto.", "052100300100", 53,
+             "T24", Decimal("0"), Decimal("30000000")),
+            ("State Universal Basic Education Board (SUBEB) Construction of SUBEB Permanent site", "051700300100", 58,
+             "T29", Decimal("0"), Decimal("500000000")),
+            ("Ministry for Basic Education Expansion of New Out of School Children Gandu Pepsi Cola Area", "051700100100",
+             58, "T29", Decimal("266033690"), Decimal("780738676.10"))]
+    lines = [("Construction of SUBEB Permanent site", "051700300100", "State Universal Basic Education Board"),
+             ("Construction of SUBEB permanent site (phase 2)", "051700300100", "State Universal Basic Education Board"),
+             ("Rehabilitation of PHC Bazza area Sokoto", "052100300100", "Primary Health Care Development Agency"),
+             ("Expansion of New Out of School Children Gandu Pepsi Cola Area", "051700100100", "Ministry for Basic Education"),
+             ("Construction of Livestock Service Centre", "052400100100", "Ministry of Livestock")]
+    matched, candidates = match_lines(lines, rows)
+    assert candidates == 4                                           # the livestock line's agency isn't in the tables
+    assert [m[0] for m in matched] == ["Construction of SUBEB Permanent site",
+                                       "Expansion of New Out of School Children Gandu Pepsi Cola Area"]
+    assert matched[1][1][4] == Decimal("266033690")                  # spent to date, from the matched row
+    # 'PHC Bazza' had two rows differing only in punctuation: two candidates, so no match (never guessed)
+
+
 def test_the_spending_follow_up_leads_with_spending_and_repeats_nothing() -> None:
     lead, note = A.lga_text(_res(spent=10), A.ANALYSIS_WORDS["en"], _v(_res(spent=10)), "en", spent_focus=True)
     # 4 Nov, from the source: the BIRs give spending by project for primary healthcare and basic education (Tables

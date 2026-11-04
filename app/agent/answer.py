@@ -4385,6 +4385,13 @@ ANALYSIS_WORDS = {
                         "education; other sectors are reported by ministry.",
         "lga_spent": "The implementation reports give spending by project only for primary healthcare and basic "
                      "education; other sectors are reported by ministry.",
+        "lga_matched": "Project-level spending to date ({report} report, {tables}): {match_n} of {subject}'s {hb_n} "
+                       "primary healthcare and basic education lines are found there, with {match_spent} spent so far "
+                       "on them: {examples}. No project-level spending is reported for the other lines.",
+        "lga_matched_none": "None of {subject}'s {hb_n} primary healthcare and basic education lines appears in the "
+                            "{report} report's by-project tables ({tables}), so no project-level spending is reported "
+                            "for them.",
+        "lga_match_row": "{name}: {spent} of {budget} ({table}, p. {page})",
         "lga_statewide": "{statewide_n} statewide {sector}lines ({statewide_cur}) aren't split by LGA and may also "
                          "cover {subject}; the largest: {names}.",
         "lga_note": "This is state money for projects in {subject}, not the local government's own allocation.",
@@ -4480,6 +4487,14 @@ ANALYSIS_WORDS = {
                         "ilimi na asali kaɗai; sauran sassa bisa ma'aikata.",
         "lga_spent": "Rahotannin aiwatarwa suna ba da kuɗin da aka kashe aiki-aiki don kiwon lafiya na farko da "
                      "ilimi na asali kaɗai; sauran sassa ana ba da su bisa ma'aikata.",
+        "lga_matched": "Kuɗin da aka kashe aiki-aiki zuwa yanzu (rahoton {report}, {tables}): {match_n} daga cikin "
+                       "layukan kiwon lafiya na farko da ilimi na asali {hb_n} na {subject} suna nan, an kashe "
+                       "{match_spent} a kansu zuwa yanzu: {examples}. Ba a ba da kuɗin da aka kashe aiki-aiki ga "
+                       "sauran layukan ba.",
+        "lga_matched_none": "Babu ɗaya daga cikin layukan kiwon lafiya na farko da ilimi na asali {hb_n} na {subject} "
+                            "a cikin teburin aiki-aiki na rahoton {report} ({tables}), don haka ba a ba da kuɗin da "
+                            "aka kashe aiki-aiki a kansu ba.",
+        "lga_match_row": "{name}: {spent} daga cikin {budget} ({table}, shafi {page})",
         "lga_statewide": "Ayyukan {sector}{statewide_n} na duk jihar ({statewide_cur}) ba a raba su bisa ƙaramar "
                          "hukuma ba, kuma suna iya shafar {subject}; mafi girma: {names}.",
         "lga_note": "Wannan kuɗin jiha ne na ayyukan da ke {subject}, ba kason ƙaramar hukumar ba.",
@@ -4819,6 +4834,19 @@ def lga_text(res: AnalysisResult, w: dict, v: dict, lang: str, spent_focus: bool
     else:
         lead = w["lga_none"].format(**v)
     progress = []
+    if n and spent_focus and "hb_n" in v and f["hb_n"].value:
+        # project-level spending from the report's by-project tables (primary healthcare and basic education):
+        # the matched lines with their spending to date, or that none of the LGA's lines appears there
+        if res.matched:
+            examples = "; ".join(w["lga_match_row"].format(name=line_name(r.name, 70), spent=_money(r.amount),
+                                                           budget=_money(r.detail["budget"]),
+                                                           table=r.detail.get("table") or "by-project table",
+                                                           page=r.page) for r in res.matched[:3])
+            progress.append(w["lga_matched"].format(report=res.report, tables=res.match_tables or "by-project tables",
+                                                    examples=examples, **v))
+        else:
+            progress.append(w["lga_matched_none"].format(report=res.report,
+                                                         tables=res.match_tables or "by-project tables", **v))
     if n and f["n_prev"].value:
         key = "lga_prev" if f["spent"].value else "lga_prev_none"
         progress.append(w[key].format(**v).strip())
@@ -4932,7 +4960,7 @@ def analysis_answer(conn, plan: Plan, res: AnalysisResult, lang: str, t: dict, a
     for fact in res.facts.values():
         if fact.page:
             cited_pages[(fact.doc_id, fact.page)] = None
-    for r in res.rows[:TOP_ROWS] + res.statewide + res.agencies:
+    for r in res.rows[:TOP_ROWS] + res.statewide + res.agencies + res.matched[:3]:
         cited_pages[(r.doc_id, r.page)] = None
     evidence = [Evidence(i, d, res.titles.get(d, d), None, p, "text", "") for i, (d, p) in
                 enumerate(cited_pages, start=1)]

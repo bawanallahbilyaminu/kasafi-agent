@@ -77,6 +77,10 @@ class AnalysisResult:
     groups: list = field(default_factory=list)       # lga_projects: (sector, lines, amount, page), largest first
     statewide: list = field(default_factory=list)    # lga_projects: the largest statewide lines (Row)
     agencies: list = field(default_factory=list)     # lga_projects: the agencies running them, capital so far (Row)
+    # lga_projects: the LGA's lines found in the report's by-project tables (primary healthcare and basic
+    # education, BIR Tables 24 and 29), each with its spending to date (Row: amount = spent to date)
+    matched: list = field(default_factory=list)
+    match_tables: str = ""        # lga_projects: the report's by-project tables those matches come from ('Table 24, Table 29')
 
     def money(self, key: str, value, doc_id: str, page: int | None) -> None:
         if value is not None:
@@ -281,6 +285,56 @@ def community_line(name: str, function_name: str, mda_name: str) -> bool:
         and not ADMIN_MDA.search(mda_name or "")
 
 
+def _norm(s: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
+
+
+def match_lines(lines: list[tuple], rows: list[tuple]) -> tuple[list[tuple], int]:
+    """The budget lines found in the report's by-project rows, with no guessing (4 Nov 2026, from the source):
+    `lines` are (name, mda_code, mda_name) and `rows` the report's (name, code, page, table, ytd_spent, budget),
+    whose name is the agency's name followed by the project description. A line matches when the row's agency
+    code is its own and the row's description is exactly its own (after case, spacing and punctuation), and only
+    one row does. Returns the matches as (line name, row) and how many lines had an agency in those tables."""
+    by_code: dict[str, list[tuple]] = {}
+    for r in rows:
+        by_code.setdefault(r[1], []).append((_norm(r[0]), r))
+    matched, candidates = [], 0
+    for name, mda_code, mda_name in lines:
+        if mda_code not in by_code:
+            continue
+        candidates += 1
+        want, full = _norm(name), _norm(f"{mda_name} {name}")
+        hits = [r for n, r in by_code[mda_code] if n == full or (want and n.endswith(" " + want))]
+        if len(hits) == 1:
+            matched.append((name, hits[0]))
+    return matched, candidates
+
+
+_TABLE_LABEL = re.compile(r"Table (\d+): ((?:Primary Healthcare|Basic Education) Capital Expenditure by Project)")
+
+
+def project_matches(conn: psycopg.Connection, rdoc: str, lines: list[tuple]) -> tuple[list[Row], int, dict[int, str]]:
+    """The LGA's lines with project-level spending in the report (perf_items rows of the by-project tables), the
+    number of lines whose agency is covered by those tables, and the table label per page ('Table 24: …')."""
+    rows = conn.execute(
+        "SELECT name, code, page, table_title, ytd_spent, COALESCE(revised, final, original) FROM perf_items "
+        "WHERE doc_id = %s AND classification = 'project' AND spend_kind = 'capital'", (rdoc,)).fetchall()
+    if not rows:
+        return [], 0, {}
+    found, candidates = match_lines([(x[0], x[6], x[5]) for x in lines], rows)
+    labels: dict[int, str] = {}
+    for (page, text) in conn.execute("SELECT page, text FROM pages WHERE doc_id = %s AND page = ANY(%s)",
+                                     (rdoc, sorted({r[2] for r in rows}))):
+        if m := _TABLE_LABEL.search(text or ""):
+            labels[page] = f"Table {m.group(1)}"
+    out = []
+    for name, (_, code, page, title, ytd, budget) in found:
+        out.append(Row(name, ytd or Decimal(0), rdoc, page, {"budget": budget or Decimal(0), "code": code,
+                                                              "table": labels.get(page, "")}))
+    out.sort(key=lambda r: -r.amount)
+    return out, candidates, labels
+
+
 def lga_projects(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
     res = AnalysisResult("lga_projects", False)
     picked = budget_doc(conn, spec.get("year"), need_projects=True)
@@ -368,6 +422,21 @@ def lga_projects(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
                     "classification = 'administrative' AND spend_kind = 'capital' AND code = ANY(%s) "
                     "ORDER BY COALESCE(revised, original) DESC LIMIT %s", (rdoc, agencies, TOP)):
                 res.agencies.append(Row(name, a_budget or Decimal(0), rdoc, pg, {"spent": a_got or Decimal(0)}))
+            # project-level spending (4 Nov, from the source): the report's Tables 24 and 29 give capital spending
+            # by project for primary healthcare and basic education; the LGA's lines are matched by agency code and
+            # exact description, never guessed; the other lines have no project-level spending reported
+            res.matched, hb_n, labels = project_matches(conn, rdoc, lines)
+            mpage = res.matched[0].page if res.matched else (min(labels) if labels else None)
+            res.count("match_n", len(res.matched), rdoc, mpage)
+            res.count("hb_n", hb_n, rdoc, mpage)
+            res.money("match_spent", sum((r.amount for r in res.matched), Decimal(0)), rdoc, mpage)
+            res.match_tables = ", ".join(sorted(set(labels.values()), key=lambda t: int(t.split()[1]))) if labels else ""
+            res.working.append(f"Project-level spending: the {res.report} report's by-project tables "
+                               f"({res.match_tables or 'none parsed'}) cover {hb_n} of the LGA's lines by agency; "
+                               f"{len(res.matched)} matched by agency code and exact description, "
+                               f"{sum((r.amount for r in res.matched), Decimal(0)):,.2f} spent to date on them"
+                               + ("; matched: " + "; ".join(f"{r.name[:60]} {r.amount:,.2f} ({r.detail['table']} p{r.page})"
+                                                             for r in res.matched[:8]) if res.matched else ""))
     # statewide programmes that may serve the LGA: sector lines (schools, PHCs, water, roads, farm inputs) only,
     # never administrative items (aircraft, vehicles, offices, residences, Government House); the asked sector only
     sw = [(name, amt, pg) for name, amt, pg, fn, mda in conn.execute(
