@@ -190,3 +190,20 @@ reported. The wording everywhere is now "The implementation reports give spendin
 healthcare and basic education; other sectors are reported by ministry." `tests/test_bir_by_project.py`,
 `tests/test_lga_budget.py`. The seven reports were re-indexed on dev (`scripts/index_docs.py --only bir-… --force
 --no-cards`) and need `--sync-index`.
+
+**L44 (4 Nov 2026): a reader that times out must be retried or named, and the sector's own documents come first.**
+"What is the state of PHCs in Sokoto State?" had used the PHC Minimum Service Package (2020), the EmONC assessment
+and the health ROP on 2 Nov (server trace 108: 10 documents, 23 checked claims, $0.10, 42 s). On 4 Nov the same
+question (trace 474) planned the same documents but came back with 9 claims for $0.02 after 154 s, mostly budget
+figures computed in code, and said "Not found: number of PHC facilities, staff by cadre, immunisation coverage":
+with Baseten out of credit every Muse Spark Open reader ran on Fireworks, ran past the 120 s reading deadline and
+was dropped in silence. It also gave the registry's 934 facilities of every type as the state's PHCs. Now
+(`app/agent/deep.py`): documents are ordered sector-first (plans, assessments, surveys and reports before budgets,
+performance reports and financial statements); the first three readings go to the live model and the rest to Muse
+Spark Open with 40 s each, a failed or slow reading is read again on the other model, and a document that gave no
+figure in any round is named in the reply ("Not read in time") and in the trace; registry counts in a PHC brief
+are primary-level only, labelled, with the all-types total named as such. The brief writer states what a
+requirement means and what a count includes, gives every year's spending share (the current year so far
+included), states a share change before explaining it, tags sources shortly with the document's year ("MSP, 2020,
+p. 7") and lists under "what was looked for" only the figures the brief cites. `tests/test_deep_readers.py`,
+`tests/test_deep.py`, live-failure case `lfPHC`.
