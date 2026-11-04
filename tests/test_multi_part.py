@@ -265,6 +265,56 @@ def test_a_place_budget_part_from_a_pin_takes_the_lga_tool_so_no_planner_clarify
     assert ans.reading_lga_route(other, "What is the 2026 health budget?", plan, place) is None
 
 
+def test_a_voice_note_takes_exactly_the_text_path_so_a_three_part_question_is_split(monkeypatch) -> None:
+    """4 Nov live: the three-part question as a voice note (transcribed fine) went straight to 'Checking the
+    documents' as one question and failed, while the same text was split. The transcript now re-enters the text
+    path: understanding, multi-part, each capability, the shared pin; 'I heard: …' first."""
+    from app.providers.stt import SpeechResult
+    from app.whatsapp.voice import VoiceOutcome
+    s, store, key = _setup()
+    reading = U.parse(THREE)
+    reading.care, reading.facility_level = "general", "primary"
+    heard = ("I'm thinking of moving my family here. What is the government spending in this area? Has it ever "
+             "flooded? And where is the nearest clinic?")
+    seen: dict = {}
+
+    async def voice_fn(msg, wa, *, lang, settings):
+        return VoiceOutcome("echo of the voice path", SpeechResult(heard, heard, "en", "high", False))
+
+    async def understand_fn(message, history, place, settings, fallbacks=None):
+        seen["message"] = message
+        return reading
+
+    async def answer(question, lang, **kw):
+        u = kw["understanding"]
+        seen[u.capability] = (u.level, kw.get("place", {}).get("lga"))
+        return SimpleNamespace(text=f"ANSWER {u.capability}", found=True, sources=[], working="", quotes="")
+
+    async def facility_reading(text, u, key_, lang, settings, facility_fn, spot=None):
+        seen["facility"] = (u.level, spot.lga if spot else None)
+        return [C.Out("Nearest clinic: Wajake Dispensary, 0.8 km by road", lang=lang)]
+
+    async def no_trace(*a, **k):
+        return None
+    monkeypatch.setattr(C, "_facility_reading", facility_reading)
+    monkeypatch.setattr(C, "_trace_route", no_trace)
+    monkeypatch.setattr(C, "_add_buttons", lambda *a, **k: None)
+    monkeypatch.setattr(s.__class__, "has_database", property(lambda self: True))
+    msg = {"from": SENDER, "id": "w-voice3", "type": "audio", "audio": {"id": "a1"}}
+    outs = asyncio.run(C.handle(msg, None, store=store, settings=s, answer_fn=answer, guard_fn=_ok, place_fn=_none,
+                                understand_fn=understand_fn, emergency_fn=_quiet, classify_fn=_quiet, voice_fn=voice_fn))
+    assert seen["message"] == heard                                        # the transcript was read as a message
+    assert outs[0].text.startswith("I heard") or "heard" in outs[0].text.lower()
+    text = outs[1].text
+    assert text.index("*1. Government spending here*") < text.index("ANSWER place_budget") \
+        < text.index("*2. Flood history*") < text.index("ANSWER place_history") < text.index("*3. Nearest clinic*") \
+        < text.index("Wajake")
+    assert seen["place_budget"] == ("lga", "Wamakko") and seen["place_history"] == ("pin", "Wamakko")
+    assert seen["facility"] == ("pin", "Wamakko")                          # the shared pin reached every part
+    voice, questions = store.usage(key)
+    assert voice == 1 and questions == 0                                   # counted once, as voice
+
+
 def test_a_single_part_question_is_answered_exactly_as_before(monkeypatch) -> None:
     s, store, key = _setup()
     calls: list = []

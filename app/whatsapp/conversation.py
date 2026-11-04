@@ -172,9 +172,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                  answer_fn: AnswerFn | None | object = _DEFAULT, locate_fn: LocateFn = locate_point,
                  place_fn: PlaceFn = place_from_text, facility_fn: FacilityFn = search_replies,
                  emergency_fn: EmergencyFn = emergency_lookup, classify_fn: ClassifyFn = em.classify,
-                 understand_fn=understand_message) -> list[Out]:
+                 understand_fn=understand_message, heard: bool = False) -> list[Out]:
     """Returns the replies to send. `notify` sends a message right away (the "listening" ack). `understand_fn`:
-    the conversation-understanding step (app/agent/understand.py), on with KASAFI_UNDERSTANDING."""
+    the conversation-understanding step (app/agent/understand.py), on with KASAFI_UNDERSTANDING. `heard`: this
+    text is a voice note's transcript re-entering the text path (already counted and checked as voice)."""
     sender, kind = msg.get("from", ""), msg.get("type")
     text = ((msg.get("text") or {}).get("body", "") if kind == "text" else
             (msg.get("button") or {}).get("text", "") if kind == "button" else "")   # a template's MORE / STOP
@@ -747,23 +748,25 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         if r and r.needs_confirmation and not is_medical_emergency(*heard_texts(r)):
             store.set_pending(key, r.transcript, r.english)
             return [Out(outcome.text)]            # read-back: answer after Eh or a correction
-        if r and outcome.text != EMERGENCY_REPLY:  # heard clearly: answer now
-            # a facility question by voice ('ina asibiti mafi kusa', 'how far is Arkilla PHC') as by text
-            if settings.has_database and settings.kasafi_shortcut_facilities and \
-                    (outs := await _facilities(r.english or r.transcript, key, lang, store,
-                                                                    settings, place_fn, facility_fn)) is not None:
-                return [Out(t("heard_prefix", lang, transcript=r.transcript[:1000]))] + outs
-            return await respond(r.transcript, t("heard_prefix", lang, transcript=r.transcript[:1000]),
-                                 Out(outcome.text))
+        if r and outcome.text != EMERGENCY_REPLY:  # heard clearly: the transcript takes exactly the text path
+            # (understanding, multi-part, every shortcut and capability, the shared pin), after "I heard: …".
+            # 4 Nov: a three-part voice note had gone straight to the document search as one question
+            heard_msg = {**msg, "id": f"{msg.get('id', '')}-heard", "type": "text", "text": {"body": r.transcript[:1000]}}
+            outs = await handle(heard_msg, wa, store=store, settings=settings, voice_fn=voice_fn, notify=notify,
+                                resolve_fn=resolve_fn, guard_fn=guard_fn, answer_fn=answer_fn, locate_fn=locate_fn,
+                                place_fn=place_fn, facility_fn=facility_fn, emergency_fn=emergency_fn,
+                                classify_fn=classify_fn, understand_fn=understand_fn, heard=True)
+            return [Out(t("heard_prefix", lang, transcript=r.transcript[:1000]))] + outs
         return [Out(outcome.text)]                # emergency referral, not heard, too long
 
     if kind == "text":
-        if not exempt and questions_used >= settings.kasafi_questions_per_day:
-            return [Out(t("question_limit", lang, n=settings.kasafi_questions_per_day))]
-        store.count(key, "questions")
-        from app.agent.deep import deep_question
-        if deep_question(text):                   # a deep analysis counts double against the daily limit
+        if not heard:                             # a voice note's transcript was counted and capped as voice
+            if not exempt and questions_used >= settings.kasafi_questions_per_day:
+                return [Out(t("question_limit", lang, n=settings.kasafi_questions_per_day))]
             store.count(key, "questions")
+            from app.agent.deep import deep_question
+            if deep_question(text):               # a deep analysis counts double against the daily limit
+                store.count(key, "questions")
         if pending:                               # a typed correction, or a new question
             if over_cap(settings.kasafi_cost_per_question_usd):
                 return [Out(t("busy", lang))]
@@ -774,7 +777,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                     store.clear_pending(key)
                 return await resolution_reply(res, pending[0], text)
             store.clear_pending(key)
-        if refusal := await _guarded([text], lang, guard_fn, settings):
+        if not heard and (refusal := await _guarded([text], lang, guard_fn, settings)):   # voice: guarded already
             return [refusal]
         if parts:
             return await multi_part(parts)
