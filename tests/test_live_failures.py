@@ -237,3 +237,12 @@ def test_a_single_part_is_still_shown_dates_are_searched_in_their_printed_forms_
     assert ans.place_names(p, "Which 3 LGAs in Sokoto State have the most IDPs?") == []
     assert ans.place_names(p, "How many schools are in Kebbe LGA?") == ["Kebbe"]
     assert not ans.GENERIC_PLACE.search("Dange Shuni") and ans.GENERIC_PLACE.search("Sokoto State LGAs")
+
+
+def test_a_topic_figure_must_carry_the_day_asked() -> None:
+    """4 Nov overnight, round 2: 'displaced as of 17 August 2025' got the newest dashboard's 24/09/25 figure."""
+    from app.agent.answer import date_forms
+    forms = date_forms("how many people were displaced as of 17 August 2025?")
+    aug = tp.Card(ASC, "d", "t", 2, "626", "people", "displaced persons", "17/08/25", "Sokoto")
+    sep = tp.Card(ASC, "d", "t", 3, "4,566", "people", "displaced persons", "24/09/25", "Sokoto")
+    assert tp.card_on_date(aug, forms) and not tp.card_on_date(sep, forms)
