@@ -2245,14 +2245,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         # questions to a web search)
         shortcut = not document_question(question) or (u is not None and u.capability == "place_history")
         place_on = shortcut and settings.kasafi_shortcut_place and allow("place_history")  # switches: docs/routing.md
-        ar = area_route(question, plan.english_question, place) if conn is not None and place_on else None
-        if ar is not None and ar[0] == "state" and u is not None and u.level == "lga" and u.name:
-            # the reading's subject beats the words: 'for each ward in Tambuwal LGA in Sokoto State' had been answered
-            # for all 244 wards of the state (4 Nov overnight)
-            from app.hazards.advisories import lgas_in
-            if codes := lgas_in(u.name):
-                ar = ("lga", codes[0])
-        if ar is not None:
+        if conn is not None and place_on and (ar := area_route(question, plan.english_question, place)):
             t0 = time.perf_counter()
             aa = area_answer(conn, question, plan.english_question, lang, ar[0], ar[1], today, place=place)
             t["place_area"] = time.perf_counter() - t0

@@ -391,8 +391,7 @@ def truly_missing(missing: list[str], a) -> list[str]:
         figs = figures_in(m)
         if figs and a.cited and len(unverified_numbers(" ".join(figs), a.cited)) < len(figs):
             continue
-        # figures out of the wording, the spaces kept ('as of 17 August 2025' had become 'as ofAugust')
-        out.append(re.sub(r"\s+", " ", re.sub(r"[:(]?\s*\d[\d,.]*\s*%?\)?", " ", m)).strip(" ;:,"))
+        out.append(re.sub(r"\s*[:(]?\s*\d[\d,.]*\s*%?\)?", "", m).strip(" ;:,"))
     return [m for m in out if m]
 
 
