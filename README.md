@@ -116,7 +116,7 @@ result in code and acts on a failed check. Four examples from the code:
    period, spent or approved, the publisher named) and overrides the plan where they are clear
    ([`app/agent/words.py`](app/agent/words.py)); when they conflict, Muse Spark Open gives a second plan. A routing
    rule in code sends each question to the structured budget tools, the library search, hazards, facilities,
-   place history or a deep analysis ([`app/agent/routing.py`](app/agent/routing.py)). The routing set of 74
+   place history or a deep analysis ([`app/agent/routing.py`](app/agent/routing.py)). The routing set of 88
    questions that carry another feature's words is checked in code at 0 wrong ([`evals/routing/`](evals/routing)).
 2. **Fetching the documents it is missing.** When the plan needs a document the library doesn't hold,
    `find_and_fetch` ([`app/acquisition/library.py`](app/acquisition/library.py)) tries the publisher's own address,
@@ -195,6 +195,15 @@ Kasafi answers only from public documents and public data.
   on the admin trace ([`app/agent/attribution.py`](app/agent/attribution.py)).
 - **Entity, level and period** of the rows used are compared with what was asked; a mismatch is redone once and
   then said plainly ([`app/agent/consistency.py`](app/agent/consistency.py)).
+- **An answer check before sending.** Every answer (document, place, hazard, deep analysis, and a "not found") is
+  read by Muse Spark Open against the question, the last four turns, the restatement, the cited pages and the code
+  checks: does it answer what was asked, about the exact place, time and topic, and is each figure on a cited page?
+  Code rules sit above the model: an answer whose figures appear on none of the cited pages, or a Yes/No about a
+  different subject, can never pass. A "revise" verdict buys one more round (the message is read again when the
+  subject was wrong); if that still fails, code keeps only the supported claims, states what was left out in one
+  plain line, and keeps the maps and crops that belong to the claims kept. The checker never writes user-facing
+  text. On a replay of 43 drafts it stopped all 6 bad live answers and sent back 3 of 37 right ones (8%), at about
+  2.3 s and $0.0065 a check ([`app/agent/answer_check.py`](app/agent/answer_check.py), [`evals/check/`](evals/check)).
 - **An answer or an apology.** While the server is running, the answer function has a 120-second limit; past it
   the user gets an apology, and nothing from that job can be sent afterwards. The checked text is sent as soon as it
   is ready. Maps follow under their own 30-second limit (or a note says the map couldn't be drawn), and evidence
@@ -221,13 +230,38 @@ Kasafi answers only from public documents and public data.
   and never a duplicate ([`tests/test_e2e_conversation.py`](tests/test_e2e_conversation.py)).
 - **A held-out set** of questions is kept outside this repository, so that it can't shape the code. It is run
   before the final submission, with the same checks.
+- **An overnight improvement loop** ([`evals/overnight/`](evals/overnight), rules in
+  [`RULES.md`](evals/overnight/RULES.md), results in [`docs/overnight-report.md`](docs/overnight-report.md)). Each
+  round generates about 100 questions across every feature, with expected answers computed by code from the
+  structured data or confirmed on the cited page (a model only rephrases), split 50/50 into a fix half and a held-out
+  half. Failures are grouped by cause and fixed with general changes only (no keywords, no question-specific rules); a
+  fix is kept only if the held-out half improves or stays the same and the live-failure, routing and understanding
+  sets don't get worse, one commit per fix with its before/after scores. Questions are never edited to pass. The
+  night of 3–4 Nov ran two rounds on Muse Spark Open (held-out 41/48 → 45/48, then 34/37 → 34/37) and kept 13
+  fixes for $19.29 on Baseten and $0 on the Meta API.
 
-Latest reports before the 1 Nov deploy: fresh draw [`report-predeploy-review2.md`](evals/generated/report-predeploy-review2.md)
-(52 cases, 0 wrong), topics [`report-predeploy-review.md`](evals/topics/report-predeploy-review.md) (0 wrong of 12),
-guardrails [`report.md`](evals/guardrails/report.md) (104 of 104), place history
-[`report-full.md`](evals/place/report-full.md) (89 cases, 0 wrong), flip cases
-[`report.md`](evals/variance/report.md) (0 flips). These are results on these test sets, not a general accuracy
-figure.
+### Results
+
+Measured on the code now on `main` (the overnight branch at `3137cda`, merged as `cd29d4a`) against the release
+deployed before it (`a7836ff`, with `3e4e58b` and `8eedd7f` where that commit itself wasn't rerun). All runs are on
+Muse Spark Open through the full live path; the eval harness refuses Meta calls. These are results on these test
+sets, not a general accuracy figure, and some sets move between runs of the same code (the writer sometimes drops a
+sentence), so the range of the runs is given where it moved.
+
+| Set | Cases | Deployed before | This code | Note |
+| --- | --- | --- | --- | --- |
+| Place history, full live path ([`evals/place/`](evals/place)) | 103 | 79–80 | **95** | The rain, flood and water ward rankings now reach the satellite record and keep their maps. Still wrong: eight ward-scope wording and ranking cases. |
+| Survey and statistics questions ([`report.md`](evals/surveys/report.md)) | 23 | 21 | 19 overnight, **22** on the merged `main` (4 Nov) | The overnight misses s05, s07 and s09 passed on reruns (variance). s18, a two-survey comparison of birth registration, is wrong on every version: the MICS Sokoto row (p. 337) isn't among the pages read. |
+| New documents ([`evals/newdocs/`](evals/newdocs)) | 12 | 8 | 8 | The same four cases wrong on both. |
+| Prose figures ([`evals/prose/`](evals/prose)) | 7 | 1–2 | 1 | p05 flips between runs on both versions; the others take a budget-table route or a clarification instead of the report's sentence, or don't find it. Not improved by the overnight loop. |
+| Live phone failures, English and Hausa ([`evals/live_failures/`](evals/live_failures)) | 13 | 11 | 11–13 over three runs of the same code | No case fails on every run; the writer sometimes omits the state-level IQS line or the total sentence. |
+| Routing (in code, [`evals/routing/`](evals/routing)) | 88 | 88 | 88 | |
+| Conversation understanding ([`report.md`](evals/understanding/report.md)) | 78 | 78 | 78 | Last live run on Muse Spark, 3 Nov; the recorded readings replay through the handler in the test suite on both versions. |
+
+Older sets last run before the 1 Nov deploy and not rerun since: fresh budget draw
+[`report-predeploy-review2.md`](evals/generated/report-predeploy-review2.md) (52 cases, 0 wrong), topics
+[`report-predeploy-review.md`](evals/topics/report-predeploy-review.md) (0 wrong of 12), guardrails
+[`report.md`](evals/guardrails/report.md) (104 of 104), flip cases [`report.md`](evals/variance/report.md) (0 flips).
 
 ## Safety and privacy
 
