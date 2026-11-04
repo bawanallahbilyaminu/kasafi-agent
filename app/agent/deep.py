@@ -745,8 +745,9 @@ async def read_one(client, r: Reading, subject: str, dims: list[Dimension]) -> l
     return out[:12]
 
 
-READ_ONE_S = 70.0             # one reading on Muse Spark Open; slower, and the live model reads it instead (4 Nov)
+READ_ONE_S = 40.0             # one reading on Muse Spark Open; slower, and the live model reads it instead (4 Nov)
 RETRY_ONE_S = 45.0
+LIVE_FIRST = 3                # the first readings (the sector's own documents) go to the live model directly
 
 
 async def read_all(client, readings: list[Reading], subject: str, dims: list[Dimension], settings: Settings,
@@ -774,7 +775,7 @@ async def read_all(client, readings: list[Reading], subject: str, dims: list[Dim
             log.info("deep: reading %s on %s failed: %s", r.doc_id, getattr(c, "provider", "?"), type(e).__name__)
         return None
 
-    async def one(r: Reading) -> list[Claim]:
+    async def one(r: Reading, i: int) -> list[Claim]:
         nonlocal stopped
         async with gate:
             if spent() - start_cost >= cost_cap:
@@ -786,16 +787,20 @@ async def read_all(client, readings: list[Reading], subject: str, dims: list[Dim
                 stopped = stopped or f"time {deadline_s:.0f}s"
                 unread[r.doc_id] = "time"
                 return []
-            got = await attempt(client, r, min(READ_ONE_S, left))
-            if got is None and retry_client is not None and retry_client is not client:
+            # the first readings (the sector's own documents, ordered first) on the live model; the rest on Muse
+            # Spark Open, each read again on the other model when it fails or runs past its time
+            live = retry_client is not None and retry_client is not client
+            first, second = (retry_client, client) if live and i < LIVE_FIRST else (client, retry_client if live else None)
+            got = await attempt(first, r, min(RETRY_ONE_S if first is retry_client else READ_ONE_S, left))
+            if got is None and second is not None:
                 left = deadline_s - (time.perf_counter() - t0)
                 if left > 1:
-                    got = await attempt(retry_client, r, min(RETRY_ONE_S, left))
+                    got = await attempt(second, r, min(RETRY_ONE_S, left))
             if got is None:
                 unread[r.doc_id] = "not read in time"
                 return []
             return got
-    tasks = [asyncio.ensure_future(one(r)) for r in readings]
+    tasks = [asyncio.ensure_future(one(r, i)) for i, r in enumerate(readings)]
     done, pending = await asyncio.wait(tasks, timeout=deadline_s)
     for t, r in zip(tasks, readings):
         if t in pending:
