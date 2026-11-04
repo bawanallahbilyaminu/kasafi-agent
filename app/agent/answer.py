@@ -2420,13 +2420,17 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
                                                  for i, (d, title, p) in enumerate(tr.cited, 1)],
                               plan, t, partial=tr.partial, exact=f"{summary}\n{tr.text}", topic=tr, quotes=quotes)
             log.info("topic sources gave no figure; falling back")
-        if plan.followup == "recheck" and prev:
+        # a missing document named with an exact period the library doesn't hold is fetched before anything else:
+        # never a recheck of another series or the newest edition in its place (4 Nov live, trace 535)
+        exact_missing = bool(plan.missing_document) and conn is not None and \
+            exact_edition_missing(conn, plan.missing_document)
+        if plan.followup == "recheck" and prev and not exact_missing:
             t0 = time.perf_counter()
             latest, recheck_note, context = await recheck(conn, plan, prev, lang, client, settings, notify, today,
                                                           latest_fn)
             t["acquire"] = time.perf_counter() - t0
             acq = latest.acquired if latest and latest.fetched else None
-        elif plan.latest:
+        elif plan.latest and not exact_missing:
             t0 = time.perf_counter()
             latest = await resolve_latest(conn, plan, lang, client, settings, notify, today, latest_fn)
             t["acquire"] = time.perf_counter() - t0
