@@ -81,13 +81,14 @@ def schools(conn, rng: random.Random, n: int) -> list[dict]:
         elif kind == 1:
             out.append(q("schools", "combine", "en", [f"How many schools are in {lga}?"],
                          {"figures": [str(total), str(r["public_primary"]), str(r["public_jss"]), str(r["public_sss"])],
-                          "lead_figure": str(total), "must_not_figures": [str(double)], "docs": [ASC]},
-                         "ASC p31/44/53, total in code", lga))
+                          "lead_figure": str(total), "must_not_figures": [str(double)] if double != total else [],
+                          "docs": [ASC]}, "ASC p31/44/53, total in code", lga))
         elif kind == 2:
             out.append(q("schools", "multi", "en",
                          [f"How many schools are in {lga}?", "I mean all of them: primary, JSS, SSS and IQS"],
                          {"figures": [str(total), str(iqs)], "lead_figure": str(total), "must_any": ["IQS", "Islamiyya"],
-                          "must_not_figures": [str(double)], "docs": [ASC]}, "ASC + IQS statewide p22", lga))
+                          "must_not_figures": [str(double)] if double != total else [], "docs": [ASC]},
+                         "ASC + IQS statewide p22", lga))
         else:
             out.append(q("schools", "direct", "en", [f"How many junior secondary schools does {lga} have?"],
                          {"figures": [str(r["public_jss"])], "docs": [ASC]}, "ASC p44", lga))
