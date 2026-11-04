@@ -139,6 +139,7 @@ class DeepResult:
     seconds: float
     stopped: str = ""        # why reading stopped early (cost cap, time), if it did
     coverage: list[tuple[str, list[str], list[str]]] = field(default_factory=list)   # dimension, found, missing
+    unread: list[str] = field(default_factory=list)   # documents chosen but not read in time (said, never silent)
 
 
 # --- 1. dimensions and measures -----------------------------------------------------------------------------------
@@ -293,6 +294,24 @@ def _page_text(conn: psycopg.Connection, doc_id: str, page: int) -> str:
             .fetchone() or [""])[0][:6000]
 
 
+SUPPORTING = ("budget", "budget_performance", "fiscal", "accountability")     # money evidence: read after the sector's own
+
+
+def sector_first(conn: psycopg.Connection, readings: list[Reading]) -> list[Reading]:
+    """The sector's own plans, assessments, surveys and reports before budgets and financial statements (a stable
+    order within each group): under a reading deadline the subject's documents finish first, and money documents
+    never crowd them out (4 Nov 2026: a PHC brief read 11 budgets and statements and lost the MSP and EmONC)."""
+    ids = [r.doc_id for r in readings if not r.doc_id.startswith("registry:")]
+    if not ids:
+        return readings
+    try:
+        cats = dict(conn.execute("SELECT id, COALESCE(category, '') FROM documents WHERE id = ANY(%s)", (ids,)).fetchall())
+    except Exception:          # noqa: BLE001 - the order as chosen
+        conn.rollback()
+        return readings
+    return sorted(readings, key=lambda r: 1 if cats.get(r.doc_id, "") in SUPPORTING else 0)
+
+
 def choose_sources(conn: psycopg.Connection, subject: str, dims: list[Dimension],
                    max_docs: int = MAX_DOCS) -> list[Reading]:
     """Per dimension the library's best documents and their best pages, spread across the dimensions (each
@@ -402,8 +421,19 @@ def registry_reading(conn: psycopg.Connection, subject: str, question: str, dim_
     if not FACILITY_SUBJECT.search(f"{subject} {question}"):
         return None
     try:
-        from app.geo.facility_info import count_answer
-        text = count_answer(conn, "how many primary health care facilities are there in Sokoto State", "en")
+        # counted in code by registry level: a PHC subject gets primary-level facilities (primary health centres
+        # and clinics, health posts, dispensaries), labelled as such; the all-types total is named as all types
+        # (4 Nov 2026: 934 facilities of every type had been given as the state's PHCs)
+        rows = conn.execute("SELECT f.level, count(*) FROM facility f WHERE NOT f.hidden GROUP BY 1").fetchall()
+        by_level = {lvl or "": n for lvl, n in rows}
+        total = sum(by_level.values())
+        kinds = conn.execute("SELECT f.level_option, count(*) FROM facility f WHERE NOT f.hidden AND f.level = 'Primary' "
+                             "GROUP BY 1 ORDER BY 2 DESC LIMIT 6").fetchall()
+        prim = by_level.get("Primary", 0)
+        text = (f"Sokoto State has {prim:,} primary-level health facilities in the registry (primary health centres and "
+                f"clinics, health posts, dispensaries: " + ", ".join(f"{k or 'unspecified'} {n:,}" for k, n in kinds)
+                + f"), out of {total:,} health facilities of all types (primary {prim:,}, secondary "
+                f"{by_level.get('Secondary', 0):,}, tertiary {by_level.get('Tertiary', 0):,}).")
     except Exception as e:          # noqa: BLE001
         conn.rollback()
         log.info("deep: registry count failed: %s", e)
@@ -715,40 +745,67 @@ async def read_one(client, r: Reading, subject: str, dims: list[Dimension]) -> l
     return out[:12]
 
 
+READ_ONE_S = 70.0             # one reading on Muse Spark Open; slower, and the live model reads it instead (4 Nov)
+RETRY_ONE_S = 45.0
+
+
 async def read_all(client, readings: list[Reading], subject: str, dims: list[Dimension], settings: Settings,
                    *, cost_cap: float = COST_CAP_USD, deadline_s: float = READ_DEADLINE_S,
-                   spent=None) -> tuple[list[Claim], str]:
-    """All readings in parallel (CONCURRENT at a time); no new reading starts past the cost cap or the deadline,
-    and readings still running at the deadline are dropped. Returns (claims, why stopped or '')."""
+                   spent=None, retry_client=None) -> tuple[list[Claim], str, list[str]]:
+    """All readings in parallel (CONCURRENT at a time); no new reading starts past the cost cap or the deadline.
+    A reading that fails or runs past READ_ONE_S is read again once on `retry_client` (the live model) while time
+    remains; what still isn't read is returned by document id, never dropped in silence (4 Nov 2026: Fireworks
+    readers timed out and a PHC brief lost the sector's own documents). Returns (claims, why stopped or '', the
+    documents not read)."""
     spent = spent or (lambda: usage.total_dollars(settings))
     start_cost, t0 = spent(), time.perf_counter()
     gate = asyncio.Semaphore(CONCURRENT)
     stopped = ""
+    unread: dict[str, str] = {}
     if not readings:
-        return [], ""
+        return [], "", []
+
+    async def attempt(c, r: Reading, limit: float) -> list[Claim] | None:
+        try:
+            return await asyncio.wait_for(read_one(c, r, subject, dims), limit)
+        except asyncio.TimeoutError:
+            log.info("deep: reading %s on %s ran past %.0fs", r.doc_id, getattr(c, "provider", "?"), limit)
+        except Exception as e:  # noqa: BLE001 - one document must not stop the analysis
+            log.info("deep: reading %s on %s failed: %s", r.doc_id, getattr(c, "provider", "?"), type(e).__name__)
+        return None
 
     async def one(r: Reading) -> list[Claim]:
         nonlocal stopped
         async with gate:
             if spent() - start_cost >= cost_cap:
                 stopped = stopped or f"cost cap ${cost_cap:.2f}"
+                unread[r.doc_id] = "cost cap"
                 return []
-            if time.perf_counter() - t0 >= deadline_s:
+            left = deadline_s - (time.perf_counter() - t0)
+            if left <= 0:
                 stopped = stopped or f"time {deadline_s:.0f}s"
+                unread[r.doc_id] = "time"
                 return []
-            try:
-                return await read_one(client, r, subject, dims)
-            except Exception as e:  # noqa: BLE001 - one document must not stop the analysis
-                log.info("deep: reading %s failed: %s", r.doc_id, type(e).__name__)
+            got = await attempt(client, r, min(READ_ONE_S, left))
+            if got is None and retry_client is not None and retry_client is not client:
+                left = deadline_s - (time.perf_counter() - t0)
+                if left > 1:
+                    got = await attempt(retry_client, r, min(RETRY_ONE_S, left))
+            if got is None:
+                unread[r.doc_id] = "not read in time"
                 return []
+            return got
     tasks = [asyncio.ensure_future(one(r)) for r in readings]
     done, pending = await asyncio.wait(tasks, timeout=deadline_s)
-    for t in pending:
-        t.cancel()
-    if pending:
-        stopped = stopped or f"time {deadline_s:.0f}s ({len(pending)} documents not read)"
+    for t, r in zip(tasks, readings):
+        if t in pending:
+            t.cancel()
+            unread.setdefault(r.doc_id, "not read in time")
+    cut = [d for d, why in unread.items() if why == "not read in time"]
+    if pending or (cut and time.perf_counter() - t0 >= deadline_s - 1):   # the deadline, not the hosts, ended it
+        stopped = stopped or f"time {deadline_s:.0f}s ({len(pending) or len(cut)} documents not read)"
     claims = [c for t in done if not t.exception() for c in t.result()]
-    return claims, stopped
+    return claims, stopped, [d for d in unread if not d.startswith("registry:")]
 
 
 # --- 4. selection ---------------------------------------------------------------------------------------------------
@@ -1077,6 +1134,7 @@ WORDS = {
            "reading": "📚 Reading {n} documents: {kinds}… (up to 3 minutes)",
            "writing": "✍️ Writing the summary from {n} checked figures…",
            "differ": "↔️ Where sources differ: {text}", "missing": "ℹ️ Not found in the documents read: {text}",
+           "unread": "⏳ Not read in time (ask again for these): {text}",
            "brief": "📄 Reply *full brief* for a PDF with every section and its citations.",
            "none": "I couldn't find checked figures on this in the library's documents.",
            "head": "*{name}*"},
@@ -1085,6 +1143,7 @@ WORDS = {
            "writing": "✍️ Ina rubuta taƙaitawa daga alƙaluma {n} da aka tabbatar…",
            "differ": "↔️ Inda majiyoyi suka bambanta: {text}",
            "missing": "ℹ️ Ba a samu a takardun da aka karanta ba: {text}",
+           "unread": "⏳ Ba a karanta waɗannan a kan lokaci ba (sake tambaya): {text}",
            "brief": "📄 Ku amsa da *full brief* don samun PDF mai dukkan sassan da madogararsu.",
            "none": "Ban samu alƙaluma da aka tabbatar a kan wannan a takardun ɗakin karatu ba.",
            "head": "*{name}*"},
@@ -1157,14 +1216,15 @@ async def deep_answer(conn: psycopg.Connection, question: str, english: str, lan
         for d in dims:              # nothing in the rows: the budget tables are read like any page
             for m in d.measures:
                 m.structured = False
-    readings = choose_sources(conn, subject, dims)
+    readings = sector_first(conn, choose_sources(conn, subject, dims))
     if reg := registry_reading(conn, subject, f"{question} {english}", dims[0].name):
         readings.insert(0, reg)
     log.info("deep: %s | %d dimensions | %d documents: %s | %d budget figures", subject, len(dims), len(readings),
              ", ".join(r.doc_id for r in readings), len(money))
     if notify:
         await notify(w["reading"].format(n=len(readings), kinds=kinds_of(conn, readings, bool(money))))
-    claims, stopped = await read_all(open_client or client, readings, subject, dims, settings)
+    claims, stopped, unread = await read_all(open_client or client, readings, subject, dims, settings,
+                                             retry_client=client)
     claims = money + claims
     # rounds 2-3: each measure still without a claim gets its own search on pages not read yet, within what's left
     # of the caps; a measure is 'not found' only after its searches came back empty
@@ -1180,16 +1240,22 @@ async def deep_answer(conn: psycopg.Connection, question: str, english: str, lan
         if not extra:
             break
         log.info("deep: round %d for %s: %s", round_no, sorted(missing), ", ".join(r.doc_id for r in extra))
-        more, stopped = await read_all(open_client or client, extra, subject, dims, settings,
-                                       cost_cap=COST_CAP_USD - spent_now, deadline_s=left)
+        more, stopped, more_unread = await read_all(open_client or client, extra, subject, dims, settings,
+                                                    cost_cap=COST_CAP_USD - spent_now, deadline_s=left,
+                                                    retry_client=client)
         claims += more
         readings += extra
+        unread += [d for d in more_unread if d not in unread]
     log.info("deep: %d verified claims%s", len(claims), f" (stopped: {stopped})" if stopped else "")
+    unread = [next((r.title for r in readings if r.doc_id == d and r.title), d) for d in unread]
+    if unread:
+        log.warning("deep: %d documents not read in time: %s", len(unread), "; ".join(unread))
     chosen = select_claims(claims, dims, question)
     cov = coverage(chosen, dims)
     if not chosen:
         return DeepResult(w["none"], [], "", "", [], [r.doc_id for r in readings],
-                          usage.total_dollars(settings) - start_cost, time.perf_counter() - t0, stopped, cov)
+                          usage.total_dollars(settings) - start_cost, time.perf_counter() - t0, stopped, cov,
+                          unread=unread)
     if notify:
         await notify(w["writing"].format(n=len(chosen)))
     d = await synthesise(client, question, lang, chosen, dims, settings)
@@ -1199,7 +1265,8 @@ async def deep_answer(conn: psycopg.Connection, question: str, english: str, lan
     differ = cite(keep_verified(VERDICT.sub("", str(d.get("differ") or "")).strip(), chosen), chosen)
     return DeepResult(cite(keep_verified(str(d.get("summary") or ""), chosen), chosen), sections, differ,
                       missing_line(cov, lang, dims), chosen, list(dict.fromkeys(r.doc_id for r in readings)),
-                      usage.total_dollars(settings) - start_cost, time.perf_counter() - t0, stopped, cov)
+                      usage.total_dollars(settings) - start_cost, time.perf_counter() - t0, stopped, cov,
+                      unread=unread)
 
 
 def render(r: DeepResult, lang: str) -> tuple[str, list[str]]:
@@ -1211,6 +1278,8 @@ def render(r: DeepResult, lang: str) -> tuple[str, list[str]]:
         tail.append(w["differ"].format(text=r.differ))
     if r.missing:
         tail.append(w["missing"].format(text=r.missing))
+    if r.unread:                   # chosen but not read in time: said, so 'not found' never covers an unread source
+        tail.append(w["unread"].format(text="; ".join(r.unread[:4])))
     if r.sections:
         tail.append(w["brief"])
     if tail:
@@ -1266,5 +1335,5 @@ def brief_pdf(question: str, r: DeepResult) -> bytes:
 
 def as_json(r: DeepResult) -> str:
     return json.dumps({"documents": r.documents, "claims": len(r.claims), "cost": round(r.cost, 4),
-                       "seconds": round(r.seconds, 1), "stopped": r.stopped,
+                       "seconds": round(r.seconds, 1), "stopped": r.stopped, "unread": r.unread,
                        "missing": [m for _, _, ms in r.coverage for m in ms]})

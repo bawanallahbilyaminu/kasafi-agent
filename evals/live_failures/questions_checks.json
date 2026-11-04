@@ -1,18 +1,116 @@
 {
  "_about": "What each final answer must (and must not) say. Schools: the code-computed total of separate schools leads the answer (ASC 23-24: Dange Shuni 91 + 18 + 8 = 117 public, Sokoto North 23 + 23 + 14 = 60 public), the levels from their own rows; private schools are counted at each level they offer (Table 2.2, p21), so 173 and 94 double-count (and 221 with pre-primary); IQS (Islamiyya Integrated) exists only statewide (123 primary, p22), said in one line when the user names it; never a budget. D: never 'Yes', Wamakko named, the state figure given. E: people, never hectares.",
  "checks": {
-  "lfA": {"all_re": ["\\A[^\\n]*\\b117\\b", "\\b91\\b", "\\b18\\b", "\\b17\\b"], "must_not": "\\b173\\b|\\b221\\b|Newest figure|(?i:budget)"},
-  "lfB": {"all_re": ["\\A[^\\n]*\\b117\\b", "\\b91\\b", "\\b18\\b", "(?i:IQS|Islamiyya|Qur.?anic)", "\\b123\\b"], "must_not": "\\b173\\b|\\b221\\b|(?i:budget|allocat)"},
-  "lfC": {"all_re": ["\\A[^\\n]*\\b117\\b", "\\b91\\b", "\\b18\\b"], "must_not": "\\b173\\b|\\b221\\b|(?i:budget|allocat)|didn't find this in the pages I read"},
-  "lfD": {"all_re": ["Wamakko", "15,675|\\b7\\b"], "must_not": "(?im)^\\W*yes\\b"},
-  "lfD_ha": {"all_re": ["Wamakko", "15,675|\\b7\\b"], "must_not": "(?im)^\\W*(?:e{1,2}h?|i|haka ne)\\b[,.!\\s]"},
-  "lfE": {"all_re": ["102K|102,000|97,928"], "must_not": "\\bha\\b|(?i:hectare|radar)"},
-  "lfE2": {"all_re": ["102K|102,000|97,928|98K"], "must_not": "\\bha\\b|(?i:hectare|radar)"},
-  "lfA_ha": {"all_re": ["\\A[^\\n]*\\b117\\b", "\\b91\\b", "\\b18\\b"], "must_not": "\\b173\\b|\\b221\\b|₦|(?i:biliyan|miliyan)"},
-  "lfB_ha": {"all_re": ["\\A[^\\n]*\\b117\\b", "\\b91\\b", "(?i:IQS|Islamiyya)", "\\b123\\b"], "must_not": "\\b173\\b|\\b221\\b|₦|(?i:biliyan|miliyan)"},
-  "lfSN": {"all_re": ["\\A[^\\n]*\\b60\\b", "\\b23\\b", "\\b14\\b"], "must_not": "\\b94\\b|(?i:budget)"},
-  "lfSN_ha": {"all_re": ["\\A[^\\n]*\\b60\\b", "\\b23\\b", "\\b14\\b"], "must_not": "\\b94\\b|₦"},
-  "lfSNB": {"all_re": ["\\A[^\\n]*\\b60\\b", "\\b23\\b", "(?i:IQS|Islamiyya)", "\\b123\\b"], "must_not": "\\b94\\b|(?i:budget)"},
-  "lfSNB_ha": {"all_re": ["\\A[^\\n]*\\b60\\b", "\\b23\\b", "(?i:IQS|Islamiyya)", "\\b123\\b"], "must_not": "\\b94\\b|₦"}
+  "lfA": {
+   "all_re": [
+    "\\A[^\\n]*\\b117\\b",
+    "\\b91\\b",
+    "\\b18\\b",
+    "\\b17\\b"
+   ],
+   "must_not": "\\b173\\b|\\b221\\b|Newest figure|(?i:budget)"
+  },
+  "lfB": {
+   "all_re": [
+    "\\A[^\\n]*\\b117\\b",
+    "\\b91\\b",
+    "\\b18\\b",
+    "(?i:IQS|Islamiyya|Qur.?anic)",
+    "\\b123\\b"
+   ],
+   "must_not": "\\b173\\b|\\b221\\b|(?i:budget|allocat)"
+  },
+  "lfC": {
+   "all_re": [
+    "\\A[^\\n]*\\b117\\b",
+    "\\b91\\b",
+    "\\b18\\b"
+   ],
+   "must_not": "\\b173\\b|\\b221\\b|(?i:budget|allocat)|didn't find this in the pages I read"
+  },
+  "lfD": {
+   "all_re": [
+    "Wamakko",
+    "15,675|\\b7\\b"
+   ],
+   "must_not": "(?im)^\\W*yes\\b"
+  },
+  "lfD_ha": {
+   "all_re": [
+    "Wamakko",
+    "15,675|\\b7\\b"
+   ],
+   "must_not": "(?im)^\\W*(?:e{1,2}h?|i|haka ne)\\b[,.!\\s]"
+  },
+  "lfE": {
+   "all_re": [
+    "102K|102,000|97,928"
+   ],
+   "must_not": "\\bha\\b|(?i:hectare|radar)"
+  },
+  "lfE2": {
+   "all_re": [
+    "102K|102,000|97,928|98K"
+   ],
+   "must_not": "\\bha\\b|(?i:hectare|radar)"
+  },
+  "lfA_ha": {
+   "all_re": [
+    "\\A[^\\n]*\\b117\\b",
+    "\\b91\\b",
+    "\\b18\\b"
+   ],
+   "must_not": "\\b173\\b|\\b221\\b|₦|(?i:biliyan|miliyan)"
+  },
+  "lfB_ha": {
+   "all_re": [
+    "\\A[^\\n]*\\b117\\b",
+    "\\b91\\b",
+    "(?i:IQS|Islamiyya)",
+    "\\b123\\b"
+   ],
+   "must_not": "\\b173\\b|\\b221\\b|₦|(?i:biliyan|miliyan)"
+  },
+  "lfSN": {
+   "all_re": [
+    "\\A[^\\n]*\\b60\\b",
+    "\\b23\\b",
+    "\\b14\\b"
+   ],
+   "must_not": "\\b94\\b|(?i:budget)"
+  },
+  "lfSN_ha": {
+   "all_re": [
+    "\\A[^\\n]*\\b60\\b",
+    "\\b23\\b",
+    "\\b14\\b"
+   ],
+   "must_not": "\\b94\\b|₦"
+  },
+  "lfSNB": {
+   "all_re": [
+    "\\A[^\\n]*\\b60\\b",
+    "\\b23\\b",
+    "(?i:IQS|Islamiyya)",
+    "\\b123\\b"
+   ],
+   "must_not": "\\b94\\b|(?i:budget)"
+  },
+  "lfSNB_ha": {
+   "all_re": [
+    "\\A[^\\n]*\\b60\\b",
+    "\\b23\\b",
+    "(?i:IQS|Islamiyya)",
+    "\\b123\\b"
+   ],
+   "must_not": "\\b94\\b|₦"
+  },
+  "lfPHC": {
+   "all_re": [
+    "(?i:Minimum Service Package|MSP)",
+    "(?i:Emergency Obstetric|EmONC)"
+   ],
+   "must_not": "934 health facilities recorded|(?i:Not found[^\n]*(?:number of PHC|facilit))"
+  }
  }
 }

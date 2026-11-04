@@ -108,7 +108,7 @@ def test_reading_stops_at_the_cost_cap() -> None:
         return await orig(messages, **kw)
     model.chat = costly
     dims = [D.Dimension("staffing", ["x"])]
-    claims, stopped = asyncio.run(D.read_all(model, readings(12), "PHC", dims, make_settings(), cost_cap=0.20,
+    claims, stopped, _ = asyncio.run(D.read_all(model, readings(12), "PHC", dims, make_settings(), cost_cap=0.20,
                                              spent=lambda: spend["usd"]))
     assert "cost cap" in stopped and 4 <= len(model.calls) <= 4 + D.CONCURRENT
     assert all(c.value == "1,234" for c in claims)                        # the invented figure never passes
@@ -117,7 +117,7 @@ def test_reading_stops_at_the_cost_cap() -> None:
 def test_reading_stops_at_the_deadline() -> None:
     dims = [D.Dimension("staffing", ["x"])]
     t0 = time.perf_counter()
-    claims, stopped = asyncio.run(D.read_all(StubModel(delay=2.0), readings(3), "PHC", dims, make_settings(),
+    claims, stopped, _ = asyncio.run(D.read_all(StubModel(delay=2.0), readings(3), "PHC", dims, make_settings(),
                                              deadline_s=0.3, spent=lambda: 0.0))
     assert time.perf_counter() - t0 < 1.5 and claims == [] and "time" in stopped
 

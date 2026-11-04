@@ -1,44 +1,149 @@
 {
  "_about": "The 3 Nov 2026 live failures A-E as conversations, with the user's exact wording and, for the follow-ups, the exact replies Kasafi gave live (traces 298-305). Run with evals/complex/run_open.py --file evals/live_failures/questions.json: each case goes through the understanding step and answer_question, so the answer check runs as live. Checks: questions_checks.json.",
  "questions": [
-  {"id": "lfA", "lang": "en", "understand": true, "text": "How many schools are in Dange Shuni",
-   "note": "A: got only 91 public primary (+ pre-primary) as 'Newest figure'. ASC 23-24: primary 91 + 28 (p31), JSS 18 + 17 (p44), SSS 8 + 11 (p53) = 173; pre-primary 20 + 28 (p26) counted with primary; IQS only statewide (p22)"},
-  {"id": "lfB", "lang": "en", "understand": true,
-   "history": [{"question": "How many schools are in Dange Shuni", "answer": "Dange Shuni LGA has 91 public primary schools in the 2023/2024 ASC, from the Sokoto State Annual School Census 23-24 Report.\n\n📊 Newest figure: *91 schools* – Number of Primary Schools in Public Primary School, DANGE SHUNI LGA (Sokoto State Annual School Census 23-24 Report, 2023/2024 ASC).\n\nBy source:\n• Sokoto State Annual School Census 23-24 Report: 91 schools – Number of Primary Schools in Public Primary School, DANGE SHUNI LGA; 2023/2024 ASC (p. 19)\n• Sokoto State Annual School Census 23-24 Report: 20 schools – public pre-primary schools, DANGE SHUNI LGA; 2023/2024 ASC (p. 26)\n• Sokoto State Annual School Census 23-24 Report: 28 schools – private pre-primary schools, DANGE SHUNI LGA; 2023/2024 ASC (p. 26)"}],
+  {
+   "id": "lfA",
+   "lang": "en",
+   "understand": true,
+   "text": "How many schools are in Dange Shuni",
+   "note": "A: got only 91 public primary (+ pre-primary) as 'Newest figure'. ASC 23-24: primary 91 + 28 (p31), JSS 18 + 17 (p44), SSS 8 + 11 (p53) = 173; pre-primary 20 + 28 (p26) counted with primary; IQS only statewide (p22)"
+  },
+  {
+   "id": "lfB",
+   "lang": "en",
+   "understand": true,
+   "history": [
+    {
+     "question": "How many schools are in Dange Shuni",
+     "answer": "Dange Shuni LGA has 91 public primary schools in the 2023/2024 ASC, from the Sokoto State Annual School Census 23-24 Report.\n\n📊 Newest figure: *91 schools* – Number of Primary Schools in Public Primary School, DANGE SHUNI LGA (Sokoto State Annual School Census 23-24 Report, 2023/2024 ASC).\n\nBy source:\n• Sokoto State Annual School Census 23-24 Report: 91 schools – Number of Primary Schools in Public Primary School, DANGE SHUNI LGA; 2023/2024 ASC (p. 19)\n• Sokoto State Annual School Census 23-24 Report: 20 schools – public pre-primary schools, DANGE SHUNI LGA; 2023/2024 ASC (p. 26)\n• Sokoto State Annual School Census 23-24 Report: 28 schools – private pre-primary schools, DANGE SHUNI LGA; 2023/2024 ASC (p. 26)"
+    }
+   ],
    "text": "I mean all the total schools primary, senior secondary and junior secondary and IQS",
-   "note": "B: answered about the BUDGET for Dange Shuni"},
-  {"id": "lfC", "lang": "en", "understand": true,
-   "history": [{"question": "How many schools are in Dange Shuni", "answer": "Dange Shuni LGA has 91 public primary schools in the 2023/2024 ASC, from the Sokoto State Annual School Census 23-24 Report."},
-               {"question": "I mean all the total schools primary, senior secondary and junior secondary and IQS", "answer": "The state budget doesn't show money allocated directly to Dange Shuni Local Government. State budget lines for institutions located in Dange Shuni (a hospital or a school, say) are state money, not the LGA's. LGAs get their statutory allocations from the Federation Account separately, and the documents I have don't show Dange Shuni's."}],
+   "note": "B: answered about the BUDGET for Dange Shuni"
+  },
+  {
+   "id": "lfC",
+   "lang": "en",
+   "understand": true,
+   "history": [
+    {
+     "question": "How many schools are in Dange Shuni",
+     "answer": "Dange Shuni LGA has 91 public primary schools in the 2023/2024 ASC, from the Sokoto State Annual School Census 23-24 Report."
+    },
+    {
+     "question": "I mean all the total schools primary, senior secondary and junior secondary and IQS",
+     "answer": "The state budget doesn't show money allocated directly to Dange Shuni Local Government. State budget lines for institutions located in Dange Shuni (a hospital or a school, say) are state money, not the LGA's. LGAs get their statutory allocations from the Federation Account separately, and the documents I have don't show Dange Shuni's."
+    }
+   ],
    "text": "Am talking about schools not budget",
-   "note": "C: '91 public primary schools… I didn't find this in the pages I read', with '0 figure(s) found' in show working"},
-  {"id": "lfD", "lang": "en", "understand": true, "text": "Was Wamakko LGA affected by floods in 2025, according to NEMA?",
-   "note": "D: 'Yes, Sokoto State is listed…' then 'can't tell about Wamakko'. NEMA's 2025 reports never name Wamakko: 7 LGAs and 8 wards, 15,675 people (24 Sep sitrep p3)"},
-  {"id": "lfD_ha", "lang": "ha", "understand": true, "text": "Shin ambaliya ta shafi Ƙaramar Hukumar Wamakko a 2025, a cewar NEMA?",
-   "note": "D in Hausa"},
-  {"id": "lfE", "lang": "en", "understand": true,
-   "history": [{"question": "How many people were affected by floods in Sokoto State in 2024?", "answer": "*Flooding: Sokoto State* — experimental\n\nIn 2024, radar saw about 4,120 ha of Sokoto State under water on its biggest pass (27 August 2024), and 26,000 ha at some point in the season."}],
+   "note": "C: '91 public primary schools… I didn't find this in the pages I read', with '0 figure(s) found' in show working"
+  },
+  {
+   "id": "lfD",
+   "lang": "en",
+   "understand": true,
+   "text": "Was Wamakko LGA affected by floods in 2025, according to NEMA?",
+   "note": "D: 'Yes, Sokoto State is listed…' then 'can't tell about Wamakko'. NEMA's 2025 reports never name Wamakko: 7 LGAs and 8 wards, 15,675 people (24 Sep sitrep p3)"
+  },
+  {
+   "id": "lfD_ha",
+   "lang": "ha",
+   "understand": true,
+   "text": "Shin ambaliya ta shafi Ƙaramar Hukumar Wamakko a 2025, a cewar NEMA?",
+   "note": "D in Hausa"
+  },
+  {
+   "id": "lfE",
+   "lang": "en",
+   "understand": true,
+   "history": [
+    {
+     "question": "How many people were affected by floods in Sokoto State in 2024?",
+     "answer": "*Flooding: Sokoto State* — experimental\n\nIn 2024, radar saw about 4,120 ha of Sokoto State under water on its biggest pass (27 August 2024), and 26,000 ha at some point in the season."
+    }
+   ],
    "text": "How many people in Sokoto State were affected by floods in October 2024?",
-   "note": "E: satellite hectares. NEMA: 102K (14 and 21 Oct), 97,928 (2 Oct)"},
-  {"id": "lfE2", "lang": "en", "understand": true,
-   "history": [{"question": "How many people were affected by floods in Sokoto State in 2024?", "answer": "*Flooding: Sokoto State* — experimental\n\nIn 2024, radar saw about 4,120 ha of Sokoto State under water on its biggest pass (27 August 2024), and 26,000 ha at some point in the season."}],
+   "note": "E: satellite hectares. NEMA: 102K (14 and 21 Oct), 97,928 (2 Oct)"
+  },
+  {
+   "id": "lfE2",
+   "lang": "en",
+   "understand": true,
+   "history": [
+    {
+     "question": "How many people were affected by floods in Sokoto State in 2024?",
+     "answer": "*Flooding: Sokoto State* — experimental\n\nIn 2024, radar saw about 4,120 ha of Sokoto State under water on its biggest pass (27 August 2024), and 26,000 ha at some point in the season."
+    }
+   ],
    "text": "I asked about people, not hectares of land",
-   "note": "E as a correction"},
-  {"id": "lfA_ha", "lang": "ha", "understand": true, "text": "Makarantu nawa ne a Dange Shuni?", "note": "A in Hausa"},
-  {"id": "lfB_ha", "lang": "ha", "understand": true,
-   "history": [{"question": "Makarantu nawa ne a Dange Shuni?", "answer": "Ƙaramar Hukumar Dange Shuni tana da makarantun gwamnati 117 a 2023/24: firamare 91, ƙaramar sakandare 18, babbar sakandare 8."}],
+   "note": "E as a correction"
+  },
+  {
+   "id": "lfA_ha",
+   "lang": "ha",
+   "understand": true,
+   "text": "Makarantu nawa ne a Dange Shuni?",
+   "note": "A in Hausa"
+  },
+  {
+   "id": "lfB_ha",
+   "lang": "ha",
+   "understand": true,
+   "history": [
+    {
+     "question": "Makarantu nawa ne a Dange Shuni?",
+     "answer": "Ƙaramar Hukumar Dange Shuni tana da makarantun gwamnati 117 a 2023/24: firamare 91, ƙaramar sakandare 18, babbar sakandare 8."
+    }
+   ],
    "text": "Ina nufin duka makarantun: firamare, ƙaramar sakandare, babbar sakandare da IQS",
-   "note": "B in Hausa: IQS only statewide (123 primary, p22), said in one line"},
-  {"id": "lfSN", "lang": "en", "understand": true, "text": "How many schools are in Sokoto North",
-   "note": "Live after the 3 Nov deploy: the main answer listed only private JSS 8 and SSS 6; the total was in show working. ASC: public 23 (p31) + 23 (p44) + 14 (p53) = 60; private 14, 8, 6 not added"},
-  {"id": "lfSN_ha", "lang": "ha", "understand": true, "text": "Makarantu nawa ne a Sokoto North?", "note": "Sokoto North in Hausa"},
-  {"id": "lfSNB", "lang": "en", "understand": true,
-   "history": [{"question": "How many schools are in Sokoto North", "answer": "Sokoto North had 60 public schools in 2023/24: 23 primary, 23 junior secondary and 14 senior secondary."}],
+   "note": "B in Hausa: IQS only statewide (123 primary, p22), said in one line"
+  },
+  {
+   "id": "lfSN",
+   "lang": "en",
+   "understand": true,
+   "text": "How many schools are in Sokoto North",
+   "note": "Live after the 3 Nov deploy: the main answer listed only private JSS 8 and SSS 6; the total was in show working. ASC: public 23 (p31) + 23 (p44) + 14 (p53) = 60; private 14, 8, 6 not added"
+  },
+  {
+   "id": "lfSN_ha",
+   "lang": "ha",
+   "understand": true,
+   "text": "Makarantu nawa ne a Sokoto North?",
+   "note": "Sokoto North in Hausa"
+  },
+  {
+   "id": "lfSNB",
+   "lang": "en",
+   "understand": true,
+   "history": [
+    {
+     "question": "How many schools are in Sokoto North",
+     "answer": "Sokoto North had 60 public schools in 2023/24: 23 primary, 23 junior secondary and 14 senior secondary."
+    }
+   ],
    "text": "I mean all the schools, primary, junior secondary, senior secondary and IQS",
-   "note": "The check stopped an invented IQS figure for Sokoto North: the census has IQS only for the whole state (123 primary, p22)"},
-  {"id": "lfSNB_ha", "lang": "ha", "understand": true,
-   "history": [{"question": "Makarantu nawa ne a Sokoto North?", "answer": "Sokoto North tana da makarantun gwamnati 60 a 2023/24: firamare 23, ƙaramar sakandare 23, babbar sakandare 14."}],
+   "note": "The check stopped an invented IQS figure for Sokoto North: the census has IQS only for the whole state (123 primary, p22)"
+  },
+  {
+   "id": "lfSNB_ha",
+   "lang": "ha",
+   "understand": true,
+   "history": [
+    {
+     "question": "Makarantu nawa ne a Sokoto North?",
+     "answer": "Sokoto North tana da makarantun gwamnati 60 a 2023/24: firamare 23, ƙaramar sakandare 23, babbar sakandare 14."
+    }
+   ],
    "text": "Ina nufin duka makarantun: firamare, ƙaramar sakandare, babbar sakandare da IQS",
-   "note": "The same in Hausa"}
+   "note": "The same in Hausa"
+  },
+  {
+   "id": "lfPHC",
+   "lang": "en",
+   "understand": true,
+   "text": "What is the state of PHCs in sokoto state?",
+   "note": "4 Nov live: a deep analysis read 11 budgets and statements and lost the PHC MSP 2020, the EmONC assessment, the health AOP and ROP (Fireworks readers timed out and were dropped in silence), then said 'Not found: number of PHC facilities, staff by cadre, immunisation coverage'; it also gave 934 registry facilities of all types as PHCs. Expected: the sector's own documents read first (MSP, EmONC), unread sources said, registry counts primary-level only."
+  }
  ]
 }
