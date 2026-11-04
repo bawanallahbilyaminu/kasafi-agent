@@ -150,9 +150,14 @@ def test_a_balance_recorded_on_the_status_page_turns_the_guard_on_when_spend_lea
                    follow_redirects=False)
         assert r.status_code == 303
         assert float(conn.execute("SELECT usd FROM meta_credit_readings ORDER BY id DESC LIMIT 1").fetchone()[0]) == 10.5
-        spend.add("Meta", {"prompt_tokens": 1_000_000}, s)                 # $1.25 since: $9.25 left
+        # the ledger is hourly, so Meta spend already recorded in this hour (other tests, dev runs) counts too:
+        # the guard is checked on the difference it sees, not on an absolute figure
+        before = spend.refresh(s, conn)
+        assert before.configured and before.remaining_usd <= 10.5
+        spend.add("Meta", {"prompt_tokens": 1_000_000}, s)                 # $1.25 more since the reading
         st = spend.refresh(s, conn)
-        assert st.configured and st.low and abs(st.remaining_usd - 9.25) < 0.01
+        assert st.configured and st.low and abs((before.remaining_usd - st.remaining_usd) - 1.25) < 0.01
+        assert st.remaining_usd < 10                                       # under the $10 line: the guard is on
         assert "LOW: Muse Spark calls go to Muse Spark Open" in c.get("/admin/status", auth=("admin", "a-long-test-password")).text
         bad = c.post("/admin/credit", auth=("admin", "a-long-test-password"), content="usd=lots",
                      headers={"origin": "http://testserver", "content-type": "application/x-www-form-urlencoded"})
