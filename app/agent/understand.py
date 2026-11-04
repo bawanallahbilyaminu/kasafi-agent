@@ -83,8 +83,12 @@ Rules:
 "correction"; «CORRECTION_CAP»; the subject is what the user names (e.g. the facility). \
 A claim that a named facility is closer or nearer is capability "facility" with the facility as the subject, even \
 with no list before it.
-- "this land", "here", "my farm", "this place" with a pin = level "pin"; "this area", "my ward", "my community" = \
-"ward"; "my LGA", "my local government" = "lga". No place words and no pin: level "state" or "none".
+- Level "pin" (the user's own plot, read from the satellite images of that spot) ONLY when the user says it is \
+their farm, plot, field or land ("my farm", "this farm", "my plot", "this field", "my land", "gonata", "filina", \
+"this land I farm"). "here", "this area", "this place", "around here", "where I am", "my ward", "my community", \
+"a nan", "wannan wuri", "wannan yanki" (with a pin or not) = level "ward": the area around the pin, never a plot; \
+"my LGA", "my local government", "ƙaramar hukumata" = "lga". No place words and no pin: level "state" or "none". \
+In the restatement, level "ward" is "my ward" and level "pin" is "my farm (the pin)"; the same in every part.
 - "ever", "before", "in the past", "last year" = past; "will", "expected", "this season", "tomorrow" = forecast.
 - A flood question about the past is place_history only when it asks about land, water or area (was it flooded, \
 how much land was under water, where); about the future or now is hazard.

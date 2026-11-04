@@ -447,7 +447,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     outer_notify = notify
 
     async def respond(question: str, prefix: str, fallback: Out, understanding=None, announced: bool = False,
-                      sink: NotifyFn | None = None, closing: bool = True) -> list[Out]:
+                      sink: NotifyFn | None = None, closing: bool = True, short: bool = False) -> list[Out]:
         """Answer an in-scope, confirmed question from the documents, after `prefix` (what we heard).
 
         With no document store (dev, tests), the old acknowledgement `fallback` is sent instead. `announced`: the
@@ -512,8 +512,12 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                      else not looks_like_request(question)):
                 from app.agent.conversational import help_text
                 body = help_text(lang, place)
+            working = getattr(result, "working", "")
+            if short and getattr(result, "found", True) is not False:   # a part of a multi-part reply: the lead
+                body, rest = short_form(body)                            # and sources; the rest to 'show working'
+                working = f"{rest}\n\n{working}".strip() if rest else working
             # Keep the turn for follow-ups ("check again", "what about 2024?"): 5 turns, 90 days, no number.
-            store.add_turn(key, lang, question, body, getattr(result, "sources", []), getattr(result, "working", ""),
+            store.add_turn(key, lang, question, body, getattr(result, "sources", []), working,
                            getattr(result, "quotes", ""))
         except asyncio.TimeoutError:
             closed = True
@@ -596,7 +600,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                     _remember_turn(store, key, lang, r.restatement, outs)
                     return outs
                 return await respond(r.restatement[:1000], "", Out(t("echo", lang, text=r.restatement[:500])),
-                                     understanding=r, announced=True, sink=_no_notify, closing=False)
+                                     understanding=r, announced=True, sink=_no_notify, closing=False, short=True)
             except Exception as e:              # noqa: BLE001 - one part's failure never drops the others
                 log.exception("a part of a multi-part question failed: %s", type(e).__name__)
                 return [Out(t("answer_failed", lang), lang=lang)]
@@ -798,6 +802,34 @@ def parts_progress(lang: str, readings: list) -> str:
     return w["progress"].format(n=len(readings), labels=labels)
 
 
+def short_form(body: str) -> tuple[str, str]:
+    """A part of a multi-part reply, kept short: its lead paragraph (the first paragraph that isn't an assumption
+    note), then its sources line and the 'show working' hint; everything between (execution detail, statewide
+    figures, the agency breakdown) goes to 'show working'. Returns (short text, the rest)."""
+    paras = [p.strip() for p in re.split(r"\n\s*\n", body or "") if p.strip()]
+    if len(paras) <= 2:
+        return (body or "").strip(), ""
+    keep, rest, lead_done, take_next = [], [], False, False
+    for p in paras:
+        tail = p.startswith(("📄", "_Reply", "_Ku rubuta", "Sources:", "📎"))
+        title = "\n" not in p and p.startswith("*") and (p.endswith("*") or "experimental" in p)
+        note = "\n" not in p and len(p) <= 200 and not any(ch.isdigit() for ch in p) and \
+            not p.startswith(("_Assumption", "_Zato"))
+        if tail:
+            keep.append(p)
+        elif take_next:                         # the lead ended with ':' — its list belongs with it
+            keep.append(p)
+            take_next = False
+        elif not lead_done and (title or note):
+            keep.append(p)                      # a title line or a short scope note: kept with the first findings
+        elif not lead_done and not p.startswith(("_Assumption", "_Zato")):
+            keep.append(p)                      # the first paragraph with figures: the lead
+            lead_done, take_next = True, p.rstrip().endswith(":")
+        else:
+            rest.append(p)
+    return "\n\n".join(keep), "\n\n".join(rest)
+
+
 def join_parts(readings: list, results: list[list[Out]], lang: str, max_images: int = 3) -> list[Out]:
     """One reply from the parts' replies: each part's text under a numbered heading, in the order asked, then
     every part's attachments (page crops with the first message, then maps, pins and documents) in the same
@@ -807,6 +839,7 @@ def join_parts(readings: list, results: list[list[Out]], lang: str, max_images: 
     for i, (r, outs) in enumerate(zip(readings, results), 1):
         first = outs[0] if outs else Out(w["none"], lang=lang)
         label = (r.label or r.restatement[:60]).strip().rstrip(".?:")
+        label = label[:1].upper() + label[1:]                   # "1. Government spending"
         heads.append(f"*{i}. {label}*\n{first.text.strip()}")
         crops += first.crops or []
         location_request = location_request or first.location_request
@@ -1625,7 +1658,9 @@ async def _facility_reading(text: str, u, key: str, lang: str, settings: Setting
     (its registry card), else a nearest search of the kind the words ask for (maternity, hospitals, government…)
     from the point; with no point, the location is asked for and the search runs when it comes."""
     words = f"{text} {u.restatement}"
-    if u.name:
+    # a name the reading gives is a facility only when its subject is one: at pin, ward, LGA or state level the
+    # name is the user's place (4 Nov: 'nearest clinic to my ward' with name 'Gumbi' matched Gumbi Health Clinic)
+    if u.name and u.level not in ("pin", "ward", "lga", "state"):
         name = FACILITY_ALIASES.get(u.name.strip().lower(), u.name)
         try:
             hits = await asyncio.to_thread(lookup, settings, name)

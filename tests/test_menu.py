@@ -340,6 +340,39 @@ def test_the_typing_indicator_is_only_for_consented_users() -> None:
     assert asyncio.run(run({"from": "2348000000099", "id": "wamid.3"})) is None      # no consent yet
 
 
+def test_the_typing_indicator_is_sent_again_while_a_long_answer_is_written(monkeypatch) -> None:
+    """4 Nov: the phone showed nothing while a 30-60 s answer was written (WhatsApp drops the indicator after 25 s
+    and at our progress line). It is re-sent every TYPING_REPEAT_S until the reply goes out, then stops."""
+    s, store, key = _user("en")
+    monkeypatch.setattr(W, "TYPING_REPEAT_S", 0.05)
+
+    class Client:
+        marks: list = []
+        sent: list = []
+
+        async def mark_typing(self, message_id):
+            Client.marks.append(message_id)
+
+        async def send_text(self, to, body):
+            Client.sent.append(body)
+
+        async def aclose(self):
+            return None
+
+    async def handle(msg, wa, **kw):
+        await asyncio.sleep(0.4)
+        return [C.Out("ANSWER", lang="en")]
+    monkeypatch.setattr(W, "get_settings", lambda: s)
+    monkeypatch.setattr(W, "get_store", lambda: store)
+    monkeypatch.setattr(W, "WhatsAppClient", Client)
+    monkeypatch.setattr(W, "handle", handle)
+    asyncio.run(W._reply([{"from": SENDER, "id": "wamid.typing2", "type": "text", "text": {"body": "hi"}}]))
+    assert Client.sent == ["ANSWER"] and len(Client.marks) >= 4 and set(Client.marks) == {"wamid.typing2"}
+    n = len(Client.marks)
+    asyncio.run(asyncio.sleep(0.2))                  # cancelled with the reply: nothing more is sent
+    assert len(Client.marks) == n
+
+
 def test_a_quick_answer_sends_no_progress_line_and_a_slow_one_does(monkeypatch) -> None:
     s, store, key = _user("en")
     monkeypatch.setattr(C, "PROGRESS_AFTER_S", 0.2)

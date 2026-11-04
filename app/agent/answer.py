@@ -2212,8 +2212,12 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
         # two readings, both can't be shown: ask; never for a place-history question (the planner may ask "where is
         # your farm?" without knowing the pin travels with the question: the place path asks for one itself)
         # … nor for "what does the <report> say about X": the report's own wording answers, whichever reading
+        # … nor for a place_budget reading with a place to answer for (4 Nov: "spending in this area" from a pin got
+        # "My specific ward / Whole Wamakko LGA?"; the reading's level decides, the LGA tool answers)
         if plan.clarify and plan.followup == "none" and not place_question(question, plan.english_question, place) \
-                and not (document_question(question) and narrative_asked(plan)):
+                and not (document_question(question) and narrative_asked(plan)) \
+                and not (conn is not None and (spec := reading_lga_route(u, question, plan, place))
+                         and spec["tool"] != "need_place"):
             return Answer(plan.clarify["question"], False, True, plan=plan, timings=t,
                           clarify=plan.clarify["options"])
         prev = history[-1] if history else None
@@ -4377,9 +4381,10 @@ ANALYSIS_WORDS = {
         "lga_progress": "Spending in {year}: by the end of {month}, the {rep_agencies} ministries and agencies that run "
                         "these projects had spent {rep_spent} of their {rep_budget} capital budgets ({rep_rate}%, "
                         "{report} implementation report; statewide, all of the ministries' projects, not only those "
-                        "in {subject}). The report gives spending by agency, not by project or LGA.",
-        "lga_spent": "Spending isn't reported project by project. For the {n} {sector}projects located in {subject} "
-                     "in the {year} budget ({cur}):",
+                        "in {subject}). The report gives spending by project only for primary healthcare and basic "
+                        "education; other sectors are reported by ministry.",
+        "lga_spent": "The implementation reports give spending by project only for primary healthcare and basic "
+                     "education; other sectors are reported by ministry.",
         "lga_statewide": "{statewide_n} statewide {sector}lines ({statewide_cur}) aren't split by LGA and may also "
                          "cover {subject}; the largest: {names}.",
         "lga_note": "This is state money for projects in {subject}, not the local government's own allocation.",
@@ -4471,10 +4476,10 @@ ANALYSIS_WORDS = {
         "lga_progress": "Kuɗin da aka kashe a {year}: zuwa ƙarshen {month}, ma'aikatu da hukumomi {rep_agencies} da ke "
                         "gudanar da waɗannan ayyuka sun kashe {rep_spent} daga cikin kasafin manyan ayyukansu na "
                         "{rep_budget} ({rep_rate}%, rahoton aiwatarwa na {report}; na duk jihar, ba na {subject} "
-                        "kaɗai ba). Rahoton yana ba da kuɗin da aka "
-                        "kashe bisa hukuma, ba bisa aiki ko ƙaramar hukuma ba.",
-        "lga_spent": "Ba a bayar da kuɗin da aka kashe aiki-aiki ba. Ga ayyukan {sector}{n} da ke {subject} "
-                     "({cur} a kasafin {year}):",
+                        "kaɗai ba). Rahoton yana ba da kuɗin da aka kashe aiki-aiki don kiwon lafiya na farko da "
+                        "ilimi na asali kaɗai; sauran sassa bisa ma'aikata.",
+        "lga_spent": "Rahotannin aiwatarwa suna ba da kuɗin da aka kashe aiki-aiki don kiwon lafiya na farko da "
+                     "ilimi na asali kaɗai; sauran sassa ana ba da su bisa ma'aikata.",
         "lga_statewide": "Ayyukan {sector}{statewide_n} na duk jihar ({statewide_cur}) ba a raba su bisa ƙaramar "
                          "hukuma ba, kuma suna iya shafar {subject}; mafi girma: {names}.",
         "lga_note": "Wannan kuɗin jiha ne na ayyukan da ke {subject}, ba kason ƙaramar hukumar ba.",
@@ -4796,14 +4801,18 @@ def lga_text(res: AnalysisResult, w: dict, v: dict, lang: str, spent_focus: bool
     v = {**v, "sector": sector}
     paras = []
     n = f["n"].value
+    top = res.groups[0] if res.groups else None               # the first sentence short: the leading sector only
+    mostly = w["lga_by_sector"].format(sector=sector_label(top[0], lang, w), amount=_money(top[2])) \
+        if top and top[0] != "other" and len(res.groups) > 1 else ""
     if n and spent_focus:
-        lead = w["lga_spent"].format(**{**v, "sector": f"{sector} " if sector else ""})
+        # 'what is being spent here': the lines first (count, total, the main sector), then where project-level
+        # spending exists (4 Nov, from the source: BIR Tables 24 and 29 give it for primary healthcare and basic
+        # education only; other sectors by ministry)
+        lead = (w["lga_sector"].format(**v) if sector else w["lga"].format(**{**v, "by_sector": mostly})) \
+            + " " + w["lga_spent"]
     elif n and sector:
         lead = w["lga_sector"].format(**v)
     elif n:
-        top = res.groups[0] if res.groups else None           # the first sentence short: the leading sector only
-        mostly = w["lga_by_sector"].format(sector=sector_label(top[0], lang, w), amount=_money(top[2])) \
-            if top and top[0] != "other" and len(res.groups) > 1 else ""
         lead = w["lga"].format(**{**v, "by_sector": mostly})
     elif sector and "n_all" in v:
         lead = w["lga_sector_none"].format(**v)

@@ -149,6 +149,7 @@ def test_each_conversation_reaches_the_capability_and_subject_it_means(case, mon
 
     async def answer(question, lang, **kw):
         seen["understanding"] = kw.get("understanding")
+        seen.setdefault("answered", []).append(question)
         return "ANSWER"
 
     async def conversational(message, lang, history, place, settings, client_cls=None):
@@ -177,6 +178,11 @@ def test_each_conversation_reaches_the_capability_and_subject_it_means(case, mon
         assert case["expect"]["capability"] == "conversation"
         return
     got = seen.get("understanding")
+    if "parts" in case["expect"]:                           # a multi-part message: each part answered, one reply
+        assert score(reading(case["id"]).to_dict(), case["expect"]) == []
+        assert len(seen["answered"]) == len(case["expect"]["parts"]) and outs[0].text.startswith("*1. ")
+        assert outs[0].text.count("ANSWER") == len(case["expect"]["parts"])
+        return
     assert got is not None and outs and outs[-1].text.startswith("ANSWER")    # with its closing offer, if any
     assert score(got.to_dict(), case["expect"]) == []
     if case["place"] == "pin":

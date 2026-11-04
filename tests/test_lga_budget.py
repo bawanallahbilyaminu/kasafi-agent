@@ -95,7 +95,12 @@ def test_the_reply_names_the_sector_progress_and_the_statewide_lines_never_a_bar
 
 def test_the_spending_follow_up_leads_with_spending_and_repeats_nothing() -> None:
     lead, note = A.lga_text(_res(spent=10), A.ANALYSIS_WORDS["en"], _v(_res(spent=10)), "en", spent_focus=True)
-    assert lead.startswith("Spending isn't reported project by project.") and note == ""
+    # 4 Nov, from the source: the BIRs give spending by project for primary healthcare and basic education (Tables
+    # 24 and 29), other sectors by ministry; the lead gives the lines first, then that note; nothing repeated
+    assert lead.startswith("The 2026 budget has") and note == ""
+    assert "The implementation reports give spending by project only for primary healthcare and basic education; " \
+           "other sectors are reported by ministry." in lead
+    assert "isn't reported project by project" not in lead
 
 
 @pytest.mark.parametrize("name, fn, mda, ok", [

@@ -1,6 +1,6 @@
 # Conversation understanding eval (open)
 
-111 cases: **111 right**, 0 wrong. Latency median 2.18 s, p90 3.45 s; cost $0.0048 ($0.0048 per message; 1 re-read with --only, the rest kept from the last run).
+121 cases: **121 right**, 0 wrong. Latency median 2.27 s, p90 3.99 s; cost $0.0032 ($0.0032 per message; 1 re-read with --only, the rest kept from the last run).
 
 | Id | Message | Capability / level / time / kind | Restatement | Wrong |
 |---|---|---|---|---|
@@ -115,3 +115,13 @@
 | lf08 | I mean the 2025 budget | place_budget / lga / year / correction | What is the government budgeting for my LGA (Wamakko LGA) in the 2025 budget? | ✅ |
 | lf09 | I mean all of them, PHCs and dispensaries too | facility / lga / none / clarification | How many health facilities of all levels, including PHCs, dispensaries and hospitals, are in Wamakko LGA? | ✅ |
 | lf10 | Ok so which LGAs does it name? | statistics / document / year / follow_up | Which LGAs does the NEMA situation report of 26 September 2025 name as affected by floods in Sokoto State? | ✅ |
+| a01 | Has it ever flooded here? | place_history / ward / past / follow_up | Has my ward (Kalambaina ward, Wamakko LGA, around my farm (the pin)) ever been flooded in past years? | ✅ |
+| a02 | Has this place ever flooded? | place_history / ward / past / follow_up | Has my ward (Kalambaina ward, Wamakko LGA) ever flooded? | ✅ |
+| a03 | Any floods around here in past years? | place_history / ward / past / follow_up | Were there floods in my ward in past years? | ✅ |
+| a04 | Shin wannan wuri ya taɓa ambaliya? | place_history / ward / past / follow_up | Has my ward ever been flooded? | ✅ |
+| a05 | An taɓa samun ambaliya a nan? | place_history / ward / past / follow_up | Has my ward ever been flooded? | ✅ |
+| a06 | Has my farm ever flooded? | place_history / pin / past / follow_up | Has my farm (the pin) ever flooded in the past? | ✅ |
+| a07 | Has this field been under water before? | place_history / pin / past / follow_up | Has my farm (the pin) ever been under water/flooded before? | ✅ |
+| a08 | Gonata ta taɓa ambaliya? | place_history / pin / past / follow_up | Has my farm (the pin) ever been flooded? | ✅ |
+| a09 | I'm thinking of moving my family here. What is the government spending in this area, has it ever flooded, and where's the nearest clinic? | place_budget / ward / none / follow_up | What is the government spending in my ward (my farm (the pin) area in Kalambaina ward, Wamakko LGA), has my ward ever flooded, and where is the nearest clinic to my ward? | ✅ |
+| a10 | Has this area flooded before, and what is the state spending on erosion here? | place_history / ward / past / new | Has my ward flooded before and what is Sokoto State spending on erosion in my ward? | ✅ |

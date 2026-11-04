@@ -38,6 +38,15 @@ def score(reading: dict | None, expect: dict) -> list[str]:
     if reading is None:
         return ["no reading"]
     wrong = []
+    if "parts" in expect:                   # a multi-part message: each part's capability, level and time, in order
+        parts = reading.get("parts") or []
+        if len(parts) != len(expect["parts"]):
+            return [f"{len(parts)} parts (want {len(expect['parts'])})"]
+        for i, (got, want) in enumerate(zip(parts, expect["parts"]), 1):
+            for k, w in want.items():
+                if got.get(k) not in (w if isinstance(w, list) else [w]):
+                    wrong.append(f"part {i} {k} {got.get(k)} (want {w})")
+        return wrong
     caps = expect["capability"] if isinstance(expect["capability"], list) else [expect["capability"]]
     if reading["capability"] not in caps:
         wrong.append(f"capability {reading['capability']} (want {'/'.join(caps)})")

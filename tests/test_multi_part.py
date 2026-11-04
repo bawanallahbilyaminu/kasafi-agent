@@ -250,6 +250,21 @@ def test_a_parts_restatement_never_carries_a_name_the_model_added_to_the_users_o
     assert u.parts[0]["restatement"] == kept
 
 
+def test_a_place_budget_part_from_a_pin_takes_the_lga_tool_so_no_planner_clarify_can_ask_which_ward() -> None:
+    """4 Nov live: the budget part of the three-part question got 'My specific ward / Whole Wamakko LGA?' from the
+    planner; the reading (place_budget, ward level, a pin on file) settles it and the LGA tool answers."""
+    from app.agent import answer as ans
+    place = {"lat": 13.045, "lon": 5.155, "lga_pcode": "NG034021", "lga": "Wamakko", "ward": "Gumbi"}
+    u = U.Understanding(capability="place_budget", level="ward", measure="amount",
+                        restatement="What is the government spending in my ward?")
+    plan = ans.Plan(english_question="q", search_queries=[], doc_ids=[])
+    spec = ans.reading_lga_route(u, "What government spending / budget allocation is for my ward?", plan, place)
+    assert spec and spec["tool"] == "lga_projects" and spec["lga"] == "Wamakko" and spec["ward"] == "Gumbi"
+    assert ans.reading_lga_route(u, "What is the spending in my ward?", plan, None) == {"tool": "need_place"}
+    other = U.Understanding(capability="budget", level="state", restatement="What is the 2026 health budget?")
+    assert ans.reading_lga_route(other, "What is the 2026 health budget?", plan, place) is None
+
+
 def test_a_single_part_question_is_answered_exactly_as_before(monkeypatch) -> None:
     s, store, key = _setup()
     calls: list = []
@@ -308,6 +323,71 @@ def test_join_parts_keeps_each_parts_attachments_in_order() -> None:
     assert [o.image for o in outs[1:]] == [b"JPEG-A", b"JPEG-B"]
     empty = C.join_parts([a, b], [[], [C.Out("₦120,000,000")]], "ha", 3)         # a part with no reply at all
     assert "Ban iya amsa wannan ɓangaren ba." in empty[0].text and "₦120,000,000" in empty[0].text
+
+
+def test_a_part_is_kept_short_its_lead_and_sources_with_the_detail_in_show_working() -> None:
+    """4 Nov: the budget part of a three-part reply ran to 20 lines (execution detail, statewide agency figures).
+    A part keeps its lead paragraph and its sources line; the rest goes to 'show working'."""
+    body = ("_Assumption: used the latest budget, 2026._\n\n"
+            "The 2026 budget has 163 capital projects located in Wamakko, worth ₦79.98 billion, mostly health "
+            "(₦30.1 billion). The implementation reports give spending by project only for primary healthcare and "
+            "basic education; other sectors are reported by ministry.\n\n"
+            "118 of these lines were also in the 2025 budget (₦13.61 billion), and ₦1.08 billion was spent on them "
+            "by September 2025.\n\n"
+            "Capital spent so far by these agencies (Q3 2026 report; statewide):\n• Ministry of Health: ₦3.43 billion\n\n"
+            "📄 *Sources:* Sokoto State FY 2026 Budget, p. 49, 51\n_Reply *show working* to see the rows and arithmetic._")
+    short, rest = C.short_form(body)
+    assert short == ("The 2026 budget has 163 capital projects located in Wamakko, worth ₦79.98 billion, mostly health "
+                     "(₦30.1 billion). The implementation reports give spending by project only for primary healthcare "
+                     "and basic education; other sectors are reported by ministry.\n\n"
+                     "📄 *Sources:* Sokoto State FY 2026 Budget, p. 49, 51\n_Reply *show working* to see the rows and arithmetic._")
+    assert rest.startswith("_Assumption") and "118 of these lines" in rest and "Ministry of Health" in rest
+    assert C.short_form("One short answer.\n\n📄 *Sources:* p. 3") == ("One short answer.\n\n📄 *Sources:* p. 3", "")
+
+
+def test_a_parts_title_line_stays_with_its_first_paragraph() -> None:
+    """4 Nov live: the flood part showed only '*Flooding: Gumbi ward (likely), Wamakko LGA* — experimental' and
+    its findings went to show working."""
+    body = ("*Flooding: Gumbi ward (likely), Wamakko LGA* — experimental\n\n"
+            "Your pin is in Gumbi ward (likely) of Wamakko LGA, so this answer is about that ward.\n\n"
+            "Floodwater was seen in 2020 (25.2% of the ward's land, the most) and 2024 (8.1%). Radar can't judge "
+            "about 6% of the ward.\n\n"
+            "Years 2016–2026; clear images per year: 2016 9, 2017 14.\n\n"
+            "📄 *Sources:* Copernicus Sentinel-1 via Planetary Computer")
+    short, rest = C.short_form(body)
+    assert short.startswith("*Flooding: Gumbi ward (likely), Wamakko LGA* — experimental\n\nYour pin is in Gumbi ward "
+                            "(likely) of Wamakko LGA, so this answer is about that ward.\n\nFloodwater was seen in 2020")
+    assert short.endswith("📄 *Sources:* Copernicus Sentinel-1 via Planetary Computer") and rest.startswith("Years 2016")
+    # a lead that ends with a colon keeps the list it introduces
+    years = "Projects located in Wamakko, year by year (2024–2026):\n\n• 2024: 120 projects\n• 2025: 118 projects\n\n" \
+            "Extra detail here, 2 lines.\n\n📄 *Sources:* p. 1"
+    short, rest = C.short_form(years)
+    assert "• 2024: 120 projects" in short and rest == "Extra detail here, 2 lines."
+
+
+def test_a_facility_part_whose_name_is_the_users_own_place_searches_nearest_instead_of_a_card(monkeypatch) -> None:
+    """4 Nov live: 'nearest clinic to my ward' read with name 'Gumbi' (the ward) matched Gumbi Health Clinic's
+    registry card, with no distance. A name at pin, ward, LGA or state level is the place, not a facility."""
+    from app.geo.location import Spot
+    looked, searched = [], []
+    monkeypatch.setattr(C, "lookup", lambda settings, name: looked.append(name) or [])
+
+    async def replies(spot, search, lang, settings, facility_fn, how, key):
+        searched.append((spot.lga, search.filters.levels if hasattr(search.filters, "levels") else None))
+        return [C.Out("Nearest: Wajake Dispensary, 0.8 km by road", lang=lang)]
+    monkeypatch.setattr(C, "_facility_replies", replies)
+    u = U.Understanding(capability="facility", level="ward", name="Gumbi", care="general", facility_level="primary",
+                        restatement="Where is the nearest clinic to my ward?")
+    spot = Spot(13.045, 5.155, "NG034021", "Wamakko", ward="Gumbi", how="pin")
+    outs = asyncio.run(C._facility_reading(u.restatement, u, "k-fac", "en", make_settings(), None, spot))
+    assert looked == [] and searched and outs[0].text.startswith("Nearest: Wajake")
+
+
+def test_part_headings_are_capitalised() -> None:
+    a = U.Understanding(restatement="x", label="government spending")
+    b = U.Understanding(restatement="y", label="flood history")
+    outs = C.join_parts([a, b], [[C.Out("A")], [C.Out("B")]], "en", 3)
+    assert outs[0].text == "*1. Government spending*\nA\n\n*2. Flood history*\nB"
 
 
 @pytest.mark.parametrize("lang", ["en", "ha"])

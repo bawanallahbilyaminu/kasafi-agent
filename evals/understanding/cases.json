@@ -1,235 +1,1627 @@
 {
  "_about": "Conversation understanding (app/agent/understand.py), 2 Nov 2026: natural multi-turn conversations and cold first messages in English and Hausa, written from how people talk, including the three live failures of 2 Nov (u01-u03). Each case: the earlier turns (the user's message and Kasafi's reply in short), the location on file (pin = a pin in Kalambaina ward, Wamakko LGA; lga = Wamakko saved; none), the new message, and what it must be understood as (capability always; level, time and kind where they matter). Run live: uv run python evals/understanding/run.py (records evals/understanding/recorded.json); the deploy gate replays the recording (tests/test_understanding.py).",
  "cases": [
-  {"id": "u01", "place": "pin", "turns": [
-     {"user": "Where is the nearest hospital?", "kasafi": "Nearest hospitals to you (by road): 1. Specialist Hospital Sokoto: 6.2 km, 12 min 2. Women and Children Welfare Clinic: 7.0 km, 14 min 3. Maryam Abacha Women and Children Hospital: 7.9 km, 16 min"}],
-   "message": "But Uduth is closer to me", "expect": {"capability": "facility", "kind": "correction", "level": "facility"}},
-  {"id": "u02", "place": "pin", "turns": [
-     {"user": "(location pin shared)", "kasafi": "Got it: your pin is in Kalambaina ward (likely), Wamakko LGA. Ask about floods, weather, budgets or facilities here."}],
-   "message": "Has this area ever flooded", "expect": {"capability": "place_history", "level": "ward", "time": "past"}},
-  {"id": "u03", "place": "pin", "turns": [
-     {"user": "(location pin shared)", "kasafi": "Got it: your pin is in Kalambaina ward (likely), Wamakko LGA."}],
-   "message": "Has this land ever flooded?", "expect": {"capability": "place_history", "level": "pin", "time": "past"}},
-  {"id": "u04", "place": "pin", "turns": [
-     {"user": "Has my farm ever flooded?", "kasafi": "Your farm: no flood water seen on radar in July-October 2017-2026; the UN flood maps of 2022 and 2024 don't cover it."}],
-   "message": "What about the rain this season, will it flood?", "expect": {"capability": "hazard", "time": "forecast"}},
-  {"id": "u05", "place": "pin", "turns": [
-     {"user": "What is the government budgeting for my area in 2026?", "kasafi": "The 2026 budget has 163 capital projects located in Wamakko, worth N79.98 billion, mostly health (N56.32 billion). Largest: Modern Medical Warehouse at Kasarawa N15 billion; College of Medical Sciences at SOSUTH N15 billion"}],
-   "message": "How much of that has actually been spent?", "expect": {"capability": "place_budget", "kind": "follow_up"}},
-  {"id": "u06", "place": "pin", "turns": [
-     {"user": "What is the government budgeting for my area in 2026?", "kasafi": "The 2026 budget has 163 capital projects located in Wamakko, worth N79.98 billion, mostly health."}],
-   "message": "And the past three years?", "expect": {"capability": "place_budget", "time": "span"}},
-  {"id": "u07", "place": "pin", "turns": [
-     {"user": "Nearest clinic", "kasafi": "Nearest health facilities to you: 1. Kalambaina PHC: 1.1 km, 3 min 2. Gidan Bubu Health Post: 2.4 km, 6 min 3. Arkilla PHC: 3.0 km, 8 min"}],
-   "message": "How do I get to the second one?", "expect": {"capability": "facility", "kind": "follow_up"}},
-  {"id": "u08", "place": "pin", "turns": [
-     {"user": "Nearest clinic", "kasafi": "Nearest health facilities to you: 1. Kalambaina PHC: 1.1 km 2. Gidan Bubu Health Post: 2.4 km 3. Arkilla PHC: 3.0 km"}],
-   "message": "Does Kalambaina PHC have enough nurses?", "expect": {"capability": "statistics"}},
-  {"id": "u09", "place": "pin", "turns": [
-     {"user": "Ina asibiti mafi kusa?", "kasafi": "Asibitoci mafi kusa da kai: 1. Specialist Hospital Sokoto: 6.2 km 2. Women and Children Welfare Clinic: 7.0 km"}],
-   "message": "Amma UDUTH ya fi kusa da ni", "expect": {"capability": "facility", "kind": "correction"}},
-  {"id": "u10", "place": "pin", "turns": [
-     {"user": "(location pin shared)", "kasafi": "Na gane: wurinka yana unguwar Kalambaina, karamar hukumar Wamakko."}],
-   "message": "Shin wannan gonar ta taba cika da ruwa?", "expect": {"capability": "place_history", "level": "pin", "time": "past"}},
-  {"id": "u11", "place": "pin", "turns": [
-     {"user": "(location pin shared)", "kasafi": "Na gane: wurinka yana unguwar Kalambaina, karamar hukumar Wamakko."}],
-   "message": "Za a yi ambaliya a nan bana?", "expect": {"capability": "hazard", "time": "forecast"}},
-  {"id": "u12", "place": "pin", "turns": [
-     {"user": "Nawa aka ware wa yankina a kasafin 2026?", "kasafi": "Kasafin 2026 yana da manyan ayyuka 163 a Wamakko, na N79.98 biliyan, galibi na lafiya."}],
-   "message": "Nawa aka kashe daga ciki?", "expect": {"capability": "place_budget", "kind": "follow_up"}},
-  {"id": "u13", "place": "none", "turns": [
-     {"user": "How much was budgeted for health in 2026?", "kasafi": "In 2026, all ministries and agencies together are allocated N120.13 billion for health: N8.70 billion salaries, N4.56 billion running costs, N106.87 billion capital."}],
-   "message": "And how much of it was spent by June?", "expect": {"capability": "budget", "kind": "follow_up"}},
-  {"id": "u14", "place": "none", "turns": [
-     {"user": "How much was budgeted for health in 2026?", "kasafi": "In 2026 health is allocated N120.13 billion, N106.87 billion of it capital."}],
-   "message": "That's not right, the health budget is much smaller", "expect": {"capability": "budget", "kind": "correction"}},
-  {"id": "u15", "place": "none", "turns": [
-     {"user": "What share of children are fully vaccinated in Sokoto?", "kasafi": "According to MICS 2021, 3.7% of children age 12-23 months in Sokoto received all basic antigens (by card)."}],
-   "message": "What about in the DHS?", "expect": {"capability": "statistics", "kind": "follow_up"}},
-  {"id": "u16", "place": "pin", "turns": [
-     {"user": "Is it going to be very hot tomorrow here?", "kasafi": "Tomorrow at your pin: up to 41 C in the afternoon, a heat caution day."}],
-   "message": "What about the dust?", "expect": {"capability": "hazard", "kind": "follow_up"}},
-  {"id": "u17", "place": "pin", "turns": [
-     {"user": "Is it going to be very hot tomorrow here?", "kasafi": "Tomorrow at your pin: up to 41 C, a heat caution day."},
-     {"user": "What about the dust?", "kasafi": "Air quality tomorrow: moderate dust, AQI 85."}],
-   "message": "Which hospital near me can I go to if my child has trouble breathing?", "expect": {"capability": "facility", "urgent": "either"}},
-  {"id": "u18", "place": "pin", "turns": [
-     {"user": "Nearest hospital", "kasafi": "Nearest hospitals: 1. Specialist Hospital Sokoto 6.2 km 2. Women and Children Welfare Clinic 7.0 km"}],
-   "message": "How much did the government budget for Specialist Hospital this year?", "expect": {"capability": "budget"}},
-  {"id": "u19", "place": "pin", "turns": [
-     {"user": "Has my farm ever flooded?", "kasafi": "Your farm: no flood water seen on radar in 2017-2026."}],
-   "message": "And is it getting greener over the years?", "expect": {"capability": "place_history", "level": "pin", "time": ["past", "span"]}},
-  {"id": "u20", "place": "pin", "turns": [
-     {"user": "Has my farm ever flooded?", "kasafi": "Your farm: no flood water seen on radar in 2017-2026."}],
-   "message": "What about the whole of Wamakko?", "expect": {"capability": "place_history", "level": "lga"}},
-  {"id": "u21", "place": "pin", "turns": [
-     {"user": "Which wards in my LGA were greenest in 2024?", "kasafi": "Greenest wards of Wamakko in 2024: Gumbi, Dundaye, Kalambaina."}],
-   "message": "Is there any budget for irrigation there?", "expect": {"capability": "place_budget"}},
-  {"id": "u22", "place": "none", "turns": [
-     {"user": "How many out-of-school children are in Sokoto?", "kasafi": "The 2023/24 school census gives ... (figures)"}],
-   "message": "What is the state doing about it in the 2026 budget?", "expect": {"capability": "budget"}},
-  {"id": "u23", "place": "none", "turns": [
-     {"user": "What's the state of PHCs in Sokoto?", "kasafi": "Sokoto has 798 PHC facilities (2020); 207 need upgrading; 78 nurses/midwives against 244 required..."}],
-   "message": "Send me the full brief", "expect": {"capability": "deep", "kind": "follow_up"}},
-  {"id": "u24", "place": "pin", "turns": [
-     {"user": "Nearest PHC", "kasafi": "Nearest: 1. Kalambaina PHC 1.1 km 2. Arkilla PHC 3.0 km"}],
-   "message": "Thanks", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "u25", "place": "pin", "turns": [
-     {"user": "Nearest PHC", "kasafi": "Nearest: 1. Kalambaina PHC 1.1 km 2. Arkilla PHC 3.0 km"}],
-   "message": "Is Arkilla open at night?", "expect": {"capability": "facility", "level": "facility"}},
-  {"id": "u26", "place": "lga", "turns": [
-     {"user": "Will it rain this week in my LGA?", "kasafi": "Wamakko this week: light rain likely on Thursday (6 mm)."}],
-   "message": "Last year was there flooding in my LGA?", "expect": {"capability": "place_history", "level": "lga", "time": "past"}},
-  {"id": "u27", "place": "pin", "turns": [
-     {"user": "Ina asibiti mafi kusa?", "kasafi": "Asibitoci mafi kusa da kai: 1. Specialist Hospital Sokoto: 6.2 km 2. Women and Children Welfare Clinic: 7.0 km"}],
-   "message": "Na farko, yaya zan je can?", "expect": {"capability": "facility", "kind": "follow_up"}},
-  {"id": "u28", "place": "pin", "turns": [
-     {"user": "Kasafin ilimi na 2026 nawa ne?", "kasafi": "A 2026, an ware wa ilimi N117.75 biliyan."}],
-   "message": "Nawa ne a karamar hukumata?", "expect": {"capability": "place_budget", "level": "lga"}},
-  {"id": "u29", "place": "pin", "turns": [
-     {"user": "What is the government budgeting for my area?", "kasafi": "The 2026 budget has 163 capital projects located in Wamakko, worth N79.98 billion, mostly health."}],
-   "message": "Is there anything for farmers?", "expect": {"capability": "place_budget", "kind": "follow_up"}},
-  {"id": "u30", "place": "pin", "turns": [
-     {"user": "Has my farm ever flooded?", "kasafi": "Your farm: no flood water seen on radar in 2017-2026."}],
-   "message": "My neighbour says it flooded in 2020, are you sure?", "expect": {"capability": "place_history", "kind": "correction", "level": "pin"}},
-  {"id": "f01", "place": "none", "turns": [], "message": "How many medical officers do PHCs need in Sokoto?", "expect": {"capability": "statistics"}},
-  {"id": "f02", "place": "none", "turns": [], "message": "What's the state of PHCs in Sokoto?", "expect": {"capability": "deep"}},
-  {"id": "f03", "place": "none", "turns": [], "message": "tell me about health in Sokoto", "expect": {"capability": "deep"}},
-  {"id": "f04", "place": "pin", "turns": [], "message": "what's happening in my area?", "expect": {"capability": ["deep", "place_budget"]}},
-  {"id": "f05", "place": "none", "turns": [], "message": "How many PHCs are in Tureta?", "expect": {"capability": "facility"}},
-  {"id": "f06", "place": "none", "turns": [], "message": "How much did Sokoto spend on education last year?", "expect": {"capability": "budget", "time": ["year", "past"]}},
-  {"id": "f07", "place": "pin", "turns": [], "message": "Is it safe to plant this week, will it rain?", "expect": {"capability": "hazard", "time": "forecast"}},
-  {"id": "f08", "place": "none", "turns": [], "message": "Nawa aka ware wa ma'aikatar lafiya a 2026?", "expect": {"capability": "budget"}},
-  {"id": "f09", "place": "pin", "turns": [], "message": "Ina asibiti mafi kusa da ni?", "expect": {"capability": "facility"}},
-  {"id": "f10", "place": "pin", "turns": [], "message": "Gonata ta taba yin ambaliya?", "expect": {"capability": "place_history", "level": "pin", "time": "past"}},
-  {"id": "f11", "place": "none", "turns": [], "message": "What does the MICS say about birth registration in Sokoto?", "expect": {"capability": "statistics", "level": "document"}},
-  {"id": "f12", "place": "none", "turns": [], "message": "Alert me when there will be floods in Goronyo", "expect": {"capability": "alerts"}},
-  {"id": "f13", "place": "none", "turns": [], "message": "What projects is the government doing in Tambuwal?", "expect": {"capability": "place_budget", "level": "lga"}},
-  {"id": "f14", "place": "none", "turns": [], "message": "Sannu", "expect": {"capability": "conversation"}},
-  {"id": "f15", "place": "none", "turns": [], "message": "Yaya yanayin ilimi a Sokoto?", "expect": {"capability": "deep"}},
-  {"id": "c01", "place": "none", "lang": "en", "turns": [], "message": "Who are you?", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c02", "place": "none", "lang": "ha", "turns": [], "message": "Kai wanene?", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c03", "place": "none", "lang": "ha", "turns": [], "message": "Me za ka iya yi?", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c04", "place": "none", "lang": "en", "turns": [], "message": "What can you do?", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c05", "place": "none", "lang": "en", "turns": [], "message": "How does this work?", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c06", "place": "none", "lang": "en", "turns": [], "message": "Who made you?", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c07", "place": "none", "lang": "en", "turns": [], "message": "Is this a bot?", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c08", "place": "none", "lang": "en", "turns": [], "message": "Can you speak Hausa?", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c09", "place": "pin", "lang": "ha", "turns": [{"user": "Kasafin ilimi na 2026 nawa ne?", "kasafi": "A 2026, an ware wa ilimi N117.75 biliyan."}], "message": "Na gode", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c10", "place": "none", "lang": "ha", "turns": [], "message": "Assalamu alaikum", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c11", "place": "none", "lang": "en", "turns": [], "message": "Hello", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c12", "place": "none", "lang": "ha", "turns": [{"user": "Ina asibiti mafi kusa?", "kasafi": "Asibitoci mafi kusa da kai: 1. Specialist Hospital Sokoto: 6.2 km"}], "message": "Sai anjima", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c13", "place": "pin", "lang": "en", "turns": [{"user": "Nearest PHC", "kasafi": "Nearest: 1. Kalambaina PHC 1.1 km 2. Arkilla PHC 3.0 km"}], "message": "Thank you, bye", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c14", "place": "none", "lang": "en", "turns": [], "message": "help", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c15", "place": "none", "lang": "ha", "turns": [], "message": "Ina kwana", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c16", "place": "none", "lang": "ha", "turns": [], "message": "Wa ya yi ka?", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c17", "place": "none", "lang": "ha", "turns": [], "message": "Kana jin Hausa?", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c18", "place": "none", "lang": "ha", "turns": [], "message": "Mutum ne kai ko na'ura?", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c19", "place": "none", "lang": "ha", "turns": [], "message": "Yaya kake aiki?", "expect": {"capability": "conversation", "kind": "chitchat"}},
-  {"id": "c20", "place": "lga", "lang": "en", "turns": [], "message": "But uduth is closer to me", "expect": {"capability": "facility", "level": "facility"}},
-  {"id": "m01", "place": "pin", "lang": "en", "turns": [], "message": "Where can my wife deliver a baby?", "expect": {"capability": "facility", "care": "maternal"}},
-  {"id": "m02", "place": "pin", "lang": "ha", "turns": [], "message": "Matata na naƙuda, ina zan kai ta?", "expect": {"capability": "facility", "care": "maternal", "urgent": true}},
-  {"id": "m03", "place": "pin", "lang": "en", "turns": [], "message": "Nearest place for antenatal care", "expect": {"capability": "facility", "care": "maternal"}},
-  {"id": "m04", "place": "pin", "lang": "ha", "turns": [], "message": "A ina matata za ta haihu?", "expect": {"capability": "facility", "care": "maternal"}},
-  {"id": "m05", "place": "pin", "lang": "en", "turns": [], "message": "Is there anywhere I can deliver a baby around here?", "expect": {"capability": "facility", "care": "maternal"}},
-  {"id": "m06", "place": "pin", "lang": "en", "turns": [], "message": "Where can I take my sick child?", "expect": {"capability": "facility", "care": "children", "urgent": "either"}},
-  {"id": "m07", "place": "pin", "lang": "ha", "turns": [], "message": "Ina asibitin gwamnati mafi kusa?", "expect": {"capability": "facility", "care": "general", "facility_level": "hospital", "ownership": "public"}},
-  {"id": "m08", "place": "pin", "lang": "en", "turns": [], "message": "Is there a private clinic near me?", "expect": {"capability": "facility", "facility_level": "primary", "ownership": "private"}},
-  {"id": "m09", "place": "pin", "lang": "en", "turns": [
-     {"user": "Where can my wife deliver a baby?", "kasafi": "Nearest facilities with emergency obstetric care: 1. Kalambaina PHC 1.1 km 2. Women and Children Welfare Clinic 7.0 km"}],
-   "message": "Only government ones", "expect": {"capability": "facility", "kind": ["follow_up", "clarification", "correction"], "care": "maternal", "ownership": "public"}},
-  {"id": "m10", "place": "pin", "lang": "en", "turns": [
-     {"user": "What is the government budgeting for my area?", "kasafi": "The 2026 budget has 163 capital projects located in Wamakko, worth N79.98 billion, mostly health."}],
-   "message": "Anything for schools?", "expect": {"capability": "place_budget"}},
-  {"id": "k01", "place": "none", "lang": "en", "turns": [], "message": "menu", "expect": {"capability": "conversation", "kind": "menu"}},
-  {"id": "k02", "place": "pin", "lang": "ha", "turns": [], "message": "zaɓi", "expect": {"capability": "conversation", "kind": "menu"}},
-  {"id": "k03", "place": "none", "lang": "ha", "turns": [
-     {"user": "Nawa aka ware wa lafiya a 2026?", "kasafi": "A 2026, an ware wa lafiya N124.41 biliyan."}],
-   "message": "Nuna min zaɓuɓɓuka", "expect": {"capability": "conversation", "kind": "menu"}},
-  {"id": "n01", "place": "none", "turns": [],
-   "message": "How many people were affected by floods in Sokoto State in October 2024?", "expect": {"capability": "statistics", "satellite_context": false}},
-  {"id": "n02", "place": "none", "turns": [],
-   "message": "How many people were displaced by the 2024 floods in Sokoto?", "expect": {"capability": "statistics"}},
-  {"id": "n03", "place": "none", "turns": [],
-   "message": "How many houses were destroyed by flooding in Sokoto in 2025?", "expect": {"capability": "statistics"}},
-  {"id": "n04", "place": "lga", "turns": [],
-   "message": "Was Wamakko LGA affected by floods in 2025, according to NEMA?", "expect": {"capability": "statistics"}},
-  {"id": "n05", "place": "none", "turns": [],
-   "message": "Which LGAs in Sokoto State were affected by floods in 2025, according to NEMA?", "expect": {"capability": "statistics"}},
-  {"id": "n06", "place": "none", "lang": "ha", "turns": [],
-   "message": "Mutane nawa ambaliyar ruwa ta shafa a Jihar Sokoto a 2025, a cewar NEMA?", "expect": {"capability": "statistics"}},
-  {"id": "n07", "place": "none", "lang": "ha", "turns": [],
-   "message": "Mutane nawa suka rasa matsugunansu saboda ambaliya a Sokoto a 2024?", "expect": {"capability": "statistics"}},
-  {"id": "n08", "place": "none", "lang": "ha", "turns": [],
-   "message": "Gidaje nawa ambaliya ta rushe a Sokoto a 2024?", "expect": {"capability": "statistics"}},
-  {"id": "n09", "place": "none", "turns": [],
-   "message": "How bad were the 2024 floods in Sokoto?", "expect": {"capability": "statistics", "satellite_context": true}},
-  {"id": "n10", "place": "none", "lang": "ha", "turns": [],
-   "message": "Yaya girman ambaliyar 2024 a Jihar Sokoto?", "expect": {"capability": "statistics", "satellite_context": true}},
-  {"id": "n11", "place": "none", "turns": [],
-   "message": "How many people died in floods in Sokoto in 2024?", "expect": {"capability": "statistics", "urgent": false}},
-  {"id": "n12", "place": "pin", "turns": [
-     {"user": "(location pin shared)", "kasafi": "Got it: your pin is in Kalambaina ward (likely), Wamakko LGA."}],
-   "message": "How much of my ward was under water in 2024?", "expect": {"capability": "place_history", "satellite_context": false}},
-  {"id": "n13", "place": "none", "turns": [],
-   "message": "Which wards of Wamakko flooded most in 2022?", "expect": {"capability": "place_history"}},
-  {"id": "n14", "place": "pin", "lang": "ha", "turns": [
-     {"user": "(location pin shared)", "kasafi": "Got it: your pin is in Kalambaina ward (likely), Wamakko LGA."}],
-   "message": "Ruwa ya taɓa rufe gonata?", "expect": {"capability": "place_history", "level": "pin"}},
-  {"id": "n15", "place": "none", "turns": [],
-   "message": "What does the MICS report say about birth registration in Sokoto?", "expect": {"capability": "statistics"}},
-  {"id": "n16", "place": "lga", "turns": [],
-   "message": "According to NiMet, when will the rains end in my LGA this year?", "expect": {"capability": "hazard"}},
-  {"id": "lf15", "place": "none", "turns": [],
-   "message": "Which wards of Kware LGA got the most June–October rain in 2024?", "expect": {"capability": "place_history"}},
-  {"id": "lf16", "place": "none", "lang": "ha", "turns": [],
-   "message": "Waɗanne gundumomin Ƙaramar Hukumar Kware ne suka fi samun ruwan sama a damina ta 2024?", "expect": {"capability": "place_history"}},
-  {"id": "lf17", "place": "lga", "turns": [],
-   "message": "Will it rain in my LGA this week?", "expect": {"capability": "hazard"}},
-  {"id": "lf11", "place": "none", "turns": [],
-   "message": "According to the Multiple Indicator Cluster Survey (MICS) by NBS and UNICEF, what are the gaps in child healthcare and civil registration for Sokoto State?", "expect": {"capability": "statistics"}},
-  {"id": "lf12", "place": "none", "lang": "ha", "turns": [],
-   "message": "A cewar MICS na NBS da UNICEF, waɗanne gibi ne ke cikin kula da lafiyar yara da rajistar haihuwa a Jihar Sokoto?", "expect": {"capability": "statistics"}},
-  {"id": "lf13", "place": "none", "turns": [],
-   "message": "Birth registration in Sokoto: what did MICS 2021 and NDHS 2024 each find, and can the two be compared?", "expect": {"capability": "statistics"}},
-  {"id": "lf14", "place": "none", "turns": [],
-   "message": "What's the state of child health in Sokoto?", "expect": {"capability": "deep"}},
-  {"id": "lf01", "place": "none", "turns": [],
-   "message": "How many schools are in Dange Shuni", "expect": {"capability": "statistics", "level": "lga", "name_has": "dange"}},
-  {"id": "lf02", "place": "none", "turns": [
-     {"user": "How many schools are in Dange Shuni", "kasafi": "Dange Shuni LGA has 91 public primary schools in the 2023/2024 ASC, from the Sokoto State Annual School Census 23-24 Report. Newest figure: 91 schools. By source: 91 public primary; 20 public pre-primary; 28 private pre-primary."}],
+  {
+   "id": "u01",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "Where is the nearest hospital?",
+     "kasafi": "Nearest hospitals to you (by road): 1. Specialist Hospital Sokoto: 6.2 km, 12 min 2. Women and Children Welfare Clinic: 7.0 km, 14 min 3. Maryam Abacha Women and Children Hospital: 7.9 km, 16 min"
+    }
+   ],
+   "message": "But Uduth is closer to me",
+   "expect": {
+    "capability": "facility",
+    "kind": "correction",
+    "level": "facility"
+   }
+  },
+  {
+   "id": "u02",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Got it: your pin is in Kalambaina ward (likely), Wamakko LGA. Ask about floods, weather, budgets or facilities here."
+    }
+   ],
+   "message": "Has this area ever flooded",
+   "expect": {
+    "capability": "place_history",
+    "level": "ward",
+    "time": "past"
+   }
+  },
+  {
+   "id": "u03",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Got it: your pin is in Kalambaina ward (likely), Wamakko LGA."
+    }
+   ],
+   "message": "Has this land ever flooded?",
+   "expect": {
+    "capability": "place_history",
+    "level": "pin",
+    "time": "past"
+   }
+  },
+  {
+   "id": "u04",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "Has my farm ever flooded?",
+     "kasafi": "Your farm: no flood water seen on radar in July-October 2017-2026; the UN flood maps of 2022 and 2024 don't cover it."
+    }
+   ],
+   "message": "What about the rain this season, will it flood?",
+   "expect": {
+    "capability": "hazard",
+    "time": "forecast"
+   }
+  },
+  {
+   "id": "u05",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "What is the government budgeting for my area in 2026?",
+     "kasafi": "The 2026 budget has 163 capital projects located in Wamakko, worth N79.98 billion, mostly health (N56.32 billion). Largest: Modern Medical Warehouse at Kasarawa N15 billion; College of Medical Sciences at SOSUTH N15 billion"
+    }
+   ],
+   "message": "How much of that has actually been spent?",
+   "expect": {
+    "capability": "place_budget",
+    "kind": "follow_up"
+   }
+  },
+  {
+   "id": "u06",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "What is the government budgeting for my area in 2026?",
+     "kasafi": "The 2026 budget has 163 capital projects located in Wamakko, worth N79.98 billion, mostly health."
+    }
+   ],
+   "message": "And the past three years?",
+   "expect": {
+    "capability": "place_budget",
+    "time": "span"
+   }
+  },
+  {
+   "id": "u07",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "Nearest clinic",
+     "kasafi": "Nearest health facilities to you: 1. Kalambaina PHC: 1.1 km, 3 min 2. Gidan Bubu Health Post: 2.4 km, 6 min 3. Arkilla PHC: 3.0 km, 8 min"
+    }
+   ],
+   "message": "How do I get to the second one?",
+   "expect": {
+    "capability": "facility",
+    "kind": "follow_up"
+   }
+  },
+  {
+   "id": "u08",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "Nearest clinic",
+     "kasafi": "Nearest health facilities to you: 1. Kalambaina PHC: 1.1 km 2. Gidan Bubu Health Post: 2.4 km 3. Arkilla PHC: 3.0 km"
+    }
+   ],
+   "message": "Does Kalambaina PHC have enough nurses?",
+   "expect": {
+    "capability": "statistics"
+   }
+  },
+  {
+   "id": "u09",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "Ina asibiti mafi kusa?",
+     "kasafi": "Asibitoci mafi kusa da kai: 1. Specialist Hospital Sokoto: 6.2 km 2. Women and Children Welfare Clinic: 7.0 km"
+    }
+   ],
+   "message": "Amma UDUTH ya fi kusa da ni",
+   "expect": {
+    "capability": "facility",
+    "kind": "correction"
+   }
+  },
+  {
+   "id": "u10",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Na gane: wurinka yana unguwar Kalambaina, karamar hukumar Wamakko."
+    }
+   ],
+   "message": "Shin wannan gonar ta taba cika da ruwa?",
+   "expect": {
+    "capability": "place_history",
+    "level": "pin",
+    "time": "past"
+   }
+  },
+  {
+   "id": "u11",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Na gane: wurinka yana unguwar Kalambaina, karamar hukumar Wamakko."
+    }
+   ],
+   "message": "Za a yi ambaliya a nan bana?",
+   "expect": {
+    "capability": "hazard",
+    "time": "forecast"
+   }
+  },
+  {
+   "id": "u12",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "Nawa aka ware wa yankina a kasafin 2026?",
+     "kasafi": "Kasafin 2026 yana da manyan ayyuka 163 a Wamakko, na N79.98 biliyan, galibi na lafiya."
+    }
+   ],
+   "message": "Nawa aka kashe daga ciki?",
+   "expect": {
+    "capability": "place_budget",
+    "kind": "follow_up"
+   }
+  },
+  {
+   "id": "u13",
+   "place": "none",
+   "turns": [
+    {
+     "user": "How much was budgeted for health in 2026?",
+     "kasafi": "In 2026, all ministries and agencies together are allocated N120.13 billion for health: N8.70 billion salaries, N4.56 billion running costs, N106.87 billion capital."
+    }
+   ],
+   "message": "And how much of it was spent by June?",
+   "expect": {
+    "capability": "budget",
+    "kind": "follow_up"
+   }
+  },
+  {
+   "id": "u14",
+   "place": "none",
+   "turns": [
+    {
+     "user": "How much was budgeted for health in 2026?",
+     "kasafi": "In 2026 health is allocated N120.13 billion, N106.87 billion of it capital."
+    }
+   ],
+   "message": "That's not right, the health budget is much smaller",
+   "expect": {
+    "capability": "budget",
+    "kind": "correction"
+   }
+  },
+  {
+   "id": "u15",
+   "place": "none",
+   "turns": [
+    {
+     "user": "What share of children are fully vaccinated in Sokoto?",
+     "kasafi": "According to MICS 2021, 3.7% of children age 12-23 months in Sokoto received all basic antigens (by card)."
+    }
+   ],
+   "message": "What about in the DHS?",
+   "expect": {
+    "capability": "statistics",
+    "kind": "follow_up"
+   }
+  },
+  {
+   "id": "u16",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "Is it going to be very hot tomorrow here?",
+     "kasafi": "Tomorrow at your pin: up to 41 C in the afternoon, a heat caution day."
+    }
+   ],
+   "message": "What about the dust?",
+   "expect": {
+    "capability": "hazard",
+    "kind": "follow_up"
+   }
+  },
+  {
+   "id": "u17",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "Is it going to be very hot tomorrow here?",
+     "kasafi": "Tomorrow at your pin: up to 41 C, a heat caution day."
+    },
+    {
+     "user": "What about the dust?",
+     "kasafi": "Air quality tomorrow: moderate dust, AQI 85."
+    }
+   ],
+   "message": "Which hospital near me can I go to if my child has trouble breathing?",
+   "expect": {
+    "capability": "facility",
+    "urgent": "either"
+   }
+  },
+  {
+   "id": "u18",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "Nearest hospital",
+     "kasafi": "Nearest hospitals: 1. Specialist Hospital Sokoto 6.2 km 2. Women and Children Welfare Clinic 7.0 km"
+    }
+   ],
+   "message": "How much did the government budget for Specialist Hospital this year?",
+   "expect": {
+    "capability": "budget"
+   }
+  },
+  {
+   "id": "u19",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "Has my farm ever flooded?",
+     "kasafi": "Your farm: no flood water seen on radar in 2017-2026."
+    }
+   ],
+   "message": "And is it getting greener over the years?",
+   "expect": {
+    "capability": "place_history",
+    "level": "pin",
+    "time": [
+     "past",
+     "span"
+    ]
+   }
+  },
+  {
+   "id": "u20",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "Has my farm ever flooded?",
+     "kasafi": "Your farm: no flood water seen on radar in 2017-2026."
+    }
+   ],
+   "message": "What about the whole of Wamakko?",
+   "expect": {
+    "capability": "place_history",
+    "level": "lga"
+   }
+  },
+  {
+   "id": "u21",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "Which wards in my LGA were greenest in 2024?",
+     "kasafi": "Greenest wards of Wamakko in 2024: Gumbi, Dundaye, Kalambaina."
+    }
+   ],
+   "message": "Is there any budget for irrigation there?",
+   "expect": {
+    "capability": "place_budget"
+   }
+  },
+  {
+   "id": "u22",
+   "place": "none",
+   "turns": [
+    {
+     "user": "How many out-of-school children are in Sokoto?",
+     "kasafi": "The 2023/24 school census gives ... (figures)"
+    }
+   ],
+   "message": "What is the state doing about it in the 2026 budget?",
+   "expect": {
+    "capability": "budget"
+   }
+  },
+  {
+   "id": "u23",
+   "place": "none",
+   "turns": [
+    {
+     "user": "What's the state of PHCs in Sokoto?",
+     "kasafi": "Sokoto has 798 PHC facilities (2020); 207 need upgrading; 78 nurses/midwives against 244 required..."
+    }
+   ],
+   "message": "Send me the full brief",
+   "expect": {
+    "capability": "deep",
+    "kind": "follow_up"
+   }
+  },
+  {
+   "id": "u24",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "Nearest PHC",
+     "kasafi": "Nearest: 1. Kalambaina PHC 1.1 km 2. Arkilla PHC 3.0 km"
+    }
+   ],
+   "message": "Thanks",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "u25",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "Nearest PHC",
+     "kasafi": "Nearest: 1. Kalambaina PHC 1.1 km 2. Arkilla PHC 3.0 km"
+    }
+   ],
+   "message": "Is Arkilla open at night?",
+   "expect": {
+    "capability": "facility",
+    "level": "facility"
+   }
+  },
+  {
+   "id": "u26",
+   "place": "lga",
+   "turns": [
+    {
+     "user": "Will it rain this week in my LGA?",
+     "kasafi": "Wamakko this week: light rain likely on Thursday (6 mm)."
+    }
+   ],
+   "message": "Last year was there flooding in my LGA?",
+   "expect": {
+    "capability": "place_history",
+    "level": "lga",
+    "time": "past"
+   }
+  },
+  {
+   "id": "u27",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "Ina asibiti mafi kusa?",
+     "kasafi": "Asibitoci mafi kusa da kai: 1. Specialist Hospital Sokoto: 6.2 km 2. Women and Children Welfare Clinic: 7.0 km"
+    }
+   ],
+   "message": "Na farko, yaya zan je can?",
+   "expect": {
+    "capability": "facility",
+    "kind": "follow_up"
+   }
+  },
+  {
+   "id": "u28",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "Kasafin ilimi na 2026 nawa ne?",
+     "kasafi": "A 2026, an ware wa ilimi N117.75 biliyan."
+    }
+   ],
+   "message": "Nawa ne a karamar hukumata?",
+   "expect": {
+    "capability": "place_budget",
+    "level": "lga"
+   }
+  },
+  {
+   "id": "u29",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "What is the government budgeting for my area?",
+     "kasafi": "The 2026 budget has 163 capital projects located in Wamakko, worth N79.98 billion, mostly health."
+    }
+   ],
+   "message": "Is there anything for farmers?",
+   "expect": {
+    "capability": "place_budget",
+    "kind": "follow_up"
+   }
+  },
+  {
+   "id": "u30",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "Has my farm ever flooded?",
+     "kasafi": "Your farm: no flood water seen on radar in 2017-2026."
+    }
+   ],
+   "message": "My neighbour says it flooded in 2020, are you sure?",
+   "expect": {
+    "capability": "place_history",
+    "kind": "correction",
+    "level": "pin"
+   }
+  },
+  {
+   "id": "f01",
+   "place": "none",
+   "turns": [],
+   "message": "How many medical officers do PHCs need in Sokoto?",
+   "expect": {
+    "capability": "statistics"
+   }
+  },
+  {
+   "id": "f02",
+   "place": "none",
+   "turns": [],
+   "message": "What's the state of PHCs in Sokoto?",
+   "expect": {
+    "capability": "deep"
+   }
+  },
+  {
+   "id": "f03",
+   "place": "none",
+   "turns": [],
+   "message": "tell me about health in Sokoto",
+   "expect": {
+    "capability": "deep"
+   }
+  },
+  {
+   "id": "f04",
+   "place": "pin",
+   "turns": [],
+   "message": "what's happening in my area?",
+   "expect": {
+    "capability": [
+     "deep",
+     "place_budget"
+    ]
+   }
+  },
+  {
+   "id": "f05",
+   "place": "none",
+   "turns": [],
+   "message": "How many PHCs are in Tureta?",
+   "expect": {
+    "capability": "facility"
+   }
+  },
+  {
+   "id": "f06",
+   "place": "none",
+   "turns": [],
+   "message": "How much did Sokoto spend on education last year?",
+   "expect": {
+    "capability": "budget",
+    "time": [
+     "year",
+     "past"
+    ]
+   }
+  },
+  {
+   "id": "f07",
+   "place": "pin",
+   "turns": [],
+   "message": "Is it safe to plant this week, will it rain?",
+   "expect": {
+    "capability": "hazard",
+    "time": "forecast"
+   }
+  },
+  {
+   "id": "f08",
+   "place": "none",
+   "turns": [],
+   "message": "Nawa aka ware wa ma'aikatar lafiya a 2026?",
+   "expect": {
+    "capability": "budget"
+   }
+  },
+  {
+   "id": "f09",
+   "place": "pin",
+   "turns": [],
+   "message": "Ina asibiti mafi kusa da ni?",
+   "expect": {
+    "capability": "facility"
+   }
+  },
+  {
+   "id": "f10",
+   "place": "pin",
+   "turns": [],
+   "message": "Gonata ta taba yin ambaliya?",
+   "expect": {
+    "capability": "place_history",
+    "level": "pin",
+    "time": "past"
+   }
+  },
+  {
+   "id": "f11",
+   "place": "none",
+   "turns": [],
+   "message": "What does the MICS say about birth registration in Sokoto?",
+   "expect": {
+    "capability": "statistics",
+    "level": "document"
+   }
+  },
+  {
+   "id": "f12",
+   "place": "none",
+   "turns": [],
+   "message": "Alert me when there will be floods in Goronyo",
+   "expect": {
+    "capability": "alerts"
+   }
+  },
+  {
+   "id": "f13",
+   "place": "none",
+   "turns": [],
+   "message": "What projects is the government doing in Tambuwal?",
+   "expect": {
+    "capability": "place_budget",
+    "level": "lga"
+   }
+  },
+  {
+   "id": "f14",
+   "place": "none",
+   "turns": [],
+   "message": "Sannu",
+   "expect": {
+    "capability": "conversation"
+   }
+  },
+  {
+   "id": "f15",
+   "place": "none",
+   "turns": [],
+   "message": "Yaya yanayin ilimi a Sokoto?",
+   "expect": {
+    "capability": "deep"
+   }
+  },
+  {
+   "id": "c01",
+   "place": "none",
+   "lang": "en",
+   "turns": [],
+   "message": "Who are you?",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c02",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "Kai wanene?",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c03",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "Me za ka iya yi?",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c04",
+   "place": "none",
+   "lang": "en",
+   "turns": [],
+   "message": "What can you do?",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c05",
+   "place": "none",
+   "lang": "en",
+   "turns": [],
+   "message": "How does this work?",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c06",
+   "place": "none",
+   "lang": "en",
+   "turns": [],
+   "message": "Who made you?",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c07",
+   "place": "none",
+   "lang": "en",
+   "turns": [],
+   "message": "Is this a bot?",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c08",
+   "place": "none",
+   "lang": "en",
+   "turns": [],
+   "message": "Can you speak Hausa?",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c09",
+   "place": "pin",
+   "lang": "ha",
+   "turns": [
+    {
+     "user": "Kasafin ilimi na 2026 nawa ne?",
+     "kasafi": "A 2026, an ware wa ilimi N117.75 biliyan."
+    }
+   ],
+   "message": "Na gode",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c10",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "Assalamu alaikum",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c11",
+   "place": "none",
+   "lang": "en",
+   "turns": [],
+   "message": "Hello",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c12",
+   "place": "none",
+   "lang": "ha",
+   "turns": [
+    {
+     "user": "Ina asibiti mafi kusa?",
+     "kasafi": "Asibitoci mafi kusa da kai: 1. Specialist Hospital Sokoto: 6.2 km"
+    }
+   ],
+   "message": "Sai anjima",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c13",
+   "place": "pin",
+   "lang": "en",
+   "turns": [
+    {
+     "user": "Nearest PHC",
+     "kasafi": "Nearest: 1. Kalambaina PHC 1.1 km 2. Arkilla PHC 3.0 km"
+    }
+   ],
+   "message": "Thank you, bye",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c14",
+   "place": "none",
+   "lang": "en",
+   "turns": [],
+   "message": "help",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c15",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "Ina kwana",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c16",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "Wa ya yi ka?",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c17",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "Kana jin Hausa?",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c18",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "Mutum ne kai ko na'ura?",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c19",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "Yaya kake aiki?",
+   "expect": {
+    "capability": "conversation",
+    "kind": "chitchat"
+   }
+  },
+  {
+   "id": "c20",
+   "place": "lga",
+   "lang": "en",
+   "turns": [],
+   "message": "But uduth is closer to me",
+   "expect": {
+    "capability": "facility",
+    "level": "facility"
+   }
+  },
+  {
+   "id": "m01",
+   "place": "pin",
+   "lang": "en",
+   "turns": [],
+   "message": "Where can my wife deliver a baby?",
+   "expect": {
+    "capability": "facility",
+    "care": "maternal"
+   }
+  },
+  {
+   "id": "m02",
+   "place": "pin",
+   "lang": "ha",
+   "turns": [],
+   "message": "Matata na naƙuda, ina zan kai ta?",
+   "expect": {
+    "capability": "facility",
+    "care": "maternal",
+    "urgent": true
+   }
+  },
+  {
+   "id": "m03",
+   "place": "pin",
+   "lang": "en",
+   "turns": [],
+   "message": "Nearest place for antenatal care",
+   "expect": {
+    "capability": "facility",
+    "care": "maternal"
+   }
+  },
+  {
+   "id": "m04",
+   "place": "pin",
+   "lang": "ha",
+   "turns": [],
+   "message": "A ina matata za ta haihu?",
+   "expect": {
+    "capability": "facility",
+    "care": "maternal"
+   }
+  },
+  {
+   "id": "m05",
+   "place": "pin",
+   "lang": "en",
+   "turns": [],
+   "message": "Is there anywhere I can deliver a baby around here?",
+   "expect": {
+    "capability": "facility",
+    "care": "maternal"
+   }
+  },
+  {
+   "id": "m06",
+   "place": "pin",
+   "lang": "en",
+   "turns": [],
+   "message": "Where can I take my sick child?",
+   "expect": {
+    "capability": "facility",
+    "care": "children",
+    "urgent": "either"
+   }
+  },
+  {
+   "id": "m07",
+   "place": "pin",
+   "lang": "ha",
+   "turns": [],
+   "message": "Ina asibitin gwamnati mafi kusa?",
+   "expect": {
+    "capability": "facility",
+    "care": "general",
+    "facility_level": "hospital",
+    "ownership": "public"
+   }
+  },
+  {
+   "id": "m08",
+   "place": "pin",
+   "lang": "en",
+   "turns": [],
+   "message": "Is there a private clinic near me?",
+   "expect": {
+    "capability": "facility",
+    "facility_level": "primary",
+    "ownership": "private"
+   }
+  },
+  {
+   "id": "m09",
+   "place": "pin",
+   "lang": "en",
+   "turns": [
+    {
+     "user": "Where can my wife deliver a baby?",
+     "kasafi": "Nearest facilities with emergency obstetric care: 1. Kalambaina PHC 1.1 km 2. Women and Children Welfare Clinic 7.0 km"
+    }
+   ],
+   "message": "Only government ones",
+   "expect": {
+    "capability": "facility",
+    "kind": [
+     "follow_up",
+     "clarification",
+     "correction"
+    ],
+    "care": "maternal",
+    "ownership": "public"
+   }
+  },
+  {
+   "id": "m10",
+   "place": "pin",
+   "lang": "en",
+   "turns": [
+    {
+     "user": "What is the government budgeting for my area?",
+     "kasafi": "The 2026 budget has 163 capital projects located in Wamakko, worth N79.98 billion, mostly health."
+    }
+   ],
+   "message": "Anything for schools?",
+   "expect": {
+    "capability": "place_budget"
+   }
+  },
+  {
+   "id": "k01",
+   "place": "none",
+   "lang": "en",
+   "turns": [],
+   "message": "menu",
+   "expect": {
+    "capability": "conversation",
+    "kind": "menu"
+   }
+  },
+  {
+   "id": "k02",
+   "place": "pin",
+   "lang": "ha",
+   "turns": [],
+   "message": "zaɓi",
+   "expect": {
+    "capability": "conversation",
+    "kind": "menu"
+   }
+  },
+  {
+   "id": "k03",
+   "place": "none",
+   "lang": "ha",
+   "turns": [
+    {
+     "user": "Nawa aka ware wa lafiya a 2026?",
+     "kasafi": "A 2026, an ware wa lafiya N124.41 biliyan."
+    }
+   ],
+   "message": "Nuna min zaɓuɓɓuka",
+   "expect": {
+    "capability": "conversation",
+    "kind": "menu"
+   }
+  },
+  {
+   "id": "n01",
+   "place": "none",
+   "turns": [],
+   "message": "How many people were affected by floods in Sokoto State in October 2024?",
+   "expect": {
+    "capability": "statistics",
+    "satellite_context": false
+   }
+  },
+  {
+   "id": "n02",
+   "place": "none",
+   "turns": [],
+   "message": "How many people were displaced by the 2024 floods in Sokoto?",
+   "expect": {
+    "capability": "statistics"
+   }
+  },
+  {
+   "id": "n03",
+   "place": "none",
+   "turns": [],
+   "message": "How many houses were destroyed by flooding in Sokoto in 2025?",
+   "expect": {
+    "capability": "statistics"
+   }
+  },
+  {
+   "id": "n04",
+   "place": "lga",
+   "turns": [],
+   "message": "Was Wamakko LGA affected by floods in 2025, according to NEMA?",
+   "expect": {
+    "capability": "statistics"
+   }
+  },
+  {
+   "id": "n05",
+   "place": "none",
+   "turns": [],
+   "message": "Which LGAs in Sokoto State were affected by floods in 2025, according to NEMA?",
+   "expect": {
+    "capability": "statistics"
+   }
+  },
+  {
+   "id": "n06",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "Mutane nawa ambaliyar ruwa ta shafa a Jihar Sokoto a 2025, a cewar NEMA?",
+   "expect": {
+    "capability": "statistics"
+   }
+  },
+  {
+   "id": "n07",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "Mutane nawa suka rasa matsugunansu saboda ambaliya a Sokoto a 2024?",
+   "expect": {
+    "capability": "statistics"
+   }
+  },
+  {
+   "id": "n08",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "Gidaje nawa ambaliya ta rushe a Sokoto a 2024?",
+   "expect": {
+    "capability": "statistics"
+   }
+  },
+  {
+   "id": "n09",
+   "place": "none",
+   "turns": [],
+   "message": "How bad were the 2024 floods in Sokoto?",
+   "expect": {
+    "capability": "statistics",
+    "satellite_context": true
+   }
+  },
+  {
+   "id": "n10",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "Yaya girman ambaliyar 2024 a Jihar Sokoto?",
+   "expect": {
+    "capability": "statistics",
+    "satellite_context": true
+   }
+  },
+  {
+   "id": "n11",
+   "place": "none",
+   "turns": [],
+   "message": "How many people died in floods in Sokoto in 2024?",
+   "expect": {
+    "capability": "statistics",
+    "urgent": false
+   }
+  },
+  {
+   "id": "n12",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Got it: your pin is in Kalambaina ward (likely), Wamakko LGA."
+    }
+   ],
+   "message": "How much of my ward was under water in 2024?",
+   "expect": {
+    "capability": "place_history",
+    "satellite_context": false
+   }
+  },
+  {
+   "id": "n13",
+   "place": "none",
+   "turns": [],
+   "message": "Which wards of Wamakko flooded most in 2022?",
+   "expect": {
+    "capability": "place_history"
+   }
+  },
+  {
+   "id": "n14",
+   "place": "pin",
+   "lang": "ha",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Got it: your pin is in Kalambaina ward (likely), Wamakko LGA."
+    }
+   ],
+   "message": "Ruwa ya taɓa rufe gonata?",
+   "expect": {
+    "capability": "place_history",
+    "level": "pin"
+   }
+  },
+  {
+   "id": "n15",
+   "place": "none",
+   "turns": [],
+   "message": "What does the MICS report say about birth registration in Sokoto?",
+   "expect": {
+    "capability": "statistics"
+   }
+  },
+  {
+   "id": "n16",
+   "place": "lga",
+   "turns": [],
+   "message": "According to NiMet, when will the rains end in my LGA this year?",
+   "expect": {
+    "capability": "hazard"
+   }
+  },
+  {
+   "id": "lf15",
+   "place": "none",
+   "turns": [],
+   "message": "Which wards of Kware LGA got the most June–October rain in 2024?",
+   "expect": {
+    "capability": "place_history"
+   }
+  },
+  {
+   "id": "lf16",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "Waɗanne gundumomin Ƙaramar Hukumar Kware ne suka fi samun ruwan sama a damina ta 2024?",
+   "expect": {
+    "capability": "place_history"
+   }
+  },
+  {
+   "id": "lf17",
+   "place": "lga",
+   "turns": [],
+   "message": "Will it rain in my LGA this week?",
+   "expect": {
+    "capability": "hazard"
+   }
+  },
+  {
+   "id": "lf11",
+   "place": "none",
+   "turns": [],
+   "message": "According to the Multiple Indicator Cluster Survey (MICS) by NBS and UNICEF, what are the gaps in child healthcare and civil registration for Sokoto State?",
+   "expect": {
+    "capability": "statistics"
+   }
+  },
+  {
+   "id": "lf12",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "A cewar MICS na NBS da UNICEF, waɗanne gibi ne ke cikin kula da lafiyar yara da rajistar haihuwa a Jihar Sokoto?",
+   "expect": {
+    "capability": "statistics"
+   }
+  },
+  {
+   "id": "lf13",
+   "place": "none",
+   "turns": [],
+   "message": "Birth registration in Sokoto: what did MICS 2021 and NDHS 2024 each find, and can the two be compared?",
+   "expect": {
+    "capability": "statistics"
+   }
+  },
+  {
+   "id": "lf14",
+   "place": "none",
+   "turns": [],
+   "message": "What's the state of child health in Sokoto?",
+   "expect": {
+    "capability": "deep"
+   }
+  },
+  {
+   "id": "lf01",
+   "place": "none",
+   "turns": [],
+   "message": "How many schools are in Dange Shuni",
+   "expect": {
+    "capability": "statistics",
+    "level": "lga",
+    "name_has": "dange"
+   }
+  },
+  {
+   "id": "lf02",
+   "place": "none",
+   "turns": [
+    {
+     "user": "How many schools are in Dange Shuni",
+     "kasafi": "Dange Shuni LGA has 91 public primary schools in the 2023/2024 ASC, from the Sokoto State Annual School Census 23-24 Report. Newest figure: 91 schools. By source: 91 public primary; 20 public pre-primary; 28 private pre-primary."
+    }
+   ],
    "message": "I mean all the total schools primary, senior secondary and junior secondary and IQS",
-   "expect": {"capability": "statistics", "kind": ["clarification", "correction", "follow_up"], "name_has": "dange", "restatement_has": "school"}},
-  {"id": "lf03", "place": "none", "turns": [
-     {"user": "How many schools are in Dange Shuni", "kasafi": "Dange Shuni LGA has 91 public primary schools in the 2023/2024 ASC."},
-     {"user": "I mean all the total schools primary, senior secondary and junior secondary and IQS", "kasafi": "The state budget doesn't show money allocated directly to Dange Shuni Local Government. State budget lines for institutions located in Dange Shuni are state money, not the LGA's."}],
+   "expect": {
+    "capability": "statistics",
+    "kind": [
+     "clarification",
+     "correction",
+     "follow_up"
+    ],
+    "name_has": "dange",
+    "restatement_has": "school"
+   }
+  },
+  {
+   "id": "lf03",
+   "place": "none",
+   "turns": [
+    {
+     "user": "How many schools are in Dange Shuni",
+     "kasafi": "Dange Shuni LGA has 91 public primary schools in the 2023/2024 ASC."
+    },
+    {
+     "user": "I mean all the total schools primary, senior secondary and junior secondary and IQS",
+     "kasafi": "The state budget doesn't show money allocated directly to Dange Shuni Local Government. State budget lines for institutions located in Dange Shuni are state money, not the LGA's."
+    }
+   ],
    "message": "Am talking about schools not budget",
-   "expect": {"capability": "statistics", "kind": ["correction", "clarification"], "name_has": "dange", "exclude_has": ["budget", "kasafi"], "restatement_has": "school"}},
-  {"id": "lf04", "place": "none", "lang": "ha", "turns": [],
-   "message": "Makarantu nawa ne a Dange Shuni?", "expect": {"capability": "statistics", "level": "lga", "name_has": "dange"}},
-  {"id": "lf05", "place": "none", "lang": "ha", "turns": [
-     {"user": "Makarantu nawa ne a Dange Shuni?", "kasafi": "Ƙaramar Hukumar Dange Shuni tana da makarantun firamare na gwamnati 91 (ASC 2023/2024)."}],
+   "expect": {
+    "capability": "statistics",
+    "kind": [
+     "correction",
+     "clarification"
+    ],
+    "name_has": "dange",
+    "exclude_has": [
+     "budget",
+     "kasafi"
+    ],
+    "restatement_has": "school"
+   }
+  },
+  {
+   "id": "lf04",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "Makarantu nawa ne a Dange Shuni?",
+   "expect": {
+    "capability": "statistics",
+    "level": "lga",
+    "name_has": "dange"
+   }
+  },
+  {
+   "id": "lf05",
+   "place": "none",
+   "lang": "ha",
+   "turns": [
+    {
+     "user": "Makarantu nawa ne a Dange Shuni?",
+     "kasafi": "Ƙaramar Hukumar Dange Shuni tana da makarantun firamare na gwamnati 91 (ASC 2023/2024)."
+    }
+   ],
    "message": "Ina nufin duka makarantun: firamare, ƙaramar sakandare, babbar sakandare da IQS",
-   "expect": {"capability": "statistics", "kind": ["clarification", "correction", "follow_up"], "name_has": "dange", "restatement_has": "school"}},
-  {"id": "lf06", "place": "none", "lang": "ha", "turns": [
-     {"user": "Makarantu nawa ne a Dange Shuni?", "kasafi": "Ƙaramar Hukumar Dange Shuni tana da makarantun firamare na gwamnati 91."},
-     {"user": "Duka makarantun nake nufi", "kasafi": "Kasafin jihar bai nuna kuɗin da aka ware kai tsaye ga Ƙaramar Hukumar Dange Shuni ba."}],
+   "expect": {
+    "capability": "statistics",
+    "kind": [
+     "clarification",
+     "correction",
+     "follow_up"
+    ],
+    "name_has": "dange",
+    "restatement_has": "school"
+   }
+  },
+  {
+   "id": "lf06",
+   "place": "none",
+   "lang": "ha",
+   "turns": [
+    {
+     "user": "Makarantu nawa ne a Dange Shuni?",
+     "kasafi": "Ƙaramar Hukumar Dange Shuni tana da makarantun firamare na gwamnati 91."
+    },
+    {
+     "user": "Duka makarantun nake nufi",
+     "kasafi": "Kasafin jihar bai nuna kuɗin da aka ware kai tsaye ga Ƙaramar Hukumar Dange Shuni ba."
+    }
+   ],
    "message": "Makarantu nake magana ba kasafi ba",
-   "expect": {"capability": "statistics", "kind": ["correction", "clarification"], "name_has": "dange", "exclude_has": ["budget", "kasafi"]}},
-  {"id": "lf07", "place": "none", "turns": [
-     {"user": "How many people were affected by floods in Sokoto State in 2024?", "kasafi": "In 2024, radar saw about 4,120 ha of Sokoto State under water on its biggest pass, and 26,000 ha at some point in the season."}],
+   "expect": {
+    "capability": "statistics",
+    "kind": [
+     "correction",
+     "clarification"
+    ],
+    "name_has": "dange",
+    "exclude_has": [
+     "budget",
+     "kasafi"
+    ]
+   }
+  },
+  {
+   "id": "lf07",
+   "place": "none",
+   "turns": [
+    {
+     "user": "How many people were affected by floods in Sokoto State in 2024?",
+     "kasafi": "In 2024, radar saw about 4,120 ha of Sokoto State under water on its biggest pass, and 26,000 ha at some point in the season."
+    }
+   ],
    "message": "I asked about people, not hectares of land",
-   "expect": {"capability": "statistics", "kind": ["correction", "clarification"], "exclude_has": ["land", "hectare", "satellite", "area", "place_history"]}},
-  {"id": "lf08", "place": "none", "turns": [
-     {"user": "What is the government budgeting for Wamakko LGA in 2026?", "kasafi": "The 2026 budget has 163 capital projects located in Wamakko, with ₦79.98 billion allocated."}],
-   "message": "I mean the 2025 budget", "expect": {"capability": "place_budget", "kind": ["clarification", "correction", "follow_up"], "name_has": "wamakko"}},
-  {"id": "lf09", "place": "none", "turns": [
-     {"user": "How many health facilities are in Wamakko?", "kasafi": "Wamakko LGA has 12 hospitals in the facility registry."}],
+   "expect": {
+    "capability": "statistics",
+    "kind": [
+     "correction",
+     "clarification"
+    ],
+    "exclude_has": [
+     "land",
+     "hectare",
+     "satellite",
+     "area",
+     "place_history"
+    ]
+   }
+  },
+  {
+   "id": "lf08",
+   "place": "none",
+   "turns": [
+    {
+     "user": "What is the government budgeting for Wamakko LGA in 2026?",
+     "kasafi": "The 2026 budget has 163 capital projects located in Wamakko, with ₦79.98 billion allocated."
+    }
+   ],
+   "message": "I mean the 2025 budget",
+   "expect": {
+    "capability": "place_budget",
+    "kind": [
+     "clarification",
+     "correction",
+     "follow_up"
+    ],
+    "name_has": "wamakko"
+   }
+  },
+  {
+   "id": "lf09",
+   "place": "none",
+   "turns": [
+    {
+     "user": "How many health facilities are in Wamakko?",
+     "kasafi": "Wamakko LGA has 12 hospitals in the facility registry."
+    }
+   ],
    "message": "I mean all of them, PHCs and dispensaries too",
-   "expect": {"capability": "facility", "kind": ["clarification", "correction", "follow_up"], "name_has": "wamakko"}},
-  {"id": "lf10", "place": "none", "turns": [
-     {"user": "Was Wamakko LGA affected by floods in 2025, according to NEMA?", "kasafi": "NEMA's situation report of 26 September 2025 lists 7 LGAs and 8 wards of Sokoto State as affected (15,675 people), but doesn't name them, so it can't say whether Wamakko was among them."}],
+   "expect": {
+    "capability": "facility",
+    "kind": [
+     "clarification",
+     "correction",
+     "follow_up"
+    ],
+    "name_has": "wamakko"
+   }
+  },
+  {
+   "id": "lf10",
+   "place": "none",
+   "turns": [
+    {
+     "user": "Was Wamakko LGA affected by floods in 2025, according to NEMA?",
+     "kasafi": "NEMA's situation report of 26 September 2025 lists 7 LGAs and 8 wards of Sokoto State as affected (15,675 people), but doesn't name them, so it can't say whether Wamakko was among them."
+    }
+   ],
    "message": "Ok so which LGAs does it name?",
-   "expect": {"capability": "statistics", "kind": "follow_up"}}
+   "expect": {
+    "capability": "statistics",
+    "kind": "follow_up"
+   }
+  },
+  {
+   "id": "a01",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Got it: your pin is in Gumbi ward (likely), Wamakko LGA. Ask about floods, weather, budgets or facilities here."
+    }
+   ],
+   "message": "Has it ever flooded here?",
+   "expect": {
+    "capability": "place_history",
+    "level": "ward",
+    "time": "past"
+   }
+  },
+  {
+   "id": "a02",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Got it: your pin is in Gumbi ward (likely), Wamakko LGA. Ask about floods, weather, budgets or facilities here."
+    }
+   ],
+   "message": "Has this place ever flooded?",
+   "expect": {
+    "capability": "place_history",
+    "level": "ward",
+    "time": "past"
+   }
+  },
+  {
+   "id": "a03",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Got it: your pin is in Gumbi ward (likely), Wamakko LGA. Ask about floods, weather, budgets or facilities here."
+    }
+   ],
+   "message": "Any floods around here in past years?",
+   "expect": {
+    "capability": "place_history",
+    "level": "ward",
+    "time": "past"
+   }
+  },
+  {
+   "id": "a04",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Got it: your pin is in Gumbi ward (likely), Wamakko LGA. Ask about floods, weather, budgets or facilities here."
+    }
+   ],
+   "lang": "ha",
+   "message": "Shin wannan wuri ya taɓa ambaliya?",
+   "expect": {
+    "capability": "place_history",
+    "level": "ward",
+    "time": "past"
+   }
+  },
+  {
+   "id": "a05",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Got it: your pin is in Gumbi ward (likely), Wamakko LGA. Ask about floods, weather, budgets or facilities here."
+    }
+   ],
+   "lang": "ha",
+   "message": "An taɓa samun ambaliya a nan?",
+   "expect": {
+    "capability": "place_history",
+    "level": "ward",
+    "time": "past"
+   }
+  },
+  {
+   "id": "a06",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Got it: your pin is in Gumbi ward (likely), Wamakko LGA. Ask about floods, weather, budgets or facilities here."
+    }
+   ],
+   "message": "Has my farm ever flooded?",
+   "expect": {
+    "capability": "place_history",
+    "level": "pin",
+    "time": "past"
+   }
+  },
+  {
+   "id": "a07",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Got it: your pin is in Gumbi ward (likely), Wamakko LGA. Ask about floods, weather, budgets or facilities here."
+    }
+   ],
+   "message": "Has this field been under water before?",
+   "expect": {
+    "capability": "place_history",
+    "level": "pin",
+    "time": "past"
+   }
+  },
+  {
+   "id": "a08",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Got it: your pin is in Gumbi ward (likely), Wamakko LGA. Ask about floods, weather, budgets or facilities here."
+    }
+   ],
+   "lang": "ha",
+   "message": "Gonata ta taɓa ambaliya?",
+   "expect": {
+    "capability": "place_history",
+    "level": "pin",
+    "time": "past"
+   }
+  },
+  {
+   "id": "a09",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Got it: your pin is in Gumbi ward (likely), Wamakko LGA. Ask about floods, weather, budgets or facilities here."
+    }
+   ],
+   "message": "I'm thinking of moving my family here. What is the government spending in this area, has it ever flooded, and where's the nearest clinic?",
+   "expect": {
+    "parts": [
+     {
+      "capability": "place_budget"
+     },
+     {
+      "capability": "place_history",
+      "level": "ward",
+      "time": "past"
+     },
+     {
+      "capability": "facility"
+     }
+    ]
+   }
+  },
+  {
+   "id": "a10",
+   "place": "pin",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Got it: your pin is in Gumbi ward (likely), Wamakko LGA. Ask about floods, weather, budgets or facilities here."
+    }
+   ],
+   "message": "Has this area flooded before, and what is the state spending on erosion here?",
+   "expect": {
+    "parts": [
+     {
+      "capability": "place_history",
+      "level": "ward",
+      "time": "past"
+     },
+     {
+      "capability": "place_budget"
+     }
+    ]
+   }
+  }
  ]
 }

@@ -196,12 +196,15 @@ async def _reply(messages: list[dict[str, Any]]) -> None:
 
 
 TYPING_TIMEOUT_S = 3.0
+TYPING_REPEAT_S = 18.0      # WhatsApp shows the indicator for at most 25 s, and drops it at any message we send
+TYPING_MOST_S = 300.0       # never past the longest answer limit
 
 
 def start_typing(client, msg: dict[str, Any], store, settings) -> asyncio.Task | None:
     """The typing indicator on the user's message (marked read), for consented users only: fire and forget, at
-    most TYPING_TIMEOUT_S, a failure logged and nothing else. WhatsApp drops it at our reply or after 25 s; the
-    progress line covers longer answers (the docs don't say it can be re-sent)."""
+    most TYPING_TIMEOUT_S a call, a failure logged and nothing else. WhatsApp drops it after 25 s and at any
+    message we send (a progress line), so it is sent again every TYPING_REPEAT_S until the reply is out and the
+    task is cancelled (4 Nov 2026: the phone showed nothing while a 30-60 s answer was being written)."""
     from app.users import user_key
     msg_id = msg.get("id", "")
     if not msg_id or not msg.get("from") or not hasattr(client, "mark_typing"):
@@ -214,10 +217,16 @@ def start_typing(client, msg: dict[str, Any], store, settings) -> asyncio.Task |
         return None
 
     async def run() -> None:
-        try:
-            await asyncio.wait_for(client.mark_typing(msg_id), TYPING_TIMEOUT_S)
-        except Exception as e:              # noqa: BLE001 - a missing indicator never matters
-            log.info("typing indicator not shown: %s", type(e).__name__)
+        started = asyncio.get_running_loop().time()
+        while asyncio.get_running_loop().time() - started < TYPING_MOST_S:
+            try:
+                await asyncio.wait_for(client.mark_typing(msg_id), TYPING_TIMEOUT_S)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:          # noqa: BLE001 - a missing indicator never matters
+                log.info("typing indicator not shown: %s", type(e).__name__)
+                return
+            await asyncio.sleep(TYPING_REPEAT_S)
     return asyncio.get_running_loop().create_task(run())
 
 
