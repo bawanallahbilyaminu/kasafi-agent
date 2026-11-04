@@ -959,7 +959,13 @@ def place_names(plan: Plan, asked: str) -> list[str]:
              if e.type in ("lga", "ward", "town", "community") and (e.resolved or e.name)]
     if not names and (lga := lga_in(asked)):
         names = [lga]
-    return list(dict.fromkeys(n for n in names if len(n) > 2))[:3]
+    # a real place, never the kind of place ('LGAs', 'Sokoto State wards'): 'which 3 LGAs have the most IDPs' is a
+    # ranking for the topic and structured paths, not a place's own rows (4 Nov overnight)
+    return list(dict.fromkeys(n for n in names if len(n) > 2 and not GENERIC_PLACE.search(n)))[:3]
+
+
+GENERIC_PLACE = re.compile(r"(?i)^(?:(?:the|all|every|sokoto(?:\s+state)?(?:'s)?)\s+)?(?:\d+\s+)?(?:lgas?|wards?|local\s+"
+                           r"government(?:\s+areas?)?|ƙananan\s+hukumomi|gundumomi)\b|\bstate\b")
 
 
 def place_pattern(name: str) -> re.Pattern:
