@@ -2044,7 +2044,7 @@ async def checked_answer(a: Answer, question: str, lang: str, conn, kw: dict, t_
         if client is None:
             return a
         v = await answer_check.check(question, a, u, history, conn, settings, client)
-        a.checks = [answer_check.trace_entry(v)]
+        a.checks = [{**answer_check.trace_entry(v), "draft": (a.text or "")[:400]}]   # the draft, for the trace
         if v.verdict in ("pass", "skipped"):
             return a
         left = settings.kasafi_answer_timeout_s - (time.perf_counter() - t_start)
@@ -2075,7 +2075,7 @@ async def checked_answer(a: Answer, question: str, lang: str, conn, kw: dict, t_
                 log.warning("check: the second round failed (%s)", type(e).__name__)
             if a2 is not None and answer_check.should_check(a2):
                 v2 = await answer_check.check(question, a2, u2, history, conn, settings, client, round_=2)
-                a2.checks = a.checks + [answer_check.trace_entry(v2)]
+                a2.checks = a.checks + [{**answer_check.trace_entry(v2), "draft": (a2.text or "")[:400]}]
                 a2.understanding = u2 if u2 is not None else a2.understanding
                 if v2.verdict in ("pass", "skipped"):
                     return a2
