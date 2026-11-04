@@ -3047,9 +3047,14 @@ def parts_block(d: dict, by_n: dict, names: list[str], lang: str) -> tuple[str, 
     # a figure not printed in the place's row is never shown, added or not (3 Nov: the writer's own sums, 37 and 31,
     # appeared as 'parts'); one meant to be added still stops the total below
     parts = [p for p in parts if _as_number(p.value) is not None and (p.ok or p.add)]
-    if len(parts) < 2:
+    if not parts:
         return "", "", ""
     w = PARTS_WORDS.get(lang, PARTS_WORDS["en"])
+    if len(parts) == 1:        # one figure: shown as its line, no total (4 Nov overnight: a single-level count had
+        p = parts[0]           # its only figure in 'parts', which was dropped, so the reply gave no figure at all)
+        line = f"• {p.label}: {p.value}" + (f" ({PAGE_WORD.get(lang, 'page')} {p.ev.page})" if p.ev is not None else "")
+        more = "\n".join(f"• {s.label}: {s.value}" for s in statements)
+        return "\n".join(x for x in (line, more) if x), "", f"{p.label}: {p.value}"
     page = PAGE_WORD.get(lang, "page")
     for p in parts:                 # pre-primary is counted with primary in school censuses, whatever the writer said
         if p.add and pre_primary_only(p.label):
