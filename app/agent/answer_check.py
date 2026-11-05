@@ -444,7 +444,8 @@ def truly_missing(missing: list[str], a) -> list[str]:
     out = []
     for m in missing:
         figs = figures_in(m)
-        if figs and a.cited and len(unverified_numbers(" ".join(figs), a.cited)) < len(figs):
+        # the item's own wording, so a house-style amount keeps its unit ('₦100 million' is the page's 100,000,000.00)
+        if figs and a.cited and len(unverified_numbers(m, a.cited)) < len(figs):
             continue
         # figures out of the wording, the spaces kept ('as of 17 August 2025' had become 'as ofAugust')
         out.append(re.sub(r"\s+", " ", re.sub(r"[:(]?\s*\d[\d,.]*\s*%?\)?", " ", m)).strip(" ;:,"))

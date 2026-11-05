@@ -30,6 +30,8 @@ AMOUNT = re.compile(
     r"(?:\s?(?P<scale>trillion|billion|biliyan|million|miliyan|thousand|dubu|tn|bn|mn|b|m|k)\b)?"
     r"(?P<pct>\s?(?:%|percent\b|per\s?cent\b))?",
     re.I)
+SCALE_FIRST = re.compile(r"(?i)\b(?P<scale>biliyan|miliyan|dubu)\s+"
+                         r"(?P<num>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:[.,]\d+)?)(?![\d,.]*\d)")
 KASHI = re.compile(r"(?i)\bkashi\s+(\d+(?:[.,]\d+)?)")
 
 
@@ -77,6 +79,13 @@ def amounts(text: str) -> list[Amount]:
         mult = SCALES.get(scale, Decimal(1))
         out.append(Amount(m.group(0).strip(), v * mult, half * mult, bool(m.group("pct")),
                           bool(m.group("cur") or scale), m.start("num"), m.end()))
+    # Hausa puts the scale first: 'naira miliyan 100', 'biliyan 1.2' (5 Nov 2026: only '100 million' order matched)
+    for m in SCALE_FIRST.finditer(text or ""):
+        scale = m.group("scale").lower()
+        got = _number(m.group("num"), scale)
+        if got:
+            mult = SCALES[scale]
+            out.append(Amount(m.group(0).strip(), got[0] * mult, got[1] * mult, False, True, m.start("num"), m.end()))
     for m in KASHI.finditer(text or ""):
         got = _number(m.group(1), "")
         if got:

@@ -662,6 +662,54 @@ def verify_claim(c: dict, pages: dict[int, str]) -> bool:
     return False
 
 
+_ROW_AMOUNT = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\b\d+\.\d{2}\b")
+_ROW_TOTAL = re.compile(r"(?i)\b(?:sub[\s-]?total|grand\s+total|total)\b")
+_ROW_STOP = {"budget", "budgeted", "approved", "revised", "final", "original", "actual", "actuals", "spending",
+             "spent", "expenditure", "allocation", "allocated", "amount", "total", "performance", "variance",
+             "against", "naira", "million", "billion", "year", "with", "from", "that", "this", "were", "leaving"}
+
+
+def _stems(text: str) -> set[str]:
+    """Naming words as six-letter stems ('computers' and 'computer' agree), without figures or money words."""
+    return {w[:6] for w in re.findall(r"[a-z]{4,}", (text or "").lower()) if w not in _ROW_STOP}
+
+
+def row_bound(c: dict, pages: dict[int, str]) -> bool:
+    """On a table page, the claim's value must sit on a row that names what the claim is about (5 Nov 2026, trace
+    590: '₦42 million for computer purchases' when 42,000,000.00 is the 'REHABILITATION / REPAIRS OF OFFICE
+    BUILDINGS' row and the computers row prints 40,000,000.00). A row is one printed line with two or more
+    amounts. The words that tell the page's rows apart are those on some rows but not on most (a ministry's name
+    on every row tells nothing). The claim is refused when it uses such words and none is on a row that prints its
+    value. True when the page isn't a table, the value isn't on a row, or the claim names nothing that tells rows
+    apart: then the printed-on-the-page check alone decides, as before."""
+    from app.agent import figures
+    text = pages.get(c.get("page")) or ""
+    lines = text.splitlines()
+    at = [i for i, ln in enumerate(lines) if len(_ROW_AMOUNT.findall(ln)) >= 2]
+    if len(at) < 4:
+        return True
+
+    def label(i: int) -> set[str]:
+        """The row's naming words; a label wrapped onto the line above (a line with no amounts) belongs to it."""
+        own = _stems(_ROW_AMOUNT.sub(" ", lines[i]))
+        above = lines[i - 1] if i and not _ROW_AMOUNT.search(lines[i - 1]) else ""
+        return own | _stems(above)
+
+    want = figures.amounts(str(c.get("value") or ""))
+    rows = [i for i in at if want and figures.found_in(want[0], figures.amounts(lines[i]))]
+    if not rows:
+        return True
+    if any(_ROW_TOTAL.search(lines[i]) or not label(i) for i in rows):
+        return True                    # a total sums the rows a claim may name; a row with no words can't be judged
+    labels = [_stems(_ROW_AMOUNT.sub(" ", lines[i])) for i in at]
+    seen = set().union(*labels)
+    telling = {s for s in seen if sum(s in lab for lab in labels) <= 0.6 * len(labels)}
+    claim = _stems(str(c.get("statement") or "")) & telling
+    if not claim:
+        return True
+    return any(claim & label(i) for i in rows)
+
+
 def measures_text(dims: list[Dimension]) -> str:
     return "\n".join(f"- {m.id}: {m.name} ({d.name})" for d in dims for m in d.measures if not m.structured) or \
         "\n".join(f"- {d.name}" for d in dims)
@@ -738,6 +786,9 @@ async def read_one(client, r: Reading, subject: str, dims: list[Dimension]) -> l
         if c["page"] not in pages and len(pages) == 1:
             c["page"] = next(iter(pages))
         if not verify_claim(c, pages):
+            continue
+        if not row_bound(c, pages):        # the value is printed, but on another line than the one the claim names
+            log.info("deep: claim refused, its value is on another row: %s", str(c.get("statement"))[:100])
             continue
         entity = str(c.get("entity") or "")
         if not national_ok(r, entity, pages.get(c["page"], ""), str(c.get("value") or "")):
