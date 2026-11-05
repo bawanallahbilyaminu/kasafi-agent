@@ -270,9 +270,10 @@ def user_text(message: str, restatement: str, history: list[dict] | None, draft:
 
 
 async def check(message: str, a, u, history: list[dict] | None, conn, settings, client, *, round_: int = 1,
-                model: str | None = None) -> Verdict:
-    """One check of the draft `a`. Never raises: a failed call is a 'skipped' verdict (the draft's own checks stand),
-    unless a code rule was broken, which no model reply can overrule."""
+                model: str | None = None, retry=None, retry_timeout_s: float | None = None) -> Verdict:
+    """One check of the draft `a`. Never raises: a call that fails or times out is tried once more on `retry` (a
+    factory for the live model's client); only when that fails too is the verdict 'skipped' (the draft's own
+    checks stand), unless a code rule was broken, which no model reply can overrule."""
     from app.providers.stt import parse_json_reply
     t0 = time.perf_counter()
     counts = found_count(a)
@@ -298,11 +299,29 @@ async def check(message: str, a, u, history: list[dict] | None, conn, settings, 
             why = f"{type(e).__name__} after {time.perf_counter() - t0:.1f}s"
             log.warning("answer check failed: %s", why)
             break
+    retried = ""
+    if v is None and retry is not None:
+        # the checker's host timed out or failed: once more on the live model, never a silent skip (5 Nov 2026: 25
+        # of 87 checked answers since 4 Nov had gone out unchecked, 22 of them on the 30 s timeout)
+        t1 = time.perf_counter()
+        try:
+            async with retry() as rc:
+                with usage.stage("check"):
+                    r = await asyncio.wait_for(rc.chat([{"role": "system", "content": SYSTEM},
+                                                        {"role": "user", "content": user}],
+                                                       reasoning_effort="low", max_tokens=3000),
+                                               max(5.0, retry_timeout_s or settings.kasafi_check_timeout_s))
+                v = parse(parse_json_reply(r.content), round_)
+                retried = getattr(rc, "provider", "") or "retry"
+                log.info("answer check retried on %s in %.1fs after: %s", retried, time.perf_counter() - t1, why)
+        except Exception as e:          # noqa: BLE001
+            why = f"{why}; retry: {type(e).__name__} after {time.perf_counter() - t1:.1f}s"
+            log.warning("answer check retry failed: %s", why)
     if v is None:
         v = Verdict("skipped", round=round_, why=why)
     v = settle(a, v, rules, round_)
     v.seconds = time.perf_counter() - t0
-    v.provider = getattr(client, "provider", "")
+    v.provider = retried or getattr(client, "provider", "")
     log.info("answer check round %d: %s in %.1fs (%s)%s", round_, v.verdict, v.seconds, v.provider,
              f": {v.feedback[:200]}" if v.verdict != "pass" else "")
     return v

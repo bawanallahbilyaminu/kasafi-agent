@@ -239,7 +239,7 @@ def test_a_revise_round_reads_again_and_a_second_failure_sends_only_what_is_supp
     verdicts = iter([ck.Verdict("revise", subject={"place": False}, feedback="asked about Wamakko", round=1),
                      ck.Verdict("fail", subject={"place": False}, round=2, missing=["whether Wamakko is listed"])])
 
-    async def fake_check(message, a, u, history, conn, settings, client, *, round_=1, model=None):
+    async def fake_check(message, a, u, history, conn, settings, client, *, round_=1, model=None, **kw):
         return next(verdicts)
 
     async def fake_understand(message, history, place, settings, fallbacks=None, feedback=""):
@@ -285,7 +285,7 @@ def _run_checked(monkeypatch, drafts: list, verdicts: list) -> ans.Answer:
     async def fake_finished(question, lang, conn, **kw):
         return next(drafts_it)
 
-    async def fake_check(message, a, u, history, conn, settings, client, *, round_=1, model=None):
+    async def fake_check(message, a, u, history, conn, settings, client, *, round_=1, model=None, **kw):
         v = next(verdicts_it)                       # the model's verdict, settled by code's rules as in check()
         return ck.settle(a, ck.Verdict(**{**ck.asdict(v), "round": round_}), ck.code_rules(a, u, ck.found_count(a)),
                          round_)

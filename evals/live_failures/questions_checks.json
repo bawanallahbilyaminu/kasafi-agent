@@ -111,6 +111,13 @@
     "(?i:Emergency Obstetric|EmONC)"
    ],
    "must_not": "934 health facilities recorded|(?i:Not found[^\n]*(?:number of PHC|facilit))"
+  },
+  "lf586": {
+   "all_re": [
+    "(?i:local government \\(LGA\\) budgets|LGA budgets)",
+    "(?i:only the state)"
+   ],
+   "must_not": "No line in the documents is exactly that|: 0\\.00 \\["
   }
  }
 }

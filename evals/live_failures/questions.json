@@ -144,6 +144,13 @@
    "understand": true,
    "text": "What is the state of PHCs in sokoto state?",
    "note": "4 Nov live: a deep analysis read 11 budgets and statements and lost the PHC MSP 2020, the EmONC assessment, the health AOP and ROP (Fireworks readers timed out and were dropped in silence), then said 'Not found: number of PHC facilities, staff by cadre, immunisation coverage'; it also gave 934 registry facilities of all types as PHCs. Expected: the sector's own documents read first (MSP, EmONC), unread sources said, registry counts primary-level only."
+  },
+  {
+   "id": "lf586",
+   "lang": "en",
+   "understand": true,
+   "text": "How much was released for MNCH from the local government budget in Sokoto State?",
+   "note": "5 Nov live, trace 586 (a real tester): 'No line in the documents is exactly that…' with three state lines at 0.00 (BIR Q3 2025 and the 2026 budget), no word that only state documents are held, the planned health AOP / MTSS / ROP unread, the check skipped on a 30 s timeout. Expected: the lead says the library has no LGA budgets, only the state's; never a list of 0.00 nearest lines; the state documents' own MNCH figures offered as the state's (MTSS p. 12: Free Maternal and Child Healthcare (MNCH+N) 960,000,000)."
   }
  ]
 }

@@ -1298,6 +1298,43 @@ def intention_docs(conn: psycopg.Connection, question: str, plan: Plan) -> list[
     return list(dict.fromkeys(h.hit.doc_id for h in hits if cats.get(h.hit.doc_id) in PLAN_CATEGORIES))[:2]
 
 
+# the level the user asked for against the level the library holds (5 Nov 2026, trace 586: "How much was released
+# for MNCH from the local government budget?" got state lines with no word that they were the state's)
+LG_BUDGET_Q = re.compile(
+    r"(?i)\b(?:local\s+governments?(?:\s+(?:areas?|councils?))?|LGAs?)['’]?s?\s+(?:own\s+)?"
+    r"(?:budgets?|allocations?|accounts?|releases?|spending|expenditures?)\b|"
+    r"\b(?:budgets?|allocations?|accounts?)\s+of\s+(?:the\s+)?(?:local\s+governments?|LGAs?)\b|"
+    r"\bkasafin\s+(?:ku[ɗd]in?\s+)?[ƙk](?:aramar|ananan)\s+hukum\w+")
+LG_DOC_TITLE = r"(local governments?( area| council)?s?|LGAs?)[^,;]{0,30}(budget|appropriation|financial statement|accounts)"
+LG_BUDGET_NOTE = {
+    "en": {"lead": "I don't have Sokoto's local government (LGA) budgets, only the state budget and its reports. "
+                   "What the state's documents show:",
+           "none": "I don't have Sokoto's local government (LGA) budgets, only the state budget and its reports, and "
+                   "the state documents I read don't give a figure for this."},
+    "ha": {"lead": "Ba ni da kasafin kuɗin ƙananan hukumomin Sokoto, sai na jiha da rahotanninsa. Ga abin da "
+                   "takardun jiha suka nuna:",
+           "none": "Ba ni da kasafin kuɗin ƙananan hukumomin Sokoto, sai na jiha da rahotanninsa, kuma takardun jiha "
+                   "da na karanta ba su ba da adadi a kan wannan ba."},
+}
+
+
+def lg_budget_note(conn, question: str, plan: Plan | None, found: bool, lang: str) -> str:
+    """The lead when the question is about the local governments' own budgets or releases and the library holds
+    none (only the state's documents): said plainly first; what follows is the state's, labelled so. '' when the
+    question isn't about an LGA's own budget, or the library does hold LGA budget documents."""
+    asked = f"{question} {plan.english_question if plan else ''}"
+    if conn is None or not LG_BUDGET_Q.search(asked):
+        return ""
+    try:
+        if conn.execute("SELECT 1 FROM documents WHERE title ~* %s LIMIT 1", (LG_DOC_TITLE,)).fetchone():
+            return ""
+    except Exception:              # noqa: BLE001
+        conn.rollback()
+        return ""
+    w = LG_BUDGET_NOTE.get(lang, LG_BUDGET_NOTE["en"])
+    return w["lead"] if found else w["none"]
+
+
 def exact_edition_missing(conn: psycopg.Connection, description: str) -> bool:
     """The planner's missing document names a series and an exact period that the library doesn't hold (4 Nov
     live: 'Budget Implementation Report Q4 2025'): then no other document answers in its place, and the fetch runs;
@@ -2040,6 +2077,12 @@ async def answer_question(question: str, lang: str, conn: psycopg.Connection, **
     if a is not None and getattr(a, "plan", None) is not None and getattr(a.plan, "edition_note", "") and \
             (a.text or "").strip() and not getattr(a, "clarify", None):
         a.text = f"{a.plan.edition_note}\n\n{a.text}"
+    # asked about the local governments' own budgets, which the library doesn't hold: said first; the rest is the
+    # state's, labelled so (or, with nothing found, said in one plain sentence)
+    if a is not None and (a.text or "").strip() and not getattr(a, "clarify", None) and \
+            not getattr(a, "needs_pin", False) and \
+            (note := lg_budget_note(conn, question, getattr(a, "plan", None), bool(getattr(a, "found", True)), lang)):
+        a.text = f"{note}\n\n{a.text}" if getattr(a, "found", True) else note
     return a
 
 
@@ -2077,10 +2120,15 @@ async def checked_answer(a: Answer, question: str, lang: str, conn, kw: dict, t_
     factory = kw.get("client_factory") or MetaClient
     if factory is MetaClient and (batch := batch_factory(settings)):
         factory = batch                      # an eval run on Muse Spark Open: the check runs there too
+    # the checker (Muse Spark Open) timing out or failing is retried once on the live model, never skipped in
+    # silence; not in an eval run (a batch provider), where nothing may call Muse Spark
+    retry_factory = (lambda: MetaClient(settings)) if factory is MetaClient and \
+        settings.kasafi_check_provider == "open" else None
     async with check_client(settings, factory) as client:
         if client is None:
             return a
-        v = await answer_check.check(question, a, u, history, conn, settings, client)
+        retry_kw = {"retry": retry_factory} if retry_factory is not None else {}
+        v = await answer_check.check(question, a, u, history, conn, settings, client, **retry_kw)
         a.checks = [{**answer_check.trace_entry(v), "draft": (a.text or "")[:400]}]   # the draft, for the trace
         if v.verdict in ("pass", "skipped"):
             return a
@@ -2111,7 +2159,8 @@ async def checked_answer(a: Answer, question: str, lang: str, conn, kw: dict, t_
                 a2 = None
                 log.warning("check: the second round failed (%s)", type(e).__name__)
             if a2 is not None and answer_check.should_check(a2):
-                v2 = await answer_check.check(question, a2, u2, history, conn, settings, client, round_=2)
+                v2 = await answer_check.check(question, a2, u2, history, conn, settings, client, round_=2,
+                                              **retry_kw)
                 a2.checks = a.checks + [{**answer_check.trace_entry(v2), "draft": (a2.text or "")[:400]}]
                 a2.understanding = u2 if u2 is not None else a2.understanding
                 if v2.verdict in ("pass", "skipped"):
@@ -3938,10 +3987,17 @@ async def _line_path(conn, plan: Plan, question: str, lang: str, client, second,
                       attribution=[f"clarify: {res.clarify_reason}"] if res.clarify_reason else [])
     if res.selections:
         return line_answer(conn, plan, res, hits, lang, t, acq)
-    res.nearest = [s for s in res.nearest if not other_agency(plan, s.line)]
+    res.nearest = shown_nearest([s for s in res.nearest if not other_agency(plan, s.line)])
     if res.nearest:                  # nothing is that item, but related lines exist: name them as the nearest
         return nearest_answer(conn, plan, res, lang, t, acq)
-    return None
+    return None                      # the page path then reads the documents the plan named
+
+
+def shown_nearest(nearest: list) -> list:
+    """The related lines worth naming: never a zero. A list of '0.00' for lines that aren't the item asked about
+    reads as an answer and says nothing (5 Nov 2026, trace 586: three state lines at 0.00 for 'MNCH from the local
+    government budget'); with none left, the planned documents' own pages are read instead."""
+    return [s for s in nearest if getattr(s.cell, "amount", None)]
 
 
 async def _focused_lines(conn, plan: Plan, settings: Settings, hits: list, focus: list[str], docs) -> list:
