@@ -2001,6 +2001,12 @@ TIMED_OUT = {
     "ha": "Na ɗauki lokaci mai tsawo ina nema ban gama ba. Don Allah a sake tambaya nan gaba kaɗan.",
     "en": "Looking this up took too long and I didn't finish. Please ask again in a little while.",
 }
+DEEP_UNFINISHED = {
+    "ha": "Ban gama karanta takardun wannan tambaya mai fadi ba, kuma ban tabbatar da wani adadi ba tukuna. Ku tambayi "
+          "wani sashe guda, misali shekara ɗaya ko abu ɗaya.",
+    "en": "I haven't finished reading the documents for this broad question and have no checked figure yet. Try asking "
+          "about one part of it, for example one year or one measure.",
+}
 
 
 async def settle_by_words(plan: Plan, question: str, planned_q: str, catalog: list[dict], names, second,
@@ -2071,8 +2077,10 @@ def deep_as_answer(r, plan: Plan, t: dict, lang: str) -> Answer:
         else:
             at[(c.doc_id, c.page)] = Evidence(len(cited) + 1, c.doc_id, c.title, None, c.page, "text", said)
             cited.append(at[(c.doc_id, c.page)])
+    # the registry's counts are read in code and have no page: they go in the working, where the check sees them
+    registry = "\n".join(f"{c.statement} {c.value}" for c in r.claims if c.doc_id.startswith("registry:"))
     return Answer(summary, bool(r.claims), True, cited, plan, t, exact=deep_exact(r), parts=parts, deep=r,
-                  verification="figures checked" if r.claims else "unsupported",
+                  working=registry, verification="figures checked" if r.claims else "unsupported",
                   partial=bool(r.stopped), sources=[{"doc_id": e.doc_id, "page": e.page} for e in cited],
                   crop_requests=subject_crops(r, cited) if getattr(r, "about", None) is not None else None)
 
@@ -2167,6 +2175,7 @@ def mda_overview(profile: Answer, deep: Answer, lang: str) -> Answer:
     return replace(profile, text=text, cited=cited, parts=deep.parts, deep=deep.deep, code_block=profile.text,
                    exact=f"{profile.exact}\n{deep.exact}", partial=profile.partial or deep.partial,
                    sources=[*profile.sources, *deep.sources],
+                   working="\n\n".join(x for x in (profile.working, deep.working) if x),
                    timings={**deep.timings, **profile.timings}, crop_requests=crops)
 
 
@@ -2215,17 +2224,17 @@ async def check_client(settings: Settings, factory) -> AsyncIterator:
         yield client
 
 
-DEEP_REWRITE_MIN_S = 35.0      # a rewrite round of a deep analysis needs at least this much of the turn left
+DEEP_REWRITE_MIN_S = 65.0      # a rewrite (up to 45 s) and the check of it (at least 15 s) must fit in what is left
 
 
-async def deep_rewritten(a: Answer, feedback: str, question: str, lang: str, settings: Settings, factory) -> Answer | None:
+async def deep_rewritten(a: Answer, feedback: str, question: str, lang: str, settings: Settings, factory,
+                         limit: float = 45.0) -> Answer | None:
     """The deep analysis written again from its checked claims with the check's feedback (app/agent/deep.rewrite);
     an MDA overview keeps its structured profile first. None when the rewrite fails or changes nothing."""
     from app.agent.deep import rewrite
     try:
         async with factory(settings) as writer:
-            r2 = await asyncio.wait_for(rewrite(writer, question, lang, a.deep, feedback, settings),
-                                        DEEP_REWRITE_MIN_S - 5)
+            r2 = await asyncio.wait_for(rewrite(writer, question, lang, a.deep, feedback, settings), limit)
     except Exception as e:              # noqa: BLE001 - the first brief's verdict then decides
         log.warning("deep rewrite failed (%s)", type(e).__name__)
         return None
@@ -2246,10 +2255,11 @@ async def checked_answer(a: Answer, question: str, lang: str, conn, kw: dict, t_
     settings = kw.get("settings") or get_settings()
     if not settings.kasafi_answer_check or kw.get("review") or not answer_check.should_check(a) or conn is None:
         return a                             # no database: a unit test's answer (live answers always have one)
-    if getattr(a, "deep", None) is not None:   # a deep turn has the longer limit (app/whatsapp/conversation.respond)
-        from app.agent.deep import TIME_BUDGET_S
+    deep_turn = getattr(a, "deep", None) is not None
+    if deep_turn:                              # a deep turn has the longer limit (app/whatsapp/conversation.respond)
+        from app.agent.deep import DEEP_TURN_S
         settings = settings.model_copy(update={"kasafi_answer_timeout_s": max(settings.kasafi_answer_timeout_s,
-                                                                             TIME_BUDGET_S + 60)})
+                                                                             DEEP_TURN_S - 15)})
     if settings.kasafi_answer_timeout_s - (time.perf_counter() - t_start) < settings.kasafi_check_timeout_s + 10:
         log.info("answer check skipped: too little time left")      # the answer's own checks stand
         a.checks = [{"verdict": "skipped", "why": "too little time left"}]
@@ -2266,25 +2276,46 @@ async def checked_answer(a: Answer, question: str, lang: str, conn, kw: dict, t_
         if client is None:
             return a
         retry_kw = {"retry": retry_factory} if retry_factory is not None else {}
-        v = await answer_check.check(question, a, u, history, conn, settings, client, **retry_kw)
+
+        def time_left() -> float:
+            return settings.kasafi_answer_timeout_s - (time.perf_counter() - t_start)
+
+        def within_turn() -> tuple[Settings, dict]:
+            """A deep turn's check with what is left of it: the first try and its retry both fit, or there is no retry."""
+            if not deep_turn:
+                return settings, retry_kw
+            room, usual = time_left(), settings.kasafi_check_timeout_s
+            first = max(5.0, min(usual, room - 2))
+            rest = room - first - 2
+            return (settings.model_copy(update={"kasafi_check_timeout_s": first}),
+                    {**retry_kw, "retry_timeout_s": rest} if retry_kw and rest >= 10 else {})
+        s_check, kw_check = within_turn()
+        v = await answer_check.check(question, a, u, history, conn, s_check, client, **kw_check)
         a.checks = [{**answer_check.trace_entry(v), "draft": (a.text or "")[:400]}]   # the draft, for the trace
         if v.verdict in ("pass", "skipped"):
             return a
-        left = settings.kasafi_answer_timeout_s - (time.perf_counter() - t_start)
+        left = time_left()
         best, best_v = a, v
-        if v.verdict == "revise" and getattr(a, "deep", None) is not None and left >= DEEP_REWRITE_MIN_S:
+        if v.verdict == "revise" and deep_turn and left >= DEEP_REWRITE_MIN_S:
             # a deep analysis sent back is written again once from its own checked claims, with the check's
             # feedback (no document is read again), and checked again, before any fall back to a partial answer
             # (5 Nov 2026, trace 590: 'check: revise -> partial' with no second round)
-            a2 = await deep_rewritten(a, v.feedback, question, lang, settings, factory)
+            a2 = await deep_rewritten(a, v.feedback, question, lang, settings, factory, min(45.0, left - 20))
             if a2 is not None:
-                v2 = await answer_check.check(question, a2, u, history, conn, settings, client, round_=2, **retry_kw)
+                s_check, kw_check = within_turn()
+                v2 = await answer_check.check(question, a2, u, history, conn, s_check, client, round_=2, **kw_check)
                 a2.checks = a.checks + [{**answer_check.trace_entry(v2), "draft": (a2.text or "")[:400]}]
                 if v2.verdict in ("pass", "skipped"):
                     return a2
                 best, best_v = a2, v2
             else:
                 a.checks.append({"verdict": "no rewrite", "round": 2})
+        elif deep_turn:
+            # no time for a rewrite and its check: the partial answer below, never the whole analysis again and
+            # never 'took too long' (5 Nov 2026: a deep turn reached 232 s of 240 s)
+            if v.verdict == "revise":
+                log.info("check: %.0f s left, no rewrite round: the checked partial answer", left)
+                a.checks.append({"verdict": "no time for a rewrite", "round": 2, "seconds_left": round(left, 1)})
         elif v.verdict == "revise" and left - 15 >= settings.kasafi_check_round_min_s:
             u2 = u
             if v.wrong_subject and u is not None:
@@ -2356,7 +2387,8 @@ async def _answer_finished(question: str, lang: str, conn: psycopg.Connection, *
     # a deep analysis: 180 s, by the words or by the reading (5 Nov 2026: a 'deep' reading restated as 'Tell me about
     # the Ministry … including its budget and spending' has none of the words, got 165 s and timed out while reading)
     reading = kw.get("understanding")
-    budget = TIME_BUDGET_S if deep_question(question) or getattr(reading, "capability", "") == "deep" else LOOP_BUDGET_S
+    deep_turn = deep_question(question) or getattr(reading, "capability", "") == "deep"
+    budget = TIME_BUDGET_S if deep_turn else LOOP_BUDGET_S
     try:
         a = await asyncio.wait_for(_answer_question(question, lang, conn, box=box, **kw), timeout=budget)
     except ReplyError:
@@ -2367,6 +2399,10 @@ async def _answer_finished(question: str, lang: str, conn: psycopg.Connection, *
         log.warning("the answer loop ran out of its %.0f s budget", budget)
         if plan is not None and plan.held is not None:
             return plan.held
+        if deep_turn:         # never 'took too long' on a deep turn: what is checked already, or a plain way forward
+            if box.get("deep_profile") is not None:
+                return box["deep_profile"]
+            return Answer(DEEP_UNFINISHED.get(lang, DEEP_UNFINISHED["en"]), False, True, plan=plan)
         return Answer(TIMED_OUT.get(lang, TIMED_OUT["en"]), False, True, plan=plan)
     plan = a.plan
     a = keep_better(a, plan.held if plan is not None else None)
@@ -2466,6 +2502,8 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
                         from app.agent.deep import subject_pattern
                         if about := subject_pattern(*overview_of):
                             profile.crop_requests = profile_crops(conn, profile, res, about)
+                        if box is not None:
+                            box["deep_profile"] = profile      # what stands if the documents' part can't finish
                 except Exception as e:      # noqa: BLE001 - the deep analysis alone, as before
                     conn.rollback()
                     log.warning("mda overview: the profile failed (%s)", type(e).__name__)

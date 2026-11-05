@@ -5,7 +5,7 @@ permalink: /data-deletion/
 
 # Delete your Kasafi data
 
-*Last updated: 29 October 2026 (answer traces and review queue)*
+*Last updated: 5 November 2026 (what is deleted; the WhatsApp profile name is never stored)*
 
 ## On WhatsApp (quickest)
 
@@ -25,9 +25,10 @@ used. We may ask you to confirm the number is yours by sending a message from it
 
 ## What we delete
 
-Your messages, voice-note transcripts, Kasafi's replies and evidence images, your consent record, your language choice
-and your daily usage counts, plus your phone number and WhatsApp name from our records. We do this within **7 days**,
-and usually straight away. If you message Kasafi again afterwards, you'll get the first-contact notice again.
+Your messages, voice-note transcripts, Kasafi's replies, your consent record, your language choice, your LGA, your daily
+usage counts, any hazard-alert sign-up with its encrypted number, and anything still held in working memory: a location,
+a first message sent before you accepted, and a name you told Kasafi. We do this within **7 days**, and usually straight
+away. Kasafi keeps your number only for alert sign-ups, and never stores your WhatsApp profile name. If you message Kasafi again afterwards, you'll get the first-contact notice again.
 
 **Answer traces** (kept up to 30 days) and **review-queue entries** (kept up to 90 days) hold the English wording of a
 question and, for traces, Kasafi's reply. They are **not linked to your number or to any ID**, so we can't pick yours out

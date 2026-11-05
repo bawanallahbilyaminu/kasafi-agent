@@ -57,8 +57,12 @@ MAX_DOCS = 15
 EXTRA_DOCS = 6                # round 2: documents read for measures still missing after round 1
 PAGES_PER_DOC = 2
 COST_CAP_USD = 0.20           # reading stops adding documents past this (the measured spend of this answer)
-TIME_BUDGET_S = 180.0
+TIME_BUDGET_S = 240.0         # the analysis itself, planning included (it stops itself sooner: reading and writing below)
+DEEP_TURN_S = 300.0           # the whole turn, with the check and a rewrite. The webhook has acknowledged long before and
+#                               the typing indicator runs to 360 s, so WhatsApp has no limit here: a document fetch's turn
+#                               already runs this long. Past it the answer is sent when ready, never 'took too long'.
 READ_DEADLINE_S = 120.0       # readings still running after this are dropped; the synthesis needs the rest
+WRITE_LIMIT_S = 60.0          # the writer's turn: past it, the brief is written in code from the checked figures
 CONCURRENT = 5
 PER_DIMENSION = 5             # the most informative claims each dimension keeps
 PER_MEASURE = 2
@@ -1226,6 +1230,10 @@ SYNTH_SYSTEM = (
     "WRITING: plain sentences in your own words. Each WHAT is a label for you to read, not text to paste: never "
     "copy a label or its colons and brackets into the answer (write 'the PHC agency's approved budget was ₦13.20 "
     "billion in 2025', never 'Primary Health Care Development Agency: approved budget, 2025 (...) of').\n"
+    "A sentence says the fact, never where it was read: a source is only ever its [C<n>] tag, which becomes the "
+    "reference. Never name a document or a page in a sentence or make one its subject (never 'MFS 2025-2027 p.37 prints "
+    "its share as 0.16%' or 'according to the MFS'; write 'its share of sector personnel spending in 2025 was 0.16% "
+    "[C2]').\n"
     "Rules: the numbers only from the list, each number copied exactly (the words are yours); cite each as [C<n>]; "
     "give each figure's WHEN as listed (a "
     "year, or 'as of the 2020 report'); never write that a year is not stated and never add a year the list "
@@ -1393,7 +1401,8 @@ async def synthesise(client, question: str, lang: str, claims: list[Claim], dims
     from app.agent.answer import chat_json
     lname = "Hausa" if lang == "ha" else "English"
     review = (f"\n\nREVIEW OF YOUR FIRST DRAFT (write it again from the same checked figures, fixing this; use "
-              f"only figures in the list, each with its own source): {feedback[:600]}") if feedback else ""
+              f"only figures in the list, each with its own source, which is its [C<n>] tag alone even when the review "
+              f"mentions a document or a page): {feedback[:600]}") if feedback else ""
     with usage.stage("deep_synthesis"):
         d = await chat_json(client, [{"role": "system", "content": with_core(SYNTH_SYSTEM).format(lang=lname)},
                                      {"role": "user", "content": f"QUESTION: {question}\nDIMENSIONS: "
@@ -1401,6 +1410,24 @@ async def synthesise(client, question: str, lang: str, claims: list[Claim], dims
                                                                  f"FIGURES:\n{claims_block(claims, dims)}{review}"}],
                             model=settings.meta_model, reasoning_effort="low", max_tokens=6000)
     return d if isinstance(d, dict) else {}
+
+
+PLAIN_HEAD = {"en": "These are the checked figures I found.",
+              "ha": "Ga alƙaluman da aka tabbatar da na samu, a Turance."}
+
+
+def plain_brief(chosen: list[Claim], lang: str) -> dict:
+    """The writer's JSON, made in code when the writer can't answer in time: each checked figure in the reader's own
+    statement, by dimension. Plain, but every figure is checked and nothing read is lost."""
+    def line(i: int, c: Claim) -> str:
+        said = c.statement.strip().rstrip(".")
+        return f"{said}{'' if c.value and c.value in said else f': {c.value}'} [C{i + 1}]."
+    numbered = list(enumerate(chosen))
+    sections: dict[str, list[str]] = {}
+    for i, c in numbered:
+        sections.setdefault(c.dimension, []).append(line(i, c))
+    return {"summary": " ".join([PLAIN_HEAD.get(lang, PLAIN_HEAD["en"]), *[line(i, c) for i, c in numbered[:3]]]),
+            "sections": [{"dimension": n, "text": " ".join(x)} for n, x in sections.items()], "differ": ""}
 
 
 # --- 6. the answer -------------------------------------------------------------------------------------------------
@@ -1540,7 +1567,13 @@ async def deep_answer(conn: psycopg.Connection, question: str, english: str, lan
                           unread=unread, about=about)
     if notify:
         await notify(w["writing"].format(n=len(chosen)))
-    d = await synthesise(client, question, lang, chosen, dims, settings)
+    try:
+        d = await asyncio.wait_for(synthesise(client, question, lang, chosen, dims, settings), WRITE_LIMIT_S)
+    except Exception as e:          # noqa: BLE001 - checked figures are never lost to a slow or failed writer
+        log.warning("deep: the writer failed (%s): the brief is written in code", type(e).__name__)
+        d = {}
+    if not str(d.get("summary") or "").strip():
+        d = plain_brief(chosen, lang)
     summary, sections, differ, used, cov = written(d, chosen, dims)
     return DeepResult(summary, sections, differ,
                       missing_line(cov, lang, dims), used, list(dict.fromkeys(r.doc_id for r in readings)),

@@ -121,7 +121,7 @@
   },
   "lf590": {
    "all_re": [
-    "\b2026\b",
+    "\\b2026\\b",
     "(?i:capital)",
     "(?i:personnel|overhead)"
    ],

@@ -510,13 +510,13 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             place = _place_for(key, store)
             try:
                 # every long job ends in an answer or an apology within the limit, never silence
-                from app.agent.deep import TIME_BUDGET_S, deep_question
+                from app.agent.deep import DEEP_TURN_S, deep_question
                 # a deep analysis (by the reading, or by its words) gets the longer limit: the reading, the check and
                 # a rewrite round must fit (5 Nov: a deep turn worded plainly had the shorter one, and its check
-                # was skipped for lack of time)
+                # was skipped for lack of time); past it, it is sent when ready
                 deep_turn = deep_question(question) or (understanding is not None and
                                                         understanding.capability == "deep")
-                limit = max(settings.kasafi_answer_timeout_s, TIME_BUDGET_S + 60) if deep_turn \
+                limit = max(settings.kasafi_answer_timeout_s, DEEP_TURN_S) if deep_turn \
                     else settings.kasafi_answer_timeout_s
                 # an exact location typed or spoken into the question never reaches a model (app/privacy.py);
                 # the history is read back from the store, where it was removed before writing
@@ -525,7 +525,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                            history=store.recent_turns(key),
                            **({"place": place} if place else {}),
                            **({"understanding": understanding} if understanding is not None else {})))
-                result = await _await_answer(job, limit, sent, lang, notify)
+                result = await _await_answer(job, limit, sent, lang, notify, carry_on=deep_turn)
             finally:
                 slow.cancel()
             body = result if isinstance(result, str) else result.text
@@ -551,7 +551,8 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             log.warning("fetch still running after %.0fs: the answer will follow on its own", seconds)
             asyncio.get_running_loop().create_task(
                 _deliver_later(fsr.job, sender, key, lang, strip_location(question), store, settings))
-            body, result = FETCH_WORDS.get(lang, FETCH_WORDS["en"])["later"], None
+            words = FETCH_WORDS.get(lang, FETCH_WORDS["en"])
+            body, result = words["later" if fetch_started(sent) else "deep_later"], None
         except asyncio.TimeoutError:
             closed = True
             seconds = time.perf_counter() - started
@@ -899,9 +900,11 @@ FETCH_LIMIT_S = 300.0        # a turn that started a document fetch gets this lo
 FETCH_PROGRESS_S = 45.0      # a progress line this often while the fetch runs
 FETCH_WORDS = {
     "en": {"progress": ["⬇️ Downloading the report…", "📖 Reading the tables…", "📖 Still indexing the report…"],
-           "later": "The report is still being indexed. I'll send the answer here as soon as it's ready."},
+           "later": "The report is still being indexed. I'll send the answer here as soon as it's ready.",
+           "deep_later": "I'm still checking this analysis. I'll send it here as soon as it's ready."},
     "ha": {"progress": ["⬇️ Ina sauke rahoton…", "📖 Ina karanta teburinsa…", "📖 Har yanzu ina shigar da rahoton…"],
-           "later": "Har yanzu ana shigar da rahoton. Zan aiko da amsar a nan da zarar ta shirya."},
+           "later": "Har yanzu ana shigar da rahoton. Zan aiko da amsar a nan da zarar ta shirya.",
+           "deep_later": "Har yanzu ina duba wannan bincike. Zan aiko shi a nan da zarar ya shirya."},
 }
 
 
@@ -917,11 +920,13 @@ def fetch_started(sent: list[str]) -> bool:
     return any(x.startswith("📥") for x in sent)
 
 
-async def _await_answer(job: asyncio.Task, limit: float, sent: list[str], lang: str, notify: NotifyFn):
+async def _await_answer(job: asyncio.Task, limit: float, sent: list[str], lang: str, notify: NotifyFn,
+                        carry_on: bool = False):
     """The answer within `limit`; when the job has started a document fetch (its progress line went out), the
     turn runs on to FETCH_LIMIT_S with a progress line every FETCH_PROGRESS_S (4 Nov: a live fetch finished after
     the 2-minute limit and the user got 'took too long', then the answer only on asking again). Past that, the
-    job keeps running and FetchStillRunning carries it to the caller, which sends the answer when it's done."""
+    job keeps running and FetchStillRunning carries it to the caller, which sends the answer when it's done. With
+    `carry_on` (a deep analysis), the same past `limit`."""
     t0 = asyncio.get_running_loop().time()
     words = FETCH_WORDS.get(lang, FETCH_WORDS["en"])["progress"]
     n = 0
@@ -929,7 +934,7 @@ async def _await_answer(job: asyncio.Task, limit: float, sent: list[str], lang: 
         elapsed = asyncio.get_running_loop().time() - t0
         budget = FETCH_LIMIT_S if fetch_started(sent) else limit
         if elapsed >= budget:
-            if fetch_started(sent):
+            if fetch_started(sent) or carry_on:
                 raise FetchStillRunning(job)
             job.cancel()
             raise asyncio.TimeoutError()
@@ -957,6 +962,8 @@ async def _deliver_later(job: asyncio.Task, sender: str, key: str, lang: str, qu
         client = WhatsAppClient()
         try:
             await client.send_text(sender, body)
+            for part in getattr(result, "parts", None) or []:      # a deep analysis's section messages
+                await client.send_text(sender, part)
         finally:
             await client.aclose()
         log.info("late answer sent after a fetch for %s", mask_phone(sender))

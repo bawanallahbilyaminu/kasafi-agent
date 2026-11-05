@@ -595,6 +595,21 @@ def working_note(a, v: Verdict, lang: str, kept: bool) -> str:
     return " ".join(lines)
 
 
+def no_empty_headings(text: str) -> str:
+    """A brief's section headings ('*Staffing*') without the section's lines, which all went; and nothing but notes
+    means there is no brief left."""
+    lines = [ln for ln in (text or "").split("\n")]
+    out = []
+    for i, ln in enumerate(lines):
+        if re.fullmatch(r"\*[^*]+\*", ln.strip()):
+            after = next((x.strip() for x in lines[i + 1:] if x.strip()), "")
+            if not after or re.fullmatch(r"\*[^*]+\*", after) or after.startswith(("ℹ️", "⏳", "↔️")):
+                continue
+        out.append(ln)
+    kept = re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip()
+    return kept if any(ln.strip() and not ln.startswith(("ℹ️", "⏳")) for ln in kept.split("\n")) else ""
+
+
 def partial_answer(a, v: Verdict, lang: str) -> tuple[str, bool, list]:
     """The answer sent when no draft passed, built in code (the check never writes user-facing text): the draft's
     own lines, without any line the check flagged (a figure or sentence it named as contradicted, unclear or
@@ -613,15 +628,23 @@ def partial_answer(a, v: Verdict, lang: str) -> tuple[str, bool, list]:
         figs, quotes = flagged_bits(v)
         figs -= set(figures_in(block)) | set(figures_in(a.working or ""))
         keep = []
-        for ln in ((a.text or "").replace(block, "") if block else (a.text or "")).splitlines():
-            if ln.startswith(("📄", "_Reply", "_Ku rubuta")) or ln.strip() in NOT_READ.values():
+        # a deep analysis: its section messages too, with 'not found' and 'not read in time'; never only its summary
+        deep = getattr(a, "deep", None) is not None
+        source = document_part(a) if deep else ((a.text or "").replace(block, "") if block else (a.text or ""))
+        notes = [ln for ln in source.splitlines() if deep and ln.startswith(("ℹ️", "⏳"))]    # no figures to check
+        for ln in source.splitlines():
+            if ln.startswith(("📄", "_Reply", "_Ku rubuta")) or ln.strip() in NOT_READ.values() or ln in notes:
                 continue
             parts = re.split(r"(?<!\bp\.)(?<=[.!?])\s+", ln) if not ln.lstrip().startswith("•") else [ln]
             parts = [p for p in parts if not (set(figures_in(p)) & figs) and not any(q in p for q in quotes)]
             if parts or not ln.strip():
                 keep.append(" ".join(parts))
         text = supported("\n".join(keep), a, keep_lines=True)
+        if deep:
+            text = no_empty_headings(text)
         text = "\n\n".join(x for x in (block.strip(), text) if x)
+        if text and notes:
+            text = "\n\n".join([text, *notes])
         if text and (gaps := truly_missing(v.missing, a)) and not v.missing_stated:
             text += "\n\n" + MISSING.get(lang, MISSING["en"]).format(missing="; ".join(gaps[:3]).rstrip("."))
     if not text and not v.wrong_subject and not refused and not figures_in(a.text or ""):

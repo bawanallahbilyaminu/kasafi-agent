@@ -50,6 +50,10 @@ Each entry is a fix for a failure a real tester hit on the live service, kept as
   sector keeps only document figures whose page names that subject, and its page crops come from rows about it.
 - **A long analysis timing out.** A question read as a deep analysis but worded without the broad-question words got
   the short time limit and ended in "took too long". The reading now sets the limit.
+- **A long analysis never ends in "took too long".** The turn limit is 300 s. A revise that won't fit in the time left
+  gives the checked partial answer with its "not read in time" note, a writer that is too slow gives a plain brief from
+  the checked figures, and a turn past its limit is sent when ready. A brief's sentences no longer name their source
+  ("MFS 2025-2027 p.37 prints…").
 
 ### A change that is not a bug fix
 
