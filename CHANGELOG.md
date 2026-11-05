@@ -35,10 +35,12 @@ Each entry is a fix for a failure a real tester hit on the live service, kept as
   saved in the follow-up history or an answer trace; the prompts never repeat it or claim to know who the user
   is. The privacy page source says so.
 
-- `1157c5b` **Figures on the right row** (follow-up to `68e4622`, same trace). The draft had written "₦42 million for
-  computer purchases"; 42,000,000.00 is printed on that page, but on the office-repairs row. On a table page a
-  deep-analysis figure must now sit on a row that names what the claim is about, or it is dropped
-  (`deep.row_bound`). Amounts with the scale word first, as Hausa writes them ("miliyan 100"), are matched to the
+- `1157c5b` **Figures on the right row** (follow-up to `68e4622`). On a table page a deep-analysis figure must now
+  sit on a row that names what the claim is about, or it is dropped (`deep.row_bound`); before, a value printed
+  anywhere on the cited page passed. Correction to this entry's first wording: trace 590's "₦42 million for
+  computer purchases" was not a wrong pairing. The page prints 42,000,000.00 twice, as the office-repairs row's
+  budget and as the actual spending of a computers row (budget 100,000,000.00, variance 58,000,000.00), and the
+  draft cited the second. The tests now use every one of the ministry's rows on that page. Amounts with the scale word first, as Hausa writes them ("miliyan 100"), are matched to the
   printed figure like "₦100 million" is; `tests/test_amount_forms.py` pins every written form on every check.
 
 ### A change that is not a bug fix
@@ -48,6 +50,12 @@ Each entry is a fix for a failure a real tester hit on the live service, kept as
   a greeting or a thank-you. It is never written to disk (the follow-up history, traces and logs hold
   "[name removed]"), the WhatsApp profile name is never used, and DELETE MY DATA clears it. This replaces the
   `68e4622` behaviour above (never kept at all). The privacy page source says so.
+- **The name is read by the understanding step, and removed from every store** (follow-up, same day). The first
+  version found a name by its wording and only when capitalised. The conversation-understanding reading now
+  returns it (`user_name`: "my name is musa", "Ni ne Musa", "Call me Musa", "Musa ne sunana"; eval cases
+  p01-p14), and a name it returns must be in the message itself. The reading kept in a trace never carries it.
+  The same redaction now also covers the review queue's gaps and sites awaiting approval, and a voice question
+  waiting for its read-back, pending choices and clarifications in the user store.
 
 ## Before the deadline
 

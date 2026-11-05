@@ -67,10 +67,21 @@ class Acquired:
 # --- review queue ------------------------------------------------------------------------------
 
 def log_gap(conn: psycopg.Connection, question: str, missing_doc: str, reason: str, detail: dict | None = None) -> None:
-    """Add to the human review queue. No user identifier: only the (English) question and what was tried."""
+    """Add to the human review queue. No user identifier: only the (English) question and what was tried, redacted
+    as a trace is (app/agent/trace.py: no exact location, email, phone number, or name the user gave)."""
+    from app.agent.trace import redact
+    from app.privacy import strip_identity, strip_location
+
+    def clean(v):                      # what was tried (addresses, document ids) keeps its digits; no name, no point
+        if isinstance(v, str):
+            return strip_identity(strip_location(v))
+        if isinstance(v, dict):
+            return {k: clean(x) for k, x in v.items()}
+        return [clean(x) for x in v] if isinstance(v, list) else v
     conn.execute("DELETE FROM gaps WHERE created_at < now() - make_interval(days => %s)", (GAP_RETENTION_DAYS,))
     conn.execute("INSERT INTO gaps (question, missing_doc, reason, detail) VALUES (%s, %s, %s, %s)",
-                 (question[:1000], missing_doc[:500] or None, reason, json.dumps(detail or {})))
+                 (redact(question)[:1000], strip_identity(missing_doc)[:500] or None, reason,
+                  json.dumps(clean(detail or {}))))
     log.info("gap logged: reason=%s", reason)
 
 

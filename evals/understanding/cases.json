@@ -1,5 +1,5 @@
 {
- "_about": "Conversation understanding (app/agent/understand.py), 2 Nov 2026: natural multi-turn conversations and cold first messages in English and Hausa, written from how people talk, including the three live failures of 2 Nov (u01-u03). Each case: the earlier turns (the user's message and Kasafi's reply in short), the location on file (pin = a pin in Kalambaina ward, Wamakko LGA; lga = Wamakko saved; none), the new message, and what it must be understood as (capability always; level, time and kind where they matter). Run live: uv run python evals/understanding/run.py (records evals/understanding/recorded.json); the deploy gate replays the recording (tests/test_understanding.py).",
+ "_about": "Conversation understanding (app/agent/understand.py), 2 Nov 2026: natural multi-turn conversations and cold first messages in English and Hausa, written from how people talk, including the three live failures of 2 Nov (u01-u03). Each case: the earlier turns (the user's message and Kasafi's reply in short), the location on file (pin = a pin in Kalambaina ward, Wamakko LGA; lga = Wamakko saved; none), the new message, and what it must be understood as (capability always; level, time and kind where they matter). Run live: uv run python evals/understanding/run.py (records evals/understanding/recorded.json); the deploy gate replays the recording (tests/test_understanding.py). p01-p14 (5 Nov): the user's own name, given in any wording or letter case ('my name is musa', 'Ni ne Musa', 'Call me Musa', 'Musa ne sunana'), and none taken from a job, a place, someone else or an earlier turn; every other case must read no name.",
  "cases": [
   {
    "id": "u01",
@@ -1621,6 +1621,191 @@
       "capability": "place_budget"
      }
     ]
+   }
+  },
+  {
+   "id": "p01",
+   "place": "none",
+   "lang": "en",
+   "turns": [],
+   "message": "my name is musa",
+   "expect": {
+    "capability": "conversation",
+    "user_name": "Musa"
+   }
+  },
+  {
+   "id": "p02",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "Ni ne Musa",
+   "expect": {
+    "capability": "conversation",
+    "user_name": "Musa"
+   }
+  },
+  {
+   "id": "p03",
+   "place": "none",
+   "lang": "en",
+   "turns": [],
+   "message": "Call me Musa",
+   "expect": {
+    "capability": "conversation",
+    "user_name": "Musa"
+   }
+  },
+  {
+   "id": "p04",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "Musa ne sunana",
+   "expect": {
+    "capability": "conversation",
+    "user_name": "Musa"
+   }
+  },
+  {
+   "id": "p05",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "Sunana Aisha Umar, ina so in san kasafin lafiya na 2026",
+   "expect": {
+    "capability": "budget",
+    "user_name": "Aisha Umar",
+    "restatement_lacks": [
+     "Aisha",
+     "Umar"
+    ]
+   }
+  },
+  {
+   "id": "p06",
+   "place": "none",
+   "lang": "en",
+   "turns": [],
+   "message": "Hello, I'm Dr. Aisha Umar from the Ministry of Finance. How much is the 2026 health budget?",
+   "expect": {
+    "capability": "budget",
+    "user_name": "Dr. Aisha Umar",
+    "restatement_lacks": [
+     "Aisha",
+     "Umar"
+    ]
+   }
+  },
+  {
+   "id": "p07",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "ku kira ni malam sani",
+   "expect": {
+    "capability": "conversation",
+    "user_name": "Malam Sani"
+   }
+  },
+  {
+   "id": "p08",
+   "place": "pin",
+   "lang": "en",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Got it: your pin is in Gumbi ward (likely), Wamakko LGA. Ask about floods, weather, budgets or facilities here."
+    }
+   ],
+   "message": "good morning, hauwa here. where is the nearest hospital?",
+   "expect": {
+    "capability": "facility",
+    "user_name": "Hauwa",
+    "restatement_lacks": [
+     "Hauwa"
+    ]
+   }
+  },
+  {
+   "id": "p09",
+   "place": "pin",
+   "lang": "en",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Got it: your pin is in Gumbi ward (likely), Wamakko LGA. Ask about floods, weather, budgets or facilities here."
+    }
+   ],
+   "message": "I am a farmer in Wamakko. Has my farm ever flooded?",
+   "expect": {
+    "capability": "place_history",
+    "level": "pin",
+    "time": "past"
+   }
+  },
+  {
+   "id": "p10",
+   "place": "none",
+   "lang": "ha",
+   "turns": [],
+   "message": "Ni manomi ne daga Wurno, nawa aka ware wa noma a kasafin 2026?",
+   "expect": {
+    "capability": "budget"
+   }
+  },
+  {
+   "id": "p11",
+   "place": "pin",
+   "lang": "en",
+   "turns": [
+    {
+     "user": "(location pin shared)",
+     "kasafi": "Got it: your pin is in Gumbi ward (likely), Wamakko LGA. Ask about floods, weather, budgets or facilities here."
+    }
+   ],
+   "message": "I want to take my son Musa for immunisation, where is the nearest clinic?",
+   "expect": {
+    "capability": "facility",
+    "urgent": "either"
+   }
+  },
+  {
+   "id": "p12",
+   "place": "none",
+   "lang": "en",
+   "turns": [
+    {
+     "user": "My name is [name removed]",
+     "kasafi": "Welcome, [name removed]! I'm Kasafi. Ask me about budgets, reports or the nearest health facility."
+    }
+   ],
+   "message": "Thank you",
+   "expect": {
+    "capability": "conversation"
+   }
+  },
+  {
+   "id": "p13",
+   "place": "none",
+   "lang": "en",
+   "turns": [],
+   "message": "I am the Director of Budget. Tell me about the Ministry of Innovation and Digital Economy",
+   "expect": {
+    "capability": [
+     "deep",
+     "budget"
+    ]
+   }
+  },
+  {
+   "id": "p14",
+   "place": "none",
+   "lang": "en",
+   "turns": [],
+   "message": "Is this Kasafi?",
+   "expect": {
+    "capability": "conversation"
    }
   }
  ]

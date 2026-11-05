@@ -221,9 +221,13 @@ class UserStore:
 
     def _exec(self, sql: str, args: tuple = ()) -> sqlite3.Cursor:
         """Every write goes through here or add_turn: typed or spoken exact locations are removed from every text
-        stored (app/privacy.py; follow-up review, finding 3)."""
+        stored (app/privacy.py; follow-up review, finding 3), and so is a name the user gave for themselves (5 Nov:
+        a voice question waiting for its read-back, pending choices and clarifications)."""
         if not sql.lstrip().upper().startswith("SELECT"):
-            args = tuple(strip_location(a) for a in args)
+            # the alert tables hold codes, counts and an encrypted number, never a user's words: a name is not
+            # looked for there (a ciphertext must never be rewritten)
+            words = "alert_subs" not in sql and "alert_log" not in sql
+            args = tuple(strip_identity(strip_location(a)) if words else strip_location(a) for a in args)
         with self._lock:
             return self._db.execute(sql, args)
 

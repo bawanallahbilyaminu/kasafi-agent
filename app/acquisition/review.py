@@ -73,7 +73,8 @@ async def open_web_candidates(http: httpx.AsyncClient, description: str, key: st
 
 def queue_domain(conn: psycopg.Connection, c: Candidate, question: str) -> str:
     """Queue the result's domain for a person (once per domain; later questions update it). Returns the domain."""
-    domain = policy.site_of(c.url)
+    from app.agent.trace import redact
+    domain, question = policy.site_of(c.url), redact(question)      # the question as a trace keeps it (no name)
     conn.execute("DELETE FROM domain_reviews WHERE status <> 'approved' "
                  "AND last_seen < now() - make_interval(days => %s)", (REVIEW_RETENTION_DAYS,))
     conn.execute("""INSERT INTO domain_reviews (domain, question, url, title) VALUES (%s, %s, %s, %s)

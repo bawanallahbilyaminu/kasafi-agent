@@ -37,7 +37,7 @@ from app.place.answer import place_route
 from app.place.planner import area_route
 from app.agent.routing import document_question, facility_intent, other_subject
 from app.privacy import names as name_memory
-from app.privacy import speaking, stated_name, strip_location, strip_name
+from app.privacy import given_name, speaking, stated_name, strip_location, strip_name
 from app.maps.render import render_specs
 from app.geo.location import memory as location_memory
 from app.guardrails import scope
@@ -268,10 +268,11 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     lang = spoken_lang if spoken_lang in ("ha", "en") else (user.lang or "ha")
     # a name the user states for themselves is held in memory for an hour after their last message (never the
     # WhatsApp profile name; never written to disk: app/privacy.py); every message restarts that hour
+    # The conversation-understanding step finds the name (any wording or letter case: 'call me musa', 'Musa ne
+    # sunana'); the wording rules of app/privacy.py decide only when that step doesn't run or fails.
     name_memory.touch(key)
-    if text and (said := stated_name(text)):
-        name_memory.remember(key, said)
-    speaking(name_memory.recall(key))            # what this message's work stores carries '[name removed]' instead
+    said = stated_name(text) if text else ""
+    speaking(name_memory.recall(key) or said)    # what this message's work stores carries '[name removed]' instead
     resume = ""                                  # a place-history question that waited for this pin or shape
     resume_reading = None                        # … or a place-budget reading that waited for a location
     before: list[Out] = []                       # the replies that go out before the resumed question's answer
@@ -363,6 +364,12 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                                     time.perf_counter() - started_u)
     if u is not None:
         u.safety = safety
+    # the user's own name, when this message gives it: from the reading when the step read the message (a name it
+    # returns must be in the message itself), else from the wording rules
+    read = u is not None and u is not preset
+    if given := (given_name(u.user_name, text) if read else said):
+        name_memory.remember(key, given)
+        speaking(given)
     # the safety net behind the fast path (2 Nov): an emergency happening now that its phrases and classifier missed
     # ('matata na naƙuda'), read from the meaning; 2-4 s later than a phrase, but never missed
     if u is not None and u.urgent:
@@ -774,6 +781,11 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         if r and outcome.text != EMERGENCY_REPLY and (refusal := await _guarded(heard_texts(r), lang, guard_fn, settings)):
             return [refusal]
         if r and r.needs_confirmation and not is_medical_emergency(*heard_texts(r)):
+            # the read-back waits on disk without a name the speaker gave (the store removes it); the name itself
+            # is held in memory as for any message
+            if heard_name := stated_name(r.transcript) or stated_name(r.english):
+                name_memory.remember(key, heard_name)
+                speaking(heard_name)
             store.set_pending(key, r.transcript, r.english)
             return [Out(outcome.text)]            # read-back: answer after Eh or a correction
         if r and outcome.text != EMERGENCY_REPLY:  # heard clearly: the transcript takes exactly the text path

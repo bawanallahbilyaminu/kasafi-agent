@@ -126,6 +126,8 @@ def _setup(case):
                                                                   "f09", "f10", "f14", "f15") else "en"))
     store.give_consent(key)
     memory.forget(key)
+    from app.privacy import names
+    names.forget(key)                         # a name a case gave (p01-p08) never reaches the next case
     if case["place"] == "pin":
         memory.remember(key, PIN)
     elif case["place"] == "lga":
@@ -152,8 +154,8 @@ def test_each_conversation_reaches_the_capability_and_subject_it_means(case, mon
         seen.setdefault("answered", []).append(question)
         return "ANSWER"
 
-    async def conversational(message, lang, history, place, settings, client_cls=None):
-        seen["conversational"] = (message, lang)
+    async def conversational(message, lang, history, place, settings, client_cls=None, name=""):
+        seen["conversational"], seen["name"] = (message, lang), name
         return "HELLO", "model"
     import app.agent.conversational as CV
     monkeypatch.setattr(CV, "reply", conversational)
@@ -176,15 +178,16 @@ def test_each_conversation_reaches_the_capability_and_subject_it_means(case, mon
         assert "understanding" not in seen and seen["conversational"][0] == case["message"]
         assert outs and outs[-1].text == "HELLO"
         assert case["expect"]["capability"] == "conversation"
+        assert seen["name"] == case["expect"].get("user_name", "")      # the name the message gave, else none
         return
     got = seen.get("understanding")
     if "parts" in case["expect"]:                           # a multi-part message: each part answered, one reply
-        assert score(reading(case["id"]).to_dict(), case["expect"]) == []
+        assert score(reading(case["id"]).to_record(), case["expect"]) == []
         assert len(seen["answered"]) == len(case["expect"]["parts"]) and outs[0].text.startswith("*1. ")
         assert outs[0].text.count("ANSWER") == len(case["expect"]["parts"])
         return
     assert got is not None and outs and outs[-1].text.startswith("ANSWER")    # with its closing offer, if any
-    assert score(got.to_dict(), case["expect"]) == []
+    assert score(got.to_record(), case["expect"]) == []
     if case["place"] == "pin":
         assert seen["place"] and seen["place"].get("lat") is not None
 

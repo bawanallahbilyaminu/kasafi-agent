@@ -51,10 +51,22 @@ def has_location(text: str) -> bool:
 NAME_MARK = "[name removed]"
 _HONORIFIC = r"(?:Alhaji|Alh\.?|Hajiya|Haj\.?|Malam|Mallam|Mal\.?|Dr\.?|Engr\.?|Prof\.?|Mr\.?|Mrs\.?|Ms\.?|Barr\.?|Hon\.?|Sir|Chief)"
 _PERSON = rf"(?:{_HONORIFIC}\s+)?[A-Z][\w'’-]+(?:\s+(?:{_HONORIFIC}\s+)?[A-Z][\w'’-]+){{0,3}}"
-_SAYS_NAME = re.compile(rf"((?i:\b(?:my\s+names?\s+(?:is|are)|i\s+am\s+called|they\s+call\s+me|sunana|sunan\s*na|"
-                        rf"ana\s+kira\s*na))\s+)({_PERSON})")
+# after words that can only introduce a name, the first word counts in any letter case ('my name is musa'), then
+# any capitalised words that follow ('musa Bello'); small words that follow such a phrase without being a name
+# ('my name is not important', 'call me when …') are left alone
+_SMALL = (r"(?!(?:not|the|a|an|on|in|at|is|it|if|when|back|later|now|here|there|and|or|but|for|to|ba|ne|ce|da|"
+          r"kuma|idan)\b)")
+_PERSON_ANY = (rf"(?:(?i:{_HONORIFIC})\s+)?{_SMALL}[^\W\d_][\w'’-]+"
+               rf"(?:\s+(?:{_HONORIFIC}\s+)?[A-Z][\w'’-]+){{0,3}}")
+_SAYS_NAME = re.compile(rf"((?i:\b(?:my\s+names?\s+(?:is|are)|i\s+am\s+called|they\s+call\s+me|"
+                        rf"(?:you\s+can\s+|you\s+may\s+|please\s+|just\s+)?call\s+me|sunana|sunan\s*na|"
+                        rf"ana\s+kira\s*na|(?:ku\s+|ka\s+|ki\s+)?kira\s+ni))\s+)({_PERSON_ANY})")
+# the name first: 'Musa ne sunana', 'Aisha ce sunana', 'Musa is my name'
+_NAME_FIRST = re.compile(rf"(?<![\w'’-])({_PERSON_ANY})(\s+(?i:ne\s+sunana|ce\s+sunana|shi\s+ne\s+sunana|is\s+my\s+name)\b)")
 _INTRODUCES = re.compile(rf"((?i:\b(?:i\s+am|i['’]m|this\s+is|ni\s+ne|ni\s+ce))\s+)({_PERSON})"
                          rf"(?=\s*(?:,|\bfrom\b|\bdaga\b|\bof\s+the\b|\bna\s+ma))")
+# … and alone at the end of a sentence: 'Ni ne Musa.', 'I am Musa' (never after 'this is': that names anything)
+_INTRODUCES_END = re.compile(rf"((?i:\b(?:i\s+am|i['’]m|ni\s+ne|ni\s+ce))\s+)({_PERSON})(?=\s*(?:[.!?]|$))")
 
 
 # the name held for the user whose message is being handled (set by the conversation handler for its own task and
@@ -77,7 +89,9 @@ def strip_identity(text):
     if not isinstance(text, str) or not text:
         return text
     text = _SAYS_NAME.sub(lambda m: m.group(1) + NAME_MARK, text)
-    return strip_speaker(_INTRODUCES.sub(lambda m: m.group(1) + NAME_MARK, text))
+    text = _NAME_FIRST.sub(lambda m: NAME_MARK + m.group(2), text)
+    text = _INTRODUCES.sub(lambda m: m.group(1) + NAME_MARK, text)
+    return strip_speaker(_INTRODUCES_END.sub(lambda m: m.group(1) + NAME_MARK, text))
 
 
 # 'I am Nigerian, …', 'This is Kasafi, right?', 'I am Director of the …': a capitalised word that isn't a person's
@@ -88,17 +102,34 @@ _NOT_A_NAME = {"kasafi", "nigerian", "hausa", "fulani", "sokoto", "director", "p
                "worried", "interested", "here", "back", "fine", "okay", "manomi", "malami", "dalibi", "likita"}
 
 
+def given_name(raw, message: str = "") -> str:
+    """A name as Kasafi may use it, or '': one to four words of letters, not a role, a people or a place word, not
+    a title alone; written with capitals ('musa bello' -> 'Musa Bello'). With `message`, every word of it must be
+    in that message (a reading can't bring a name from elsewhere)."""
+    name = " ".join(str(raw or "").split())[:60].strip(" .,;:!?\"'“”")
+    words = name.split()
+    if not words or len(words) > 4 or not all(re.fullmatch(r"[^\W\d_][\w'’.-]*", w) for w in words):
+        return ""
+    low = [w.strip(".").lower() for w in words]
+    if any(w in _NOT_A_NAME or w in ("none", "null", "unknown", "user") for w in low) or \
+            all(re.fullmatch(_HONORIFIC, w, re.I) for w in words):
+        return ""
+    if message and not all(re.search(rf"(?i)(?<![\w'’-]){re.escape(w.strip('.'))}", message) for w in words):
+        return ""
+    return " ".join(w if any(c.isupper() for c in w) else w[:1].upper() + w[1:] for w in words)
+
+
 def stated_name(text) -> str:
-    """The name a user states for themselves in this message ('My name is Musa Bello' -> 'Musa Bello'), else ''.
-    Only what the user writes or says: never the WhatsApp profile name."""
+    """The name a user states for themselves in this message, by its wording alone ('My name is Musa Bello' ->
+    'Musa Bello'), else ''. The conversation-understanding step finds the name when it runs (any form, any letter
+    case: app/agent/understand.py `user_name`); this is what decides when that step doesn't run or fails. Only what
+    the user writes or says: never the WhatsApp profile name."""
     if not isinstance(text, str) or not text:
         return ""
-    m = _SAYS_NAME.search(text) or _INTRODUCES.search(text)
-    name = m.group(2).strip()[:60] if m else ""
-    words = [w.strip(".").lower() for w in name.split()]
-    if not words or any(w in _NOT_A_NAME for w in words) or all(re.fullmatch(_HONORIFIC, w, re.I) for w in name.split()):
-        return ""
-    return name
+    if m := _SAYS_NAME.search(text) or _INTRODUCES.search(text) or _INTRODUCES_END.search(text):
+        return given_name(m.group(2))
+    m = _NAME_FIRST.search(text)
+    return given_name(m.group(1)) if m else ""
 
 
 def strip_name(text, name: str):

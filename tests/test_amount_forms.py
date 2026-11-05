@@ -70,33 +70,53 @@ def test_a_bare_letter_after_a_number_is_money_only_with_a_currency_mark() -> No
     assert not D.verify_claim({"value": "750k", "page": 5}, {5: PAGE})
 
 
-# the audited financial statement's page as it is stored (2024 Audited Financial Statement, p. 147)
+# the ministry's rows on the audited financial statement's page, all of them, as stored (2024 Audited Financial
+# Statement, p. 147: revised budget, actual, variance)
 ROWS = """230 CAPITAL EXPENDITURE
 Admin Code Economic Code Admin Economic 2024 Revised Budget Actual 2024 Variance 2024
 027900100100 23030121 Ministry of Innovation and Digital Economy REHABILITATION / REPAIRS OF OFFICE BUILDINGS 42,000,000.00 0.00 42,000,000.00
 027900100100 23010112 Ministry of Innovation and Digital Economy PURCHASE OF OFFICE FURNITURE AND FITTINGS 30,000,000.00 0.00 30,000,000.00
 027900100100 23010113 Ministry of Innovation and Digital Economy PURCHASE OF COMPUTERS 40,000,000.00 40,000,000.00 0.00
-027900100100 23020101 Ministry of Innovation and Digital Economy CONSTRUCTION / PROVISION OF OFFICE BUILDINGS 100,000,000.00 45,000,000.00 55,000,000.00
+027900100100 23020101 Ministry of Innovation and Digital Economy CONSTRUCTION / PROVISION OF OFFICE BUILDINGS 100,000,000.00 0.00 100,000,000.00
+027900100100 23020101 Ministry of Innovation and Digital Economy CONSTRUCTION / PROVISION OF OFFICE BUILDINGS 50,000,000.00 0.00 50,000,000.00
+027900100100 23020101 Ministry of Innovation and Digital Economy CONSTRUCTION / PROVISION OF OFFICE BUILDINGS 90,000,000.00 0.00 90,000,000.00
+027900100100 23020101 Ministry of Innovation and Digital Economy CONSTRUCTION / PROVISION OF OFFICE BUILDINGS 50,000,000.00 0.00 50,000,000.00
+027900100100 23010112 Ministry of Innovation and Digital Economy PURCHASE OF OFFICE FURNITURE AND FITTINGS 50,000,000.00 0.00 50,000,000.00
 027900100100 23010108 Ministry of Innovation and Digital Economy PURCHASE OF BUSES 80,000,000.00 0.00 80,000,000.00
-027900100100 23010113 Ministry of Innovation and Digital Economy PURCHASE OF COMPUTERS 100,000,000.00 11,560,000.00 88,440,000.00"""
+027900100100 23020101 Ministry of Innovation and Digital Economy CONSTRUCTION / PROVISION OF OFFICE BUILDINGS 100,000,000.00 45,000,000.00 55,000,000.00
+027900100100 23020101 Ministry of Innovation and Digital Economy CONSTRUCTION / PROVISION OF OFFICE BUILDINGS 42,900,000.00 0.00 42,900,000.00
+027900100100 23010113 Ministry of Innovation and Digital Economy PURCHASE OF COMPUTERS 100,000,000.00 11,560,000.00 88,440,000.00
+027900100100 23010113 Ministry of Innovation and Digital Economy PURCHASE OF COMPUTERS 100,000,000.00 0.00 100,000,000.00
+027900100100 23010102 Ministry of Innovation and Digital Economy PURCHASE OF OFFICE BUILDINGS 50,000,000.00 6,900,000.00 43,100,000.00
+027900100100 23010113 Ministry of Innovation and Digital Economy PURCHASE OF COMPUTERS 100,000,000.00 42,000,000.00 58,000,000.00"""
 
 
 def test_an_amount_is_refused_when_its_row_names_something_else() -> None:
-    """Trace 590: '₦42 million for computer purchases'. 42,000,000.00 is printed on the page (so the old check
-    passed it), but on the office-repairs row; the computers rows print 40,000,000.00 and 100,000,000.00."""
+    """A value printed on the page but on another line's row: the old check (printed on the page) passed it."""
     pages = {147: ROWS}
-    wrong = {"statement": "actual spending of the Ministry of Innovation and Digital Economy on computer purchases",
-             "value": "42,000,000.00", "page": 147}
-    assert D.verify_claim(wrong, pages) and not D.row_bound(wrong, pages)
-    wrong_scaled = {**wrong, "value": "42 million"}
-    assert not D.row_bound(wrong_scaled, pages)
-    right = {"statement": "revised budget for rehabilitation and repairs of office buildings", "value": "42,000,000.00",
-             "page": 147}
-    assert D.row_bound(right, pages)
-    computers = {"statement": "revised budget for the purchase of computers", "value": "40,000,000.00", "page": 147}
-    assert D.row_bound(computers, pages)
-    buses = {"statement": "the ministry's revised budget for buses", "value": "100 million", "page": 147}
-    assert not D.row_bound(buses, pages)                          # 100,000,000.00 is buildings and computers
+    for statement, value in (("revised budget for the purchase of computers", "42,900,000.00"),   # an office-buildings row
+                             ("revised budget for the purchase of computers", "42.9 million"),
+                             ("the ministry's spending on computers", "80,000,000.00"),           # the buses row
+                             ("revised budget for buses", "30 million"),                          # the furniture row
+                             ("actual spending on office furniture and fittings", "11,560,000.00")):   # a computers row
+        wrong = {"statement": statement, "value": value, "page": 147}
+        assert D.verify_claim(wrong, pages) and not D.row_bound(wrong, pages), (statement, value)
+    for statement, value in (("revised budget for rehabilitation and repairs of office buildings", "42,000,000.00"),
+                             ("revised budget for the purchase of computers", "40,000,000.00"),
+                             ("revised budget for buses", "80 million"),
+                             ("gap between revised budget and actual for construction of office buildings", "100 million")):
+        assert D.row_bound({"statement": statement, "value": value, "page": 147}, pages), (statement, value)
+
+
+def test_trace_590s_42_million_for_computers_is_a_real_row_and_is_kept() -> None:
+    """Trace 590's draft: 'actual spending ₦42 million against revised ₦100 million for computer purchases leaving
+    gap ₦58 million'. That is the page's last computers row (100,000,000.00 / 42,000,000.00 / 58,000,000.00). The
+    same page also prints 42,000,000.00 as the office-repairs row's budget; the draft did not use that row."""
+    pages = {147: ROWS}
+    for value in ("42 million", "100 million", "58 million"):
+        claim = {"statement": "actual spending against revised budget for computer purchases, and the gap",
+                 "value": value, "page": 147}
+        assert D.verify_claim(claim, pages) and D.row_bound(claim, pages), value
 
 
 def test_the_row_rule_stays_out_of_the_way_when_it_cannot_judge() -> None:

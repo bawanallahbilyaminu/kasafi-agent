@@ -64,6 +64,14 @@ def score(reading: dict | None, expect: dict) -> list[str]:
             got = str(reading.get(field_) or "").lower()
             if not any(w.lower() in got for w in (want if isinstance(want, list) else [want])):
                 wrong.append(f"{field_} {got!r} (want {want})")
+    if (lacks := expect.get("restatement_lacks")) is not None:      # the user's name is never part of the question
+        got = str(reading.get("restatement") or "").lower()
+        if any(w.lower() in got for w in (lacks if isinstance(lacks, list) else [lacks])):
+            wrong.append(f"restatement {got!r} (must not have {lacks})")
+    # the user's own name: exactly the one the message gives ('call me musa' -> 'Musa'), and none in every other
+    # case (a name from earlier turns, a place, an official or a guess is wrong)
+    if (got := reading.get("user_name") or "") != (want := expect.get("user_name", "")):
+        wrong.append(f"user_name {got!r} (want {want!r})")
     return wrong
 
 
@@ -98,7 +106,7 @@ async def main() -> int:
                 rows.append((c["id"], c["message"], reading, score(reading, c["expect"])))
                 continue
             u = await understand(c["message"], history_of(c), PLACES[c["place"]], client, s, model=model)
-            reading = u.to_dict() if u else None
+            reading = u.to_record() if u else None      # with the test conversation's own name, which a trace never has
             recorded[c["id"]] = reading
             wrong = score(reading, c["expect"])
             secs.append(u.seconds if u else 0.0)

@@ -54,12 +54,20 @@ only:
 written or as its usual short form: 'primary', 'JSS', 'SSS', 'IQS'; [] when none is named>"],
  "urgent": true|false,
  "urgent_reason": "<one short line: why it is or isn't an emergency now>",
+ "user_name": "<the name the user gives for THEMSELVES in the NEW MESSAGE, or ''>",
  "restatement": "<the full question in one English line, standalone, using these place words: 'my farm (the pin)' \
 for the pin's exact spot, 'my ward', 'my LGA', 'Sokoto State', or the place or facility the user named in full>",
  "parts": [«PARTS»]}
 In the restatement, the user's own places are 'my farm (the pin)', 'my ward' or 'my LGA' alone: never add the \
 ward's or LGA's name to them (a name there reads as a different place). A name, job title or employer the user \
 gives about themselves is never part of the restatement or of any part's restatement: restate the question only.
+user_name is the user's own name only when the NEW MESSAGE itself tells it, in any wording, language or letter \
+case: "my name is musa", "I'm Aisha Umar from the ministry", "call me Musa", "Sunana Musa", "Musa ne sunana", "Ni \
+ne Musa", "Ku kira ni Malam Sani". Write it with capital letters, with a title only when they used one ("Malam \
+Sani", "Dr. Aisha Umar"). It is "" when the message gives no name of their own: a job, a people or a place is not \
+a name ("I am a farmer", "Ni manomi ne", "I am from Wamakko", "I am the Director of Budget"), nor is anyone \
+else's name, a facility's or an official's ("my son is Musa", "Dr. Bello at the clinic"), nor "Kasafi". Never \
+take it from earlier turns and never guess it.
 
 Capabilities:
 - budget: amounts, spending or projects of the state, a ministry, agency, sector or named project.
@@ -205,8 +213,16 @@ class Understanding:
     # answered by its own capability and joined into one reply; [] for one thing asked (KASAFI_MULTI_PART)
     parts: list[dict] = field(default_factory=list)
     label: str = ""             # a part's short heading in the user's language ('Flood history', 'Tarihin ambaliya')
+    # the name the user gives for themselves in this message ('call me Musa', 'Musa ne sunana'): held in memory for
+    # an hour (app/privacy.py NameMemory), never part of to_dict(), so never in a trace or a log
+    user_name: str = ""
 
     def to_dict(self) -> dict:
+        """The reading as traces, logs and waiting questions keep it: without the user's name."""
+        return {**asdict(self), "user_name": ""}
+
+    def to_record(self) -> dict:
+        """The whole reading, for the eval's recorded readings (our own test conversations only)."""
         return asdict(self)
 
     def part_readings(self) -> list["Understanding"]:
@@ -250,6 +266,8 @@ def parse(d: dict) -> Understanding | None:
     u.satellite_context = d.get("satellite_context") is True and u.capability in ("statistics", "deep")
     u.urgent_reason = str(d.get("urgent_reason") or "").strip()[:200]
     u.exclude = str(d.get("exclude") or "").strip()[:80]
+    from app.privacy import given_name
+    u.user_name = given_name(d.get("user_name"))
     parts = d.get("asked_parts") if isinstance(d.get("asked_parts"), list) else []
     u.asked_parts = [str(p).strip()[:40] for p in parts if str(p).strip()][:8]
     u.parts = parse_parts(d.get("parts"))
@@ -258,6 +276,11 @@ def parse(d: dict) -> Understanding | None:
         u.care = fac.get("care") if fac.get("care") in CARE else "general"
         u.facility_level = fac.get("level") if fac.get("level") in FACILITY_LEVELS else "any"
         u.ownership = fac.get("ownership") if fac.get("ownership") in OWNERSHIP else "any"
+    if u.user_name:          # the restatement is logged, traced and used as the question: it never carries the name
+        from app.privacy import strip_name          # (live, 5 Nov: 'User asks to be called Musa')
+        u.restatement = strip_name(u.restatement, u.user_name)
+        for p in u.parts:
+            p["restatement"] = strip_name(p.get("restatement") or "", u.user_name)
     return u if u.restatement else None
 
 
