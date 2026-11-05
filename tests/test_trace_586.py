@@ -71,6 +71,26 @@ def test_a_zero_is_never_listed_as_a_nearest_line() -> None:
     assert A.shown_nearest([zero, real, zero_dec]) == [real]
 
 
+def test_a_zero_spending_figure_of_the_line_asked_about_is_one_plain_sentence_with_its_budget() -> None:
+    from decimal import Decimal
+    cells = [SimpleNamespace(column="2025 Original Budget", amount=Decimal("30000000")),
+             SimpleNamespace(column="2025 Revised Budget", amount=Decimal("25000000")),
+             SimpleNamespace(column="2025 Performance Year to Date (Q1-Q3)", amount=Decimal("0"))]
+    line = SimpleNamespace(cells=cells)
+    zero = SimpleNamespace(cell=cells[2], line=line)
+    assert A.zero_released(zero, "en") == "₦0 of ₦25,000,000.00 budgeted was released by Q3 2025"
+    assert A.zero_released(zero, "ha").startswith("Ba a saki komai ba daga cikin ₦25,000,000.00 da aka ware zuwa Q3 2025")
+    jan_sep = SimpleNamespace(cell=SimpleNamespace(column="2025 Performance January to September", amount=Decimal("0")),
+                              line=SimpleNamespace(cells=cells[:2]))
+    assert A.zero_released(jan_sep, "en") == "₦0 of ₦25,000,000.00 budgeted was released by September 2025"
+    # not a zero, not a spending cell, or no budget printed on the row: the usual row
+    assert A.zero_released(SimpleNamespace(cell=SimpleNamespace(column="2025 Performance Year to Date (Q1-Q3)",
+                                                                amount=Decimal("5")), line=line), "en") == ""
+    assert A.zero_released(SimpleNamespace(cell=SimpleNamespace(column="2025 Revised Budget", amount=Decimal("0")),
+                                           line=line), "en") == ""
+    assert A.zero_released(SimpleNamespace(cell=cells[2], line=SimpleNamespace(cells=[cells[2]])), "en") == ""
+
+
 class _Client:
     def __init__(self, reply=None, error=None, provider="Fireworks"):
         self.reply, self.error, self.provider, self.calls = reply, error, provider, 0

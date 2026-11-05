@@ -4000,6 +4000,37 @@ def shown_nearest(nearest: list) -> list:
     return [s for s in nearest if getattr(s.cell, "amount", None)]
 
 
+_BUDGET_COL = re.compile(r"(?i)\b(revised|final|approved|original)\b")
+_ACTUAL_COL = re.compile(r"(?i)\b(performance|actuals?)\b")
+ZERO_RELEASED = {"en": "₦0 of {budget} budgeted was released {when}",
+                 "ha": "Ba a saki komai ba daga cikin {budget} da aka ware {when}"}
+
+
+def zero_released(s, lang: str) -> str:
+    """A zero spending figure of the line asked about, in one plain sentence with its own row's budget: '₦0 of ₦30
+    million budgeted was released by Q3 2025' (never a bare '0.00'); '' when the cell isn't a zero spending cell
+    or the row prints no budget for that year."""
+    col = getattr(s.cell, "column", "") or ""
+    if getattr(s.cell, "amount", None) or not _ACTUAL_COL.search(col) or _BUDGET_COL.search(col):
+        return ""
+    year = (re.search(r"\b(20\d\d)\b", col) or [""])[0]
+    budgets = [c for c in getattr(s.line, "cells", None) or [] if c.amount and _BUDGET_COL.search(c.column or "")
+               and not _ACTUAL_COL.search(c.column or "") and (not year or year in (c.column or ""))]
+    if not budgets:
+        return ""
+    b = sorted(budgets, key=lambda c: 0 if re.search(r"(?i)revised|final", c.column) else 1)[0]
+    ha = lang == "ha"
+    if m := re.search(r"Q1\s*-\s*Q([1-4])", col):
+        when = (f"zuwa Q{m.group(1)} {year}" if ha else f"by Q{m.group(1)} {year}").strip()
+    elif re.search(r"(?i)january to september", col):
+        when = (f"zuwa Satumba {year}" if ha else f"by September {year}").strip()
+    elif m := re.search(r"(?i)\bQ([1-4]) performance", col):
+        when = (f"a Q{m.group(1)} {year}" if ha else f"in Q{m.group(1)} {year}").strip()
+    else:
+        when = (f"a {year}" if ha else f"in {year}").strip() if year else ""
+    return ZERO_RELEASED.get(lang, ZERO_RELEASED["en"]).format(budget=_money(b.amount), when=when).strip()
+
+
 async def _focused_lines(conn, plan: Plan, settings: Settings, hits: list, focus: list[str], docs) -> list:
     """The redo's lines: a search for the missing part only (its words), merged in front of the hits already
     read; nothing new (the rows were among them) means the same hits are read again."""
@@ -4232,7 +4263,9 @@ def line_answer(conn, plan: Plan, res: LineResult, hits: list, lang: str, t: dic
     code_asked = bool(CODE_ASKED.search(f"{plan.original} {plan.english_question}"))
     rows = [f"• {plain_label(s.line, lang)}"
             + (f" (code {s.line.code})" if code_asked and s.line.code else "")
-            + f", {s.cell.column}: {fmt(s.cell.amount)} [{nmap[(s.line.doc_id, s.line.page)]}]"
+            # a zero spending figure of the line asked about: one plain sentence with its budget, never '0.00'
+            + (f": {zero} [{nmap[(s.line.doc_id, s.line.page)]}]" if (zero := zero_released(s, lang)) else
+               f", {s.cell.column}: {fmt(s.cell.amount)} [{nmap[(s.line.doc_id, s.line.page)]}]")
             + side.get(s.part, "") for s in res.selections]
     notes = []                       # caveats stay in the reply, not only in the working
     if res.aggregate_only:
