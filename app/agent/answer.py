@@ -43,6 +43,7 @@ from app.acquisition.editions import (SERIES, Latest, Series, doc_edition, editi
                                      series_doc_ids, wanted_edition)
 from app.acquisition.library import Acquired, fetch_and_index, find_and_fetch, log_gap
 from app.acquisition.registry import detect_topic, registry
+from app.text import button_title, shorten
 from app.agent.analysis import TOOLS, AnalysisResult, run_analysis
 from app.agent.need import NEED_PROMPT, Names, Need, names_for, parse_need
 from app.agent.capabilities import available_capabilities, catalog, cover
@@ -712,7 +713,7 @@ def _clarify_field(v) -> dict:
     """{"question", "options": [{"title", "question"}]} with 2-3 usable options, or {}."""
     if not isinstance(v, dict) or not str(v.get("question") or "").strip():
         return {}
-    opts = [{"title": str(o.get("title") or "")[:20].strip(), "question": str(o.get("question") or "")[:500].strip()}
+    opts = [{"title": button_title(str(o.get("title") or "")), "question": str(o.get("question") or "")[:500].strip()}
             for o in v.get("options") or [] if isinstance(o, dict)]
     from app.agent.clarify import dedupe
     opts = dedupe([o for o in opts if o["title"] and o["question"]])[:3]       # never two options of one name
@@ -2409,6 +2410,13 @@ async def _answer_finished(question: str, lang: str, conn: psycopg.Connection, *
     if (covered := covered_years_line(conn, question, plan, lang, a.text)):
         a.text = f"{a.text.rstrip()}\n\n{covered}"
     a.text = plain_level_words(a.text, lang)      # a row's level label echoed by any path (p8): plain words, the
+    # a page number a model wrote is the page code verified the figure on (app/agent/page_refs.py); code's own pages are
+    if a.found and getattr(a, "deep", None) is None and not answer_check.computed_in_code(a):
+        from app.agent import page_refs
+        a.text, moved = page_refs.verified(a.text, page_refs.cited_pages(conn, a.cited), [a.working] if a.working else None)
+        if moved:
+            log.info("page numbers corrected in an answer: %s", [(c["said"], c["now"]) for c in moved])
+            a.timings["page_refs_corrected"] = float(len(moved))
     if not a.found and not a.clarify and plan is not None and (gap := level_gap(plan.need, lang)):   # working keeps it
         a.text = f"{a.text}\n\n{gap}"
     settle_verification(a, lang)          # the verification state, in show working and the trace
@@ -3357,7 +3365,7 @@ def checked_parts(d: dict, by_n: dict, names: list[str]) -> list[Part]:
     for p in (d.get("parts") or [])[:12]:
         if not isinstance(p, dict) or not str(p.get("value") or "").strip():
             continue
-        label, value = str(p.get("label") or "").strip()[:80], str(p.get("value")).strip()
+        label, value = shorten(str(p.get("label") or ""), 80), str(p.get("value")).strip()
         try:
             ev = by_n.get(int(p.get("cited")))
         except (TypeError, ValueError):
@@ -3368,7 +3376,7 @@ def checked_parts(d: dict, by_n: dict, names: list[str]) -> list[Part]:
             lines = (ev.text or "").splitlines()
             ok = any(num.search(ln) and (not pats or any(pt.search(ln) for pt in pats)) for ln in lines)
         out.append(Part(_CITE_MARK.sub("", label).strip(), value, ev, ok, p.get("add") is not False,
-                        _CITE_MARK.sub("", str(p.get("why") or "")).strip()[:120]))
+                        shorten(_CITE_MARK.sub("", str(p.get("why") or "")), 120)))
     return out
 
 
@@ -3447,7 +3455,7 @@ def parts_block(d: dict, by_n: dict, names: list[str], lang: str) -> tuple[str, 
     nums = [_as_number(p.value) for p in added]
     total = sum(nums)
     shown = f"{total:,.0f}" if all(n == int(n) for n in nums) else f"{total:,.2f}"
-    what = str(d.get("total_of") or "").strip()[:160] or "-"
+    what = shorten(str(d.get("total_of") or ""), 160) or "-"
     working = w["working"].format(sum=" + ".join(p.value for p in added), total=shown)
     # the total first, in the writer's sentence with code's figure ('Sokoto North had {total} public schools in
     # 2023/24'): the writer never computes it; then the breakdown, then what isn't added and why
@@ -4044,7 +4052,7 @@ async def structured_answer(conn, plan: Plan, lang: str, settings: Settings, t: 
     if unsure:
         e = unsure[0]
         from app.agent.clarify import dedupe
-        opts = dedupe([{"title": c[:20].strip(), "question": need.standalone_question.replace(e.name, c)
+        opts = dedupe([{"title": button_title(c), "question": need.standalone_question.replace(e.name, c)
                         if e.name in need.standalone_question else f"{need.standalone_question} ({c})"}
                        for c in e.candidates[:3]])
         if len(opts) >= 2:              # one name in several forms: no question, the paths below answer

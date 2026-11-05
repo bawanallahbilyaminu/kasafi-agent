@@ -31,6 +31,7 @@ import psycopg
 from app.agent.budget_query import SOKOTO_LGAS
 from app.agent.category import matches, resolve_scope
 from app.agent.sectors import sector_asked, sector_of, sector_sql
+from app.text import shorten
 from app.retrieval.entities import AMOUNTS
 
 log = logging.getLogger(__name__)
@@ -461,7 +462,7 @@ def lga_projects(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
                            f"({res.match_tables or 'none parsed'}) cover {hb} of the LGA's lines by agency; "
                            f"{len(res.matched)} matched by agency code and exact description, "
                            f"{sum((r.amount for r in res.matched), Decimal(0)):,.2f} spent to date on them"
-                           + ("; matched: " + "; ".join(f"{r.name[:60]} {r.amount:,.2f} ({r.detail['table']} p{r.page})"
+                           + ("; matched: " + "; ".join(f"{shorten(r.name, 60)} {r.amount:,.2f} ({r.detail['table']} p{r.page})"
                                                          for r in res.matched[:8]) if res.matched else ""))
     return res
 
@@ -527,7 +528,7 @@ def ranking(conn: psycopg.Connection, spec: dict) -> AnalysisResult:
     res.working = [f"Source: {doc}; ranked {n_all} {of} entries by {col} ({'lowest' if order == 'ASC' else 'highest'} "
                    f"first)" + (" ; LGAs by the projects located in them (statewide projects not counted)"
                                 if of == "lga" else "")]
-    res.working += [f"{i}. {r.name[:80]}: {r.amount:,.2f} (p{r.page})" for i, r in enumerate(res.rows, 1)]
+    res.working += [f"{i}. {shorten(r.name, 80)}: {r.amount:,.2f} (p{r.page})" for i, r in enumerate(res.rows, 1)]
     return res
 
 

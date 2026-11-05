@@ -26,6 +26,7 @@ from typing import Any
 import httpx
 
 from app.config import Settings
+from app.text import button_title, shorten
 from app.data_rights import DELETED_REPLY, delete_user_data, is_delete_command
 from app.geo.facilities import WORDS as FAC_WORDS
 from app.geo.facilities import (Filters, FacilitySearch, add_routes, emergency_lookup, filters_from, follow_up,
@@ -570,7 +571,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         text_out = f"{prefix}\n\n{body}" if prefix else body
         if options := getattr(result, "clarify", None):     # two readings: ask which one, with buttons
             store.set_pending_clarify(key, options)
-            return [Out(text_out, [(f"clar_{i}", o["title"][:20]) for i, o in enumerate(options[:3])])]   # split when sent
+            return [Out(text_out, [(f"clar_{i}", button_title(o["title"])) for i, o in enumerate(options[:3])])]   # split when sent
         if getattr(result, "needs_pin", False):             # a place-history question: the pin first, then the answer
             # a place-budget reading waits with its restatement, and resumes with the same reading
             location_memory.wait_for_location(key, PLACE_BUDGET_WAIT + understanding.restatement
@@ -633,7 +634,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                                                          spot)) is not None:
                     _remember_turn(store, key, lang, r.restatement, outs)
                     return outs
-                return await respond(r.restatement[:1000], "", Out(t("echo", lang, text=r.restatement[:500])),
+                return await respond(r.restatement[:1000], "", Out(t("echo", lang, text=shorten(r.restatement, 500))),
                                      understanding=r, announced=True, sink=_no_notify, closing=False, short=True)
             except Exception as e:              # noqa: BLE001 - one part's failure never drops the others
                 log.exception("a part of a multi-part question failed: %s", type(e).__name__)
@@ -847,7 +848,7 @@ def multi_parts(u, settings: Settings) -> list:
 
 def parts_progress(lang: str, readings: list) -> str:
     w = MULTI_WORDS.get(lang, MULTI_WORDS["en"])
-    labels = ", ".join((r.label or r.restatement[:40]) for r in readings)
+    labels = ", ".join((r.label or shorten(r.restatement, 40)) for r in readings)
     return w["progress"].format(n=len(readings), labels=labels)
 
 
@@ -887,7 +888,7 @@ def join_parts(readings: list, results: list[list[Out]], lang: str, max_images: 
     heads, crops, rest, location_request = [], [], [], False
     for i, (r, outs) in enumerate(zip(readings, results), 1):
         first = outs[0] if outs else Out(w["none"], lang=lang)
-        label = (r.label or r.restatement[:60]).strip().rstrip(".?:")
+        label = (r.label or shorten(r.restatement, 60)).strip().rstrip(".?:")
         label = label[:1].upper() + label[1:]                   # "1. Government spending"
         heads.append(f"*{i}. {label}*\n{first.text.strip()}")
         crops += first.crops or []

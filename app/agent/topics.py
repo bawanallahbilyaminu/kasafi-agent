@@ -775,7 +775,8 @@ async def fact_cards(conn: psycopg.Connection, src: SourceResult, topic: Topic, 
             # the code check first: the text before the figure names another publisher's report (the model may
             # name the quoting report itself as the source: SBS MPI p17's 91% is the 2022 National MPI's)
             based = quoted_from(value, pages[page], topic, p, own_year) or based
-            unit, what = str(f.get("unit") or "")[:40], str(f.get("what") or "")[:160]
+            from app.text import shorten
+            unit, what = str(f.get("unit") or "")[:40], shorten(str(f.get("what") or ""), 160)
             cards.append(Card(p, src.doc_id, src.title, page, value, unit, what, str(f.get("ref_date") or "")[:60],
                               str(f.get("geography") or "")[:60], str(d.get("edition") or "")[:60], based,
                               measure_of(value, unit, str(f.get("measure") or ""), what),
@@ -909,7 +910,8 @@ def attribute_quotes(cards: list[Card]) -> list[Card]:
 def doc_label(c: Card) -> str:
     """A source by its document: the title as printed (at most 70 characters), with its year when the title has
     none ('Education Sector 2025-2027 Medium-Term Sector Strategy (MTSS)')."""
-    title = (c.title or "").strip()[:70].rstrip(" ,;:-")
+    from app.text import shorten
+    title = shorten(c.title or "", 70, mark="").rstrip(" ,;:-")
     has_year = _YEAR.search(title) or re.search(r"\b\d{2}\s*[-/–]\s*\d{2}\b", title)       # 'Census 23-24 Report'
     if not has_year and (years := _YEAR.findall(c.edition or "")):
         title += f" {max(years)}"

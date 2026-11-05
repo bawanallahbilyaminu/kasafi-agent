@@ -68,7 +68,10 @@ or blank, which the draft reports as 'no figure printed', is stated, not missing
 - missing: what was asked for and isn't in the draft. A question for a total, or for all levels or types \
 ("how many schools" means every level), answered with one part: list the other parts. missing_stated: true when \
 the draft says plainly, for every missing thing, that the documents don't give it (e.g. "the census doesn't \
-print IQS numbers by LGA"); false when it just leaves it out.
+print IQS numbers by LGA"); false when it just leaves it out. Only what the USER'S MESSAGE or the restatement asks \
+for can be missing: a figure for a higher level (the whole state, when the user asked about an LGA or ward), or \
+another thing nobody asked about, is never missing and never a reason to revise, even when the evidence prints it or \
+the draft mentions it.
 - unclear: a sentence that says something wrong about a figure (calls a dated figure a rounding of another, a \
 part the total, a state figure the LGA's), even when the figure itself is in the evidence.
 - Totals are computed in code from the parts the document counts as separate (the writer marks parts that \
@@ -115,6 +118,7 @@ class Verdict:
     seconds: float = 0.0
     provider: str = ""
     why: str = ""                       # why the check was skipped or failed
+    not_asked: list[str] = field(default_factory=list)   # 'missing' items code set aside: nobody asked for them
 
     @property
     def wrong_subject(self) -> bool:
@@ -343,7 +347,7 @@ async def check(message: str, a, u, history: list[dict] | None, conn, settings, 
             log.warning("answer check retry failed: %s", why)
     if v is None:
         v = Verdict("skipped", round=round_, why=why)
-    v = settle(a, v, rules, round_)
+    v = settle(a, v, rules, round_, message=message, u=u)
     v.seconds = time.perf_counter() - t0
     v.provider = retried or getattr(client, "provider", "")
     log.info("answer check round %d: %s in %.1fs (%s)%s", round_, v.verdict, v.seconds, v.provider,
@@ -351,12 +355,54 @@ async def check(message: str, a, u, history: list[dict] | None, conn, settings, 
     return v
 
 
-def settle(a, v: Verdict, rules: list[str], round_: int) -> Verdict:
+_HIGHER_LEVEL = re.compile(r"(?i)\b(?:sokoto\s+state|state[- ]?wide|state[- ]level|the\s+(?:whole\s+|entire\s+)?state|"
+                           r"for\s+the\s+state|jihar\s+sokoto|duk(?:an)?\s+jihar|national(?:ly)?|nigeria)\b")
+_NOT_A_SUBJECT = re.compile(r"(?i)\b(?:figures?|numbers?|amounts?|totals?|whether|which|that|this|what|with|from|data|"
+                            r"documents?|reports?|state|sokoto|local|government|year|years|asked|about|their|there|how|"
+                            r"many|much|the|for)\b")
+
+
+def not_asked(item: str, message: str, u) -> bool:
+    """A 'missing' item nobody asked for. A part the user named is always asked. A figure for a higher level than the
+    place asked about isn't asked unless the message names that level (5 Nov 2026, lfSN: 'How many schools are in Sokoto
+    North?' was sent back for the statewide IQS figure). And an item sharing no word with the message's meaning isn't
+    asked. Without a reading the message alone may be in Hausa and the item in English, so nothing is judged."""
+    if u is None:
+        return False
+    low = (item or "").lower()
+    parts = [str(p).lower().rstrip("s") for p in (getattr(u, "asked_parts", None) or []) if str(p).strip()]
+    if any(re.search(rf"\b{re.escape(p)}", low) for p in parts):
+        return False
+    if _HIGHER_LEVEL.search(item or "") and getattr(u, "level", "") in ("lga", "ward", "pin", "facility") and \
+            not _HIGHER_LEVEL.search(message or ""):
+        return True
+    asked = " ".join(str(x or "") for x in (message, getattr(u, "restatement", ""), getattr(u, "measure", ""),
+                                            getattr(u, "name", "")))
+    if not getattr(u, "restatement", ""):
+        return False
+
+    def stems(text: str) -> set[str]:
+        return {w[:4] for w in re.findall(r"[^\W\d_]{4,}", _NOT_A_SUBJECT.sub(" ", text.lower()))}
+    words = stems(item or "")
+    return bool(words) and not words & stems(asked)
+
+
+def settle(a, v: Verdict, rules: list[str], round_: int, message: str = "", u=None) -> Verdict:
     """The model's verdict, settled by the rules code decides: a broken code rule never passes; an answer computed
-    in code is judged on its subject alone; an honest partial answer passes."""
+    in code is judged on its subject alone; an honest partial answer passes; what nobody asked for is never missing."""
     v.rules = rules
     if round_ == 1 and v.verdict == "fail":      # the writer always gets one more try with the feedback before a fallback
         v.verdict = "revise"
+    if extra := [m for m in v.missing if not_asked(m, message, u)]:
+        v.missing = [m for m in v.missing if m not in extra]
+        v.not_asked = extra
+        subject_ok = not any((v.subject or {}).get(k) is False for k in ("place", "time", "topic", "level"))
+        if v.verdict in ("revise", "fail") and subject_ok and not rules and not (
+                v.contradictions or v.unsupported or v.unclear or v.missing) and v.answers_question != "no":
+            v.why = f"only something nobody asked for was missing (model said {v.verdict})"
+            v.verdict = "pass"
+        elif v.verdict in ("revise", "fail"):       # the writer fixes the rest, and doesn't add what wasn't asked
+            v.feedback = f"{v.feedback} Not asked for, so leave out: {'; '.join(extra)}.".strip()
     if computed_in_code(a) or getattr(a, "deep", None) is not None:
         # code chose the place and level from the reading, and a short code answer keeps its full ranking in show
         # working (3 Nov: 'which wards flooded most' was judged 'not ward-level', and the answer and its map lost);

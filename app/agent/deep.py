@@ -43,6 +43,7 @@ import psycopg
 
 from app import usage
 from app.config import Settings
+from app.text import shorten
 
 from app.agent.persona import with_core  # noqa: E402 - the shared core prompt
 
@@ -269,10 +270,10 @@ def parse_dimensions(d: dict) -> tuple[str, list[Dimension]]:
     for i, x in enumerate((d or {}).get("dimensions") or []):
         if isinstance(x, dict) and str(x.get("name") or "").strip():
             qs = [str(q).strip()[:120] for q in x.get("queries") or [] if str(q).strip()][:3]
-            ms = [Measure(f"m{i}_{j}", str(m.get("name") or "").strip()[:100],
+            ms = [Measure(f"m{i}_{j}", shorten(str(m.get("name") or ""), 100),
                           [str(m.get("query") or m.get("name") or "").strip()[:120]])
                   for j, m in enumerate(x.get("measures") or []) if isinstance(m, dict) and m.get("name")][:4]
-            dims.append(Dimension(str(x["name"]).strip()[:60], qs, bool(x.get("money")), ms))
+            dims.append(Dimension(shorten(str(x["name"]), 60), qs, bool(x.get("money")), ms))
     return subject, dims[:6]
 
 

@@ -55,6 +55,11 @@ Each entry is a fix for a failure a real tester hit on the live service, kept as
   the checked figures, and a turn past its limit is sent when ready. A brief's sentences no longer name their source
   ("MFS 2025-2027 p.37 prints…").
 
+- **Three things the school answers showed** (live traces 659, 660). The answer check no longer sends back a right answer
+  for a figure nobody asked about, such as a statewide count when the question was about one LGA. Labels shown to users
+  are shortened at a word, never mid-word. A page number a model writes in a sentence is now tested against the cited
+  pages: it becomes the page that prints the figure, or goes if none does ("p. 4" was the number printed on PDF page 22).
+
 ### A change that is not a bug fix
 
 - **A stated name, for one hour** (5 Nov 2026, asked for by the owner). When a user tells Kasafi their name in a

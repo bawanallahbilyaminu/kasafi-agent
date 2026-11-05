@@ -22,6 +22,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from app import usage
 from app.config import Settings
+from app.text import button_title, shorten
 from app.providers.chat import ChatClient
 from app.retrieval.line_search import is_blank_cell, MAX_LINES, Cell, Line, groups, ministry_of, names_a_kind
 
@@ -255,7 +256,7 @@ def ask_which(lines: list[Line], question: str, lang: str) -> tuple[str, list[di
         return None
     q = {"ha": "Tambayarku ta shafi layuka da yawa a kasafin. Wane ɓangare kuke nufi?",
          "en": "Your question matches many budget lines. Which area do you mean?"}.get(lang, "")
-    return q, [{"title": name[:20], "question": f"{question} ({name})"} for name, _ in tops]
+    return q, [{"title": button_title(name), "question": f"{question} ({name})"} for name, _ in tops]
 
 
 def _number_ok(summary: str, allowed: set[str]) -> list[str]:
@@ -359,7 +360,7 @@ def verify(d: dict, lines: list[Line]) -> tuple[LineResult, list[str]]:
         res.found = "partial"
     c = d.get("clarify")
     if not res.selections and isinstance(c, dict) and str(c.get("question") or "").strip():
-        opts = [{"title": str(o.get("title") or "")[:20].strip(), "question": str(o.get("question") or "")[:500].strip()}
+        opts = [{"title": button_title(str(o.get("title") or "")), "question": str(o.get("question") or "")[:500].strip()}
                 for o in c.get("options") or [] if isinstance(o, dict)]
         from app.agent.clarify import dedupe
         opts = dedupe([o for o in opts if o["title"] and o["question"]])[:3]
@@ -625,7 +626,7 @@ def reconcile(r1: LineResult, d1: dict, r2: LineResult, lines: list[Line], extra
             log.info("two readings name one thing (%s): answered from the first", why[:200])
             return r1
         if opts[0]["title"] == opts[1]["title"]:
-            opts[1]["title"] = (opts[1]["title"][:17] + " 2")[:20]
+            opts[1]["title"] = shorten(opts[1]["title"], 18, mark="", hard=True) + " 2"
         log.info("clarify: %s", why[:300])
         return LineResult(clarify=opts, clarify_question=CLARIFY_READINGS.get(lang, CLARIFY_READINGS["en"]),
                           clarify_reason=why[:400])

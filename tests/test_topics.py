@@ -297,8 +297,8 @@ def test_a_quoted_figure_is_labelled_as_its_publishers_and_its_primary_source_is
     quoted = mpi(DS, "91%", "2022", "headcount", "multidimensional poverty incidence", based_on="NBS MPI 2022",
                  doc="durable-solutions-2026-sokoto", page=12)
     sources = [tp.SourceResult(DS, "durable-solutions-2026-sokoto", status="ok", cards=[quoted])]
-    assert tp.source_label(quoted, "en") == ("Sokoto State Bureau of Statistics (state surveys and co-published "
-                                             "repo, citing NBS MPI 2022")
+    # (the publisher's bracket used to be cut mid-word here: '… and co-published repo'; 5 Nov, app/text.py)
+    assert tp.source_label(quoted, "en") == "Sokoto State Bureau of Statistics, citing NBS MPI 2022"
     assert tp.card_year(quoted) == 2022
     assert [p.id for p in tp.primary_sources(registry().topics["poverty_welfare"], sources)] == ["nbs_mpi"]
 
