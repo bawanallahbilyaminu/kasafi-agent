@@ -54,7 +54,7 @@ from app.hazards import official
 from app.agent.summary import lead, split_quotes
 from app.hazards.answer import MEASURE_LAYERS, days_asked, hazard_answer, layers_asked, where_for
 from app.hazards.summary import hazard_summary
-from app.place.answer import place_answer, place_route
+from app.place.answer import SATELLITE_JOB_S, SatelliteUnavailable, place_answer, place_route, satellite_turn
 from app.place.planner import area_answer, area_route
 from app.agent.deep import deep_question
 from app.agent.routing import document_question, other_subject, own_source
@@ -2261,6 +2261,9 @@ async def checked_answer(a: Answer, question: str, lang: str, conn, kw: dict, t_
         from app.agent.deep import DEEP_TURN_S
         settings = settings.model_copy(update={"kasafi_answer_timeout_s": max(settings.kasafi_answer_timeout_s,
                                                                              DEEP_TURN_S - 15)})
+    elif "place" in (getattr(a, "timings", None) or {}):       # a first read of a pin may take minutes: the check keeps its time
+        settings = settings.model_copy(update={"kasafi_answer_timeout_s": settings.kasafi_answer_timeout_s +
+                                               time.perf_counter() - t_start})
     if settings.kasafi_answer_timeout_s - (time.perf_counter() - t_start) < settings.kasafi_check_timeout_s + 10:
         log.info("answer check skipped: too little time left")      # the answer's own checks stand
         a.checks = [{"verdict": "skipped", "why": "too little time left"}]
@@ -2389,7 +2392,9 @@ async def _answer_finished(question: str, lang: str, conn: psycopg.Connection, *
     # the Ministry … including its budget and spending' has none of the words, got 165 s and timed out while reading)
     reading = kw.get("understanding")
     deep_turn = deep_question(question) or getattr(reading, "capability", "") == "deep"
-    budget = TIME_BUDGET_S if deep_turn else LOOP_BUDGET_S
+    # a satellite turn goes on until its work is done (traces 682, 683: a clean first read of a 4 ha plot took 159 s)
+    satellite = not deep_turn and satellite_turn(question, reading)
+    budget = TIME_BUDGET_S if deep_turn else SATELLITE_JOB_S + 120.0 if satellite else LOOP_BUDGET_S
     try:
         a = await asyncio.wait_for(_answer_question(question, lang, conn, box=box, **kw), timeout=budget)
     except ReplyError:
@@ -2404,6 +2409,8 @@ async def _answer_finished(question: str, lang: str, conn: psycopg.Connection, *
             if box.get("deep_profile") is not None:
                 return box["deep_profile"]
             return Answer(DEEP_UNFINISHED.get(lang, DEEP_UNFINISHED["en"]), False, True, plan=plan)
+        if satellite:
+            raise SatelliteUnavailable("no answer within the turn's limit") from None
         return Answer(TIMED_OUT.get(lang, TIMED_OUT["en"]), False, True, plan=plan)
     plan = a.plan
     a = keep_better(a, plan.held if plan is not None else None)
@@ -2588,6 +2595,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
                                     notify=notify, ask_size=bool(place and place.get("ask_size")))
             t["place"] = time.perf_counter() - t0
             t["place_first"] = pa.timing.get("first", 0.0)
+            t.update({f"place_{k}": round(v, 2) for k, v in pa.timing.items() if k != "first"})   # each step, in the trace
             return Answer(pa.text, pa.found, True, plan=plan, timings=t, exact=pa.text, working=pa.working,
                           partial=pa.partial, maps=pa.specs, needs_pin=pa.needs_pin, needs_size=pa.needs_size)
         # NCDC outbreak figures and official outlooks (NIHSA, NiMet): answered in code from the crawled tables; an

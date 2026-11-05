@@ -211,10 +211,17 @@ TEXTS = {
         "ha": "Yi haƙuri, ban iya kammala neman amsar a kan lokaci ba.\n\nDon Allah ku sake gwadawa nan da ƴan mintoci.",
         "en": "Sorry, I couldn't finish the answer in time.\n\nPlease try again in a few minutes.",
     },
-    "satellite_failed": {             # a place-history request that timed out or failed
-        "ha": "Yi haƙuri, ban iya kammala duba hotunan tauraron ɗan adam ba.\n\nDon Allah ku sake gwadawa nan da ƴan "
-              "mintoci.",
-        "en": "Sorry, I couldn't finish checking the satellite images.\n\nPlease try again in a few minutes.",
+    "satellite_failed": {             # a place-history request hit a fault that waiting can't cure: never 'try again'
+        "ha": "Yi haƙuri, ban iya kammala duba hotunan tauraron ɗan adam na wannan wuri ba. Matsalar daga wajenmu take, "
+              "ba daga saƙonku ba, kuma an rubuta ta.",
+        "en": "Sorry, I couldn't finish checking the satellite images for this place. The fault is on our side, not in "
+              "your message, and it has been recorded.",
+    },
+    "satellite_gave_up": {            # the service stayed busy for the whole 30 minutes a location may be held
+        "ha": "Yi haƙuri, sabis ɗin hotunan tauraron ɗan adam bai amsa ba cikin minti 30, don haka ban iya kammala "
+              "bayanan wannan wuri ba. Na daina dubawa, kuma ba a ajiye wurin da kuka aiko ba.",
+        "en": "Sorry, the satellite image service didn't respond for 30 minutes, so I couldn't finish this place's "
+              "record. I've stopped checking, and the location you sent is no longer kept.",
     },
     # Read-back confirmation and corrections
     "confirmed": {

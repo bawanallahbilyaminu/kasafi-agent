@@ -197,7 +197,7 @@ async def _reply(messages: list[dict[str, Any]]) -> None:
 
 TYPING_TIMEOUT_S = 3.0
 TYPING_REPEAT_S = 18.0      # WhatsApp shows the indicator for at most 25 s, and drops it at any message we send
-TYPING_MOST_S = 360.0       # never past the longest answer limit (a turn with a document fetch: 5 minutes)
+TYPING_MOST_S = 2160.0      # never past the longest turn (a satellite job that keeps waiting: 30 minutes and its map)
 
 
 def start_typing(client, msg: dict[str, Any], store, settings) -> asyncio.Task | None:

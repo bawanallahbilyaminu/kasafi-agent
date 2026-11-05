@@ -26,7 +26,6 @@ Cached per ~100 m cell and year in sat_cache (layer 's1'; the reference as layer
 from __future__ import annotations
 
 import logging
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -36,7 +35,7 @@ from rasterio.features import geometry_mask
 from rasterio.io import MemoryFile
 
 from app.place import stac
-from app.place.history import DATA_API, TIMEOUT, WORKERS, bbox_of, grid_shape
+from app.place.history import DATA_API, MAX_LOST, TIMEOUT, WORKERS, bbox_of, grid_shape
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +56,7 @@ class RadarYear:
     passes: int = 0
     water: list[str] = field(default_factory=list)     # ISO dates of passes with the plot under water
     vv_db: dict[str, float] = field(default_factory=dict)   # date -> median VV dB (show working)
+    lost: int = 0                                          # passes still unread: the year isn't kept as its record
 
     @property
     def water_passes(self) -> int:
@@ -121,11 +121,11 @@ def dry_reference(lat: float, lon: float, geom: dict, today: date, *, workers: i
     last = today.year if today.month > DRY_MONTHS[1] else today.year - 1
     first = last - REF_SEASONS + 1
     todo = passes(lon, lat, date(first, DRY_MONTHS[0], 1), date(last, DRY_MONTHS[1], 30), DRY_MONTHS)
-    vals = []
-    with httpx.Client(timeout=TIMEOUT) as client, ThreadPoolExecutor(max_workers=workers) as ex:
-        for db in ex.map(lambda it: read_pass(client, it["id"], geom, bbox, shape), todo):
-            if db is not None:
-                vals.append(db)
+    with httpx.Client(timeout=TIMEOUT) as client:
+        got, failed = stac.each(lambda it: read_pass(client, it["id"], geom, bbox, shape), todo, workers)
+    if len(failed) > MAX_LOST * len(todo):
+        raise stac.Busy(f"{len(failed)} of {len(todo)} dry-season passes unread")
+    vals = [db for _, db in sorted(got.items()) if db is not None]
     ref = Reference(round(float(np.median(vals)), 1) if vals else None, len(vals), f"{first}–{last}")
     log.info("place: radar dry-season reference %s dB over %d passes (%s)", ref.vv_db, ref.passes, ref.seasons)
     return ref
@@ -135,6 +135,8 @@ def read_pass(client: httpx.Client, item_id: str, geom: dict, bbox: tuple, shape
     url = f"{DATA_API}/{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}/{shape[0]}x{shape[1]}.tif"
     params = [("collection", S1), ("item", item_id), ("assets", "vv"), ("resampling", "nearest")]
     r = client.get(url, params=params, headers=stac._headers())
+    if r.status_code in stac.BUSY_STATUS:       # busy, not 'no pass': never a thinner year in the cache
+        raise stac.Busy(f"HTTP {r.status_code}")
     if r.status_code != 200:
         log.info("place: radar window of %s: HTTP %s", item_id, r.status_code)
         return None
@@ -156,16 +158,21 @@ def radar_years(lat: float, lon: float, geom: dict, years: list[int], *, workers
             if int(it["properties"]["datetime"][:4]) in years]
     log.info("place: %d radar passes for %d years", len(todo), len(years))
     out = {y: RadarYear(y) for y in years}
-    with httpx.Client(timeout=TIMEOUT) as client, ThreadPoolExecutor(max_workers=workers) as ex:
-        for it, db in zip(todo, ex.map(lambda it: read_pass(client, it["id"], geom, bbox, shape), todo)):
-            day = it["properties"]["datetime"][:10]
-            r = out[int(day[:4])]
-            if db is None:
-                continue
-            r.passes += 1
-            r.vv_db[day] = round(db, 1)
-            if is_water(db, threshold, reference, on_water):
-                r.water.append(day)
+    with httpx.Client(timeout=TIMEOUT) as client:
+        got, failed = stac.each(lambda it: read_pass(client, it["id"], geom, bbox, shape), todo, workers)
+    if len(failed) > MAX_LOST * len(todo):
+        raise stac.Busy(f"{len(failed)} of {len(todo)} radar passes unread")
+    for i in failed:
+        out[int(todo[i]["properties"]["datetime"][:4])].lost += 1
+    for i, db in sorted(got.items()):
+        day = todo[i]["properties"]["datetime"][:10]
+        r = out[int(day[:4])]
+        if db is None:
+            continue
+        r.passes += 1
+        r.vv_db[day] = round(db, 1)
+        if is_water(db, threshold, reference, on_water):
+            r.water.append(day)
     return out
 
 

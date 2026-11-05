@@ -60,6 +60,14 @@ Each entry is a fix for a failure a real tester hit on the live service, kept as
   are shortened at a word, never mid-word. A page number a model writes in a sentence is now tested against the cited
   pages: it becomes the page that prints the figure, or goes if none does ("p. 4" was the number printed on PDF page 22).
 
+- **A new pin on a busy evening** (live traces 682, 683). Reading a pin for the first time worked, but Planetary
+  Computer's image service was answering 3-6% of requests with a 504 after 15 s, with an occasional hung read or
+  unreadable reply. One such request among about 400 failed the whole job, lost everything fetched and told the user to
+  try again; a 504 was also taken as "no data", so a thinner year could be cached. Requests now go again, a job waits out
+  a busy service and goes on from what it has, a year with images still unread is never cached, and the turn stays open
+  with the typing indicator and progress lines until the answer goes out with its chart and map. The reply never says
+  "try again". A job stops after 30 minutes, the time an exact location may be held, and DELETE MY DATA stops it at once.
+
 ### A change that is not a bug fix
 
 - **A stated name, for one hour** (5 Nov 2026, asked for by the owner). When a user tells Kasafi their name in a

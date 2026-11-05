@@ -7,6 +7,8 @@ from datetime import date
 
 import httpx
 
+from app.place import stac
+
 ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
 TIMEOUT = 40.0
 SEASON = (6, 10)          # June–October: the rainy season
@@ -17,9 +19,7 @@ def daily_rain(lat: float, lon: float, start: date, end: date) -> dict[str, floa
     params = {"latitude": lat, "longitude": lon, "start_date": start.isoformat(), "end_date": end.isoformat(),
               "daily": "precipitation_sum", "timezone": "Africa/Lagos"}
     with httpx.Client(timeout=TIMEOUT) as c:
-        r = c.get(ARCHIVE, params=params)
-        r.raise_for_status()
-        d = r.json()["daily"]
+        d = stac.read_json(lambda: c.get(ARCHIVE, params=params))["daily"]
     return {t: (v if v is not None else 0.0) for t, v in zip(d["time"], d["precipitation_sum"])}
 
 

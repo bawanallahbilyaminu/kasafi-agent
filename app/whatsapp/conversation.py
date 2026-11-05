@@ -18,6 +18,7 @@ import asyncio
 import logging
 import re
 import time
+import traceback
 from collections.abc import Awaitable, Callable
 import json
 from dataclasses import dataclass, replace
@@ -34,7 +35,7 @@ from app.geo.facilities import (Filters, FacilitySearch, add_routes, emergency_l
 from app.geo.facilities import FACILITY as FACILITY_WORD
 from app.geo.facility_info import NAMED, ROUTE_TO, as_facility, card, counted, is_count, lookup
 from app.geo.location import SHARE, Spot, locate_point, pin_of, place_from_text
-from app.place.answer import place_route
+from app.place.answer import SATELLITE_JOB_S, SatelliteUnavailable, place_route, satellite_turn
 from app.place.planner import area_route
 from app.agent.routing import document_question, facility_intent, other_subject
 from app.privacy import names as name_memory
@@ -188,6 +189,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     if text and is_delete_command(text):
         delete_user_data(sender, store=store, settings=settings)
         location_memory.forget(user_key(sender, settings))       # and any point still in memory
+        withdraw_satellite(user_key(sender, settings))           # and a satellite job still holding one
         name_memory.forget(user_key(sender, settings))           # and a name the user stated (memory only)
         _first_messages.pop(user_key(sender, settings), None)    # and a first message kept before consent
         return [Out(DELETED_REPLY)]
@@ -484,8 +486,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
         store.add_spend(settings.kasafi_cost_per_question_usd)
         # one progress line per request: a place-history question sends its own ("checking about N years of
         # satellite images…", app/place/answer.py) on a first request and answers from the cache in seconds otherwise
-        satellite = understanding.capability == "place_history" if understanding is not None and \
-            understanding.capability not in ("other", "conversation", "") else bool(place_route(question))
+        satellite = satellite_turn(question, understanding)
         sent: list[str] = []
         closed = False                            # set when the answer timed out: nothing of it is sent after that
 
@@ -526,7 +527,10 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                            history=store.recent_turns(key),
                            **({"place": place} if place else {}),
                            **({"understanding": understanding} if understanding is not None else {})))
-                result = await _await_answer(job, limit, sent, lang, notify, carry_on=deep_turn)
+                # the satellite record: the turn stays open (typing, progress lines) until the answer is ready, and a
+                # part of a multi-part reply says so too (traces 682, 683)
+                result = await _satellite_wait(job, key, lang, outer_notify) if satellite and not deep_turn else \
+                    await _await_answer(job, limit, sent, lang, notify, carry_on=deep_turn)
             finally:
                 slow.cancel()
             body = result if isinstance(result, str) else result.text
@@ -554,6 +558,16 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
                 _deliver_later(fsr.job, sender, key, lang, strip_location(question), store, settings))
             words = FETCH_WORDS.get(lang, FETCH_WORDS["en"])
             body, result = words["later" if fetch_started(sent) else "deep_later"], None
+        except SatelliteWithdrawn:                # DELETE MY DATA while it ran: no answer, no turn kept
+            closed = True
+            log.info("a satellite job was withdrawn")
+            return []
+        except SatelliteUnavailable as e:         # busy for the whole time a location may be held
+            closed = True
+            seconds = time.perf_counter() - started
+            log.error("satellite service unavailable after %.0fs: %s", seconds, e)
+            body, result = t("satellite_gave_up", lang), None
+            await _note_failure(settings, question, lang, f"satellite: unavailable after {seconds:.0f}s: {e}"[:300], seconds, body)
         except asyncio.TimeoutError:
             closed = True
             seconds = time.perf_counter() - started
@@ -565,7 +579,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             seconds = time.perf_counter() - started
             log.exception("answer failed: %s", type(e).__name__)
             body, result = t("satellite_failed" if satellite else "answer_failed", lang), None
-            await _note_failure(settings, question, lang, f"{'satellite' if satellite else 'documents'}: {type(e).__name__}: {e}"[:300], seconds, body)
+            await _note_failure(settings, question, lang, f"{'satellite' if satellite else 'documents'}: {type(e).__name__}: {e}{_failed_at(e)}"[:300], seconds, body)
         offer = getattr(result, "offer", None)
         store.set_pending_calc(key, offer.to_dict() if offer else None)
         text_out = f"{prefix}\n\n{body}" if prefix else body
@@ -948,6 +962,72 @@ async def _await_answer(job: asyncio.Task, limit: float, sent: list[str], lang: 
             if fetch_started(sent) and asyncio.get_running_loop().time() - t0 < FETCH_LIMIT_S:
                 await notify(Out(words[min(n, len(words) - 1)], lang=lang))
                 n += 1
+
+
+SATELLITE_LINES_AT_S = (90.0, 210.0, 600.0, 1200.0)      # a first read took 109-209 s on a busy evening (5 Nov 2026)
+SATELLITE_WORDS = {
+    "en": ["🛰️ Still reading the satellite images for this place…",
+           "🛰️ Still checking. This one is taking longer; I'll send the answer here as soon as it's ready, and you don't "
+           "need to ask again.",
+           "🛰️ Still working on this place's record. The answer will come here.",
+           "🛰️ Still working on it. The answer will come here."],
+    "ha": ["🛰️ Har yanzu ina karanta hotunan tauraron ɗan adam na wannan wuri…",
+           "🛰️ Har yanzu ina dubawa. Wannan yana ɗaukar lokaci fiye da yadda aka saba; zan aiko da amsar a nan da zarar "
+           "ta shirya, ba sai kun sake tambaya ba.",
+           "🛰️ Har yanzu ina aiki a kan bayanan wannan wuri. Amsar za ta zo nan.",
+           "🛰️ Har yanzu ina aiki a kai. Amsar za ta zo nan."],
+}
+_satellite_jobs: dict[str, set[asyncio.Task]] = {}
+
+
+class SatelliteWithdrawn(Exception):
+    """The user deleted their data while the satellite job ran: it holds their location, so it stops."""
+
+
+def withdraw_satellite(key: str) -> None:
+    for job in list(_satellite_jobs.pop(key, ())):
+        job.cancel()
+
+
+async def _satellite_wait(job: asyncio.Task, key: str, lang: str, notify: NotifyFn):
+    """The satellite job's answer, whenever it is ready (never 'try again'): the turn stays open, so the typing indicator
+    goes on and the answer goes out the usual way, with its chart, map and buttons. A progress line now and then. Past
+    the job's own limit (a location is held no longer), SatelliteUnavailable."""
+    _satellite_jobs.setdefault(key, set()).add(job)
+    job.add_done_callback(lambda j: _satellite_jobs.get(key, set()).discard(j))
+    words = SATELLITE_WORDS.get(lang, SATELLITE_WORDS["en"])
+    loop = asyncio.get_running_loop()
+    t0, n = loop.time(), 0
+    limit = SATELLITE_JOB_S + 240.0
+    while True:
+        elapsed = loop.time() - t0
+        if elapsed >= limit:
+            job.cancel()
+            raise SatelliteUnavailable("no answer within the turn's limit")
+        next_at = min(limit, SATELLITE_LINES_AT_S[n]) if n < len(SATELLITE_LINES_AT_S) else limit
+        try:
+            return await asyncio.wait_for(asyncio.shield(job), max(0.05, next_at - elapsed))
+        except asyncio.TimeoutError:
+            if job.done():
+                return job.result()
+            if n < len(SATELLITE_LINES_AT_S) and loop.time() - t0 >= SATELLITE_LINES_AT_S[n]:
+                await notify(Out(words[n], lang=lang))
+                n += 1
+        except asyncio.CancelledError:
+            current = asyncio.current_task()
+            if job.cancelled() and not (current is not None and current.cancelling()):
+                raise SatelliteWithdrawn() from None
+            raise
+
+
+def _failed_at(e: BaseException) -> str:
+    """Where in our code it failed, for the trace (a job run through scripts/ask.py logs to its caller, not the server)."""
+    for frame in reversed(traceback.extract_tb(e.__traceback__)):
+        path = frame.filename.replace("\\", "/")
+        at = path.rfind("/app/")
+        if at >= 0 and not path.endswith("app/whatsapp/conversation.py"):
+            return f" (at {path[at + 1:]}:{frame.lineno})"
+    return ""
 
 
 async def _deliver_later(job: asyncio.Task, sender: str, key: str, lang: str, question: str, store: UserStore,

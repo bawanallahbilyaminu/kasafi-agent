@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
@@ -49,7 +48,8 @@ FIRST_YEAR, GOOD_FROM = 2015, 2017     # 2015–2016 (one satellite) count only 
 PIXEL_M = 10.0
 STALE_DAYS = 7
 WORKERS = 12
-TIMEOUT = 60.0
+TIMEOUT = 30.0               # the data API's own gateway gives up at 15 s; a read that hangs past this goes again
+MAX_LOST = 0.05              # past this share of a pin's scenes still unread after the retries, the job waits and goes again
 JRC_DIR = Path("data/place/jrc")        # yearly water classes clipped to Sokoto, if ever exported (none yet: README roadmap)
 WORLDCOVER = {10: "trees", 20: "shrubland", 30: "grassland", 40: "cropland", 50: "built-up", 60: "bare or sparse",
               70: "snow", 80: "open water", 90: "wetland", 95: "mangroves", 100: "moss and lichen"}
@@ -91,6 +91,7 @@ class YearRow:
     rain_year_mm: float | None = None
     rain_days: int = 0                  # season days with data (an incomplete season shows)
     usable: bool = False                # enough clear images for the cell (mark_usable); else shown hatched
+    lost: int = 0                       # scenes the service was too busy to serve: this row is never kept as the year's record
 
 
 def obs_threshold(years: dict[int, "YearRow"]) -> int:
@@ -251,6 +252,8 @@ def fetch_window(client: httpx.Client, scene: Scene, bbox: tuple, shape: tuple[i
     url = f"{DATA_API}/{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}/{shape[0]}x{shape[1]}.tif"
     params = [("collection", stac.S2), ("item", scene.id), ("resampling", "nearest")] + [("assets", a) for a in assets]
     r = client.get(url, params=params, headers=stac._headers())
+    if r.status_code in stac.BUSY_STATUS:       # busy, not 'no data': a scene lost here must not thin a cached year
+        raise stac.Busy(f"HTTP {r.status_code}")
     if r.status_code != 200:
         log.info("place: window of %s: HTTP %s", scene.id, r.status_code)
         return None
@@ -309,19 +312,25 @@ def year_rows(observations: list[Observation], years: list[int]) -> dict[int, Ye
 
 def compute_years(lat: float, lon: float, geom: dict, years: list[int], *, workers: int = WORKERS,
                   progress=None) -> dict[int, YearRow]:
-    """The Sentinel-2 measures for these years (the scenes fetched side by side)."""
+    """The Sentinel-2 measures for these years (the scenes fetched side by side; those the service was too busy for go
+    again, stac.each). A few still unread after that: the rows are used and marked `lost`, so they are never kept as
+    the year's record. More than MAX_LOST: stac.Busy, and the job waits and goes again."""
     bbox, shape = bbox_of(geom), grid_shape(bbox_of(geom), lat)
     todo = scenes(lon, lat, date(min(years), 2, 1), date(max(years), 10, 31))
     todo = [s for s in todo if s.day.year in years]
     log.info("place: %d scenes for %d years", len(todo), len(years))
-    observations: list[Observation] = []
-    with httpx.Client(timeout=TIMEOUT) as client, ThreadPoolExecutor(max_workers=workers) as ex:
-        for i, obs in enumerate(ex.map(lambda s: observe(client, s, geom, bbox, shape), todo), 1):
-            if obs is not None:
-                observations.append(obs)
-            if progress and i % 25 == 0:
-                progress(i, len(todo))
-    return year_rows(observations, years)
+    with httpx.Client(timeout=TIMEOUT) as client:
+        got, failed = stac.each(lambda s: observe(client, s, geom, bbox, shape), todo, workers)
+    if len(failed) > MAX_LOST * len(todo):
+        raise stac.Busy(f"{len(failed)} of {len(todo)} scenes unread")
+    if progress:
+        progress(len(got), len(todo))
+    rows = year_rows([o for _, o in sorted(got.items()) if o is not None], years)
+    for i in failed:
+        rows[todo[i].day.year].lost += 1
+    if failed:
+        log.warning("place: %d of %d scenes unread after the retries: those years are not cached", len(failed), len(todo))
+    return rows
 
 
 # --- the long water history and the land cover ----------------------------------------------------------------
@@ -340,7 +349,7 @@ def jrc_summary(lon: float, lat: float, geom: dict) -> dict:
         params = [("collection", stac.JRC), ("item", items[0]["id"]), ("resampling", "nearest")] + \
                  [("assets", a) for a in assets]
         with httpx.Client(timeout=TIMEOUT) as c:
-            r = c.get(url, params=params, headers=stac._headers())
+            r = stac.patient_get(c, url, params=params, headers=stac._headers())
         if r.status_code == 200:
             with MemoryFile(r.content) as mf, mf.open() as src:
                 data = src.read()
@@ -384,7 +393,7 @@ def _window(collection: str, item: str, bbox: tuple, shape: tuple[int, int], ass
     url = f"{DATA_API}/{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}/{shape[0]}x{shape[1]}.tif"
     params = [("collection", collection), ("item", item), ("resampling", "nearest")] + [("assets", a) for a in assets]
     with httpx.Client(timeout=TIMEOUT) as c:
-        r = c.get(url, params=params, headers=stac._headers())
+        r = stac.patient_get(c, url, params=params, headers=stac._headers())
     if r.status_code != 200:
         return None
     with MemoryFile(r.content) as mf, mf.open() as src:
@@ -463,7 +472,7 @@ def landcover(lon: float, lat: float, geom: dict) -> str | None:
     url = f"{DATA_API}/{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}/{shape[0]}x{shape[1]}.tif"
     params = [("collection", stac.WORLDCOVER), ("item", items[0]["id"]), ("assets", "map"), ("resampling", "nearest")]
     with httpx.Client(timeout=TIMEOUT) as c:
-        r = c.get(url, params=params, headers=stac._headers())
+        r = stac.patient_get(c, url, params=params, headers=stac._headers())
     if r.status_code != 200:
         return None
     with MemoryFile(r.content) as mf, mf.open() as src:
@@ -484,10 +493,14 @@ def _load(conn, cell: str) -> dict[tuple[str, int], tuple[dict, date]]:
     """A cell's persisted rows, or a plot's in-memory rows (a 'mem:' key)."""
     if cell.startswith("mem:"):
         return dict(_memory(cell))
-    if conn is None:
-        return {}
-    rows = conn.execute("SELECT layer, year, values, computed_at FROM sat_cache WHERE cell = %s", (cell,)).fetchall()
-    return {(layer, year): (vals, at) for layer, year, vals, at in rows}
+    kept: dict[tuple[str, int], tuple[dict, date]] = {}
+    if conn is not None:
+        rows = conn.execute("SELECT layer, year, values, computed_at FROM sat_cache WHERE cell = %s", (cell,)).fetchall()
+        kept = {(layer, year): (vals, at) for layer, year, vals, at in rows}
+    return {**kept, **_memory(_THIN + cell)}     # a year read with scenes missing, for this answer's chart and map only
+
+
+_THIN = "mem:thin:"     # a pin's year with scenes still unread: memory only, 30 minutes, then read again whole
 
 
 def _save(conn, cell: str, layer: str, year: int, values: dict, source: str, clear_obs: int | None,
@@ -530,7 +543,7 @@ def point_history(conn, lat: float, lon: float, *, today: date | None = None, po
             try:
                 near = nearest_water(lon, lat) or {}
                 _save(conn, h.cell, "nearest_water", 0, near, "JRC GSW v1.3", None, today)
-            except (httpx.HTTPError, OSError) as e:
+            except (httpx.HTTPError, OSError, stac.Refused) as e:
                 log.warning("place: nearest water failed: %s", type(e).__name__)
                 near = None
         if near:
@@ -571,9 +584,13 @@ def _point_history(conn, lat: float, lon: float, *, today: date, polygon: dict |
         fresh = compute_years(lat, lon, geom, missing, workers=workers, progress=progress)
         for y, r in fresh.items():
             rows[y] = r
-            _save(conn, cell, "s2", y, {k: v for k, v in asdict(r).items() if not k.startswith("rain")
-                                            and k != "usable"},
-                      "Sentinel-2 L2A, Planetary Computer", r.season_obs, today)
+            values = {k: v for k, v in asdict(r).items() if not k.startswith("rain") and k not in ("usable", "lost")}
+            if r.lost and not cell.startswith("mem:"):
+                _memory(_THIN + cell)[("s2", y)] = (values, today)     # never the year's lasting record
+                continue
+            _save(conn, cell, "s2", y, values, "Sentinel-2 L2A, Planetary Computer", r.season_obs, today)
+        if lost := sum(r.lost for r in fresh.values()):
+            timing["scenes_unread"] = float(lost)
     timing["sentinel2"] = time.perf_counter() - t0
     # rain: one call for every year when any year is missing or the current one is stale
     t1 = time.perf_counter()
@@ -594,13 +611,13 @@ def _point_history(conn, lat: float, lon: float, *, today: date, polygon: dict |
         try:
             cached[("jrc", 0)] = (jrc_summary(lon, lat, geom), today)
             _save(conn, cell, "jrc", 0, cached[("jrc", 0)][0], "JRC GSW v1.3", None, today)
-        except (httpx.HTTPError, OSError) as e:
+        except (httpx.HTTPError, OSError, stac.Refused) as e:     # stac.Busy goes up: the job waits and goes again
             log.warning("place: JRC summary failed: %s", type(e).__name__)
     if ("landcover", 0) not in cached:
         try:
             cached[("landcover", 0)] = ({"class": landcover(lon, lat, geom)}, today)
             _save(conn, cell, "landcover", 0, cached[("landcover", 0)][0], "ESA WorldCover 2021", None, today)
-        except (httpx.HTTPError, OSError) as e:
+        except (httpx.HTTPError, OSError, stac.Refused) as e:     # stac.Busy goes up: the job waits and goes again
             log.warning("place: WorldCover failed: %s", type(e).__name__)
     timing["context"] = time.perf_counter() - t2
     h = History(cell, lat, lon, rows, jrc=cached.get(("jrc", 0), ({}, today))[0],

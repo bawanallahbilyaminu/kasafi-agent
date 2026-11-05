@@ -59,8 +59,10 @@ won't keep it. Only your LGA is remembered for follow-ups."*
   locations, and nothing else: no number, name or message. Without it, Kasafi gives straight-line distances. In an
   emergency, Kasafi first replies with straight-line distances and sends the road distance in a second message. The map Kasafi sends you marks your location only as a circle about 1 km across.
 - The **exact location** is kept only in our server's working memory for **up to 30 minutes**, for follow-up
-  questions such as "the next one?", and is then deleted within about a minute. It is **never written to our database,
-  logs or answer traces**.
+  questions such as "the next one?", and is then deleted within about a minute. If a satellite check you asked for is
+  still running when that time is up, the location stays in working memory until the check ends, **at most 30 minutes
+  more**, or until you send GOGE BAYANAI NA or DELETE MY DATA. It is **never written to our database, logs or answer
+  traces**.
 - If you **type or say an exact location** in a message (coordinates such as 13.0589, 5.1673, degrees and minutes,
   or a plus code such as 7FG9+X2), Kasafi removes it before the message is saved in the conversation history, the
   answer trace, a failure record or the logs, and before the question or the history is sent to an AI service. The

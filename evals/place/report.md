@@ -1,6 +1,6 @@
-# Place history planner eval (in code), 2026-11-03
+# Place history planner eval (in code), 2026-11-05
 
-103 cases, **0 wrong**, median 0.0 s.
+103 cases, **0 wrong**, median 0.1 s.
 
 | id | family | lang | year | s | result |
 |---|---|---|---|---|---|
@@ -18,13 +18,13 @@
 | a012 | greenness | ha | 2024 | 0.0 | ok |
 | a013 | flood | en | 2026 | 0.4 | ok |
 | a014 | flood | ha | 2026 | 0.0 | ok |
-| a015 | flood | en | 2026 | 0.0 | ok |
+| a015 | flood | en | 2026 | 0.1 | ok |
 | a016 | flood | ha | 2026 | 0.0 | ok |
 | a017 | flood | en | 2026 | 0.0 | ok |
 | a018 | flood | ha | 2026 | 0.0 | ok |
-| a019 | flood | en | 2026 | 0.0 | ok |
+| a019 | flood | en | 2026 | 0.1 | ok |
 | a020 | flood | ha | 2026 | 0.0 | ok |
-| a021 | flood | en | 2026 | 0.0 | ok |
+| a021 | flood | en | 2026 | 0.1 | ok |
 | a022 | flood | ha | 2026 | 0.1 | ok |
 | a023 | flood | en | 2026 | 0.0 | ok |
 | a024 | flood | ha | 2026 | 0.0 | ok |
@@ -34,9 +34,9 @@
 | a028 | flood_map | ha | 2024 | 0.0 | ok |
 | a029 | flood_map | en | 2024 | 0.0 | ok |
 | a030 | flood_map | ha | 2024 | 0.0 | ok |
-| a031 | flood_map | en | 2024 | 0.0 | ok |
+| a031 | flood_map | en | 2024 | 0.1 | ok |
 | a032 | flood_map | ha | 2024 | 0.0 | ok |
-| a033 | flood_map | en | 2024 | 0.0 | ok |
+| a033 | flood_map | en | 2024 | 0.1 | ok |
 | a034 | flood_map | ha | 2024 | 0.1 | ok |
 | a035 | flood_map | en | 2024 | 0.0 | ok |
 | a036 | flood_map | ha | 2024 | 0.0 | ok |
@@ -48,12 +48,12 @@
 | a042 | water | ha | 0 | 0.0 | ok |
 | a043 | water | en | 0 | 0.0 | ok |
 | a044 | water | ha | 0 | 0.0 | ok |
-| a045 | water | en | 0 | 0.0 | ok |
-| a046 | water | ha | 0 | 0.0 | ok |
+| a045 | water | en | 0 | 0.1 | ok |
+| a046 | water | ha | 0 | 0.1 | ok |
 | a047 | water | en | 0 | 0.0 | ok |
 | a048 | water | ha | 0 | 0.0 | ok |
 | a049 | bare | en | 2024 | 0.1 | ok |
-| a050 | bare | ha | 2024 | 0.0 | ok |
+| a050 | bare | ha | 2024 | 0.1 | ok |
 | a051 | bare | en | 2024 | 0.1 | ok |
 | a052 | bare | ha | 2024 | 0.1 | ok |
 | a053 | bare | en | 2024 | 0.1 | ok |
@@ -84,7 +84,7 @@
 | a078 | state_flood | ha | 2022 | 0.0 | ok |
 | a079 | state_flood | en | 2024 | 0.0 | ok |
 | a080 | state_flood | ha | 2024 | 0.0 | ok |
-| a081 | state_greenness | en | 2022 | 0.1 | ok |
+| a081 | state_greenness | en | 2022 | 0.0 | ok |
 | a082 | state_greenness | ha | 2022 | 0.0 | ok |
 | a083 | state_greenness | en | 2024 | 0.0 | ok |
 | a084 | state_greenness | ha | 2024 | 0.0 | ok |

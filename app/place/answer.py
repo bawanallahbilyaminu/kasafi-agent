@@ -25,6 +25,7 @@ from datetime import date
 from pathlib import Path
 
 from app.place import history as H
+from app.place import stac
 from app.place.fit import MIN_YEARS
 from app.place.floods import classify_water, flood_evidence
 from app.place.outline import Outline, plot_outline
@@ -106,8 +107,10 @@ W = {
     "en": {
         "need_pin": "To look at a place's history I need the spot itself: tap the button below and send the pin of "
                     "your farm or plot (or the pond, dam or field you mean).",
-        "progress": "🛰️ I'm checking about {n} years of satellite images for this spot. The first time takes "
-                    "about 1–2 minutes.",
+        "progress": "🛰️ I'm checking about {n} years of satellite images for this spot. The first time can take a "
+                    "few minutes, and the answer will come here on its own.",
+        "retrying": "🛰️ The satellite image service isn't answering just now. I'm trying again on my own and will "
+                    "send the answer here; you don't need to do anything.",
         "head": "*What the satellite record shows for this spot ({lga} LGA)* — experimental",
         "peak": "This rainy season ({year}) the plot was {green} ({n} years with enough clear images, {first}–{last}). "
                 "June–October rain was {rain}, and the greenness is {verdict}.",
@@ -235,7 +238,9 @@ W = {
         "need_pin": "Don in duba tarihin wuri ina buƙatar wurin kansa: ku danna maɓallin da ke ƙasa ku aiko da wurin "
                     "gonarku ko filinku (ko tafki, madatsar ruwa ko filin da kuke nufi).",
         "progress": "🛰️ Ina duba hotunan tauraron ɗan adam na kusan shekaru {n} na wannan wuri. A karon farko "
-                    "yana ɗaukar kusan minti 1 zuwa 2.",
+                    "yana iya ɗaukar ƴan mintoci, kuma amsar za ta zo nan da kanta.",
+        "retrying": "🛰️ Sabis ɗin hotunan tauraron ɗan adam bai amsa ba a yanzu. Ina sake dubawa da kaina, kuma zan "
+                    "aiko da amsar a nan; ba sai kun yi komai ba.",
         "head": "*Abin da hotunan tauraron ɗan adam suka nuna game da wannan wuri (Ƙaramar Hukumar {lga})* — na gwaji",
         "peak": "A daminar {year} gonar ta kasance {green} (shekaru {n} masu isassun hotuna bayyanannu, "
                 "{first}–{last}). Ruwan saman Yuni–Oktoba ya kasance {rain}, kuma koriyar {verdict}.",
@@ -748,12 +753,65 @@ def first_request(conn, lat: float, lon: float, today: date) -> bool:
     return any(not H._fresh(cached.get(("s2", y)), y, today) for y in range(H.GOOD_FROM, today.year + 1))
 
 
+SATELLITE_JOB_S = 30 * 60.0            # the exact location is held 30 minutes (docs/site/privacy.md): a job holds it no longer
+PATIENT_WAITS_S = (20.0, 60.0, 120.0, 300.0)   # between tries of a step when the service is down; the last one repeats
+
+
+class SatelliteUnavailable(Exception):
+    """The satellite service stayed busy for the whole of SATELLITE_JOB_S."""
+
+
+def satellite_turn(question: str, understanding=None) -> bool:
+    """This turn reads the satellite record: it may take minutes, and its answer is sent when ready."""
+    if understanding is not None and getattr(understanding, "capability", "") not in ("other", "conversation", ""):
+        return understanding.capability == "place_history"
+    return bool(place_route(question))
+
+
+async def _patiently(step, conn, notify, t: dict, until: stac.Until, told: list):
+    """A step of the job, again and again while the service is busy, until the job's limit. What it finished stays in
+    the cache (the years read, the rain), so a new try goes on from there. The user is told once."""
+    tries = 0
+    while True:
+        try:
+            return await step()
+        except stac.BUSY as e:
+            wait = PATIENT_WAITS_S[min(tries, len(PATIENT_WAITS_S) - 1)]
+            if until.left() <= wait:
+                raise SatelliteUnavailable(f"{type(e).__name__}: {e}"[:120]) from e
+            log.warning("place: the satellite service is busy (%s): going again in %.0f s", type(e).__name__, wait)
+            if notify is not None and not told:
+                told.append(True)
+                await notify(t["retrying"])
+            if conn is not None:
+                try:
+                    conn.rollback()            # no transaction left open through the wait
+                except Exception as err:       # noqa: BLE001 - the next read will say if the connection is gone
+                    log.warning("place: rollback before a wait failed: %s", type(err).__name__)
+            await asyncio.sleep(wait)
+            tries += 1
+
+
 async def place_answer(conn, settings, question: str, english: str, lang: str, place: dict | None,
                        today: date, notify=None, ask_size: bool = False) -> PlaceAnswer:
+    """The place's answer, however long a busy satellite service makes it take, up to SATELLITE_JOB_S. A job that ends
+    or is withdrawn (DELETE MY DATA) stops its worker threads."""
+    until = stac.Until(SATELLITE_JOB_S)
+    token = stac.time_limit.set(until)
+    try:
+        return await _place_answer(conn, settings, question, english, lang, place, today, notify, ask_size, until)
+    finally:
+        until.stop()
+        stac.time_limit.reset(token)
+
+
+async def _place_answer(conn, settings, question: str, english: str, lang: str, place: dict | None,
+                        today: date, notify, ask_size: bool, until: stac.Until) -> PlaceAnswer:
     """`place` may carry a `shape` the user gave (app/place/shape.py: a circle of a size, or corner pins, or
     {"declined": True}); it is used instead of the satellite outline. With `ask_size`, a pin whose outline SAM 3.1
     can't draw gets the size question (needs_size) before the satellite history is read."""
     t = _t(lang)
+    told: list = []
     if not place or place.get("lat") is None or place.get("lon") is None:
         return PlaceAnswer(t["need_pin"], False, needs_pin=True)
     lat, lon = float(place["lat"]), float(place["lon"])
@@ -775,7 +833,7 @@ async def place_answer(conn, settings, question: str, english: str, lang: str, p
     if shape.get("geometry"):
         outline = Outline.from_shape(shape)
     else:
-        outline = await plot_outline(conn, settings, lat, lon, today=today)
+        outline = await _patiently(lambda: plot_outline(conn, settings, lat, lon, today=today), conn, notify, t, until, told)
         if may_ask and not outline.is_plot:
             # an outline refused as too big for one farm: the size question says so
             big = outline.note == "too_big" and outline.drawn_ha
@@ -788,9 +846,11 @@ async def place_answer(conn, settings, question: str, english: str, lang: str, p
     # a plot's geometry (the satellite outline, a size circle, corner pins) is analysed in memory under its own key;
     # a bare pin gets its ~100 m cell's shared, persisted results (external review, findings 04 and 05)
     polygon = outline.geometry if outline.is_plot else None
-    h = await asyncio.to_thread(H.point_history, conn, lat, lon, today=today, polygon=polygon,
-                                water=water_asked(f"{question} {english}"))
+    h = await _patiently(lambda: asyncio.to_thread(H.point_history, conn, lat, lon, today=today, polygon=polygon,
+                                                   water=water_asked(f"{question} {english}")),
+                         conn, notify, t, until, told)
     timing["history"] = time.perf_counter() - t1
+    timing.update({k: v for k, v in (h.timing or {}).items() if k in ("sentinel2", "rain", "context", "scenes_unread")})
     timing["first"] = 0.0 if h.from_cache else 1.0         # computed now (a first request) or from the cache
     t3 = time.perf_counter()
     h.floods = await asyncio.to_thread(flood_evidence, conn, lat, lon, polygon or H.cell_circle(lat, lon), today=today,

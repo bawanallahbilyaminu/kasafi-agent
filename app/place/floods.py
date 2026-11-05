@@ -78,7 +78,7 @@ def radar_history(conn, lat: float, lon: float, geom: dict, *, today: date, year
         fresh = radar.radar_years(lat, lon, geom, missing, workers=workers, reference=ref.vv_db, on_water=on_water)
         for y, r in fresh.items():
             rows[y] = r
-            if conn is not None:
+            if conn is not None and not r.lost:     # a year with passes still unread is read again next time
                 _save(conn, cell, "s1", y, {"year": y, "passes": r.passes, "water": r.water, "vv_db": r.vv_db},
                       radar.SOURCE, r.passes, today)
     radar.rejudge(rows, ref.vv_db, on_water)

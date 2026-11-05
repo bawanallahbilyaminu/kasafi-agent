@@ -38,7 +38,7 @@ from pathlib import Path
 MARKER = "ASK_RESULT "
 SENDER = "2340000000098"          # synthetic (not a valid Nigerian number), and never sent to: see Capture
 MAX_VOICE_BYTES = 16 * 1024 * 1024         # WhatsApp's own limit for audio
-REMOTE_LIMIT_S = 900              # a turn with a document fetch runs up to 5 minutes, then its crops
+REMOTE_LIMIT_S = 2200             # a satellite turn waits out a busy service for up to 30 minutes, then its map and chart
 LATE_DELIVERY_S = 330             # an answer delivered after the turn (a long fetch)
 HOST = os.environ.get("KASAFI_ASK_HOST", "vps")
 CONTAINER = os.environ.get("KASAFI_ASK_CONTAINER", "kasafi-agent-api")

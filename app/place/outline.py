@@ -134,7 +134,7 @@ def true_colour(lon: float, lat: float, today: date | None = None, item: dict | 
     params = [("collection", stac.S2), ("item", item["id"]), ("resampling", "bilinear")] + \
              [("assets", a) for a in assets]
     with httpx.Client(timeout=TIMEOUT) as c:
-        r = c.get(url, params=params, headers=stac._headers())
+        r = stac.patient_get(c, url, params=params, headers=stac._headers())
     if r.status_code != 200:
         log.info("place: chip of %s: HTTP %s", item["id"], r.status_code)
         return None
@@ -209,7 +209,7 @@ async def segment_plot(settings, chip: Chip, lon: float, lat: float) -> Outline:
     x, y = pin_pixel(chip, lon, lat)
     try:
         segments = await segment_masks(jpeg, point_prompt(x, y, size, size), settings=settings, timeout=SAM_TIMEOUT)
-    except (SamError, httpx.HTTPError, OSError) as e:
+    except (SamError, httpx.HTTPError, OSError, ValueError) as e:      # ValueError: a reply that can't be read
         log.warning("place: SAM 3.1 failed: %s", type(e).__name__)
         return fallback(lon, lat, "sam_failed", chip.scene)
     best: Outline | None = None
