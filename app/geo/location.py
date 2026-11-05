@@ -151,6 +151,25 @@ class LocationMemory:
             self._shapes.pop(key, None)
             self._pins.pop(key, None)
 
+    def sweep(self) -> int:
+        """Deletes everything past its time, whoever it belongs to (the methods above only act on the user who
+        writes, so a user who never comes back would otherwise stay in memory). Returns how many went."""
+        now = time.monotonic()
+        gone = 0
+        with self._lock:
+            for held in (self._spots, self._needs, self._searches, self._shapes):
+                for k in [k for k, v in held.items() if now - v[1] >= self.ttl_s]:
+                    del held[k]
+                    gone += 1
+            for k, pins in list(self._pins.items()):
+                kept = [p for p in pins if now - p[2] < self.corner_ttl_s]
+                gone += len(pins) - len(kept)
+                if kept:
+                    self._pins[k] = kept
+                else:
+                    del self._pins[k]
+        return gone
+
 
 memory = LocationMemory()
 

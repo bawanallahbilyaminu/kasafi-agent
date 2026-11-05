@@ -43,6 +43,14 @@ Each entry is a fix for a failure a real tester hit on the live service, kept as
   draft cited the second. The tests now use every one of the ministry's rows on that page. Amounts with the scale word first, as Hausa writes them ("miliyan 100"), are matched to the
   printed figure like "₦100 million" is; `tests/test_amount_forms.py` pins every written form on every check.
 
+- **The answer check on answers with a part computed in code** (live trace 629). The check had asked for off-subject
+  figures to be dropped from a ministry overview and was overridden, because the budget profile above them was
+  computed in code. The override now covers only the part code computed. A part written from documents (and a deep
+  analysis alone) keeps the verdict, and a revise triggers the rewrite. An overview of one ministry, LGA, facility or
+  sector keeps only document figures whose page names that subject, and its page crops come from rows about it.
+- **A long analysis timing out.** A question read as a deep analysis but worded without the broad-question words got
+  the short time limit and ended in "took too long". The reading now sets the limit.
+
 ### A change that is not a bug fix
 
 - **A stated name, for one hour** (5 Nov 2026, asked for by the owner). When a user tells Kasafi their name in a
@@ -56,6 +64,10 @@ Each entry is a fix for a failure a real tester hit on the live service, kept as
   p01-p14), and a name it returns must be in the message itself. The reading kept in a trace never carries it.
   The same redaction now also covers the review queue's gaps and sites awaiting approval, and a voice question
   waiting for its read-back, pending choices and clarifications in the user store.
+- **Held data is deleted when its time is up.** A sweep every minute deletes names, locations and first messages
+  held in memory past their time, including those of users who never come back; before, they became unusable but stayed
+  in memory. The privacy page source now lists the providers actually used (Fireworks AI, no Baseten, no Azure) and
+  says exactly what happens to a name, including its limits.
 
 ## Before the deadline
 

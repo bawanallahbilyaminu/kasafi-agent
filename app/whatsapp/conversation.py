@@ -1545,6 +1545,15 @@ def _kept_first(key: str) -> dict | None:
     return msg if msg is not None and time.time() - at <= FIRST_TTL_S else None
 
 
+def sweep_first_messages() -> int:
+    """Deletes every kept first message past its 30 minutes (app/maintenance.py). Returns how many went."""
+    now = time.time()
+    old = [k for k, (at, _) in list(_first_messages.items()) if now - at > FIRST_TTL_S]
+    for k in old:
+        _first_messages.pop(k, None)
+    return len(old)
+
+
 def place_budget_reading(waiting: str):
     """The reading a place-budget question resumes with once the location has come."""
     from app.agent.understand import Understanding

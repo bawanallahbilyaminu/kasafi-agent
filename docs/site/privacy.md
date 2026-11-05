@@ -5,25 +5,45 @@ permalink: /privacy/
 
 # Kasafi Privacy Policy
 
-*Last updated: 31 October 2026 (hazard alerts; emergency road distances)*
+*Last updated: 5 November 2026 (a name you give; the AI services and hosting we use)*
 
 Kasafi is a WhatsApp assistant run by **Halal Numeriq Limited**, Sokoto, Nigeria ("we"). We are the data controller
 under the **Nigeria Data Protection Act 2023 (NDPA)**. Contact: [bilyaminu@halalnumeriq.com.ng](mailto:bilyaminu@halalnumeriq.com.ng).
 
 ## What we collect
 
-- Your **WhatsApp phone number** (and the profile name WhatsApp sends with it)
+- Your **WhatsApp phone number**, which WhatsApp sends with each message. WhatsApp also sends your profile name;
+  Kasafi doesn't read, use or store it.
 - The **messages and voice notes** you send Kasafi, and Kasafi's replies
 - Basic technical records: times, message types and errors. These don't include your message text or your full number.
 - **Answer traces** (kept 30 days) and **review-queue entries** (kept 90 days): the English wording of a question,
-  plus, for traces, Kasafi's reply. **No phone number or user ID is linked to them.** Before a trace is stored, phone
-  numbers, email addresses and long digit strings (such as account or NIN numbers) are removed from the wording.
+  plus, for traces, Kasafi's reply. **No phone number or user ID is linked to them.** Before either is stored, phone
+  numbers, email addresses, long digit strings (such as account or NIN numbers) and a name you gave for yourself are
+  removed from the question's wording.
 - A few **settings linked to a coded ID**: whether and when you agreed to the first-contact notice, your reply language
   (Hausa or English), and how many messages you sent each day (for the daily limits). The ID is made from your number
   with a secret key, so we don't store the number itself (the one exception: if you sign up for hazard alerts, see
   below).
 
-We don't ask for your name, ID or address. If you tell Kasafi your name in a message ("my name is …"), Kasafi keeps it only in our server's working memory for **up to 1 hour after your last message**, so it can greet or thank you by name. It is never written to disk: the follow-up history, answer traces, logs and backups hold "[name removed]" instead. It is deleted after an hour without a message, or at once when you send DELETE MY DATA. Kasafi never uses your WhatsApp profile name and never claims to know who you are beyond the name you gave. Please don't send private details about your health or anyone else's.
+We don't ask for your name, ID or address, and please don't send private details about your health or anyone else's.
+
+### If you tell Kasafi your name
+
+If you give your name in a message ("my name is …", "sunana …"), Kasafi may greet or thank you by it. This is what
+happens to it:
+
+- **Held in memory:** the name is kept in our server's working memory for **up to 1 hour after your last message**. Each
+  new message restarts the hour. After that hour it is **deleted within about a minute**. It is also deleted at once
+  when you send GOGE BAYANAI NA or DELETE MY DATA, and when the service restarts.
+- **Removed from what we save:** before your message or Kasafi's reply is saved in the follow-up history, a voice
+  question waiting for you to confirm it, an answer trace, the review queue or the logs, the name is replaced by
+  "[name removed]", so backups don't hold it either. This is automatic. If Kasafi doesn't recognise that something in
+  your message is your name, it stays in the saved text until that text's normal deletion date (see "How long we keep
+  it").
+- **Sent to the AI services:** your message goes to the AI services as you wrote it, so a name in it goes too (see "Who
+  processes it"), and the name held in memory goes to the Meta Model API when Kasafi writes a greeting or a thank-you.
+- **What Kasafi uses:** only a name you state in a message, never your WhatsApp profile name. Kasafi is instructed not
+  to claim to know who you are, or to repeat a job or an employer you mention.
 
 ### Your location
 
@@ -39,8 +59,8 @@ won't keep it. Only your LGA is remembered for follow-ups."*
   locations, and nothing else: no number, name or message. Without it, Kasafi gives straight-line distances. In an
   emergency, Kasafi first replies with straight-line distances and sends the road distance in a second message. The map Kasafi sends you marks your location only as a circle about 1 km across.
 - The **exact location** is kept only in our server's working memory for **up to 30 minutes**, for follow-up
-  questions such as "the next one?", and is then forgotten. It is **never written to our database, logs or answer
-  traces**.
+  questions such as "the next one?", and is then deleted within about a minute. It is **never written to our database,
+  logs or answer traces**.
 - If you **type or say an exact location** in a message (coordinates such as 13.0589, 5.1673, degrees and minutes,
   or a plus code such as 7FG9+X2), Kasafi removes it before the message is saved in the conversation history, the
   answer trace, a failure record or the logs, and before the question or the history is sent to an AI service. The
@@ -93,17 +113,22 @@ We do not sell your data, use it for advertising, or profile your political view
 ## Who processes it
 
 - **Meta, WhatsApp Cloud API**: delivers messages between you and Kasafi.
-- **Meta, Meta Model API**: AI models that transcribe voice notes and help write answers. **During the hackathon pilot,
-  content sent to the Meta Model API may be used by Meta to improve its products.**
-- **Baseten**: runs an open-weight Meta AI model that helps write answers.
+- **Meta, Meta Model API**: AI models that transcribe voice notes, read what your message means and write answers
+  (Muse Spark, Muse Voice Transcribe), and find plot outlines and tables in images (SAM 3.1). **During the hackathon
+  pilot, content sent to the Meta Model API may be used by Meta to improve its products.**
+- **Fireworks AI**: runs Muse Spark Open, an open-weight Meta model. It checks answers before they are sent, helps read
+  documents for longer analyses, and stands in for the Meta Model API when that fails or its credit runs low.
 - **Document search (Serper web search, World Bank and ReliefWeb search services)**: when Kasafi needs a public document
   it doesn't have yet, it searches for that document by its name, for example "Sokoto State Budget Implementation
   Report Q3 2025". Your question itself, your phone number and your name are never sent to them.
-- **Our server (VPS) and our database (Microsoft Azure)**: host Kasafi and store conversations.
+- **Location services (OpenRouteService, Microsoft Planetary Computer, Open-Meteo)**: only as described under "Your
+  location".
+- **Our own server (VPS)**: hosts Kasafi, its databases and their backups.
 
-The AI services (Meta Model API and Baseten) receive your question and extracts from documents. **They never receive
-your phone number or WhatsApp name.** Some of these providers process data outside Nigeria, under their own data
-protection terms and the NDPA's rules on transfers.
+The AI services (Meta Model API and Fireworks AI) receive your message as you wrote it, your recent messages and
+Kasafi's replies as saved, your LGA and ward names when a question needs them, and extracts from documents. **They never
+receive your phone number, your WhatsApp profile name or your exact location.** Some of these providers process data
+outside Nigeria, under their own data protection terms and the NDPA's rules on transfers.
 
 ## How long we keep it
 
@@ -115,7 +140,8 @@ protection terms and the NDPA's rules on transfers.
 - **Daily usage counts:** 30 days. **Consent and language settings:** until you ask us to delete them.
 - **Location:** the exact location for up to 30 minutes, in memory only; your LGA for 90 days.
 - **A first message sent before you accept:** up to 30 minutes, in memory only (see "Why").
-- **A name you tell Kasafi in a message:** up to 1 hour after your last message, in memory only; never stored.
+- **A name you tell Kasafi in a message:** up to 1 hour after your last message, in memory only, then deleted within
+  about a minute. What we save has "[name removed]" in its place (see "If you tell Kasafi your name").
 - **Alert sign-ups, with your encrypted number:** until you send STOP / DAINA or DELETE MY DATA, or 90 days after
   your last message. The record of alerts sent (by hazard and LGA, with no number) is kept 90 days. When a send fails
   for some subscribers, that record also lists their **coded IDs** (not numbers) so the next round can retry only

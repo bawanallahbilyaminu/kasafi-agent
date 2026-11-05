@@ -300,6 +300,89 @@ def test_the_memory_is_per_user_and_holds_nothing_after_its_time() -> None:
     assert m.recall("a") == "" and m._names == {}
 
 
+def test_the_sweep_deletes_a_name_an_hour_after_the_last_message_for_a_user_who_never_returns(monkeypatch) -> None:
+    """Reading a name checks its time, but only for the user who writes: a user who never comes back stayed in memory,
+    unusable but not deleted. The sweep really removes it."""
+    import time
+    now = [1_000_000.0]
+    monkeypatch.setattr(time, "time", lambda: now[0])
+    m = NameMemory()
+    m.remember("gone", "Musa Bello")
+    now[0] += NAME_TTL_S - 300
+    m.remember("here", "Aisha")
+    now[0] += 299                                             # 59:59 after 'gone' last wrote
+    assert m.sweep() == 0 and set(m._names) == {"gone", "here"}
+    now[0] += 2                                               # past the hour, and nobody has written since
+    assert m.sweep() == 1 and set(m._names) == {"here"} and "Musa Bello" not in repr(m._names)
+    m.touch("here")                                           # a message restarts the hour
+    now[0] += NAME_TTL_S - 1
+    assert m.sweep() == 0 and m.recall("here") == "Aisha"
+    now[0] += 2
+    assert m.sweep() == 1 and m._names == {}
+
+
+def test_the_sweep_runs_by_itself_at_boot_whatever_else_is_switched_on(monkeypatch) -> None:
+    import time as _time
+
+    from app import maintenance
+    from app.geo.location import LocationMemory, Spot
+    from app.geo import location
+    maintenance._swept.clear()
+    fake = NameMemory(ttl_s=0.01)
+    monkeypatch.setattr(privacy, "names", fake)
+    fake.remember("gone", "Musa")
+    th = maintenance.start_held_sweep(every_s=0.02)
+    try:
+        deadline = _time.monotonic() + 3
+        while fake._names and _time.monotonic() < deadline:
+            _time.sleep(0.01)
+        assert fake._names == {} and th.is_alive() and th.daemon
+        assert maintenance.start_held_sweep() is th           # one per process
+    finally:
+        maintenance._swept.clear()
+    # started at boot, not behind a backup folder or hazard fetching
+    src = Path("app/main.py").read_text(encoding="utf-8")
+    assert "start_held_sweep()" in src
+    # the same sweep deletes locations, plot shapes, waiting questions and first messages past their time
+    mem = LocationMemory(ttl_s=0.0, corner_ttl_s=0.0)
+    mem.remember("k", Spot(13.0, 5.0))
+    mem.wait_for_location("k", "q")
+    mem.remember_search("k", object())
+    mem.remember_shape("k", {"declined": True})
+    mem.add_pin("k", 13.0, 5.0)
+    assert mem.sweep() == 5 and not (mem._spots or mem._needs or mem._searches or mem._shapes or mem._pins)
+    keep = LocationMemory()
+    keep.remember("k", Spot(13.0, 5.0))
+    assert keep.sweep() == 0 and keep.recall("k") is not None
+    monkeypatch.setattr(location, "memory", mem)
+    now = _time.time()
+    monkeypatch.setitem(C._first_messages, "old", (now - C.FIRST_TTL_S - 1, {"id": "x"}))
+    monkeypatch.setitem(C._first_messages, "new", (now, {"id": "y"}))
+    assert maintenance.sweep_held()["first_messages"] == 1 and "old" not in C._first_messages
+    assert "new" in C._first_messages
+
+
+def test_the_privacy_page_says_what_the_code_does() -> None:
+    """docs/site/privacy.md, the source of the published page."""
+    from app.config import Settings
+    page = " ".join(Path("docs/site/privacy.md").read_text(encoding="utf-8").split())
+    # the providers actually used
+    for gone in ("Baseten", "Azure"):
+        assert gone not in page
+    assert Settings.model_fields["kasafi_open_hosts"].default == "fireworks" and "Fireworks AI" in page
+    for used in ("Meta Model API", "WhatsApp Cloud API", "Serper", "OpenRouteService", "Planetary Computer", "Open-Meteo"):
+        assert used in page, used
+    # names, as built: the numbers the code uses, and no claim that nothing can slip through
+    assert NAME_TTL_S == 3600 and "up to 1 hour after your last message" in page
+    from app.maintenance import SWEEP_EVERY_S
+    assert SWEEP_EVERY_S <= 60 and "deleted within about a minute" in page
+    assert NAME_MARK in page and "goes to the Meta Model API" in page and "stays in the saved text" in page
+    section = page.split("### If you tell Kasafi your name")[1].split("### Your location")[0]
+    for over_claim in ("never written to disk", "never stored", "never claims to know", "does not keep"):
+        assert over_claim not in section and over_claim not in page.split("## How long we keep it")[1], over_claim
+    assert "doesn't read, use or store it" in page
+
+
 def test_the_prompt_uses_the_name_sparingly_and_claims_nothing_more() -> None:
     assert "NAME THE USER GAVE: Musa Bello" in CV.user_message("Thanks", "en", [], None, name="Musa Bello")
     assert "NAME THE USER GAVE: none" in CV.user_message("Thanks", "en", [], None)

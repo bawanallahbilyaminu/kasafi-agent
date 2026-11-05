@@ -186,6 +186,17 @@ class NameMemory:
         with self._lock:
             self._names.pop(key, None)
 
+    def sweep(self) -> int:
+        """Deletes every name past its hour, whoever it belongs to (`recall` and `touch` only act on the user who
+        writes, so a user who never comes back would otherwise stay in memory). Returns how many went."""
+        import time
+        now = time.time()
+        with self._lock:
+            old = [k for k, (_, at) in self._names.items() if now - at > self.ttl_s]
+            for k in old:
+                del self._names[k]
+        return len(old)
+
 
 names = NameMemory()
 
