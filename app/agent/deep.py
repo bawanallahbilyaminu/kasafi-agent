@@ -116,6 +116,7 @@ class Claim:
     from_rows: bool = False      # read from the budget and BIR rows in code (the money series over the years)
     basis: str = ""              # a survey figure's table and basis ('... (Valid dose coverage); according to ...')
     refs: list = field(default_factory=list)    # more (title, page) sources a calculation rests on, cited after its own
+    printed: str = ""            # an overview of one subject: the figure as printed on a row about it (for a crop)
 
     @property
     def when(self) -> str:
@@ -143,6 +144,7 @@ class DeepResult:
     unread: list[str] = field(default_factory=list)   # documents chosen but not read in time (said, never silent)
     dims: list = field(default_factory=list)          # the dimensions, kept for a rewrite round
     pool: list = field(default_factory=list)          # every selected claim (the brief cites some): for a rewrite
+    about: object | None = None                       # an overview of one subject: how a page names it
 
 
 # --- 1. dimensions and measures -----------------------------------------------------------------------------------
@@ -708,6 +710,178 @@ def row_bound(c: dict, pages: dict[int, str]) -> bool:
     if not claim:
         return True
     return any(claim & label(i) for i in rows)
+
+
+# --- an overview of one subject: only figures whose page names it (5 Nov 2026) ------------------------------------
+# Live trace 629, 'Tell me about the Ministry of Innovation and Digital Economy': the brief carried the state's
+# budget deficit, a health-insurance count from a partner report and the state's 2030 targets, each verified on its
+# page and none about the ministry. For an overview of one ministry or agency, LGA, facility or sector, a figure
+# read from a document is kept only when its own page names that subject.
+
+_LEAD = re.compile(r"(?i)^(?:the\s+)?(?:sokoto\s+state\s+)?(?:ministry|department|office|bureau)\s+(?:of|for)\s+(?:the\s+)?")
+_PLACE_TAIL = re.compile(r"(?i)\s*\b(?:lga|l\.g\.a\.?|local\s+government(?:\s+area)?|ward|sector)\b\.?\s*$")
+_VOCAB_STOP = {"budget", "number", "target", "targets", "plan", "plans", "cost", "costs", "required", "available",
+               "coverage", "percent", "year", "years", "state", "sokoto", "funding", "minimum", "standard",
+               "standards", "total", "share", "actual", "spending", "allocation", "expenditure", "performance",
+               "other", "their", "with", "from", "more", "needed", "against", "report", "reports", "sector",
+               "programme", "programmes", "proposed", "interventions", "implementation", "development", "level",
+               "service", "services", "package", "strategy", "partners", "support", "outcomes", "indicators",
+               "release", "infrastructure", "resources", "human", "basic", "background", "characteristics",
+               "specific", "received", "children", "people", "population", "fully", "based", "across"}
+
+
+def _phrase(name: str) -> str:
+    """A name as a pattern: its words in order, any spacing or hyphen between them, 'and' or '&' alike."""
+    words = [w for w in re.findall(r"[^\W_]+(?:['’][^\W_]+)?|&", name) if w]
+    return r"[\s\-/,]*".join(r"(?:and|&)" if w.lower() in ("and", "&") else re.escape(w) for w in words)
+
+
+def subject_pattern(level: str, name: str, code: str = "", dims: list[Dimension] | None = None) -> re.Pattern | None:
+    """How a page names the subject of an overview; None when the subject gives nothing to look for (then nothing
+    is filtered).
+    - a ministry or agency: its name as printed, the name without 'Ministry of', or its administrative code (every
+      row of a budget or accounts table carries it: 0279… for the Ministry of Innovation and Digital Economy);
+    - an LGA: its name ('Dange Shuni', 'Dange-Shuni');
+    - a facility: its name;
+    - a sector: the sector's own words (app/agent/sectors.py), its name, and the words its measures are searched
+      by ('vaccinat…', 'antenatal', 'midwives'), so a survey's coverage table counts as the sector's page."""
+    name = " ".join((name or "").split())
+    alts: list[str] = []
+    if level == "agency":
+        core = _LEAD.sub("", name)
+        alts.append(_phrase(name))
+        if len(re.findall(r"[^\W\d_]{3,}", core)) >= 2:      # 'Digital Economy' tells; 'Health' alone is on any page
+            alts.append(_phrase(core))
+        digits = re.sub(r"\D", "", code or "")
+        if len(digits) == 12 and (org := digits.rstrip("0")) and len(org) >= 4:
+            alts.append(rf"(?<!\d){org[:max(4, min(len(org), 6))]}\d{{{12 - max(4, min(len(org), 6))}}}(?!\d)")
+    elif level in ("lga", "facility"):
+        core = _PLACE_TAIL.sub("", name)
+        if len(re.sub(r"\W", "", core)) >= 4 and core.lower() not in ("sokoto", "sokoto state"):
+            alts.append(_phrase(core))
+    elif level == "sector":
+        from app.agent.sectors import sector_asked
+        core = _PLACE_TAIL.sub("", name)
+        if len(re.sub(r"\W", "", core)) >= 4:
+            alts.append(_phrase(core))
+        if (s := sector_asked(name)) is not None:
+            alts += [s.asked.pattern, s.mda.pattern, s.words.pattern]
+        vocab = set()
+        for d in dims or []:
+            for text in [d.name, *d.queries, *[m.name for m in d.measures], *[q for m in d.measures for q in m.queries]]:
+                vocab |= {w.lower()[:7] for w in re.findall(r"[A-Za-z]{6,}", text or "") if w.lower() not in _VOCAB_STOP}
+        if vocab and alts:
+            alts.append(r"\b(?:" + "|".join(sorted(re.escape(v) for v in vocab)) + r")")
+    alts = [a for a in alts if a]
+    return re.compile("|".join(f"(?:{a})" for a in alts), re.I) if alts else None
+
+
+def _whole_page(conn: psycopg.Connection, doc_id: str, page: int) -> str:
+    return (conn.execute("SELECT text FROM pages WHERE doc_id = %s AND page = %s", (doc_id, page)).fetchone() or [""])[0] or ""
+
+
+def from_code(c: Claim) -> bool:
+    """Read from the subject's own rows or the registry in code, never from a page by a model."""
+    return c.from_rows or c.calculated or c.doc_id.startswith("registry:")
+
+
+_TOKEN = re.compile(r"(?<![\d,.])\d[\d,]*(?:\.\d+)?(?![\d,]|\.\d)")
+
+
+def _names_line(lines: list[str], i: int, about: re.Pattern) -> bool:
+    """This printed line names the subject, or its row's label wrapped onto the lines just above it (lines with no
+    amounts: 'audited' tables print the ministry's name on one line and the amounts on the next)."""
+    if about.search(lines[i]):
+        return True
+    for j in range(i - 1, max(i - 4, -1), -1):
+        if _ROW_AMOUNT.search(lines[j]):
+            return False
+        if about.search(lines[j]):
+            return True
+    return False
+
+
+def _value_lines(lines: list[str], value: str) -> dict[str, list[int]]:
+    """Where the value is printed: {the figure as printed: its lines}."""
+    from app.agent import figures
+    want = figures.amounts(value)
+    if not want:
+        return {}
+    mark = "%" if want[0].percent else ""
+    hits: dict[str, list[int]] = {}
+    for i, line in enumerate(lines):
+        for tok in _TOKEN.findall(line):
+            if figures.found_in(want[0], figures.amounts(tok + mark)):
+                hits.setdefault(tok, []).append(i)
+    return hits
+
+
+def page_about(text: str, value: str, about: re.Pattern) -> bool:
+    """The page names the subject, and on a table with some rows naming it, the value sits on one of those rows
+    (a statement of accounts prints every ministry on one page: the page naming the ministry says nothing about
+    another ministry's row)."""
+    if not about.search(text or ""):
+        return False
+    lines = text.splitlines()
+    rows = [i for i, ln in enumerate(lines) if len(_ROW_AMOUNT.findall(ln)) >= 2]
+    named = [i for i in rows if _names_line(lines, i, about)]
+    if len(rows) < 4 or not named:
+        return True
+    if named == rows[:1] and not about.search(lines[rows[0]]):
+        return True                    # only the line above the table's first row names it: the table's heading
+    where = [i for idx in _value_lines(lines, value).values() for i in idx]
+    return not where or any(_names_line(lines, i, about) for i in where)
+
+
+def subject_figure(text: str, value: str, about: re.Pattern | None) -> str:
+    """The value as the page prints it, for a crop that shows a row about the subject: every place it is printed
+    must name the subject (the crop goes to the figure's first place on the page, so a figure also printed on
+    another line's row can't be used). '' when no such figure."""
+    lines = (text or "").splitlines()
+    for tok, idx in _value_lines(lines, value).items():
+        if about is None or all(_names_line(lines, i, about) for i in idx):
+            return tok
+    return ""
+
+
+def about_subject(conn: psycopg.Connection, claims: list[Claim], about: re.Pattern | None) -> list[Claim]:
+    """The claims whose own page names the subject (and those code read from the subject's rows), each with the
+    figure a crop may show. A statement naming the subject isn't enough: the reader wrote it; the page is the
+    evidence."""
+    if about is None:
+        return claims
+    pages: dict[tuple[str, int], str] = {}
+    keep = []
+    for c in claims:
+        if from_code(c):
+            keep.append(c)
+            continue
+        text = pages.setdefault((c.doc_id, c.page), _whole_page(conn, c.doc_id, c.page))
+        if page_about(text, c.value, about):
+            c.printed = subject_figure(text, c.value, about)
+            keep.append(c)
+    if len(keep) < len(claims):
+        log.info("deep: %d of %d figures dropped: their page doesn't name the subject", len(claims) - len(keep),
+                 len(claims))
+    return keep
+
+
+def subject_crops(r: "DeepResult", cited: list, most: int = 2) -> list:
+    """Page crops for the brief's figures, from rows about the subject: one per page, in the order the brief uses
+    them. `cited`: the answer's evidence (its numbers caption the crops). A figure of no use for a crop is skipped;
+    an overview never falls back to a crop off its subject."""
+    from app.evidence.crops import CropRequest, _is_figure
+    number = {(e.doc_id, e.page): e.n for e in cited}
+    out, seen = [], set()
+    for c in r.claims:
+        key = (c.doc_id, c.page)
+        if key in seen or key not in number or not c.printed or not _is_figure(c.printed):
+            continue
+        seen.add(key)
+        out.append(CropRequest(number[key], c.doc_id, c.title, c.page, c.printed))
+        if len(out) >= most:
+            break
+    return out
 
 
 def measures_text(dims: list[Dimension]) -> str:
@@ -1301,7 +1475,9 @@ def missing_line(cov: list[tuple[str, list[str], list[str]]], lang: str = "en",
 
 
 async def deep_answer(conn: psycopg.Connection, question: str, english: str, lang: str, *, client, open_client,
-                      settings: Settings, notify=None) -> DeepResult:
+                      settings: Settings, notify=None, overview_of: tuple[str, str, str] | None = None) -> DeepResult:
+    """`overview_of`: (level, name, code) when the question is an overview of one ministry, LGA, facility or sector:
+    only figures whose page names it are kept, and its crops come from rows about it."""
     t0 = time.perf_counter()
     start_cost = usage.total_dollars(settings)
     w = WORDS.get(lang, WORDS["en"])
@@ -1349,6 +1525,8 @@ async def deep_answer(conn: psycopg.Connection, question: str, english: str, lan
         readings += extra
         unread += [d for d in more_unread if d not in unread]
     log.info("deep: %d verified claims%s", len(claims), f" (stopped: {stopped})" if stopped else "")
+    about = subject_pattern(*overview_of, dims) if overview_of else None
+    claims = about_subject(conn, claims, about)
     read_after_all = {c.doc_id for c in claims}               # a later round read it: not 'not read in time'
     unread = [next((r.title for r in readings if r.doc_id == d and r.title), d) for d in unread
               if d not in read_after_all]
@@ -1359,7 +1537,7 @@ async def deep_answer(conn: psycopg.Connection, question: str, english: str, lan
     if not chosen:
         return DeepResult(w["none"], [], "", "", [], [r.doc_id for r in readings],
                           usage.total_dollars(settings) - start_cost, time.perf_counter() - t0, stopped, cov,
-                          unread=unread)
+                          unread=unread, about=about)
     if notify:
         await notify(w["writing"].format(n=len(chosen)))
     d = await synthesise(client, question, lang, chosen, dims, settings)
@@ -1367,7 +1545,7 @@ async def deep_answer(conn: psycopg.Connection, question: str, english: str, lan
     return DeepResult(summary, sections, differ,
                       missing_line(cov, lang, dims), used, list(dict.fromkeys(r.doc_id for r in readings)),
                       usage.total_dollars(settings) - start_cost, time.perf_counter() - t0, stopped, cov,
-                      unread=unread, dims=dims, pool=chosen)
+                      unread=unread, dims=dims, pool=chosen, about=about)
 
 
 def written(d: dict, chosen: list[Claim], dims: list[Dimension]):
@@ -1397,7 +1575,7 @@ async def rewrite(client, question: str, lang: str, r: DeepResult, feedback: str
         return r
     return DeepResult(summary, sections, differ, missing_line(cov, lang, r.dims), used, r.documents,
                       r.cost + usage.total_dollars(settings) - start, r.seconds + time.perf_counter() - t0, r.stopped,
-                      cov, unread=r.unread, dims=r.dims, pool=chosen)
+                      cov, unread=r.unread, dims=r.dims, pool=chosen, about=r.about)
 
 
 def render(r: DeepResult, lang: str) -> tuple[str, list[str]]:

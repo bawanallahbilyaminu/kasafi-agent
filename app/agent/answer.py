@@ -552,6 +552,8 @@ class Answer:
     understanding: object | None = None                     # the understanding step's reading, for the trace
     checks: list[dict] = field(default_factory=list)        # the answer check's verdicts, round by round (trace)
     code_block: str = ""                                    # code's total and parts: always kept in the main answer
+    model_wrote: bool = False                               # rows computed in code, the sentences written by a model
+    crop_requests: list | None = None                       # an overview's crops, from rows about its subject
 
 
 CONVERTED: dict[str, str] = {}       # doc id -> original format, for documents converted from Word-type files
@@ -2037,13 +2039,13 @@ def place_question(question: str, english: str = "", place: dict | None = None) 
 
 
 async def deep_path(conn, plan: Plan, question: str, lang: str, client, second, settings: Settings, notify,
-                    t: dict) -> Answer:
+                    t: dict, overview_of: tuple[str, str, str] | None = None) -> Answer:
     """The deep analysis as an Answer: the summary first, a message per dimension after it, the claims cited
     (their pages are the evidence), the brief kept for 'full brief'. Its measured cost and time are traced."""
     from app.agent.deep import deep_answer, render
     t0 = time.perf_counter()
     r = await deep_answer(conn, question, plan.english_question, lang, client=client, open_client=second,
-                          settings=settings, notify=notify)
+                          settings=settings, notify=notify, **({"overview_of": overview_of} if overview_of else {}))
     t["deep"] = time.perf_counter() - t0
     t["deep_cost"] = round(r.cost, 4)
     t["deep_docs"] = float(len(r.documents))
@@ -2056,18 +2058,27 @@ async def deep_path(conn, plan: Plan, question: str, lang: str, client, second, 
 def deep_as_answer(r, plan: Plan, t: dict, lang: str) -> Answer:
     """A deep result as an Answer (also after a rewrite round): the summary, a message per dimension, the claims'
     pages as the evidence."""
-    from app.agent.deep import render
+    from app.agent.deep import render, subject_crops
     summary, parts = render(r, lang)
-    cited, seen = [], set()
+    cited, at = [], {}
     for c in r.claims:
-        if (c.doc_id, c.page) not in seen and not c.doc_id.startswith("registry:"):
-            seen.add((c.doc_id, c.page))
-            cited.append(Evidence(len(cited) + 1, c.doc_id, c.title, None, c.page, "text",
-                                  f"{c.statement} {c.value}"))
-    exact = "\n".join([r.summary] + [f"{n}: {x}" for n, x in r.sections])
-    return Answer(summary, bool(r.claims), True, cited, plan, t, exact=exact, parts=parts, deep=r,
+        if c.doc_id.startswith("registry:"):
+            continue
+        said = f"{c.statement} {c.value}"
+        if (c.doc_id, c.page) in at:      # every claim from the page is the check's evidence, not only the first
+            e = at[(c.doc_id, c.page)]
+            e.text = f"{e.text}\n{said}"
+        else:
+            at[(c.doc_id, c.page)] = Evidence(len(cited) + 1, c.doc_id, c.title, None, c.page, "text", said)
+            cited.append(at[(c.doc_id, c.page)])
+    return Answer(summary, bool(r.claims), True, cited, plan, t, exact=deep_exact(r), parts=parts, deep=r,
                   verification="figures checked" if r.claims else "unsupported",
-                  partial=bool(r.stopped), sources=[{"doc_id": e.doc_id, "page": e.page} for e in cited])
+                  partial=bool(r.stopped), sources=[{"doc_id": e.doc_id, "page": e.page} for e in cited],
+                  crop_requests=subject_crops(r, cited) if getattr(r, "about", None) is not None else None)
+
+
+def deep_exact(r) -> str:
+    return "\n".join([r.summary] + [f"{n}: {x}" for n, x in r.sections])
 
 
 def single_mda(plan: Plan) -> str:
@@ -2077,7 +2088,66 @@ def single_mda(plan: Plan) -> str:
     return (ents[0].resolved or ents[0].name) if len(ents) == 1 and (ents[0].resolved or ents[0].code) else ""
 
 
+_GENERIC_FACILITY = re.compile(r"(?i)^(?:the\s+)?(?:phcs?|hospitals?|clinics?|dispensar\w+|health\s+(?:facilit\w+|"
+                               r"cent\w+|posts?)|primary\s+health\s+care(?:\s+\w+)?|asibiti\w*)$")
+
+
+def overview_subject(plan: Plan, u, place: dict | None, *texts: str) -> tuple[str, str, str] | None:
+    """(level, name, code) when a broad question is an overview of ONE ministry or agency, LGA, facility or sector;
+    None for anything wider (the state as a whole, two sectors, a ward: documents rarely print a ward)."""
+    ents = [e for e in (getattr(plan.need, "entities", None) or []) if getattr(e, "type", "") == "mda"]
+    if len(ents) == 1 and (ents[0].resolved or ents[0].code):
+        return "agency", ents[0].resolved or ents[0].name, ents[0].code or ""
+    level, name = getattr(u, "level", "") or "", (getattr(u, "name", "") or "").strip()
+    if level == "agency" and name:
+        return "agency", name, ""
+    if level == "lga" and (name or (place or {}).get("lga")):
+        return "lga", name or place["lga"], ""
+    if level == "facility" and name and not _GENERIC_FACILITY.match(name):
+        return "facility", name, ""
+    if level in ("sector", "state", "facility", "none", ""):
+        from app.agent.sectors import SECTORS
+        said = " ".join(x or "" for x in (*texts, name if level == "sector" else ""))
+        asked = [s for s in SECTORS if s.asked.search(said)]
+        if len(asked) == 1:
+            return "sector", asked[0].en, ""
+        if level == "sector" and name and not asked:
+            return "sector", name, ""
+    return None
+
+
+def profile_crops(conn, profile: Answer, res, about) -> list:
+    """The crops an overview's budget profile can show: the printed rows behind its total and its parts, then its
+    largest projects, each only when the page prints it on a row about the subject."""
+    from app.agent.deep import subject_figure
+    from app.evidence.crops import CropRequest
+    number = {(e.doc_id, e.page): e for e in profile.cited}
+    facts = getattr(res, "facts", None) or {}
+    wanted = [(getattr(facts.get(k), "value", None), getattr(facts.get(k), "doc_id", ""), getattr(facts.get(k), "page", 0))
+              for k in ("total", "capital", "overhead", "personnel") if k in facts]
+    wanted += [(r.amount, r.doc_id, r.page) for r in (getattr(res, "rows", None) or [])]
+    out, seen = [], set()
+    for value, doc_id, page in wanted:
+        e = number.get((doc_id, page))
+        if value is None or e is None or (doc_id, page) in seen:
+            continue
+        text = (conn.execute("SELECT text FROM pages WHERE doc_id = %s AND page = %s", (doc_id, page)).fetchone()
+                or [""])[0] or ""
+        figure = subject_figure(text, f"{value:,.2f}", about)
+        if figure:
+            seen.add((doc_id, page))
+            out.append(CropRequest(e.n, doc_id, e.title, page, figure))
+    return out
+
+
 MDA_MORE = {"en": "*From the documents*", "ha": "*Daga takardu*"}
+
+
+def overview_crops(profile: Answer, deep: list) -> list:
+    """Two crops about the subject: the profile's row, then the documents' (another of the profile's when the
+    documents have none)."""
+    own = list(profile.crop_requests or [])
+    return (own[:1] + deep[:1] + own[1:] + deep[1:])[:2]
 
 
 def mda_overview(profile: Answer, deep: Answer, lang: str) -> Answer:
@@ -2088,12 +2158,16 @@ def mda_overview(profile: Answer, deep: Answer, lang: str) -> Answer:
     documents gave nothing checked."""
     if not deep.found or not (deep.text or "").strip():
         return replace(profile, deep=None)
-    cited = list(profile.cited) + [replace(e, n=len(profile.cited) + i) for i, e in enumerate(deep.cited, 1)]
+    shift = len(profile.cited)
+    cited = list(profile.cited) + [replace(e, n=shift + i) for i, e in enumerate(deep.cited, 1)]
     text = f"{profile.text}\n\n{MDA_MORE.get(lang, MDA_MORE['en'])}\n{deep.text}"
+    crops = None
+    if profile.crop_requests is not None or deep.crop_requests is not None:
+        crops = overview_crops(profile, [replace(c, n=c.n + shift) for c in deep.crop_requests or []])
     return replace(profile, text=text, cited=cited, parts=deep.parts, deep=deep.deep, code_block=profile.text,
                    exact=f"{profile.exact}\n{deep.exact}", partial=profile.partial or deep.partial,
                    sources=[*profile.sources, *deep.sources],
-                   timings={**deep.timings, **profile.timings})
+                   timings={**deep.timings, **profile.timings}, crop_requests=crops)
 
 
 async def answer_question(question: str, lang: str, conn: psycopg.Connection, **kw) -> Answer:
@@ -2160,7 +2234,10 @@ async def deep_rewritten(a: Answer, feedback: str, question: str, lang: str, set
     a2 = deep_as_answer(r2, a.plan, a.timings, lang)
     if a.code_block:                     # the profile's text and pages stay first
         own = len(a.cited) - len({(c.doc_id, c.page) for c in a.deep.claims if not c.doc_id.startswith("registry:")})
-        profile = replace(a, text=a.code_block, cited=list(a.cited[:max(own, 0)]), deep=None, parts=[])
+        own = max(own, 0)
+        profile = replace(a, text=a.code_block, cited=list(a.cited[:own]), deep=None, parts=[],
+                          exact=a.exact.replace(f"\n{deep_exact(a.deep)}", ""),
+                          crop_requests=[c for c in a.crop_requests or [] if c.n <= own])
         a2 = mda_overview(profile, a2, lang)
     return a2
 
@@ -2261,6 +2338,8 @@ async def checked_answer(a: Answer, question: str, lang: str, conn, kw: dict, t_
         out = replace(best, text=text, partial=True, exact=text, found=supported, cited=kept,
                       maps=best.maps if keep_all else [], offer=best.offer if keep_all else None,
                       quotes=best.quotes if keep_all else "",
+                      crop_requests=None if best.crop_requests is None else [
+                          c for c in best.crop_requests if any((e.doc_id, e.page) == (c.doc_id, c.page) for e in kept)],
                       working=f"{best.working}\n\n{note}" if best.working else note,
                       parts=[], deep=None)          # a deep analysis's sections aren't sent after a failed check
         log.info("check: sent an answer built from what is supported (round %d verdict %s)", best_v.round,
@@ -2274,7 +2353,10 @@ async def _answer_finished(question: str, lang: str, conn: psycopg.Connection, *
     when nothing answers at the asked level; stop at the time budget with whatever was verified."""
     box: dict = {}
     from app.agent.deep import TIME_BUDGET_S, deep_question
-    budget = TIME_BUDGET_S if deep_question(question) else LOOP_BUDGET_S     # a deep analysis: 180 s
+    # a deep analysis: 180 s, by the words or by the reading (5 Nov 2026: a 'deep' reading restated as 'Tell me about
+    # the Ministry … including its budget and spending' has none of the words, got 165 s and timed out while reading)
+    reading = kw.get("understanding")
+    budget = TIME_BUDGET_S if deep_question(question) or getattr(reading, "capability", "") == "deep" else LOOP_BUDGET_S
     try:
         a = await asyncio.wait_for(_answer_question(question, lang, conn, box=box, **kw), timeout=budget)
     except ReplyError:
@@ -2372,6 +2454,7 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
                                        list(plan.need.measures) if plan.need else []))):
             # one MDA ('Tell me about the Ministry of X'): the structured budget core first, the documents on top
             profile = None
+            overview_of = overview_subject(plan, u, place, question, plan.english_question)
             if mda := single_mda(plan):
                 year = (plan.need.time or {}).get("year") if plan.need else None
                 spec = {"tool": "mda_profile", "mda": mda, **({"year": year} if year else {})}
@@ -2380,10 +2463,13 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
                     if res is not None and res.found and not res.clarify:
                         profile = analysis_answer(conn, replace(plan, analysis=spec, budget_query={}), res, lang,
                                                   dict(t), None)
+                        from app.agent.deep import subject_pattern
+                        if about := subject_pattern(*overview_of):
+                            profile.crop_requests = profile_crops(conn, profile, res, about)
                 except Exception as e:      # noqa: BLE001 - the deep analysis alone, as before
                     conn.rollback()
                     log.warning("mda overview: the profile failed (%s)", type(e).__name__)
-            deep = await deep_path(conn, plan, question, lang, client, second, settings, notify, t)
+            deep = await deep_path(conn, plan, question, lang, client, second, settings, notify, t, overview_of)
             return mda_overview(profile, deep, lang) if profile is not None else deep
         # two readings, both can't be shown: ask; never for a place-history question (the planner may ask "where is
         # your farm?" without knowing the pin travels with the question: the place path asks for one itself)
@@ -3177,7 +3263,7 @@ async def _page_path(conn, plan: Plan, question: str, lang: str, client, setting
     return Answer(f"{body}\n\n{tail}", True, True, cited, plan, t,
                   partial=found == "partial" or partly, exact=exact, acquired=acq, latest=latest, sources=sources,
                   offer=offer, budget=budget, working=working, verification=state, attribution=problems,
-                  code_block=parts_text)
+                  code_block=parts_text, model_wrote=bool(budget is not None and answer_text(d).strip()))
 
 
 PARTS_WORDS = {

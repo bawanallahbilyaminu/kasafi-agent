@@ -76,7 +76,9 @@ def test_an_mda_overview_leads_with_the_structured_budget_and_adds_the_documents
     assert out.text.index("2026 approved budget") < out.text.index("*From the documents*") < out.text.index("9 digital hubs")
     assert [(e.n, e.doc_id, e.page) for e in out.cited] == [(1, "budget-2026-approved", 18), (2, "budget-2025-proposed", 175)]
     assert out.deep is not None and out.parts and out.code_block.startswith("The Ministry of Innovation")
-    assert ck.computed_in_code(out)                              # judged on subject, not on a figure count
+    # code's part is judged on its subject alone; the documents part keeps the check's verdict (tests/test_subject_overview.py)
+    assert not ck.computed_in_code(out) and ck.code_part(out) == _profile().text
+    assert "9 digital hubs" in ck.document_part(out) and "2026 approved budget" not in ck.document_part(out)
     alone = A.mda_overview(_profile(), _deep_answer(found=False), "en")
     assert alone.text == _profile().text and alone.deep is None  # the documents gave nothing checked: the profile
 

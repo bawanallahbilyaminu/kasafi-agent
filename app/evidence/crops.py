@@ -81,7 +81,11 @@ def plan_crops(answer, max_images: int = 2) -> list[CropRequest]:
 
     A figure from a line citing [n] wins for evidence n ("41,869,252,082.91 [4]"), so a page that repeats
     another document's figure (the Q4 report also lists the approved budget) shows the one quoted from it.
+    An overview of one subject has chosen its crops already, from rows about the subject (`crop_requests`; empty
+    means none, never a crop off the subject).
     """
+    if (given := getattr(answer, "crop_requests", None)) is not None:
+        return list(given)[:max_images]
     by_n, every = _figures_by_citation(getattr(answer, "exact", "") or "")
     out, seen = [], set()
     for e in getattr(answer, "cited", None) or []:
