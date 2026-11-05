@@ -118,6 +118,14 @@
     "(?i:only the state)"
    ],
    "must_not": "No line in the documents is exactly that|: 0\\.00 \\["
+  },
+  "lf590": {
+   "all_re": [
+    "\b2026\b",
+    "(?i:capital)",
+    "(?i:personnel|overhead)"
+   ],
+   "must_not": "(?i:only for 2024)|couldn't give a checked answer"
   }
  }
 }

@@ -151,6 +151,13 @@
    "understand": true,
    "text": "How much was released for MNCH from the local government budget in Sokoto State?",
    "note": "5 Nov live, trace 586 (a real tester): 'No line in the documents is exactly that…' with three state lines at 0.00 (BIR Q3 2025 and the 2026 budget), no word that only state documents are held, the planned health AOP / MTSS / ROP unread, the check skipped on a 30 s timeout. Expected: the lead says the library has no LGA budgets, only the state's; never a list of 0.00 nearest lines; the state documents' own MNCH figures offered as the state's (MTSS p. 12: Free Maternal and Child Healthcare (MNCH+N) 960,000,000)."
+  },
+  {
+   "id": "lf590",
+   "lang": "en",
+   "understand": true,
+   "text": "Tell me about the Ministry of Innovation and Digital Economy in Sokoto State",
+   "note": "5 Nov live, trace 590 (a real tester): a deep analysis of 17 documents covered 2024 only; its 17 figures were on their cited pages but the code check counted 0 of 17 (house-style amounts), the check said revise, no second round ran and the brief was cut to one sentence. Expected: the structured budget core first (the 2026 approved total with personnel, overhead and capital, spending so far, 2025), then what the documents add; never 2024 only."
   }
  ]
 }

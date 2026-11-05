@@ -2048,6 +2048,15 @@ async def deep_path(conn, plan: Plan, question: str, lang: str, client, second, 
     t["deep_cost"] = round(r.cost, 4)
     t["deep_docs"] = float(len(r.documents))
     t["deep_claims"] = float(len(r.claims))
+    log.info("deep answer: %d documents, %d claims, $%.3f, %.0f s%s", len(r.documents), len(r.claims), r.cost,
+             r.seconds, f", stopped: {r.stopped}" if r.stopped else "")
+    return deep_as_answer(r, plan, t, lang)
+
+
+def deep_as_answer(r, plan: Plan, t: dict, lang: str) -> Answer:
+    """A deep result as an Answer (also after a rewrite round): the summary, a message per dimension, the claims'
+    pages as the evidence."""
+    from app.agent.deep import render
     summary, parts = render(r, lang)
     cited, seen = [], set()
     for c in r.claims:
@@ -2055,12 +2064,36 @@ async def deep_path(conn, plan: Plan, question: str, lang: str, client, second, 
             seen.add((c.doc_id, c.page))
             cited.append(Evidence(len(cited) + 1, c.doc_id, c.title, None, c.page, "text",
                                   f"{c.statement} {c.value}"))
-    log.info("deep answer: %d documents, %d claims, $%.3f, %.0f s%s", len(r.documents), len(r.claims), r.cost,
-             r.seconds, f", stopped: {r.stopped}" if r.stopped else "")
     exact = "\n".join([r.summary] + [f"{n}: {x}" for n, x in r.sections])
     return Answer(summary, bool(r.claims), True, cited, plan, t, exact=exact, parts=parts, deep=r,
                   verification="figures checked" if r.claims else "unsupported",
                   partial=bool(r.stopped), sources=[{"doc_id": e.doc_id, "page": e.page} for e in cited])
+
+
+def single_mda(plan: Plan) -> str:
+    """The one ministry, department or agency the plan resolved ('Tell me about the Ministry of X'), as the data
+    prints it; '' when the question isn't about exactly one."""
+    ents = [e for e in (getattr(plan.need, "entities", None) or []) if getattr(e, "type", "") == "mda"]
+    return (ents[0].resolved or ents[0].name) if len(ents) == 1 and (ents[0].resolved or ents[0].code) else ""
+
+
+MDA_MORE = {"en": "*From the documents*", "ha": "*Daga takardu*"}
+
+
+def mda_overview(profile: Answer, deep: Answer, lang: str) -> Answer:
+    """An overview of one MDA (5 Nov 2026, trace 590: 'Tell me about the Ministry of Innovation and Digital Economy'
+    had answered with 2024 only): the structured budget core first (the newest approved total with personnel,
+    overhead and capital, spending so far from the latest implementation report, the year before, its page crops),
+    then what the deep analysis found in the documents (mandate, programmes, projects). The profile alone when the
+    documents gave nothing checked."""
+    if not deep.found or not (deep.text or "").strip():
+        return replace(profile, deep=None)
+    cited = list(profile.cited) + [replace(e, n=len(profile.cited) + i) for i, e in enumerate(deep.cited, 1)]
+    text = f"{profile.text}\n\n{MDA_MORE.get(lang, MDA_MORE['en'])}\n{deep.text}"
+    return replace(profile, text=text, cited=cited, parts=deep.parts, deep=deep.deep, code_block=profile.text,
+                   exact=f"{profile.exact}\n{deep.exact}", partial=profile.partial or deep.partial,
+                   sources=[*profile.sources, *deep.sources],
+                   timings={**deep.timings, **profile.timings})
 
 
 async def answer_question(question: str, lang: str, conn: psycopg.Connection, **kw) -> Answer:
@@ -2108,10 +2141,38 @@ async def check_client(settings: Settings, factory) -> AsyncIterator:
         yield client
 
 
+DEEP_REWRITE_MIN_S = 35.0      # a rewrite round of a deep analysis needs at least this much of the turn left
+
+
+async def deep_rewritten(a: Answer, feedback: str, question: str, lang: str, settings: Settings, factory) -> Answer | None:
+    """The deep analysis written again from its checked claims with the check's feedback (app/agent/deep.rewrite);
+    an MDA overview keeps its structured profile first. None when the rewrite fails or changes nothing."""
+    from app.agent.deep import rewrite
+    try:
+        async with factory(settings) as writer:
+            r2 = await asyncio.wait_for(rewrite(writer, question, lang, a.deep, feedback, settings),
+                                        DEEP_REWRITE_MIN_S - 5)
+    except Exception as e:              # noqa: BLE001 - the first brief's verdict then decides
+        log.warning("deep rewrite failed (%s)", type(e).__name__)
+        return None
+    if r2 is a.deep:
+        return None
+    a2 = deep_as_answer(r2, a.plan, a.timings, lang)
+    if a.code_block:                     # the profile's text and pages stay first
+        own = len(a.cited) - len({(c.doc_id, c.page) for c in a.deep.claims if not c.doc_id.startswith("registry:")})
+        profile = replace(a, text=a.code_block, cited=list(a.cited[:max(own, 0)]), deep=None, parts=[])
+        a2 = mda_overview(profile, a2, lang)
+    return a2
+
+
 async def checked_answer(a: Answer, question: str, lang: str, conn, kw: dict, t_start: float) -> Answer:
     settings = kw.get("settings") or get_settings()
     if not settings.kasafi_answer_check or kw.get("review") or not answer_check.should_check(a) or conn is None:
         return a                             # no database: a unit test's answer (live answers always have one)
+    if getattr(a, "deep", None) is not None:   # a deep turn has the longer limit (app/whatsapp/conversation.respond)
+        from app.agent.deep import TIME_BUDGET_S
+        settings = settings.model_copy(update={"kasafi_answer_timeout_s": max(settings.kasafi_answer_timeout_s,
+                                                                             TIME_BUDGET_S + 60)})
     if settings.kasafi_answer_timeout_s - (time.perf_counter() - t_start) < settings.kasafi_check_timeout_s + 10:
         log.info("answer check skipped: too little time left")      # the answer's own checks stand
         a.checks = [{"verdict": "skipped", "why": "too little time left"}]
@@ -2134,7 +2195,20 @@ async def checked_answer(a: Answer, question: str, lang: str, conn, kw: dict, t_
             return a
         left = settings.kasafi_answer_timeout_s - (time.perf_counter() - t_start)
         best, best_v = a, v
-        if v.verdict == "revise" and left - 15 >= settings.kasafi_check_round_min_s:
+        if v.verdict == "revise" and getattr(a, "deep", None) is not None and left >= DEEP_REWRITE_MIN_S:
+            # a deep analysis sent back is written again once from its own checked claims, with the check's
+            # feedback (no document is read again), and checked again, before any fall back to a partial answer
+            # (5 Nov 2026, trace 590: 'check: revise -> partial' with no second round)
+            a2 = await deep_rewritten(a, v.feedback, question, lang, settings, factory)
+            if a2 is not None:
+                v2 = await answer_check.check(question, a2, u, history, conn, settings, client, round_=2, **retry_kw)
+                a2.checks = a.checks + [{**answer_check.trace_entry(v2), "draft": (a2.text or "")[:400]}]
+                if v2.verdict in ("pass", "skipped"):
+                    return a2
+                best, best_v = a2, v2
+            else:
+                a.checks.append({"verdict": "no rewrite", "round": 2})
+        elif v.verdict == "revise" and left - 15 >= settings.kasafi_check_round_min_s:
             u2 = u
             if v.wrong_subject and u is not None:
                 # the draft was about another subject: the message is read again with what the check said
@@ -2296,7 +2370,21 @@ async def _answer_question(question: str, lang: str, conn: psycopg.Connection, *
                 and not place_question(question, plan.english_question, place) and not hazard_route(question, plan)
                 and not official.route(f"{question} {plan.english_question}",
                                        list(plan.need.measures) if plan.need else []))):
-            return await deep_path(conn, plan, question, lang, client, second, settings, notify, t)
+            # one MDA ('Tell me about the Ministry of X'): the structured budget core first, the documents on top
+            profile = None
+            if mda := single_mda(plan):
+                year = (plan.need.time or {}).get("year") if plan.need else None
+                spec = {"tool": "mda_profile", "mda": mda, **({"year": year} if year else {})}
+                try:
+                    res = run_analysis(conn, spec)
+                    if res is not None and res.found and not res.clarify:
+                        profile = analysis_answer(conn, replace(plan, analysis=spec, budget_query={}), res, lang,
+                                                  dict(t), None)
+                except Exception as e:      # noqa: BLE001 - the deep analysis alone, as before
+                    conn.rollback()
+                    log.warning("mda overview: the profile failed (%s)", type(e).__name__)
+            deep = await deep_path(conn, plan, question, lang, client, second, settings, notify, t)
+            return mda_overview(profile, deep, lang) if profile is not None else deep
         # two readings, both can't be shown: ask; never for a place-history question (the planner may ask "where is
         # your farm?" without knowing the pin travels with the question: the place path asks for one itself)
         # … nor for "what does the <report> say about X": the report's own wording answers, whichever reading

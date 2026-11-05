@@ -58,7 +58,8 @@ written or as its usual short form: 'primary', 'JSS', 'SSS', 'IQS'; [] when none
 for the pin's exact spot, 'my ward', 'my LGA', 'Sokoto State', or the place or facility the user named in full>",
  "parts": [«PARTS»]}
 In the restatement, the user's own places are 'my farm (the pin)', 'my ward' or 'my LGA' alone: never add the \
-ward's or LGA's name to them (a name there reads as a different place).
+ward's or LGA's name to them (a name there reads as a different place). A name, job title or employer the user \
+gives about themselves is never part of the restatement or of any part's restatement: restate the question only.
 
 Capabilities:
 - budget: amounts, spending or projects of the state, a ministry, agency, sector or named project.

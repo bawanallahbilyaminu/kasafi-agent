@@ -250,7 +250,12 @@ def found_count(a) -> tuple[int, int]:
     if not figs:
         return 0, 0
     # code's own total counts as found ('23 + 23 + 14 = 60' in the working): it is computed from the printed parts
-    bad = set(unverified_numbers(" ".join(figs), a.cited, [a.working] if getattr(a, "working", "") else []))
+    extra = [a.working] if getattr(a, "working", "") else []
+    bad = set(unverified_numbers(" ".join(figs), a.cited, extra))
+    # an amount written in house style ('₦100 million' for the page's '100,000,000.00') is the same figure: it is
+    # matched in its own sentence, with its unit, not as the bare '100' (5 Nov 2026, trace 590: a deep analysis's
+    # 17 figures, all printed on their cited pages, were counted 0 of 17 and the brief was cut to one sentence)
+    bad &= set(unverified_numbers(a.exact or a.text, a.cited, extra))
     return len(figs), sum(1 for f in figs if f not in bad)
 
 

@@ -26,7 +26,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from app.config import Settings, get_settings
-from app.privacy import strip_location
+from app.privacy import strip_identity, strip_location
 
 log = logging.getLogger(__name__)
 LAGOS = timezone(timedelta(hours=1))  # Nigeria has no DST; "per day" means a Lagos calendar day
@@ -486,7 +486,8 @@ class UserStore:
     def add_turn(self, key: str, lang: str, question: str, answer: str, sources: list[dict] | None = None,
                  working: str = "", quotes: str = "") -> None:
         now = datetime.now(timezone.utc)
-        question, answer = strip_location(question), strip_location(answer)
+        # an exact location and a name the user gave for themselves never reach the stored history (app/privacy.py)
+        question, answer = strip_identity(strip_location(question)), strip_location(answer)
         working, quotes = strip_location(working or ""), strip_location(quotes or "")
         with self._lock:
             self._db.execute("INSERT INTO turns (user_key, at, lang, question, answer, sources, working, quotes) "

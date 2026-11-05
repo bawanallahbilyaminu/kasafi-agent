@@ -23,7 +23,7 @@ under the **Nigeria Data Protection Act 2023 (NDPA)**. Contact: [bilyaminu@halal
   with a secret key, so we don't store the number itself (the one exception: if you sign up for hazard alerts, see
   below).
 
-We don't ask for your name, ID or address. Please don't send private details about your health or anyone else's.
+We don't ask for your name, ID or address. If you tell Kasafi your name ("my name is …"), the name is removed before your message is saved in the follow-up history or an answer trace, and Kasafi does not keep or claim to know who you are. Please don't send private details about your health or anyone else's.
 
 ### Your location
 

@@ -43,6 +43,28 @@ def has_location(text: str) -> bool:
     return strip_location(text) != text
 
 
+# --- a name the user gives about themselves (5 Nov 2026) -----------------------------------------------------------
+# "My name is …", "Sunana …", "I am Musa Bello, Director of …": Kasafi doesn't ask who anyone is and doesn't keep it.
+# The name is removed before the message is saved to the follow-up history or an answer trace; the question itself
+# stays. Only the name goes: a job or an office named without a person isn't personal data.
+NAME_MARK = "[name removed]"
+_HONORIFIC = r"(?:Alhaji|Alh\.?|Hajiya|Haj\.?|Malam|Mallam|Mal\.?|Dr\.?|Engr\.?|Prof\.?|Mr\.?|Mrs\.?|Ms\.?|Barr\.?|Hon\.?|Sir|Chief)"
+_PERSON = rf"(?:{_HONORIFIC}\s+)?[A-Z][\w'’-]+(?:\s+(?:{_HONORIFIC}\s+)?[A-Z][\w'’-]+){{0,3}}"
+_SAYS_NAME = re.compile(rf"((?i:\b(?:my\s+names?\s+(?:is|are)|i\s+am\s+called|they\s+call\s+me|sunana|sunan\s*na|"
+                        rf"ana\s+kira\s*na))\s+)({_PERSON})")
+_INTRODUCES = re.compile(rf"((?i:\b(?:i\s+am|i['’]m|this\s+is|ni\s+ne|ni\s+ce))\s+)({_PERSON})"
+                         rf"(?=\s*(?:,|\bfrom\b|\bdaga\b|\bof\s+the\b|\bna\s+ma))")
+
+
+def strip_identity(text):
+    """The text with a name the user gave for themselves replaced by NAME_MARK; anything that isn't a str is
+    returned as it is."""
+    if not isinstance(text, str) or not text:
+        return text
+    text = _SAYS_NAME.sub(lambda m: m.group(1) + NAME_MARK, text)
+    return _INTRODUCES.sub(lambda m: m.group(1) + NAME_MARK, text)
+
+
 _old_factory = logging.getLogRecordFactory()
 
 

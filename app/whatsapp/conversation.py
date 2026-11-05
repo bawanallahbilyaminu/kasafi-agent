@@ -495,8 +495,13 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
             try:
                 # every long job ends in an answer or an apology within the limit, never silence
                 from app.agent.deep import TIME_BUDGET_S, deep_question
-                limit = max(settings.kasafi_answer_timeout_s, TIME_BUDGET_S + 30) if deep_question(question) \
-                    else settings.kasafi_answer_timeout_s                    # a deep analysis: 180 s
+                # a deep analysis (by the reading, or by its words) gets the longer limit: the reading, the check and
+                # a rewrite round must fit (5 Nov: a deep turn worded plainly had the shorter one, and its check
+                # was skipped for lack of time)
+                deep_turn = deep_question(question) or (understanding is not None and
+                                                        understanding.capability == "deep")
+                limit = max(settings.kasafi_answer_timeout_s, TIME_BUDGET_S + 60) if deep_turn \
+                    else settings.kasafi_answer_timeout_s
                 # an exact location typed or spoken into the question never reaches a model (app/privacy.py);
                 # the history is read back from the store, where it was removed before writing
                 job = asyncio.ensure_future(

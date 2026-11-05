@@ -141,6 +141,8 @@ class DeepResult:
     stopped: str = ""        # why reading stopped early (cost cap, time), if it did
     coverage: list[tuple[str, list[str], list[str]]] = field(default_factory=list)   # dimension, found, missing
     unread: list[str] = field(default_factory=list)   # documents chosen but not read in time (said, never silent)
+    dims: list = field(default_factory=list)          # the dimensions, kept for a rewrite round
+    pool: list = field(default_factory=list)          # every selected claim (the brief cites some): for a rewrite
 
 
 # --- 1. dimensions and measures -----------------------------------------------------------------------------------
@@ -1160,14 +1162,18 @@ def merge_refs(text: str) -> str:
 
 
 async def synthesise(client, question: str, lang: str, claims: list[Claim], dims: list[Dimension],
-                     settings: Settings) -> dict:
+                     settings: Settings, feedback: str = "") -> dict:
+    """`feedback`: what the answer check said about the first brief (a rewrite round): written again from the same
+    checked figures with that in mind."""
     from app.agent.answer import chat_json
     lname = "Hausa" if lang == "ha" else "English"
+    review = (f"\n\nREVIEW OF YOUR FIRST DRAFT (write it again from the same checked figures, fixing this; use "
+              f"only figures in the list, each with its own source): {feedback[:600]}") if feedback else ""
     with usage.stage("deep_synthesis"):
         d = await chat_json(client, [{"role": "system", "content": with_core(SYNTH_SYSTEM).format(lang=lname)},
                                      {"role": "user", "content": f"QUESTION: {question}\nDIMENSIONS: "
                                                                  f"{'; '.join(x.name for x in dims)}\n\nCHECKED "
-                                                                 f"FIGURES:\n{claims_block(claims, dims)}"}],
+                                                                 f"FIGURES:\n{claims_block(claims, dims)}{review}"}],
                             model=settings.meta_model, reasoning_effort="low", max_tokens=6000)
     return d if isinstance(d, dict) else {}
 
@@ -1306,22 +1312,41 @@ async def deep_answer(conn: psycopg.Connection, question: str, english: str, lan
     if notify:
         await notify(w["writing"].format(n=len(chosen)))
     d = await synthesise(client, question, lang, chosen, dims, settings)
+    summary, sections, differ, used, cov = written(d, chosen, dims)
+    return DeepResult(summary, sections, differ,
+                      missing_line(cov, lang, dims), used, list(dict.fromkeys(r.doc_id for r in readings)),
+                      usage.total_dollars(settings) - start_cost, time.perf_counter() - t0, stopped, cov,
+                      unread=unread, dims=dims, pool=chosen)
+
+
+def written(d: dict, chosen: list[Claim], dims: list[Dimension]):
+    """The writer's JSON as the brief's parts: sentences with unverified figures dropped, [C<n>] turned into source
+    tags; a dimension counts as found only for figures the text cites, and the checked-figures list holds those
+    figures only (4 Nov proofread). Returns (summary, sections, differ, the claims used, coverage)."""
     raw_summary = keep_verified(str(d.get("summary") or ""), chosen)
     raw_sections = [(str(s.get("dimension") or "")[:60], keep_verified(str(s.get("text") or ""), chosen))
                     for s in d.get("sections") or [] if isinstance(s, dict)]
     raw_differ = keep_verified(VERDICT.sub("", str(d.get("differ") or "")).strip(), chosen)
-    # what the brief actually reports (4 Nov proofread): a dimension counts as found only for figures the text
-    # cites, and the checked-figures list holds those figures only
     cited = {int(n) - 1 for n in re.findall(r"\[C(\d+)\]", " ".join([raw_summary, raw_differ, *(t for _, t in raw_sections)]))}
     used = [c for i, c in enumerate(chosen) if i in cited] or chosen
-    cov = coverage(used, dims)
     sections = [(n, cite(t, chosen)) for n, t in raw_sections]
-    sections = [(n, t) for n, t in sections if t]
-    differ = cite(raw_differ, chosen)
-    return DeepResult(cite(raw_summary, chosen), sections, differ,
-                      missing_line(cov, lang, dims), used, list(dict.fromkeys(r.doc_id for r in readings)),
-                      usage.total_dollars(settings) - start_cost, time.perf_counter() - t0, stopped, cov,
-                      unread=unread)
+    return cite(raw_summary, chosen), [(n, t) for n, t in sections if t], cite(raw_differ, chosen), used, \
+        coverage(used, dims)
+
+
+async def rewrite(client, question: str, lang: str, r: DeepResult, feedback: str, settings: Settings) -> DeepResult:
+    """One rewrite of a brief the answer check sent back (5 Nov 2026): the same checked claims, written again with
+    the check's feedback; no document is read again. The first brief when the rewrite gives nothing."""
+    t0 = time.perf_counter()
+    start = usage.total_dollars(settings)
+    chosen = r.pool or r.claims
+    d = await synthesise(client, question, lang, chosen, r.dims, settings, feedback=feedback)
+    summary, sections, differ, used, cov = written(d, chosen, r.dims)
+    if not summary:
+        return r
+    return DeepResult(summary, sections, differ, missing_line(cov, lang, r.dims), used, r.documents,
+                      r.cost + usage.total_dollars(settings) - start, r.seconds + time.perf_counter() - t0, r.stopped,
+                      cov, unread=r.unread, dims=r.dims, pool=chosen)
 
 
 def render(r: DeepResult, lang: str) -> tuple[str, list[str]]:
