@@ -1,6 +1,6 @@
 """Ask Kasafi one question for demo and promo content, and keep exactly what WhatsApp would have shown.
 
-    python scripts/ask.py "<question>" [--pin LAT,LON] [--lang ha|en] [--voice path.ogg] --out <file.json>
+    python scripts/ask.py "<question>" [--pin LAT,LON] [--lang ha|en] [--voice path.ogg] [--history turns.json] --out <file.json>
 
 The question goes through the same reply path as a real WhatsApp message (app/whatsapp/webhook.py `_reply`: the
 conversation handler, understanding, routing, the answer check, page crops), on the LIVE server, against its library
@@ -173,6 +173,8 @@ async def run_inside(job: dict, settings=None) -> dict:
     store.give_consent(key)
     if lang:
         store.set_lang(key, lang)
+    for turn in job.get("history") or []:      # earlier turns of this conversation (the in-memory store only)
+        store.add_turn(key, lang or "en", turn["question"], turn["answer"], [], "", "")
     Capture.voice = base64.b64decode(job.get("voice") or "")
     Capture.sent = []
     usage.reset()
@@ -260,6 +262,8 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--lang", choices=("ha", "en"), help="the user's saved language (default: detected, as on first "
                                                          "contact; a voice note is answered in the language spoken)")
     ap.add_argument("--voice", type=Path, help="a voice note (.ogg, as WhatsApp sends it): sent instead of the text")
+    ap.add_argument("--history", type=Path, help="a JSON file of earlier turns, [{\"question\": ..., \"answer\": ...}], "
+                                                 "oldest first: for a follow-up (each call is otherwise a new conversation)")
     ap.add_argument("--out", type=Path, required=True, help="the JSON file; images are saved next to it")
     return ap
 
@@ -363,6 +367,12 @@ def main(argv: list[str] | None = None) -> int:
     if not a.question.strip() and not a.voice:
         ap.error("give a question, or --voice")
     job: dict = {"question": a.question, "lang": a.lang, "pin": a.pin}
+    if a.history:
+        try:
+            job["history"] = [{"question": str(t["question"]), "answer": str(t["answer"])}
+                              for t in json.loads(a.history.read_text(encoding="utf-8"))]
+        except (OSError, ValueError, KeyError, TypeError):
+            ap.error('--history: a JSON file of [{"question": ..., "answer": ...}]')
     if a.voice:
         if not a.voice.is_file():
             ap.error(f"--voice: no such file: {a.voice}")

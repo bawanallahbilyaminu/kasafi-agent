@@ -130,6 +130,22 @@ def test_a_voice_note_is_a_real_audio_message_and_the_transcript_is_reported(ins
     assert r["heard"] == "Nawa ne kasafin lafiya?" and r["lang"] == "ha"
 
 
+def test_earlier_turns_reach_the_handler_and_only_the_throwaway_store(inside, monkeypatch) -> None:
+    s, real, path = inside
+    seen: dict = {}
+
+    async def fake_handle(msg, client, *, store, settings, notify):
+        from app.users import user_key
+        seen["turns"] = store.recent_turns(user_key(ask.SENDER, settings))
+        return [Out("ok", lang="en")]
+    monkeypatch.setattr(webhook, "handle", fake_handle)
+    history = [{"question": "How many schools are in Dange Shuni", "answer": "91 public primary schools."}]
+    asyncio.run(ask.run_inside({"question": "I mean all the schools", "lang": "en", "history": history}, s))
+    assert [(t["question"], t["answer"]) for t in seen["turns"]] == [("How many schools are in Dange Shuni",
+                                                                     "91 public primary schools.")]
+    assert _rows(path, "turns") == 0
+
+
 RESULT = {"heard": "", "lang": "en", "total_s": 12.5, "trace_match": "text", "server_commit": "abcdef1234",
           "before_question": [{"kind": "text", "at_s": 0.1, "text": "📍 Got it"}],
           "messages": [{"kind": "text", "at_s": 1.0, "text": "🔎 Checking…"},
