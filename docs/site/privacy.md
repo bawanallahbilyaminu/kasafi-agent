@@ -23,7 +23,7 @@ under the **Nigeria Data Protection Act 2023 (NDPA)**. Contact: [bilyaminu@halal
   with a secret key, so we don't store the number itself (the one exception: if you sign up for hazard alerts, see
   below).
 
-We don't ask for your name, ID or address. If you tell Kasafi your name ("my name is …"), the name is removed before your message is saved in the follow-up history or an answer trace, and Kasafi does not keep or claim to know who you are. Please don't send private details about your health or anyone else's.
+We don't ask for your name, ID or address. If you tell Kasafi your name in a message ("my name is …"), Kasafi keeps it only in our server's working memory for **up to 1 hour after your last message**, so it can greet or thank you by name. It is never written to disk: the follow-up history, answer traces, logs and backups hold "[name removed]" instead. It is deleted after an hour without a message, or at once when you send DELETE MY DATA. Kasafi never uses your WhatsApp profile name and never claims to know who you are beyond the name you gave. Please don't send private details about your health or anyone else's.
 
 ### Your location
 
@@ -115,6 +115,7 @@ protection terms and the NDPA's rules on transfers.
 - **Daily usage counts:** 30 days. **Consent and language settings:** until you ask us to delete them.
 - **Location:** the exact location for up to 30 minutes, in memory only; your LGA for 90 days.
 - **A first message sent before you accept:** up to 30 minutes, in memory only (see "Why").
+- **A name you tell Kasafi in a message:** up to 1 hour after your last message, in memory only; never stored.
 - **Alert sign-ups, with your encrypted number:** until you send STOP / DAINA or DELETE MY DATA, or 90 days after
   your last message. The record of alerts sent (by hazard and LGA, with no number) is kept 90 days. When a send fails
   for some subscribers, that record also lists their **coded IDs** (not numbers) so the next round can retry only

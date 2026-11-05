@@ -104,8 +104,8 @@ def _scrub(v):
 
 def scrub_reply(text: str) -> str:
     """The reply keeps its long figures and 12-digit budget codes; emails, phone numbers and exact locations go."""
-    from app.privacy import strip_location
-    return strip_location(_PHONE.sub("[number removed]", _EMAIL.sub("[email removed]", text or "")))
+    from app.privacy import strip_location, strip_speaker
+    return strip_speaker(strip_location(_PHONE.sub("[number removed]", _EMAIL.sub("[email removed]", text or ""))))
 
 
 def record(a) -> dict:

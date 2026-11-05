@@ -36,7 +36,8 @@ from app.geo.location import SHARE, Spot, locate_point, pin_of, place_from_text
 from app.place.answer import place_route
 from app.place.planner import area_route
 from app.agent.routing import document_question, facility_intent, other_subject
-from app.privacy import strip_location
+from app.privacy import names as name_memory
+from app.privacy import speaking, stated_name, strip_location, strip_name
 from app.maps.render import render_specs
 from app.geo.location import memory as location_memory
 from app.guardrails import scope
@@ -177,6 +178,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     the conversation-understanding step (app/agent/understand.py), on with KASAFI_UNDERSTANDING. `heard`: this
     text is a voice note's transcript re-entering the text path (already counted and checked as voice)."""
     sender, kind = msg.get("from", ""), msg.get("type")
+    speaking("")                                 # no name carried over from another message handled on this task
     text = ((msg.get("text") or {}).get("body", "") if kind == "text" else
             (msg.get("button") or {}).get("text", "") if kind == "button" else "")   # a template's MORE / STOP
     button = _button_id(msg)
@@ -185,6 +187,7 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     if text and is_delete_command(text):
         delete_user_data(sender, store=store, settings=settings)
         location_memory.forget(user_key(sender, settings))       # and any point still in memory
+        name_memory.forget(user_key(sender, settings))           # and a name the user stated (memory only)
         _first_messages.pop(user_key(sender, settings), None)    # and a first message kept before consent
         return [Out(DELETED_REPLY)]
     key = user_key(sender, settings)
@@ -263,6 +266,12 @@ async def handle(msg: dict[str, Any], wa: Any, *, store: UserStore, settings: Se
     # a voice note is answered in the language it was spoken in (4 Nov: a Hausa note had got English, the saved
     # preference); typed messages keep the saved language
     lang = spoken_lang if spoken_lang in ("ha", "en") else (user.lang or "ha")
+    # a name the user states for themselves is held in memory for an hour after their last message (never the
+    # WhatsApp profile name; never written to disk: app/privacy.py); every message restarts that hour
+    name_memory.touch(key)
+    if text and (said := stated_name(text)):
+        name_memory.remember(key, said)
+    speaking(name_memory.recall(key))            # what this message's work stores carries '[name removed]' instead
     resume = ""                                  # a place-history question that waited for this pin or shape
     resume_reading = None                        # … or a place-budget reading that waited for a location
     before: list[Out] = []                       # the replies that go out before the resumed question's answer
@@ -1546,11 +1555,16 @@ def claim_reading(text: str, name: str = ""):
 async def _conversational(text: str, key: str, lang: str, store: UserStore, settings: Settings, u) -> list[Out]:
     from app.agent.conversational import reply
     t0 = time.perf_counter()
-    body, how = await reply(strip_location(text), lang, store.recent_turns(key), _place_for(key, store), settings)
+    # a name the user stated within the last hour (memory only, app/privacy.py): the reply may use it once, in a
+    # greeting or thanks; what is kept (the follow-up history, the trace) carries '[name removed]' instead
+    name = name_memory.recall(key)
+    body, how = await reply(strip_location(text), lang, store.recent_turns(key), _place_for(key, store), settings,
+                            **({"name": name} if name else {}))
     outs = [Out(body, lang=lang)]
-    _remember_turn(store, key, lang, text, outs)
+    kept = [Out(strip_name(body, name), lang=lang)] if name else outs
+    _remember_turn(store, key, lang, text, kept)
     log.info("conversational reply (%s) in %.2fs", how, time.perf_counter() - t0)
-    await _trace_route(settings, text, lang, f"conversation:{how}", u, outs, time.perf_counter() - t0)
+    await _trace_route(settings, text, lang, f"conversation:{how}", u, kept, time.perf_counter() - t0)
     return outs
 
 

@@ -35,6 +35,20 @@ Each entry is a fix for a failure a real tester hit on the live service, kept as
   saved in the follow-up history or an answer trace; the prompts never repeat it or claim to know who the user
   is. The privacy page source says so.
 
+- `1157c5b` **Figures on the right row** (follow-up to `68e4622`, same trace). The draft had written "₦42 million for
+  computer purchases"; 42,000,000.00 is printed on that page, but on the office-repairs row. On a table page a
+  deep-analysis figure must now sit on a row that names what the claim is about, or it is dropped
+  (`deep.row_bound`). Amounts with the scale word first, as Hausa writes them ("miliyan 100"), are matched to the
+  printed figure like "₦100 million" is; `tests/test_amount_forms.py` pins every written form on every check.
+
+### A change that is not a bug fix
+
+- **A stated name, for one hour** (5 Nov 2026, asked for by the owner). When a user tells Kasafi their name in a
+  message, it is held in the server's memory for an hour after their last message and may be used, sparingly, in
+  a greeting or a thank-you. It is never written to disk (the follow-up history, traces and logs hold
+  "[name removed]"), the WhatsApp profile name is never used, and DELETE MY DATA clears it. This replaces the
+  `68e4622` behaviour above (never kept at all). The privacy page source says so.
+
 ## Before the deadline
 
 The day-by-day record of what was built during the hackathon (26 Oct to 4 Nov 2026) is in the README of the

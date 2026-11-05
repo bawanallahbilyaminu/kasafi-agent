@@ -26,7 +26,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from app.config import Settings, get_settings
-from app.privacy import strip_identity, strip_location
+from app.privacy import strip_identity, strip_location, strip_speaker
 
 log = logging.getLogger(__name__)
 LAGOS = timezone(timedelta(hours=1))  # Nigeria has no DST; "per day" means a Lagos calendar day
@@ -487,7 +487,9 @@ class UserStore:
                  working: str = "", quotes: str = "") -> None:
         now = datetime.now(timezone.utc)
         # an exact location and a name the user gave for themselves never reach the stored history (app/privacy.py)
-        question, answer = strip_identity(strip_location(question)), strip_location(answer)
+        # (a reply that greeted the user by the name held in memory is stored without it: strip_speaker)
+        question, answer = strip_identity(strip_location(question)), strip_speaker(strip_location(answer))
+        # (working and quotes are document text shown back on 'show working': no name is ever passed to them)
         working, quotes = strip_location(working or ""), strip_location(quotes or "")
         with self._lock:
             self._db.execute("INSERT INTO turns (user_key, at, lang, question, answer, sources, working, quotes) "

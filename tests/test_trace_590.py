@@ -158,5 +158,8 @@ def test_a_name_the_user_gives_is_removed_before_the_message_is_kept() -> None:
 def test_the_prompts_never_claim_or_repeat_who_the_user_is() -> None:
     from app.agent import conversational as CV
     from app.agent import understand as U
-    assert "never say you know, remember or have a record of who they are" in CV.SYSTEM
+    # (5 Nov: a stated name may be used for an hour, tests/test_name_memory.py; nothing beyond it is ever claimed)
+    rules = " ".join(CV.SYSTEM.split())
+    assert "never say you know who they are" in rules and "never say you keep a record of them" in rules
+    assert "never repeat a job title or employer they mentioned" in rules
     assert "A name, job title or employer the user" in U.system_prompt(make_settings())
