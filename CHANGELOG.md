@@ -85,6 +85,9 @@ Each entry is a fix for a failure a real tester hit on the live service, kept as
   held in memory past their time, including those of users who never come back; before, they became unusable but stayed
   in memory. The privacy page source now lists the providers actually used (Fireworks AI, no Baseten, no Azure) and
   says exactly what happens to a name, including its limits.
+- **The report on the night run of 5 Nov** (asked for by the owner; nothing in the service changes). The run was stopped
+  for low memory after 41 s, so the false-revise rate on the fixed code is still not measured:
+  [`evals/generated/night-1105-false-revise.md`](evals/generated/night-1105-false-revise.md).
 
 ## Before the deadline
 
